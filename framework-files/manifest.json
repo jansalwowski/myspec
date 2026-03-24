@@ -1,0 +1,18 @@
+{
+  "frameworkVersion": "1.0.0",
+  "files": {
+    "anti-patterns.md": { "type": "marker-merge" },
+    "pre-flight.md": { "type": "marker-merge" },
+    "memory-system.md": { "type": "overwrite" },
+    "templates/README.md": { "type": "overwrite" },
+    "templates/memory-procedural.md": { "type": "overwrite" },
+    "templates/memory-semantic.md": { "type": "overwrite" },
+    "templates/memory-episodic.md": { "type": "overwrite" },
+    "templates/index-procedural.md": { "type": "overwrite" },
+    "templates/index-semantic.md": { "type": "overwrite" },
+    "templates/index-episodic.md": { "type": "overwrite" },
+    "templates/session-log.md": { "type": "overwrite" },
+    "templates/feature-pre-flight.md": { "type": "overwrite" },
+    "templates/example-usage.md": { "type": "overwrite" }
+  }
+}

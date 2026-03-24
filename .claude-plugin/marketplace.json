@@ -1,0 +1,13 @@
+{
+  "name": "myspec-marketplace",
+  "owner": {
+    "name": "Jan Salwowski"
+  },
+  "plugins": [
+    {
+      "name": "myspec",
+      "source": "./",
+      "description": "Specification-Driven Development framework with feature workflows, memory system, ideas pipeline, and project scaffolding"
+    }
+  ]
+}
