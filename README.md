@@ -1,6 +1,6 @@
 # myspec
 
-Specification-Driven Development framework for Claude Code. Provides skills for feature workflows, memory system, ideas pipeline, brainstorming, and project scaffolding.
+Specification-Driven Development framework for Claude Code. Provides skills for feature workflows, memory system, ideas pipeline, and project scaffolding.
 
 ## Installation
 
@@ -59,8 +59,6 @@ Use `/reload-plugins` after making changes.
 | `/myspec:idea-intake` | Process new idea into priority queue |
 | `/myspec:idea-process` | Convert idea to feature specification |
 | **Meta** | |
-| `/myspec:brainstorming` | Collaborative design before implementation |
-| `/myspec:writing-plans` | Create implementation plans from specs |
 | `/myspec:docs-sanitize` | Clean up documentation naming and structure |
 
 ## Configuration
