@@ -9,7 +9,7 @@ Guide the user through creating a project-specific development workflow that def
 
 2. "What should the agent always be allowed to do without asking? (Default: reading code, answering questions, creating/updating docs in the AI directory. Anything else?)"
 
-3. "Do you want the full feature workflow (spec -> tech-spec -> implement -> complete) or a simplified version? Any customizations to the phases?"
+3. "Do you want the full feature workflow (spec → spec-review → tech-spec → tech-spec-review → feature-implement → execute-implementation-plan → finishing-a-development-branch → feature-complete) or a simplified version? Any customizations to the phases?"
 
 4. "What documentation should be required for different change types? For example:
    - New feature -> feature spec
@@ -50,8 +50,17 @@ Generate `${aiDir}/workflow.md` with this structure:
 | Phase | When | Skill |
 |-------|------|-------|
 | 1. Specification | Starting new feature | `/myspec:feature-spec` |
-| 2. Technical Design | Spec approved | `/myspec:tech-spec` |
-| 3. Completion | Implementation done | `/myspec:feature-complete` |
+| 1a. Decompose | Feature too large for single tech-spec | `/myspec:feature-decompose` |
+| 1b. Review | Validate spec before tech-spec | `/myspec:spec-review` |
+| 2. Technical Design | Spec approved, ready to plan implementation | `/myspec:tech-spec` |
+| 2a. Review | Validate tech-spec before implementation | `/myspec:tech-spec-review` |
+| 3. Implementation Plan | Tech-spec approved, ready to create tasks | `/myspec:feature-implement` |
+| 4. Execution | Implementation plan approved, ready to build | `/myspec:execute-implementation-plan` |
+| 5. Branch Completion | All tasks done, tests pass | `/myspec:finishing-a-development-branch` |
+| 6. Feature Completion | Implementation merged, updating docs | `/myspec:feature-complete` |
+
+> **Pipeline:** `feature-spec` → `spec-review` → `tech-spec` → `tech-spec-review` → `feature-implement` → `execute-implementation-plan` → `finishing-a-development-branch` → `feature-complete`
+> **Optional:** `/myspec:feature-decompose` (large features), `/myspec:scenario` (test scenarios)
 
 {customizations from user input}
 

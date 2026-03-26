@@ -42,10 +42,14 @@ Use `/reload-plugins` after making changes.
 | `/myspec:setup <type>` | Guided generation for project files (anti-patterns, conventions, claude-md, pre-flight, index-md, workflow) |
 | **Feature Workflow** | |
 | `/myspec:feature-spec` | Create feature specification (spec.md + dependencies.md) |
-| `/myspec:tech-spec` | Create technical design from approved spec |
-| `/myspec:feature-complete` | Mark feature done, update docs |
 | `/myspec:feature-decompose` | Split large feature into sub-features |
 | `/myspec:spec-review` | Validate spec for completeness and consistency |
+| `/myspec:tech-spec` | Create technical design from approved spec |
+| `/myspec:tech-spec-review` | Review tech-spec for implementability and pattern conformance |
+| `/myspec:feature-implement` | Create execution-ready implementation plan from tech-spec |
+| `/myspec:execute-implementation-plan` | Execute implementation plan with subagent dispatch |
+| `/myspec:finishing-a-development-branch` | Guide branch completion (merge, PR, or cleanup) |
+| `/myspec:feature-complete` | Mark feature done, update docs |
 | `/myspec:spec-cleanup` | Move technical content from spec to tech-spec |
 | `/myspec:spec-sync` | Detect and fix documentation drift |
 | `/myspec:scenario` | Generate Gherkin test scenarios |
