@@ -1,202 +1,193 @@
 ---
-description: "Initialize myspec in a project. Creates .myspec.json, scaffolds AI documentation directory, copies framework files. Use when setting up SDD for a new project. Do NOT use in already-initialized projects (use /myspec:update instead)."
+name: "init"
+description: "Use when setting up myspec in a new project for the first time. Keywords: initialize, setup, init, install myspec, new project setup, scaffold AI documentation. Creates .myspec.json, scaffolds ${aiDir}/ directory, copies framework files, sets up hooks and rules. Do NOT use to update framework files in an existing setup (use /myspec:update instead)."
 ---
 
-# Init — Project Setup Wizard
+# Init
 
-## Pre-checks
+**Announce at start:** "Initializing myspec in this project."
 
-1. Check if `.myspec.json` already exists in the project root. If it does, STOP and tell the user: "Project already initialized. Use `/myspec:update` to update framework files or delete `.myspec.json` to reinitialize."
-2. Resolve `${CLAUDE_PLUGIN_ROOT}` — this is the directory containing the plugin's `plugin.json` (i.e., the `.claude-plugin/` directory of the myspec plugin installation).
-3. Verify `${CLAUDE_PLUGIN_ROOT}/framework-files/` and `${CLAUDE_PLUGIN_ROOT}/scaffolding/` directories exist. If not, report which directories are missing and stop.
+Interactive setup wizard. Run this once per project.
 
-## Step 1: Gather Project Information
+## Workflow
 
-Ask the user these questions **one at a time**, waiting for each answer:
+### Step 1: Check for Existing Setup
 
-1. "What should the AI documentation directory be called? Options: `.ai` (default, hidden), `ai` (visible), or a custom name."
-   - Default: `.ai` if user presses enter or says "default"
-2. "What is the project name?"
-3. "One-line project description:"
-4. "What is the tech stack? (e.g., PHP 8.3, Laravel 11, PostgreSQL)"
+Check if `.myspec.json` already exists in the project root.
 
-Store answers as: `aiDir`, `projectName`, `projectDescription`, `techStack`.
+→ If it exists: warn user — "myspec is already initialized in this project. Run `/myspec:update` to update framework files. Continue anyway? (y/n)"
+→ If no: proceed.
 
-## Step 2: Create .myspec.json
+### Step 2: Discovery Questions
 
-Write `.myspec.json` to the project root with this exact schema:
+Ask these **one at a time** and wait for each answer:
+
+1. **Project name and description**
+   "What is the project name and a one-line description?"
+
+2. **Tech stack**
+   "What is the tech stack? (e.g., 'Node.js + TypeScript, PostgreSQL, REST API' or 'Python + Django, MySQL, GraphQL')"
+
+3. **AI documentation directory**
+   "Where should the AI documentation directory live? (default: `ai/`, alternatives: `.ai/`, `docs/ai/`, `spec/`)"
+   → Default to `ai/` if user presses Enter.
+
+4. **Verification commands** (ask in one message)
+   "What are your project's verification commands? Leave empty to configure later.
+   - Lint command (e.g., `npm run lint`, `pnpm lint`, `ruff check .`):
+   - Type-check command (e.g., `npx tsc --noEmit`, `pnpm typecheck`, or leave empty):
+   - Test command (e.g., `npm test`, `pnpm test`, `pytest`):"
+
+5. **Hooks**
+   "Set up Claude Code hooks? (y/n, default: y)
+   This configures:
+   - Git branch guard (prevents branch mutations on main checkout)
+   - Frontmatter validation (enforces YAML frontmatter on AI docs)
+   - Verification on stop (runs lint/tests before agent completes)"
+
+### Step 3: Create `.myspec.json`
+
+Write `.myspec.json` at project root:
 
 ```json
 {
-  "aiDir": "<aiDir>",
+  "aiDir": "{aiDir from step 3}",
   "frameworkVersion": "1.0.0",
   "project": {
-    "name": "<projectName>",
-    "description": "<projectDescription>",
-    "techStack": "<techStack>"
+    "name": "{name from step 1}",
+    "description": "{description from step 1}",
+    "techStack": "{techStack from step 2}"
   },
-  "frameworkFiles": {}
+  "frameworkFiles": {
+    "memory-index.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
+    "pre-flight.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
+    "memory-system.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" }
+  }
+  // "topologyFile": "backbone.yml"  ← added by /myspec:setup backbone
 }
 ```
 
-## Step 3: Create Directory Structure
+### Step 4: Scaffold Documentation Directory
 
-Create all directories under `${PROJECT_ROOT}/${aiDir}/`:
+Create the `${aiDir}/` directory structure. For each item below, create an empty placeholder if the file doesn't exist:
 
 ```
 ${aiDir}/
-├── features/
-├── memory/
-│   ├── procedural/
-│   ├── semantic/
-│   ├── episodic/
-│   ├── sessions/
-│   │   └── archive/
-├── templates/
-├── ideas/
-├── decisions/
-├── conventions/
-├── plans/
-├── specs/
+  features/
+    index.yaml         ← copy from scaffolding/features/index.yaml
+  memory/
+    index.md           ← create with basic Layer 1 template
+    procedural/
+      index.md         ← copy from framework-files/templates/index-procedural.md
+    semantic/
+      index.md         ← copy from framework-files/templates/index-semantic.md
+    episodic/
+      index.md         ← copy from framework-files/templates/index-episodic.md
+    sessions/
+      .gitkeep
+  .templates/
+    session-log.md     ← copy from framework-files/templates/session-log.md
+    memory-procedural.md
+    memory-semantic.md
+    memory-episodic.md
+    feature-pre-flight.md
+    README.md
+  ideas/
+    INTAKE-INSTRUCTIONS.md   ← copy from scaffolding/ideas/
+    PRIORITY-LISTING.md
+    PROCESSING-INSTRUCTIONS.md
+  conventions/
+    .gitkeep
+  decisions/
+    .gitkeep
+  plans/
+    .gitkeep
 ```
 
-For empty directories (`decisions/`, `conventions/`, `plans/`, `specs/`), create a `.gitkeep` file in each.
+Also create these framework files in `${aiDir}/`:
+- `memory-index.md` ← copy from `framework-files/memory-index.md`
+- `pre-flight.md` ← copy from `framework-files/pre-flight.md`
+- `memory-system.md` ← copy from `framework-files/memory-system.md`
 
-## Step 4: Copy Scaffolding Files
+Replace `${aiDir}` placeholders in all copied files with the configured value.
 
-1. Copy `${CLAUDE_PLUGIN_ROOT}/scaffolding/features/index.yaml` to `${aiDir}/features/index.yaml`
-2. Copy all files from `${CLAUDE_PLUGIN_ROOT}/scaffolding/ideas/` to `${aiDir}/ideas/`:
-   - `INTAKE-INSTRUCTIONS.md`
-   - `PRIORITY-LISTING.md`
-   - `PROCESSING-INSTRUCTIONS.md`
+### Step 5: Set Up Hooks (if user said yes)
 
-## Step 5: Create Memory Index Files
+Create `.claude/hooks/` directory. Copy these files from the plugin's `hooks/` directory:
+- `guard-git-branch.sh`
+- `validate-frontmatter.sh`
+- `mark-code-changed.sh`
+- `verify-before-stop.sh`
 
-Create these files with minimal content:
+Make them executable: `chmod +x .claude/hooks/*.sh`
 
-**`${aiDir}/memory/index.md`**:
-```markdown
----
-title: Memory System Index
-purpose: Central index for all memory types
----
+Copy `.claude/rules/` framework rules from `framework-files/rules/`:
+- `workflow.md`
+- `memory-system.md`
+- `ideas.md`
+- `skill-optimization.md`
 
-# Memory System
+Create `.claude/settings.json` using `templates/settings-hooks.json` as the base.
 
-| Type | Path | Purpose |
-|------|------|---------|
-| Procedural | procedural/ | How-to knowledge, patterns, processes |
-| Semantic | semantic/ | Facts, concepts, domain knowledge |
-| Episodic | episodic/ | Event-specific memories, incidents |
-| Sessions | sessions/ | Active and archived work sessions |
-```
+Create `.claude/verification.json` using `templates/verification.json` as the base, substituting verification commands from Step 2 question 4.
 
-**`${aiDir}/memory/procedural/index.md`**:
-```markdown
----
-title: Procedural Memory Index
-purpose: How-to knowledge and patterns
----
+If commands were left empty, write the placeholder structure and note: "Edit `.claude/verification.json` to add your verification commands."
 
-# Procedural Memories
+### Step 6: Offer Blueprint Runs
 
-No memories yet. Use `/myspec:memory-create` to add procedural memories.
-```
+Ask:
+"Would you like to set up project files now? I can guide you through any of these:
 
-**`${aiDir}/memory/semantic/index.md`**:
-```markdown
----
-title: Semantic Memory Index
-purpose: Facts, concepts, domain knowledge
----
+1. **Backbone** — project topology file for agent orientation (`/myspec:setup backbone`) ← recommended first
+2. **CLAUDE.md** — project context file for Claude (`/myspec:setup claude-md`)
+3. **Conventions** — coding standards and testing patterns (`/myspec:setup conventions`)
+4. **INDEX.md** — documentation navigation index (`/myspec:setup index-md`)
+5. **Workflow** — development workflow definition (`/myspec:setup workflow`)
+6. **Pre-flight** — project-specific pre-flight checks (`/myspec:setup pre-flight`)
+7. **Anti-patterns** — project-specific anti-patterns (`/myspec:setup anti-patterns`)
+8. **Skip** — do it manually later with `/myspec:setup <name>`
 
-# Semantic Memories
+Which would you like? Enter numbers separated by commas, `all`, or `skip`."
 
-No memories yet. Use `/myspec:memory-create` to add semantic memories.
-```
+For each selected blueprint, invoke `/myspec:setup <name>` in order.
 
-**`${aiDir}/memory/episodic/index.md`**:
-```markdown
----
-title: Episodic Memory Index
-purpose: Event-specific memories and incidents
----
-
-# Episodic Memories
-
-No memories yet. Use `/myspec:memory-create` to add episodic memories.
-```
-
-## Step 6: Copy Framework Files
-
-Copy these files from `${CLAUDE_PLUGIN_ROOT}/framework-files/` to `${aiDir}/`:
-
-| Source | Destination |
-|--------|-------------|
-| `framework-files/anti-patterns.md` | `${aiDir}/anti-patterns.md` |
-| `framework-files/pre-flight.md` | `${aiDir}/pre-flight.md` |
-| `framework-files/memory-system.md` | `${aiDir}/memory-system.md` |
-
-## Step 7: Copy Template Files
-
-Copy all files from `${CLAUDE_PLUGIN_ROOT}/framework-files/templates/` to `${aiDir}/templates/`.
-
-## Step 8: Update .myspec.json frameworkFiles
-
-After all copies, update the `frameworkFiles` object in `.myspec.json` with each copied framework file. Use relative paths from the aiDir as keys and include the source version:
-
-```json
-{
-  "frameworkFiles": {
-    "anti-patterns.md": { "version": "1.0.0", "type": "framework" },
-    "pre-flight.md": { "version": "1.0.0", "type": "framework" },
-    "memory-system.md": { "version": "1.0.0", "type": "framework" }
-  }
-}
-```
-
-## Step 9: Output Summary
-
-Print a summary in this format:
+### Step 7: Print Summary
 
 ```
-## myspec initialized
+✅ myspec initialized
 
-**Project:** <projectName>
-**AI Directory:** <aiDir>/
-**Framework Version:** 1.0.0
+Project: {name}
+AI dir:  {aiDir}/
+Hooks:   {enabled / skipped}
 
-### Created
-- <aiDir>/.myspec.json
-- <aiDir>/features/index.yaml
-- <aiDir>/memory/ (with index files)
-- <aiDir>/templates/ (with template files)
-- <aiDir>/ideas/ (with intake/priority/processing instructions)
-- <aiDir>/decisions/ (empty)
-- <aiDir>/conventions/ (empty)
-- <aiDir>/plans/ (empty)
-- <aiDir>/specs/ (empty)
-- <aiDir>/anti-patterns.md
-- <aiDir>/pre-flight.md
-- <aiDir>/memory-system.md
+Created:
+  .myspec.json
+  ${aiDir}/ (features, memory, ideas, templates)
+  {if hooks: .claude/hooks/ (4 hooks), .claude/rules/ (4 rules)}
+  {if hooks: .claude/settings.json, .claude/verification.json}
 
-### Next Steps
-Run these commands to complete setup:
-1. `/myspec:setup anti-patterns` — customize anti-patterns for your project
-2. `/myspec:setup conventions` — define coding conventions
-3. `/myspec:setup claude-md` — generate your CLAUDE.md file
+Next steps:
+  1. Run `/myspec:bootstrap` to verify the setup
+  2. Add your first feature: `/myspec:feature-spec`
+  3. Or process an existing idea: `/myspec:idea-process`
 ```
+
+## Rules
+
+- Ask one question at a time — do not batch questions
+- Default to `ai/` for aiDir if user is uncertain
+- Skip empty verification commands gracefully (write placeholder, note it needs filling)
+- Never overwrite existing `.myspec.json` without explicit confirmation
+- If `.claude/settings.json` already exists, merge hooks — do not replace it
 
 ## Verification Checklist
 
-- [ ] `.myspec.json` exists in project root with valid JSON
-- [ ] `${aiDir}/` directory exists with all subdirectories
-- [ ] `${aiDir}/features/index.yaml` exists and is valid YAML
-- [ ] `${aiDir}/memory/index.md` exists
-- [ ] `${aiDir}/ideas/INTAKE-INSTRUCTIONS.md` exists
-- [ ] `${aiDir}/anti-patterns.md` exists
-- [ ] `${aiDir}/pre-flight.md` exists
-- [ ] `${aiDir}/memory-system.md` exists
-- [ ] `${aiDir}/templates/` contains copied template files
-- [ ] `.myspec.json` frameworkFiles has 3 entries
-- [ ] Empty directories have `.gitkeep` files
+- [ ] `.myspec.json` created with project name, description, techStack, aiDir
+- [ ] `${aiDir}/features/index.yaml` created
+- [ ] `${aiDir}/memory/` directory structure created with all 3 type indexes
+- [ ] `${aiDir}/ideas/` directory with instructions files
+- [ ] `${aiDir}/memory-index.md` created (framework memory index)
+- [ ] `${aiDir}/pre-flight.md` created
+- [ ] If hooks enabled: `.claude/hooks/` has 4 scripts, all executable
+- [ ] If hooks enabled: `.claude/rules/` has 4 framework rules
+- [ ] If hooks enabled: `.claude/settings.json` and `.claude/verification.json` created

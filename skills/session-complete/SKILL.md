@@ -1,23 +1,24 @@
 ---
-description: "Use when work session is finished. Archives session log, proposes multi-type memory extractions, invokes /myspec:memory-create for approved entries. Do NOT use mid-implementation, for abandoned sessions, or for quick tasks that didn't use /myspec:session-start."
+name: "session-complete"
+description: >
+  Use when work session is finished. Keywords: end session, finish session,
+  wrap up, close session, session done. Handles session archival and memory
+  extraction from session logs. Requires active session from /session-start.
+  Do NOT use mid-implementation, for abandoned sessions, or for quick tasks
+  that didn't use /session-start.
 ---
 
 # Session Complete
 
-## Path Resolution
-
-1. Read `.myspec.json` from project root
-2. Extract `aiDir` value (e.g., ".ai" or "ai")
-3. All paths below use `${aiDir}` — resolve before use
-4. If `.myspec.json` not found: STOP and tell user to run `/myspec:init`
-
 ## Prerequisites
 
-You must have an active `${aiDir}/memory/sessions/active.md` file.
+Requires an active `${aiDir}/memory/sessions/active.md` file. If missing, abort and inform user: "No active session found. Use /myspec:session-start first or archive manually."
 
-## Procedure
+## Workflow
 
 ### 1. Update Session Log
+
+Check that `${aiDir}/memory/sessions/active.md` exists. If missing, inform user: "No active session found. Use /myspec:session-start first or archive manually." and stop.
 
 Edit `${aiDir}/memory/sessions/active.md`:
 
@@ -37,7 +38,9 @@ Review the log table, paying attention to Type column hints:
 
 ### 3. Propose Extractions to User
 
-Present a numbered list:
+If no candidates meet the threshold (all trivial or duplicates), report: "No memories worth extracting from this session." and skip to step 5.
+
+Otherwise, present a numbered list:
 
 ```
 Session complete. N potential memories:
@@ -57,8 +60,8 @@ Filter out:
 ### 4. Create Approved Memories
 
 For each approved extraction:
-> Invoke `/myspec:memory-create` with `type` parameter (procedural/semantic/episodic)
-> Pass the relevant log entries and context
+→ Invoke `/myspec:memory-create` (REQUIRED) with `type` parameter (procedural/semantic/episodic)
+→ Pass the relevant log entries and context
 
 ### 5. Archive Session
 
@@ -68,8 +71,8 @@ Move `${aiDir}/memory/sessions/active.md` to:
 Where slug is derived from the topic.
 
 **Slug format**: Use lowercase with hyphens, derived from the topic. Examples:
-- "Fix auth not updating" → `YYYY-MM-DD-fix-auth-updating.md`
-- "Implement caching layer" → `YYYY-MM-DD-implement-caching-layer.md`
+- "Fix StreetView not updating" → `YYYY-MM-DD-fix-streetview-updating.md`
+- "Implement marker clustering" → `YYYY-MM-DD-implement-marker-clustering.md`
 
 ### 6. Confirm Completion
 
@@ -88,12 +91,20 @@ Report to user:
 ```markdown
 ## Outcome
 
-**What worked**: Destroying and recreating the service instance instead of updating props.
+**What worked**: Destroying and recreating the StreetView instance instead of updating props.
 
-**Root cause**: The third-party API caches internal state that persists when props are updated. Only a full teardown + await + recreation resets the cached state.
+**Root cause**: Google Maps StreetView API caches internal state that persists when props are updated. Only a full teardown (`destroyStreetView()` + `await nextTick()` + `createStreetView()`) resets the cached state.
 
 **Key insights**:
-- Updating the component wrapper key doesn't destroy the underlying API instance
-- The API's refresh methods don't clear cached state
-- Always verify the instance is not null after recreation
+- Updating :key on the component wrapper doesn't destroy the Google Maps instance
+- The API's refresh methods don't clear cached coverage dates
+- Always verify `streetViewInstance !== null` after recreation
 ```
+
+## Verification Checklist
+
+- [ ] `${aiDir}/memory/sessions/active.md` no longer exists (was archived)
+- [ ] Archive file exists at `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md` with `status: completed`
+- [ ] Outcome section is filled (what worked, root cause, key insights)
+- [ ] Approved memories were created via `/myspec:memory-create` (check respective index files)
+- [ ] User was presented extraction list and confirmed selections

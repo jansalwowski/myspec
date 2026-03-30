@@ -1,7 +1,7 @@
 {
   "frameworkVersion": "1.0.0",
   "files": {
-    "anti-patterns.md": { "type": "marker-merge" },
+    "memory-index.md": { "type": "marker-merge" },
     "pre-flight.md": { "type": "marker-merge" },
     "memory-system.md": { "type": "overwrite" },
     "templates/README.md": { "type": "overwrite" },
@@ -14,5 +14,11 @@
     "templates/session-log.md": { "type": "overwrite" },
     "templates/feature-pre-flight.md": { "type": "overwrite" },
     "templates/example-usage.md": { "type": "overwrite" }
+  },
+  "rules": {
+    "workflow.md": { "type": "overwrite", "dest": ".claude/rules/workflow.md" },
+    "memory-system.md": { "type": "overwrite", "dest": ".claude/rules/memory-system.md" },
+    "ideas.md": { "type": "overwrite", "dest": ".claude/rules/ideas.md" },
+    "skill-optimization.md": { "type": "overwrite", "dest": ".claude/rules/skill-optimization.md" }
   }
 }

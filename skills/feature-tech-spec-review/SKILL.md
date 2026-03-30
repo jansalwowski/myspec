@@ -1,15 +1,10 @@
 ---
-description: "Use when reviewing tech-spec.md for implementability, spec alignment, and pattern conformance. Keywords: review tech-spec, validate technical design, check implementation plan, critique tech-spec, tech-spec analysis, technical review. Checks spec alignment, feasibility, completeness, pattern conformance, step granularity, dependency ordering, testability, YAGNI, and scope. Do NOT use for spec.md review (use spec-review), implementation review, or code review."
+name: feature-tech-spec-review
+description: "Use when reviewing tech-spec.md for implementability, spec alignment, and pattern conformance. Keywords: review tech-spec, validate technical design, check implementation plan, critique tech-spec, tech-spec analysis, technical review. Checks spec alignment, feasibility, completeness, pattern conformance, step granularity, dependency ordering, testability, YAGNI, and scope. Do NOT use for spec.md review (use feature-spec-review), implementation review, or code review."
+tags: [feature-workflow, tech-spec, validation, critical-thinking, review]
 ---
 
-# tech-spec-review
-
-## Path Resolution
-
-1. Read `.myspec.json` from project root
-2. Extract `aiDir` value (e.g., ".ai" or "ai")
-3. All paths below use `${aiDir}` — resolve before use
-4. If `.myspec.json` not found: STOP and tell user to run `/myspec:init`
+# Feature Tech-Spec Review
 
 ## Workflow
 
@@ -18,20 +13,20 @@ description: "Use when reviewing tech-spec.md for implementability, spec alignme
    - Read `${aiDir}/features/{feature}/spec.md`
    - Read `${aiDir}/features/{feature}/dependencies.md`
    - Read `${aiDir}/features/index.yaml` to verify feature status
-   - Read project convention files (coding standards, backend/frontend/database patterns) for reference
+   - Read `.claude/rules/` convention files if they exist (backend, frontend, database)
    - If sub-feature: also read parent tech-spec.md
 
 2. **Analyze Structure**
    - Verify required sections exist: Architecture, Implementation Steps, Edge Cases, File Inventory
-   - Check optional sections present if relevant: Key Interfaces/Types, Database Changes, API Endpoints, Decisions
+   - Check optional sections present if relevant: Key Interfaces/Types, Database Changes, GraphQL Schema, API Endpoints, Decisions
    - Validate frontmatter has `title`, `status`, `based_on_spec_version`, `created`, `last_updated`
    - Verify `based_on_spec_version` matches current `spec_version` in spec.md
 
 3. **Apply Review Dimensions** (Check tech-spec.md against all 9 dimensions below)
    - Spec Alignment: Every spec.md requirement has an implementation path; no orphan tech-spec items without spec backing
-   - Feasibility: Implementation steps achievable with the project's current tech stack
+   - Feasibility: Implementation steps achievable with the project's tech stack (from `.myspec.json` or CLAUDE.md)
    - Completeness: Missing sections, empty checklists, no file inventory, no edge cases, TBD/TODO present
-   - Pattern Conformance: Follows codebase conventions per project convention files
+   - Pattern Conformance: Follows codebase patterns per backend.md, frontend.md, database.md
    - Step Granularity: Steps not too coarse (multi-day, multi-concern) or too fine (single-line changes)
    - Dependency Ordering: Steps in logical order; dependencies created before consumers
    - Testability: Each step verifiable, test files present in file inventory
@@ -45,10 +40,11 @@ description: "Use when reviewing tech-spec.md for implementability, spec alignme
    - Check: `based_on_spec_version` matches spec.md `spec_version` — mismatch is Critical
 
 5. **Check Pattern Conformance**
-   - Check: File paths match expected project organization conventions
-   - Check: Naming follows project conventions
-   - Check: Service/module patterns match project standards
-   - Check: Database models include required audit fields per project conventions
+   - Check: Implementation follows patterns defined in `${aiDir}/conventions/` and `.claude/rules/`
+   - Check: File paths match expected project organization (per conventions docs)
+   - Check: Naming conventions followed (per project coding standards)
+   - Check: Database models include required audit fields (per project database conventions, if defined)
+   - Check: Service/component patterns match project conventions (per project rules, if defined)
 
 6. **Present Findings**
    - Output table: Severity | Dimension | Issue | File | Line(s) | Finding
@@ -70,16 +66,16 @@ description: "Use when reviewing tech-spec.md for implementability, spec alignme
 9. **Summary**
    - Show changes made (file paths, sections affected)
    - List remaining issues (if any were rejected)
-   - Recommend next step: re-review, `/myspec:feature-implement`, or address open issues first
+   - Recommend next step: re-review, `/myspec:feature-plan`, or address open issues first
 
 ## Review Dimensions Reference
 
 | Dimension | Detection Patterns | What to Check |
 |-----------|-------------------|---------------|
 | **Spec Alignment** | Compare spec.md requirements/ACs with tech-spec steps | Every requirement addressed, no orphan steps, version match |
-| **Feasibility** | Unknown packages, non-existent APIs, impossible constraints | Steps achievable with project's tech stack |
+| **Feasibility** | Unknown packages, non-existent APIs, impossible constraints | Steps achievable with the project's tech stack |
 | **Completeness** | `TBD`, `TODO`, `???`, empty sections, missing file inventory | All required sections present, all steps have detail |
-| **Pattern Conformance** | Service/module/component patterns | Matches project coding conventions |
+| **Pattern Conformance** | Service/GraphQL/validator/component patterns | Matches backend.md, frontend.md, database.md conventions |
 | **Step Granularity** | Steps joining unrelated work with "and", single-line steps | Each step = single responsibility, ~1–4 hours |
 | **Dependency Ordering** | Step N references types/files from Step N+M | Steps ordered so dependencies created before consumers |
 | **Testability** | Steps without test files in inventory, no test strategy | Each step has verifiable output, test file in inventory |
@@ -113,7 +109,7 @@ When splitting is recommended:
 
 ## Detection Patterns (Automated Checks)
 
-```
+```typescript
 // Incomplete content (Completeness)
 /\b(TBD|TODO|FIXME|\?\?\?|placeholder)\b/gi
 
@@ -144,9 +140,9 @@ When splitting is recommended:
 | Severity | Dimension | Issue | File | Line(s) | Finding |
 |----------|-----------|-------|------|---------|---------|
 | Critical | Spec Alignment | Version mismatch | tech-spec.md | 4 | `based_on_spec_version: 1` but spec.md has `spec_version: 3` |
-| High | Pattern Conformance | Missing audit fields | tech-spec.md | 67-72 | Model lacks required audit fields per project conventions |
+| High | Pattern Conformance | Missing audit fields | tech-spec.md | 67-72 | Model lacks required audit fields per project database conventions |
 | Medium | Step Granularity | Step too coarse | tech-spec.md | 45 | "Step 3: Build entire frontend" — split into component tasks |
-| Low | Completeness | Missing edge case | tech-spec.md | — | No edge case for empty results |
+| Low | Completeness | Missing edge case | tech-spec.md | — | No edge case for empty search results |
 ```
 
 ### Fix Proposals
@@ -155,31 +151,33 @@ When splitting is recommended:
 ## Fix 1: Add missing audit fields (High) [auto-fix]
 
 **File**: tech-spec.md:67-72
-**Issue**: Model missing required audit fields per project conventions.
+**Issue**: Model missing required audit fields per project database conventions.
 
 - model SearchQuery {
 -   id    String @id @default(cuid())
 -   query String
 - }
 + model SearchQuery {
-+   id         String   @id @default(cuid())
-+   query      String
-+   createdAt  DateTime @default(now()) @map("created_at")
-+   createdBy  String   @map("created_by")
-+   updatedAt  DateTime @updatedAt @map("updated_at")
++   id        String   @id @default(cuid())
++   query     String
++   createdAt DateTime @default(now())
++   createdBy String
++   updatedAt DateTime @updatedAt
 + }
 
-**Rationale**: All tables require audit fields per project conventions.
+**Rationale**: All models require audit fields per project database conventions.
 ```
 
 ```markdown
 ## Fix 2: Split into sub-features (High) [requires confirmation]
 
-**Issue**: Tech-spec covers two independent capabilities that could ship separately.
+**Issue**: Tech-spec covers both query logging AND analytics dashboard — independent capabilities that could ship separately.
 
 **Proposed split** (via `/myspec:feature-decompose`):
-1. Sub-feature A — [describe]
-2. Sub-feature B — [describe, note dependency if any]
+1. `search/query-logging` — SearchQuery model, logging service, middleware hook
+2. `search/analytics` — Dashboard page, aggregation queries, charts (depends on query-logging)
+
+**Rationale**: Query logging is useful and shippable without the dashboard. Dashboard depends on logging data but not vice versa.
 
 **ACTION REQUIRED**: Confirm or reject this split before proceeding.
 ```
@@ -188,8 +186,8 @@ When splitting is recommended:
 
 | Severity | Definition | Must Fix Before |
 |----------|------------|-----------------|
-| **Critical** | Blocks implementation — spec version mismatch, missing core implementation path, contradictory steps | `/myspec:feature-implement` |
-| **High** | Must fix — missing patterns, wrong conventions, scope issues, missing test strategy, split recommended | `/myspec:feature-implement` |
+| **Critical** | Blocks implementation — spec version mismatch, missing core implementation path, contradictory steps | `/myspec:feature-plan` |
+| **High** | Must fix — missing patterns, wrong conventions, scope issues, missing test strategy, split recommended | `/myspec:feature-plan` |
 | **Medium** | Should fix — missing edge cases, vague steps, incomplete file inventory | implementation |
 | **Low** | Nice to have — wording improvements, additional detail, documentation polish | feature-complete |
 
@@ -204,6 +202,10 @@ When splitting is recommended:
 - Cross-feature dependencies mentioned in tech-spec must appear in dependencies.md
 - If tech-spec imports from another feature's code, that feature must be in dependencies.md
 
+### tech-spec.md → codebase patterns
+- File paths follow naming and organization conventions defined in `.claude/rules/` or `${aiDir}/conventions/`
+- Models include required audit fields per project database conventions (if defined)
+
 ## Verification Checklist
 
 After running the skill:
@@ -211,7 +213,9 @@ After running the skill:
 - [ ] All 9 review dimensions checked against tech-spec.md
 - [ ] `based_on_spec_version` matches spec.md `spec_version`
 - [ ] Every spec.md requirement has an implementation path in tech-spec
-- [ ] File inventory paths follow project conventions
+- [ ] File inventory paths follow project conventions (per `.claude/rules/` or `${aiDir}/conventions/`)
+- [ ] Models include required audit fields (if project defines them)
+- [ ] Service/component patterns match project conventions
 - [ ] Implementation steps are in dependency order
 - [ ] Each step has reasonable granularity (single responsibility)
 - [ ] Edge Cases section is non-empty
@@ -222,7 +226,25 @@ After running the skill:
 - [ ] `last_updated` set to today after changes
 - [ ] Summary shows files changed and remaining issues
 
+## Example Usage
+
+```
+User: /tech-spec-review tags
+```
+
+**Expected behavior**:
+1. Load ai/features/tags/tech-spec.md, spec.md, dependencies.md, and index.yaml
+2. Load backend.md, frontend.md, database.md for pattern reference
+3. Check all 9 dimensions against tech-spec.md
+4. Cross-validate spec alignment (requirements → steps, ACs → file inventory)
+5. Validate pattern conformance against codebase conventions
+6. Present findings table with severity, dimension, file, line numbers
+7. Auto-apply small fixes; propose big fixes with rationale
+8. Wait for user to confirm big fixes
+9. Apply confirmed fixes, update `last_updated`
+10. Show summary and recommend next step
+
 ## Integration
 
-**Called by:** `/myspec:tech-spec` (after tech-spec is created and user wants review)
-**Next:** `/myspec:feature-implement` — create execution-ready implementation plan once tech-spec passes review
+**Called by:** `/myspec:feature-tech-spec` (after tech-spec is created and user wants review)
+**Next:** `/myspec:feature-plan` — create execution-ready implementation plan once tech-spec passes review

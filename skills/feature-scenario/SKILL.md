@@ -1,17 +1,12 @@
 ---
+name: "feature-scenario"
 description: "Use when creating test scenarios for a feature. Generates Gherkin-format scenarios.md with happy paths, edge cases, error states. Requires approved spec.md. Do NOT use for unit tests."
+tags: [testing, scenarios, gherkin, specification]
 ---
 
 # Generate Test Scenarios
 
 Create comprehensive test scenarios for a feature in Gherkin format.
-
-## Path Resolution
-
-1. Read `.myspec.json` from project root
-2. Extract `aiDir` value (e.g., ".ai" or "ai")
-3. All paths below use `${aiDir}` — resolve before use
-4. If `.myspec.json` not found: STOP and tell user to run `/myspec:init`
 
 ## Prerequisites
 
@@ -125,22 +120,22 @@ For each business rule:
 
 ### Good Scenario
 ```markdown
-### Scenario: User creates record with valid data
+### Scenario: User creates guide with valid data
 
 **Given** user is logged in as contributor
-**And** user is on record creation page
-**When** user enters title "Example Record"
-**And** user enters slug "example"
+**And** user is on guide creation page
+**When** user enters title "Europe Guide"
+**And** user enters slug "europe"
 **And** user clicks "Create"
-**Then** record is created with status "draft"
-**And** user is redirected to record edit page
-**And** success toast shows "Record created"
+**Then** guide is created with status "draft"
+**And** user is redirected to guide edit page
+**And** success toast shows "Guide created"
 ```
 
 ### Bad Scenario
 ```markdown
-### Scenario: Create record
-User creates a record and it works.
+### Scenario: Create guide
+User creates a guide and it works.
 ```
 
 ## Checklist

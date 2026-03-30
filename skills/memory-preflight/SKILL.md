@@ -1,23 +1,18 @@
 ---
-description: "Use before ANY implementation work. Scans all memory types (procedural, semantic, episodic), runs anchor staleness checks, loads Layer 1 + matched Layer 2 entries. Do NOT use for research-only tasks, documentation updates, or answering questions."
+name: "memory-preflight"
+description: "Use when starting implementation work, before writing code. Pre-flight memory scan across all types (procedural, semantic, episodic), anchor staleness checks, Layer 1 + matched Layer 2 loading. Keywords: preflight, memory check, pre-work scan. Do NOT use for research-only tasks, documentation updates, or answering questions."
+allowed-tools: [Read, Grep, Glob, Bash]
 ---
 
 # Memory Preflight
 
-## Path Resolution
-
-1. Read `.myspec.json` from project root
-2. Extract `aiDir` value (e.g., ".ai" or "ai")
-3. All paths below use `${aiDir}` — resolve before use
-4. If `.myspec.json` not found: STOP and tell user to run `/myspec:init`
-
-## Procedure
+## Workflow
 
 ### 1. Load Layer 1
 
 Read `${aiDir}/memory/index.md` (always-loaded global index).
 
-> **Verify**: You can name at least 1 relevant critical entry.
+→ **Verify**: At least 1 relevant critical entry identified.
 
 ### 2. Scan Procedural Index
 
@@ -26,8 +21,8 @@ Read `${aiDir}/memory/procedural/index.md`.
 Scan "Use When" column for keyword matches against current task.
 Check "Not For" column to confirm applicability.
 
-> If match: read full memory file at `${aiDir}/memory/procedural/{id}-{slug}.md`
-> Focus on "Procedure (Do This)" section.
+→ If match: read full memory file at `${aiDir}/memory/procedural/{id}-{slug}.md`
+→ Focus on "Procedure (Do This)" section.
 
 ### 3. Scan Semantic Index
 
@@ -36,8 +31,8 @@ Read `${aiDir}/memory/semantic/index.md`.
 Match "Topic" column against current task domain/feature.
 Check "Anchor" column for ⚠️ stale flags.
 
-> If match: read full memory file at `${aiDir}/memory/semantic/{id}-{slug}.md`
-> If ⚠️ stale: verify anchor before relying on the fact.
+→ If match: read full memory file at `${aiDir}/memory/semantic/{id}-{slug}.md`
+→ If ⚠️ stale: verify anchor before relying on the fact.
 
 ### 4. Scan Episodic Index
 
@@ -45,7 +40,7 @@ Read `${aiDir}/memory/episodic/index.md`.
 
 Check for recent episodes (< 30 days) related to current feature.
 
-> If match: read full memory file for context.
+→ If match: read full memory file for context.
 
 ### 5. Check Episodic Consolidation
 
@@ -67,14 +62,14 @@ For any loaded memory with anchors:
 
 Check if `${aiDir}/memory/sessions/active.md` exists.
 
-> If exists and status=active: Resume, archive (if >24h old), or ask user.
-> If not exists: proceed.
+→ If exists and status=active: Resume, archive (if >24h old), or ask user.
+→ If not exists: proceed.
 
 ### 8. Ready to Start Work
 
-After completing all steps, you're ready to begin implementation.
+After completing all steps, proceed with implementation.
 
-## Verification Checkpoints
+## Verification Checklist
 
 - [ ] Layer 1 index loaded (can name 1 relevant entry)
 - [ ] All 3 type indexes scanned
@@ -85,6 +80,6 @@ After completing all steps, you're ready to begin implementation.
 ## When NOT to Use
 
 - Research-only tasks (reading code, answering questions)
-- Documentation updates
+- Documentation updates in `ai/` or `docs/`
 - Responding to user questions without code changes
 - Single-file trivial fixes (typos, config, formatting) — read `${aiDir}/memory/index.md` directly instead

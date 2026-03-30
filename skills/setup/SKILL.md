@@ -1,130 +1,70 @@
 ---
-description: "Generate or regenerate a project file via guided questions. Usage: /myspec:setup anti-patterns, /myspec:setup conventions, /myspec:setup claude-md, /myspec:setup pre-flight, /myspec:setup index-md, /myspec:setup workflow. Reads blueprints, asks project-specific questions, generates tailored content. Do NOT use for framework-owned template files (use /myspec:update)."
+name: "setup"
+description: "Use when generating project-specific files from guided wizards. Invokes blueprints by name: backbone (topology file), claude-md (CLAUDE.md), conventions (coding standards), index-md (documentation index), workflow (dev workflow), pre-flight (pre-flight checklist), anti-patterns (project anti-patterns). Keywords: setup backbone, setup claude-md, setup conventions, generate project files, create topology file, run blueprint. Do NOT use for first-time project init (use /myspec:init)."
 ---
 
-# Setup — Guided File Generation
+# Setup
 
-## Pre-checks
+**Announce at start:** "Running setup: {blueprint name}."
 
-1. Read `.myspec.json` from project root. If not found, STOP and tell user: "No `.myspec.json` found. Run `/myspec:init` first."
-2. Read `aiDir` from `.myspec.json` to resolve output paths.
-3. Read `$ARGUMENTS` to determine the file type. Extract the first argument as `fileType`.
-4. Validate `fileType` against the supported list (see below). If invalid or missing, print supported types and STOP.
+Dispatches guided blueprint wizards to generate project-specific files. Each blueprint asks discovery questions and generates a file tailored to the project.
 
-## Supported File Types
+## Available Blueprints
 
-| Argument | Blueprint | Output Path | Description |
-|----------|-----------|-------------|-------------|
-| `anti-patterns` | `blueprints/anti-patterns.md` | `${aiDir}/anti-patterns.md` | Project-specific anti-patterns and pitfalls |
-| `pre-flight` | `blueprints/pre-flight.md` | `${aiDir}/pre-flight.md` | Pre-implementation checklist |
-| `conventions` | `blueprints/conventions.md` | `${aiDir}/conventions/coding-standards.md` | Coding standards and conventions |
-| `claude-md` | `blueprints/claude-md.md` | `CLAUDE.md` (project root) | Claude Code project instructions |
-| `index-md` | `blueprints/index-md.md` | `${aiDir}/INDEX.md` | AI documentation index |
-| `workflow` | `blueprints/workflow.md` | `${aiDir}/workflow.md` | Development workflow definition |
+| Blueprint | Generates | Output |
+|-----------|-----------|--------|
+| `backbone` | Project topology file for agent orientation | `backbone.yml` (project root) |
+| `claude-md` | CLAUDE.md project context file | `CLAUDE.md` (project root) |
+| `conventions` | Coding standards and testing patterns | `${aiDir}/conventions/` |
+| `index-md` | Documentation navigation index | `${aiDir}/INDEX.md` |
+| `workflow` | Development workflow definition | `${aiDir}/workflow.md` |
+| `pre-flight` | Project-specific pre-flight checks | `${aiDir}/pre-flight.md` |
+| `anti-patterns` | Project-specific anti-patterns | `${aiDir}/memory-index.md` |
 
-If no argument provided, print:
+## Workflow
+
+### Step 1: Resolve Blueprint
+
+If no blueprint name was given: print the table above and ask "Which blueprint would you like to run?"
+
+If a name was given: match it to the table. If no match, list available names and ask the user to choose.
+
+### Step 2: Pre-flight Check
+
+Read `.myspec.json` to get `aiDir` and project metadata.
+
+→ If `.myspec.json` does not exist: warn "myspec is not initialized in this project. Run `/myspec:init` first." and stop.
+
+Check if the output file already exists.
+
+→ If it exists: ask "This file already exists. Overwrite? (y/n)"
+→ If user says no: stop.
+
+### Step 3: Execute Blueprint
+
+Read the blueprint file from the plugin's `blueprints/{name}.md`.
+
+Follow the blueprint's **Discovery Questions** exactly — ask one at a time, wait for each answer.
+
+Generate the output using the blueprint's **Output Format**.
+
+Write to the **Output Location** specified by the blueprint.
+
+### Step 4: Post-generation
+
+**For `backbone` blueprint only**: After writing the file, update `.myspec.json` by adding or updating the `topologyFile` key with the generated filename.
+
+For all blueprints: print a brief confirmation:
 ```
-Usage: /myspec:setup <file-type>
+✅ {filename} created
 
-Supported file types:
-  anti-patterns  — Project-specific anti-patterns and pitfalls
-  pre-flight     — Pre-implementation checklist
-  conventions    — Coding standards and conventions
-  claude-md      — Claude Code project instructions (CLAUDE.md)
-  index-md       — AI documentation index
-  workflow       — Development workflow definition
-```
-
-## Step 1: Resolve Paths
-
-1. Set `blueprintPath` = `${CLAUDE_PLUGIN_ROOT}/blueprints/${fileType}.md`
-2. Set `outputPath` based on the file type table above
-3. Verify `blueprintPath` exists. If not, STOP and report: "Blueprint not found at `${blueprintPath}`. The myspec plugin installation may be incomplete."
-
-## Step 2: Load Context
-
-1. Read the blueprint file from `blueprintPath`
-2. Read `.myspec.json` for project context:
-   - `project.name`
-   - `project.description`
-   - `project.techStack`
-   - `aiDir`
-3. If the output file already exists, read it and note that this is a regeneration (existing content will be replaced)
-
-## Step 3: Follow Blueprint Instructions
-
-Each blueprint contains:
-
-- **Header section**: metadata about what the file does
-- **Discovery questions**: questions to ask the user, marked with `<!-- question -->` tags or listed in a `## Questions` section
-- **Template**: the output template with placeholders
-- **Framework markers**: sections that should be wrapped in `<!-- myspec:framework-start/end -->` markers
-
-Execute the blueprint by:
-
-1. Read all discovery questions from the blueprint
-2. Ask the user each question **one at a time**, waiting for each answer
-3. For questions with defaults, show the default: "Question text (default: X):"
-4. Store all answers for template population
-
-## Step 4: Generate the File
-
-1. Use the blueprint's template as the base structure
-2. Replace all placeholders with:
-   - User answers from discovery questions
-   - Project context from `.myspec.json`
-3. Wrap framework-owned sections with markers:
-   ```
-   <!-- myspec:framework-start -->
-   ... framework-managed content ...
-   <!-- myspec:framework-end -->
-   ```
-4. Place project-specific content (from user answers) OUTSIDE the framework markers
-
-## Step 5: Handle Existing Files
-
-If the output file already exists:
-
-1. Warn: "File `${outputPath}` already exists."
-2. If the existing file has framework markers, offer: "Replace framework sections only, keeping your customizations? (yes/replace-all/cancel)"
-   - **yes**: marker-merge (replace between markers, keep the rest)
-   - **replace-all**: overwrite entire file
-   - **cancel**: abort
-3. If no markers exist, offer: "Overwrite entire file? (yes/cancel)"
-
-## Step 6: Write the File
-
-1. Create any missing parent directories for the output path
-2. Write the generated content to `outputPath`
-3. If `fileType` is not `claude-md` (which lives in project root), verify the file is inside `${aiDir}/`
-
-## Step 7: Report Results
-
-Print:
-
-```
-## Created: <outputPath>
-
-<Brief description of what was generated>
-
-### Content Summary
-- <Section 1>: <brief description>
-- <Section 2>: <brief description>
-...
-
-### Framework Markers
-This file contains framework-managed sections between `<!-- myspec:framework-start/end -->` markers.
-These sections will be updated by `/myspec:update`. Your customizations outside the markers are preserved.
+Next: {relevant next step — e.g., "Run /myspec:bootstrap to load the topology" or "Run /myspec:setup claude-md next"}
 ```
 
-If this was the last recommended setup step from `/myspec:init`, suggest:
-"All recommended setup steps complete. Your project is ready for specification-driven development."
+## Rules
 
-## Verification Checklist
-
-- [ ] Output file exists at the expected path
-- [ ] File contains `<!-- myspec:framework-start -->` and `<!-- myspec:framework-end -->` markers
-- [ ] Project-specific content (from user answers) is present outside framework markers
-- [ ] Placeholders are fully resolved (no remaining `<placeholder>` or `${variable}` tokens)
-- [ ] File is valid markdown (no broken formatting)
-- [ ] `.myspec.json` project context was correctly incorporated
+- Ask one discovery question at a time — never batch all questions at once
+- Always read `.myspec.json` before running a blueprint (needed for `${aiDir}` substitution)
+- Replace `${aiDir}` placeholders in all generated output with the configured value
+- Respect existing files — always ask before overwriting
+- Do not modify any framework-owned files (memory-index.md framework section, pre-flight.md framework section)

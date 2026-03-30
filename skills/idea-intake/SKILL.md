@@ -1,5 +1,11 @@
 ---
-description: "Use when a new idea file is added to the ideas directory. Analyzes idea, asks clarifying questions, adds to PRIORITY-LISTING.md. Do NOT use for converting ideas to features."
+name: "idea-intake"
+description: >
+  Use when a new idea file is added to the ideas/ directory and needs to be
+  triaged into the priority queue. Covers idea analysis, priority assignment,
+  dependency identification, and PRIORITY-LISTING.md updates. Keywords: new
+  idea, idea queue, idea triage, intake, queue idea. Do NOT use for converting
+  ideas to feature specs — use idea-process for that.
 tags: [ideas, planning, intake, queue]
 ---
 
@@ -7,20 +13,14 @@ tags: [ideas, planning, intake, queue]
 
 Process a new idea file and add it to the priority queue.
 
-## Path Resolution
-1. Read `.myspec.json` from project root
-2. Extract `aiDir` value (e.g., ".ai" or "ai")
-3. All paths below use `${aiDir}` — resolve before use
-4. If `.myspec.json` not found: STOP and tell user to run `/myspec:init`
-
 ## Prerequisites
 
-- New idea file exists in `${aiDir}/ideas/` directory
-- Read `${aiDir}/ideas/PRIORITY-LISTING.md` for current queue state
+- New idea file exists in `ideas/` directory
+- Read `ideas/PRIORITY-LISTING.md` for current queue state
 
-## Instructions
+## Workflow
 
-### Step 1: Read the New Idea
+### 1. Read the New Idea
 
 Read the idea file completely. Note:
 - What problem does it solve?
@@ -28,7 +28,7 @@ Read the idea file completely. Note:
 - Is the priority specified? (look for `priority [level]` or `[level]`)
 - Are there obvious dependencies?
 
-### Step 2: Analyze and Ask Questions
+### 2. Analyze and Ask Questions
 
 **Always ask clarifying questions before adding to queue.**
 
@@ -56,7 +56,7 @@ If the idea seems large:
 > 2. **Staged idea** - track as separate entries with different priorities
 > 3. **Split ideas** - create separate idea files
 
-### Step 3: Validate Idea File Format
+### 3. Validate Idea File Format
 
 Ensure the idea file has:
 - Priority tag: `priority [level]` or `[level]` at the start
@@ -65,22 +65,24 @@ Ensure the idea file has:
 
 If missing priority, ask user to confirm and update the file.
 
-### Step 4: Add to PRIORITY-LISTING.md
+### 4. Add to PRIORITY-LISTING.md
 
 After questions are answered:
 
-1. Open `${aiDir}/ideas/PRIORITY-LISTING.md`
+1. Open `ideas/PRIORITY-LISTING.md`
 2. Find the correct priority section
-3. Add a new row to the table:
+3. If the priority section doesn't exist, create it following the existing format
+4. Check whether an existing entry covers the same idea — if so, warn user and ask whether to merge or keep separate
+5. Add a new row to the table:
 
 ```markdown
 | [ ] | Idea Name | `filename.md` | Dependencies | Brief notes |
 ```
 
-4. Update the dependency graph if needed
-5. Update Quick Stats count
+6. Update the dependency graph if needed
+7. Update Quick Stats count
 
-### Step 5: Confirm Addition
+### 5. Confirm Addition
 
 Report back to user:
 
@@ -89,21 +91,19 @@ Report back to user:
 > - **Dependencies**: [list or "None"]
 > - **Position in queue**: #[number] of [total]
 
-## Checklist
+## Rules
+
+- **Always ask before adding**: Never add an idea to the queue without user confirmation on priority
+- **One idea per file**: If an idea contains multiple features, ask user about splitting (Step 2 scope questions)
+- **Preserve existing queue order**: Only insert into the correct priority section, never reorder existing entries
+- **Dependencies must be explicit**: If a dependency is unclear, ask — never assume "None"
+
+## Verification Checklist
 
 - [ ] Idea file has priority tag
 - [ ] Priority level confirmed with user (if was missing)
-- [ ] Dependencies identified
-- [ ] Added to correct section in PRIORITY-LISTING.md
+- [ ] Dependencies identified (asked if unclear)
+- [ ] No duplicate entry added without user decision
+- [ ] Added to correct section in PRIORITY-LISTING.md (created section if missing)
 - [ ] Quick Stats updated
 - [ ] Confirmed addition to user
-
-## Quick Reference: Priority Levels
-
-| Level | Use When |
-|-------|----------|
-| HIGHEST | Core feature, MVP requirement, blocks other work |
-| HIGH | Important feature, clear value, do soon |
-| MEDIUM | Good to have, can wait, no urgency |
-| LOW | Future consideration, nice but not needed |
-| LOWEST | Vision/dream feature, may never happen |

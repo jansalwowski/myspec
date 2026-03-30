@@ -1,0 +1,22 @@
+{
+  "checks": [
+    {
+      "name": "Lint",
+      "command": "",
+      "description": "Linter — replace with your project's lint command (e.g., 'npm run lint', 'pnpm lint', 'ruff check .')",
+      "required": true
+    },
+    {
+      "name": "TypeCheck",
+      "command": "",
+      "description": "Type checking — replace with your project's type-check command (e.g., 'npx tsc --noEmit', 'pnpm typecheck')",
+      "required": true
+    },
+    {
+      "name": "Test",
+      "command": "",
+      "description": "Test suite — replace with your project's test command (e.g., 'npm test', 'pnpm test', 'pytest')",
+      "required": true
+    }
+  ]
+}

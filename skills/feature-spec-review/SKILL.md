@@ -1,15 +1,10 @@
 ---
-description: "Use when reviewing spec.md for completeness, consistency, and logical gaps. Keywords: review spec, critique requirements, validate spec, check spec, spec analysis, requirements review. Identifies missing requirements, contradictions, scope creep, unclear acceptance criteria. Do NOT use for tech-spec review or implementation review."
+name: feature-spec-review
+description: Use when reviewing spec.md for completeness, consistency, and logical gaps. Keywords: review spec, critique requirements, validate spec, check spec, spec analysis, requirements review. Identifies missing requirements, contradictions, scope creep, unclear acceptance criteria. Do NOT use for tech-spec review or implementation review.
+tags: [feature-workflow, specification, validation, critical-thinking]
 ---
 
-# spec-review
-
-## Path Resolution
-
-1. Read `.myspec.json` from project root
-2. Extract `aiDir` value (e.g., ".ai" or "ai")
-3. All paths below use `${aiDir}` — resolve before use
-4. If `.myspec.json` not found: STOP and tell user to run `/myspec:init`
+# Feature Spec Review
 
 ## Workflow
 
@@ -42,7 +37,7 @@ description: "Use when reviewing spec.md for completeness, consistency, and logi
 
 5. **Present Findings**
    - Output table: Severity | Dimension | Issue | File | Line(s) | Finding
-   - Group by severity: Critical -> High -> Medium -> Low
+   - Group by severity: Critical → High → Medium → Low
    - Include specific line numbers for each issue
 
 6. **Propose Fixes**
@@ -81,7 +76,7 @@ description: "Use when reviewing spec.md for completeness, consistency, and logi
 
 Run these checks against spec.md content:
 
-```
+```typescript
 // Vague language (Clarity)
 /\b(may|might|could|possibly|perhaps|probably)\b/gi
 
@@ -152,13 +147,13 @@ Run these checks against spec.md content:
 
 ## Cross-File Validation Rules
 
-### spec.md -> dependencies.md
+### spec.md → dependencies.md
 - Every feature name mentioned in spec.md Requirements/User Stories must appear in dependencies.md "depends_on" section
 - If spec.md says "Out of Scope: Feature X", Feature X should NOT be in dependencies.md
 
-### dependencies.md -> index.yaml
-- Every feature in dependencies.md "depends_on" must exist in `${aiDir}/features/index.yaml`
-- Every feature in dependencies.md "enables" must exist in `${aiDir}/features/index.yaml`
+### dependencies.md → index.yaml
+- Every feature in dependencies.md "depends_on" must exist in ${aiDir}/features/index.yaml
+- Every feature in dependencies.md "enables" must exist in ${aiDir}/features/index.yaml
 
 ### dependencies.md Bidirectional Check
 - If Feature A depends on Feature B, then Feature B should list Feature A in "enables"
@@ -189,15 +184,20 @@ After running the skill:
 ## Example Usage
 
 ```
-User: /spec-review user-auth
+User: /spec-review guide-versioning
 ```
 
 **Expected behavior**:
-1. Load `${aiDir}/features/user-auth/spec.md`, dependencies.md, and index.yaml
+1. Load ${aiDir}/features/guide-versioning/spec.md, dependencies.md, and index.yaml
 2. Check all 8 dimensions against spec.md
-3. Validate dependencies.md <-> spec.md <-> index.yaml alignment
+3. Validate dependencies.md ↔ spec.md ↔ index.yaml alignment
 4. Present findings table with severity, dimension, file, line numbers
 5. Propose concrete fixes for each issue
 6. Wait for user to approve fixes
 7. Apply approved fixes and increment spec_version
 8. Show summary of changes made
+
+## Integration
+
+**Called by:** `/myspec:feature-spec` (after spec is created and user approves review)
+**Next:** `/myspec:feature-tech-spec` — create technical design once spec is approved

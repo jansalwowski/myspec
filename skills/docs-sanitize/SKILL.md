@@ -1,14 +1,9 @@
 ---
-description: "Automatically sanitize documentation directory: fix naming, archive stale sessions, update references. Run after major documentation changes or periodically. Keywords: cleanup, naming conventions, session archiving, documentation maintenance. Do NOT use for code formatting or linting."
+name: "docs-sanitize"
+description: "Automatically sanitize ai/ documentation: fix naming, archive stale sessions, update references. Run after major documentation changes or periodically. Keywords: cleanup, naming conventions, session archiving, documentation maintenance. Do NOT use for code formatting or linting."
 ---
 
 # Docs Sanitize
-
-## Path Resolution
-1. Read `.myspec.json` from project root
-2. Extract `aiDir` value (e.g., ".ai" or "ai")
-3. All paths below use `${aiDir}` — resolve before use
-4. If `.myspec.json` not found: STOP and tell user to run `/myspec:init`
 
 ## Procedure
 
@@ -18,7 +13,8 @@ Find and fix files that violate naming conventions:
 
 ```bash
 # Find SCREAMING_CASE or PascalCase files (except README, INDEX)
-find ${aiDir}/ -name "*.md" -type f | grep -E "[A-Z].*\.md$" | grep -v -E "(README|INDEX)\.md$"
+# Replace "ai/" with your configured aiDir
+find "${AI_DIR:-ai}/" -name "*.md" -type f | grep -E "[A-Z].*\.md$" | grep -v -E "(README|INDEX)\.md$"
 ```
 
 **Fix**: Rename to kebab-case using `git mv`, update internal references.
@@ -30,7 +26,7 @@ Find sessions that need archiving:
 - Files named `session-log.md` with `status: completed` in frontmatter
 - Files named `session-log.md` older than 7 days with `status: active`
 
-**Fix**: Move to `${aiDir}/sessions/YYYY-MM-DD-{slug}.md` format using `git mv`.
+**Fix**: Move to `ai/sessions/YYYY-MM-DD-{slug}.md` format using `git mv`.
 
 ### 3. Broken References
 
@@ -38,7 +34,7 @@ After renames/moves, search for broken references:
 
 ```bash
 # Search for references to old file names
-grep -r "OLD_FILE_NAME.md" ${aiDir}/ --include="*.md"
+grep -r "OLD_FILE_NAME.md" ai/ --include="*.md"
 ```
 
 **Fix**: Update references to new paths using Edit tool.
@@ -54,7 +50,7 @@ Output summary in this format:
 - old/path.md → new/path.md
 
 ### Archived (N)
-- ${aiDir}/feature/session-log.md → ${aiDir}/sessions/YYYY-MM-DD-slug.md
+- ai/feature/session-log.md → ai/sessions/YYYY-MM-DD-slug.md
 
 ### References Updated (N)
 - file:line - description of change
@@ -66,22 +62,22 @@ Output summary in this format:
 ## Sanitization Complete
 
 ### Renamed (3)
-- ${aiDir}/MEMORY-SYSTEM.md → ${aiDir}/memory-system.md
-- ${aiDir}/features/maps/NOTES.md → ${aiDir}/features/maps/notes.md
+- ai/MEMORY-SYSTEM.md → ai/memory-system.md
+- ai/features/maps/NOTES.md → ai/features/maps/notes.md
 
 ### Archived (1)
-- ${aiDir}/session-log.md → ${aiDir}/sessions/2026-03-18-fix-session.md
+- ai/session-log.md → ai/sessions/2026-03-18-streetview-fix.md
 
 ### References Updated (2)
-- ${aiDir}/INDEX.md:45 - updated link to memory-system.md
-- ${aiDir}/pre-flight.md:12 - updated link to memory-system.md
+- ai/INDEX.md:45 - updated link to memory-system.md
+- ai/pre-flight.md:12 - updated link to memory-system.md
 ```
 
 ## Verification Checklist
 
 After running:
 
-- [ ] No naming violations remain in `${aiDir}/` directory
+- [ ] Run project documentation sanitize command if configured
 - [ ] Check git status - all renames should use `git mv`
 - [ ] Verify no broken links in documentation
 - [ ] All `session-log.md` files are either active (recent) or archived

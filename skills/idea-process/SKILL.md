@@ -1,34 +1,30 @@
 ---
-description: "Use when converting an approved idea to feature documentation. Creates spec.md, scenarios.md, seed.json in features directory. Requires idea in PRIORITY-LISTING.md. Do NOT use for intake."
+name: "idea-process"
+description: "Use when converting, promoting, or graduating an approved idea to feature documentation. Creates spec.md, dependencies.md, scenarios.md, seed.json in ${aiDir}/features/. Requires idea listed in PRIORITY-LISTING.md with satisfied dependencies. Do NOT use for idea intake or existing feature modifications."
 tags: [ideas, feature, specification, processing]
 ---
 
 # Idea Process
 
-Convert an idea from the ideas directory into structured feature documentation.
-
-## Path Resolution
-1. Read `.myspec.json` from project root
-2. Extract `aiDir` value (e.g., ".ai" or "ai")
-3. All paths below use `${aiDir}` — resolve before use
-4. If `.myspec.json` not found: STOP and tell user to run `/myspec:init`
+Converts an approved idea from `ideas/` into `${aiDir}/features/` documentation (spec.md, dependencies.md, scenarios.md, seed.json).
 
 ## Prerequisites
 
-Before processing any idea, read these documents:
+Read these documents before starting:
 
 1. `${aiDir}/features/README.md` - Feature documentation structure
-2. `${aiDir}/ideas/PRIORITY-LISTING.md` - Current status and dependencies
-3. Read project overview documentation if available
+2. `ideas/PRIORITY-LISTING.md` - Current status and dependencies
 
-## Instructions
+## Workflow
 
 ### Step 1: Select Idea from Listing
 
-1. Open `${aiDir}/ideas/PRIORITY-LISTING.md`
+1. Open `ideas/PRIORITY-LISTING.md`
 2. Find the highest priority idea with status `[ ]` (not started)
-3. Verify dependencies are satisfied (all dependencies should be `[x]` or existing features)
-4. Mark the idea as `[~]` (in progress)
+3. If no `[ ]` ideas exist: inform the user — no ideas are ready for processing
+4. Verify dependencies are satisfied (all dependencies should be `[x]` or existing features)
+5. If dependencies are not satisfied: list unmet dependencies and stop
+6. Mark the idea as `[~]` (in progress)
 
 ### Step 2: Initial Analysis
 
@@ -43,7 +39,7 @@ Before processing any idea, read these documents:
 >
 > Even if the idea seems clear, there are always details that need clarification.
 
-Use these question categories:
+Apply these question categories:
 
 **Scope Questions**
 - What is explicitly IN scope?
@@ -76,54 +72,11 @@ ${aiDir}/features/{feature-name}/
 
 ### Step 5: Write spec.md
 
-Use the template from `${aiDir}/ideas/PROCESSING-INSTRUCTIONS.md`:
-
-```markdown
-# Feature Name [PLANNED]
-
-## Overview
-One paragraph explaining what this feature does and why.
-
-## User Stories
-### As a [user type]
-- I want to [action]
-- So that [benefit]
-
-## UI/UX
-### [Component/Page Name]
-**Location**: Where in the app
-**Trigger**: What causes this to display
-
-## Data Model
-### EntityName
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-
-## Business Rules
-1. Rule one description
-2. Rule two description
-
-## Integration Points
-- **Feature X**: How this interacts
-
-## Out of Scope
-- Thing not included
-```
+Read template from `references/templates.md` — Section "spec.md Template".
 
 ### Step 6: Write dependencies.md
 
-```markdown
-# {Feature Name} -- Dependencies
-
-## Feature Dependencies
-- List of features this depends on
-
-## Dependent Features
-- Features that depend on this
-
-## External Dependencies
-- Packages, APIs, etc.
-```
+Read template from `references/templates.md` — Section "dependencies.md Template".
 
 ### Step 7: Write scenarios.md
 
@@ -146,12 +99,12 @@ Add the new feature to `${aiDir}/features/index.yaml`.
 
 ### Step 10: Move to Processed
 
-1. Move the original idea file to `${aiDir}/ideas/processed/`
-2. Update `${aiDir}/ideas/PRIORITY-LISTING.md`:
+1. Move the original idea file to `ideas/processed/`
+2. Update `ideas/PRIORITY-LISTING.md`:
    - Change status from `[~]` to `[x]`
    - Update Quick Stats section
 
-## Quality Checklist
+## Verification Checklist
 
 ### Specification
 - [ ] Feature name includes status tag `[PLANNED]`

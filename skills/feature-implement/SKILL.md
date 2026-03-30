@@ -1,280 +1,204 @@
 ---
-description: "Use when starting implementation of a feature or sub-feature that has approved spec.md and tech-spec.md in the AI features directory. Converts tech-spec implementation steps into execution-ready plan with parallel task groups. Do NOT use for features without tech-spec or for already-in-progress implementation plans."
+name: feature-implement
+tags: [feature-workflow, implementation, execution, parallel, worktree]
+description: "Use when executing an implementation-plan.md from ai/features/. Uses subagents per task — parallelizes when plan allows (worktree isolation). Handles [parallel:groupName] tags, Execution Order tables, barrier sections, dual-stream fork/join. Keywords: execute plan, implement feature, run plan, start implementation. Do NOT use for creating plans (use feature-plan), for debugging (use dispatching-parallel-agents), or for plans without Execution Order table."
 ---
 
 # Feature Implement
 
-Convert an approved tech-spec into an execution-ready implementation plan, then hand off to `/myspec:execute-implementation-plan` for execution.
+Execute a feature implementation plan by dispatching subagents per task and reviewing at phase boundaries.
 
-**Core principle:** Tech-spec = design (what & how). Implementation plan = execution (tasks, order, parallelism). This skill bridges the two.
+**Announce at start:** "Executing feature-implement on `${aiDir}/features/{feature}/implementation-plan.md`."
 
-**Announce at start:** "I'm using the feature-implement skill to create the implementation plan for {feature}."
+## Execution Model
 
-## Path Resolution
+**Milestone** = a vertical slice of the feature (BE → FE → tests). Top-level execution unit. Agent checkpoints occur at milestone boundaries.
+**Phase** = a group of tasks within a milestone, ending at a barrier. Nothing should break when a phase completes.
+**Task** = a unit of work dispatched to a subagent. Sequential or parallel within a phase.
+**Phase review** = after each phase: spec compliance, code quality, test coverage, docs consistency.
+**Milestone checkpoint** = after all phases in a milestone: verify all tasks done, ask user to continue / stop / fresh.
 
-1. Read `.myspec.json` from project root
-2. Extract `aiDir` value (e.g., ".ai" or "ai")
-3. All paths below use `${aiDir}` — resolve before use
-4. If `.myspec.json` not found: STOP and tell user to run `/myspec:init`
+## Task Status Tracking
 
-## When to Use
+Plans use three checkbox states:
 
-```dot
-digraph when_to_use {
-    "Have tech-spec.md?" [shape=diamond];
-    "Tech-spec approved?" [shape=diamond];
-    "In ${aiDir}/features/?" [shape=diamond];
-    "feature-implement" [shape=box style=filled fillcolor=lightgreen];
-    "Create tech-spec first" [shape=box];
-    "Get approval first" [shape=box];
+| Status | Meaning | When to set |
+|--------|---------|-------------|
+| `[ ]` | Todo | Default state in generated plans |
+| `[~]` | In progress | Before dispatching a task's subagent |
+| `[x]` | Done | After task subagent completes AND phase review passes |
 
-    "Have tech-spec.md?" -> "Create tech-spec first" [label="no"];
-    "Have tech-spec.md?" -> "Tech-spec approved?" [label="yes"];
-    "Tech-spec approved?" -> "Get approval first" [label="no"];
-    "Tech-spec approved?" -> "In ${aiDir}/features/?" [label="yes"];
-    "In ${aiDir}/features/?" -> "feature-implement" [label="yes"];
-}
+**Rules (BLOCKING — must follow exactly):**
+
+1. **Before dispatching a task's subagent:** edit the plan file, change `[ ]` → `[~]`
+2. **After phase review passes for that task:** edit the plan file, change `[~]` → `[x]`
+3. **If task fails and agent retries:** leave as `[~]` — only mark `[x]` after success
+4. **If agent stops/crashes mid-task:** `[~]` remains in the file — new agent detects it during resume
+5. **Never mark `[x]` before phase review confirms the task passes**
+
+**Scope:** Task-level checkboxes (`### Task N:` steps). Barrier sub-steps use `[ ]`/`[x]` only (no `[~]`).
+
+## Workflow
+
+### Step 1: Parse Plan → Execution DAG
+
+Read the implementation plan. Parse milestones first, then build a DAG within each:
+
+1. **Identify milestones:** Each `### Milestone N:` heading scopes a milestone. If no milestone headings exist, treat the entire plan as a single implicit milestone (backward compatibility).
+2. **For each milestone**, extract the Execution Order table and build a DAG:
+   - Nodes = tasks + barriers. Edges = `Depends On` column.
+   - Identify phases (task groups separated by barriers).
+   - Identify parallel groups (rows with `**parallel:groupName**` in Mode).
+   - Identify dual-stream forks (phases with `3a`/`3b` style rows — two simultaneous chains).
+3. **Cross-milestone dependencies:** If a milestone's first phase says `Depends On: Milestone N`, the entire previous milestone must be complete before this one starts.
+
+**Resume detection (on startup):**
+- Scan all task checkboxes in the plan file
+- `[x]` = already done — skip entirely
+- `[~]` = was in progress when previous agent stopped — re-execute this task from scratch
+- `[ ]` = todo — execute normally
+- Find the first milestone containing any non-`[x]` task. Resume from there.
+
+**Validate before starting:**
+- Every task in every Execution Order table has a `### Task N:` section.
+- Every parallel group has a `## Barrier:` section.
+- Parallel tasks have zero file overlap (check file lists — if they share a file, treat as sequential).
+- Phase numbers are globally unique (no duplicates across milestones).
+
+### Step 2: Setup
+
+1. Ensure you are on a feature branch (never `main` / `master`). Create one if needed.
+2. Record `BASE_SHA`: `git rev-parse HEAD`
+3. Create task tracking with all tasks.
+
+### Step 3: Execute Milestones
+
+Walk milestones in order. For each milestone, walk its DAG topologically. For each phase:
+
+**Sequential tasks** — dispatch one subagent at a time:
+
+```
+Dispatch implementer (./implementer-prompt.md)
+  → DONE: proceed
+  → DONE_WITH_CONCERNS: read concerns, decide before proceeding
+  → NEEDS_CONTEXT: provide missing info, re-dispatch
+  → BLOCKED: assess (more context / better model / break down / escalate to user)
 ```
 
-## Prerequisites
+**Parallel tasks** — dispatch ALL group tasks simultaneously in ONE message:
 
-- `${aiDir}/features/{feature}/spec.md` exists with `status: approved`
-- `${aiDir}/features/{feature}/tech-spec.md` exists with `status: approved` or `status: draft` (user confirms ready)
-- For sub-features: `${aiDir}/features/{parent}/{subfeature}/tech-spec.md`
-
-## The Process
-
-```dot
-digraph process {
-    rankdir=TB;
-
-    "Read tech-spec.md + spec.md" [shape=box];
-    "Read existing codebase patterns" [shape=box];
-    "Build dependency graph from implementation steps" [shape=box];
-    "Identify parallel groups (no shared files)" [shape=box];
-    "Expand steps into execution tasks" [shape=box];
-    "Save implementation-plan.md" [shape=box];
-    "Present plan for review" [shape=box];
-    "User approves?" [shape=diamond];
-    "Revise plan" [shape=box];
-    "Hand off to execute-implementation-plan" [shape=doublecircle];
-
-    "Read tech-spec.md + spec.md" -> "Read existing codebase patterns";
-    "Read existing codebase patterns" -> "Build dependency graph from implementation steps";
-    "Build dependency graph from implementation steps" -> "Identify parallel groups (no shared files)";
-    "Identify parallel groups (no shared files)" -> "Expand steps into execution tasks";
-    "Expand steps into execution tasks" -> "Save implementation-plan.md";
-    "Save implementation-plan.md" -> "Present plan for review";
-    "Present plan for review" -> "User approves?";
-    "User approves?" -> "Hand off to execute-implementation-plan" [label="yes"];
-    "User approves?" -> "Revise plan" [label="no"];
-    "Revise plan" -> "Present plan for review";
-}
+```
+Validate file disjointness → dispatch Task N, Task M, Task K as separate
+Agent calls with isolation: "worktree" in the same message → track per-task status
+→ If one fails: keep successful worktrees, fix the failed task, then barrier
 ```
 
-### Step 1: Read Context
+**Dual-stream fork** — dispatch both stream heads simultaneously with worktree isolation. Each stream proceeds independently (with its own sequential/parallel phases). Join waits for both streams.
 
-1. Read `${aiDir}/features/{feature}/tech-spec.md` — note implementation steps, file inventory, interfaces
-2. Read `${aiDir}/features/{feature}/spec.md` — note acceptance criteria, edge cases
-3. Read existing code referenced in tech-spec (patterns to follow, files to modify)
+### Step 4: Phase Review
 
-### Step 2: Build Dependency Graph
+After all tasks in a phase complete:
 
-For each implementation step in the tech-spec:
-1. List files it creates or modifies
-2. List which other steps it depends on (shared types, imports, config)
-3. Mark steps that have no dependencies on each other as **parallelizable**
+**a) Barrier merge** (parallel tasks only):
+- Merge worktrees back to the feature branch **one at a time**.
+- On conflict: attempt resolution (auto-generated files like lockfiles, codegen output → take union). Escalate to user if truly stuck.
+- Run barrier verification commands from the plan (typecheck, tests).
 
-**Parallelism rules:**
-- Two tasks are parallel-safe if they create/modify completely disjoint file sets
-- A task that creates a shared type/config is a **barrier** — all tasks depending on it must wait
-- Tasks modifying the same file are NEVER parallel
-- When in doubt, make it sequential
+**b) Dispatch phase reviewer** (`./phase-reviewer-prompt.md`):
+- Covers ALL tasks in the phase: spec compliance, code quality, test coverage, integration, docs.
+- Returns: `APPROVED` or `ISSUES_FOUND` with specifics.
 
-### Step 3: Expand to Execution Tasks
+**c) Fix loop:**
+- If `ISSUES_FOUND` → dispatch fix agent with specific issues → re-dispatch phase reviewer.
+- Repeat until `APPROVED`.
 
-Convert each tech-spec implementation step into a full task.
+**d) Mark phase complete:** all task checkboxes in the phase are now `[x]`, unlock downstream phases within the milestone.
 
-**What the tech-spec provides:** High-level step description, file inventory, interfaces
-**What the plan adds:** Exact TDD steps, test code, run commands, commit messages, parallel group tags
+**e) Inter-phase progress note** (within a milestone, no pause — proceed immediately):
 
-### Step 4: Save Plan
-
-Save to: `${aiDir}/features/{feature}/implementation-plan.md`
-- For sub-features: `${aiDir}/features/{parent}/{subfeature}/implementation-plan.md`
-
-### Step 5: Present and Hand Off
-
-Present the plan. On approval, hand off to `/myspec:execute-implementation-plan`.
-
-## Plan Document Format
-
-### Header
-
-```markdown
-# {Feature Name} Implementation Plan
-
-> **For agentic workers:** REQUIRED: Use /myspec:execute-implementation-plan to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
->
-> **Parallel groups:** Tasks tagged `[parallel:groupName]` can be dispatched simultaneously in isolated worktrees. See Execution Order below.
-
-**Goal:** [From tech-spec]
-
-**Architecture:** [From tech-spec — reference, don't duplicate]
-
-**Tech-spec:** `${aiDir}/features/{feature}/tech-spec.md`
-
-**Spec:** `${aiDir}/features/{feature}/spec.md`
-
----
-
-## Execution Order
-
-[Visual diagram showing task dependencies and parallel groups]
-
-| Phase | Tasks | Mode | Depends On |
-|-------|-------|------|------------|
-| 1 | Task 1: Config & types | sequential | — |
-| 2 | Tasks 2-5: Extractors | **parallel:extractors** | Phase 1 |
-| 3 | Task 6: Simplification | sequential | Phase 2 |
-
----
+```
+✓ Phase N complete: [phase name]
+  Next: Phase N+1 — [phase name] ([N tasks])
 ```
 
-### Sequential Task
+After all phases in a milestone complete → proceed to **Step 4b: Milestone Checkpoint**.
 
-```markdown
-### Task N: [Component Name]
+### Step 4b: Milestone Checkpoint
 
-**Files:**
-- Create: `exact/path/to/file.ts`
-- Modify: `exact/path/to/existing.ts`
-- Test: `exact/path/to/file.test.ts`
+After all phases in a milestone complete (skip this step only for the final milestone — go directly to Step 5):
 
-**Depends on:** Task N-1
+**a) Verify milestone completion:**
+- All task checkboxes within this milestone are `[x]` (no `[~]` or `[ ]` remaining)
+- All barrier verification commands passed
+- Run verification commands from `.claude/verification.json` (test, typecheck)
 
-- [ ] **Step 1: Write the failing test**
-  [test code]
+**b) Pause and ask user:**
 
-- [ ] **Step 2: Run test — expect FAIL**
-  Run: `<test command>`
+```
+═══ Milestone N complete: [milestone name] ═══
 
-- [ ] **Step 3: Implement**
-  [implementation code]
+  Completed: [list of task names]
+  Next: Milestone N+1 — [milestone name] ([N tasks])
 
-- [ ] **Step 4: Run test — expect PASS**
-  Run: `<test command>`
+  continue  → proceed to Milestone N+1 in this session
+  stop      → commit all changes, exit (resume later with /feature-implement)
+  fresh     → commit all changes, exit — start fresh /feature-implement session next
 
-- [ ] **Step 5: Commit**
-  `git commit -m "feat({feature}): add component-name"`
+  Choice?
 ```
 
-### Parallel Task
+- **continue** → proceed to next milestone
+- **stop** → ensure all changes committed, output: "Stopped after Milestone N. Resume with `/myspec:feature-implement` — it will detect completed milestones via `[x]` checkboxes.", then exit
+- **fresh** → same as stop, additionally output: "Recommended: start a fresh `/myspec:feature-implement` session. The new agent will auto-detect progress from checkbox state and resume from Milestone N+1."
 
-```markdown
-### Task N: [Component Name] [parallel:groupName]
+### Step 5: Completion
 
-**Files:**
-- Create: `exact/path/to/file.ts`
-- Test: `exact/path/to/file.test.ts`
+1. Run Final Verification section from the plan.
+2. Dispatch holistic reviewer (`./holistic-reviewer-prompt.md`) for full diff `BASE_SHA..HEAD`.
+3. Hand off to `/myspec:feature-complete`.
 
-**Depends on:** Task M (barrier)
-**Parallel with:** Tasks N+1, N+2, N+3
+## Model Selection
 
-> **Isolation:** This task runs in its own worktree. Do not reference files created by sibling parallel tasks.
+| Role | Complexity | Model |
+|------|-----------|-------|
+| Implementer | 1-2 files, mechanical | `model: "haiku"` |
+| Implementer | Multi-file, integration | `model: "sonnet"` |
+| Phase reviewer | — | `model: "sonnet"` |
+| Final holistic reviewer | — | `model: "opus"` |
 
-- [ ] **Step 1: Write the failing test**
-  [test code]
-...
-```
+## Error Handling
 
-### Parallel Group Barrier
+| Situation | Action |
+|-----------|--------|
+| BLOCKED | More context → re-dispatch; better model; break down; or ask user |
+| NEEDS_CONTEXT | Provide info, re-dispatch |
+| One parallel task fails | Keep other worktrees, fix failed, then barrier |
+| Merge conflict at barrier | Attempt resolution; escalate if stuck |
+| Verification fails at barrier | Identify offending task, dispatch fix agent |
+| 3+ attempts same task | Escalate: "I've made N attempts. What I tried: [list]." |
 
-```markdown
-## Barrier: Merge parallel:groupName
+## Constraints
 
-> After all tasks in `parallel:groupName` complete and pass review, merge worktrees back to the working branch before proceeding.
-
-- [ ] Merge Task N worktree
-- [ ] Merge Task N+1 worktree
-- [ ] Merge Task N+2 worktree
-- [ ] Run full test suite
-- [ ] Resolve any integration conflicts
-- [ ] Commit merge: `git commit -m "feat({feature}): integrate {groupName}"`
-```
-
-## Parallel Group Detection
-
-When analyzing tech-spec implementation steps, look for these patterns:
-
-**Likely parallel:**
-- Multiple extractors/parsers for different data types (each reads different source, writes different output)
-- Independent UI components that don't share state
-- Backend services for unrelated entities
-- Test suites for independent modules
-
-**Likely sequential (barriers):**
-- Shared config/types that multiple tasks import
-- Database migrations (must run in order)
-- Pipeline orchestrators that call other modules
-- Integration tests that depend on multiple components
-
-**Tag format:** `[parallel:descriptiveName]` — the name groups related parallel tasks.
-
-## Task Expansion Rules
-
-1. **Exact file paths** — from tech-spec file inventory
-2. **Complete code** — not "add validation", but the actual validation code
-3. **TDD sequence** — write test → run (fail) → implement → run (pass) → commit
-4. **Run commands** — exact commands with expected output
-5. **Commit messages** — conventional commits: `feat({feature}): description`
-6. **Context for subagents** — each task must be self-contained; reference tech-spec interfaces inline
-7. **No duplication** — reference tech-spec for architecture/decisions, don't copy them
-
-## Integration
-
-**Called by:** `/myspec:tech-spec` (after tech-spec is approved)
-**Next:** `/myspec:execute-implementation-plan` — REQUIRED: hand off after plan is approved
-
-## Integration with Execute-Implementation-Plan
-
-When handing off to `/myspec:execute-implementation-plan`:
-
-**Sequential tasks:** Standard flow — one implementer subagent at a time.
-
-**Parallel groups:** Controller dispatches multiple implementer subagents simultaneously, each with `isolation: "worktree"`. Each gets:
-- Its task text (self-contained)
-- Shared context (interfaces from tech-spec, config from barrier task)
-- Constraint: do not modify files outside your task's file list
-
-**After parallel group completes (phase boundary):**
-- All subagents report back
-- Merge barrier: integrate worktrees, run verification commands
-- Phase review: single reviewer checks spec compliance, quality, tests, and docs for all tasks
-- Proceed to next phase
-
-**Model selection for parallel tasks:**
-- Most parallel tasks are mechanical (isolated, clear spec) → use fast model
-- Barrier/merge tasks need integration judgment → use standard model
+**Never:**
+- Dispatch parallel tasks that share files
+- Skip phase review after a barrier
+- Start work on `main`/`master` without user consent
+- Make subagent read the plan file (provide full task text inline)
+- Skip barrier verification commands
+- Proceed past 3 failed attempts without escalating
+- Mark `[x]` before phase review confirms the task passes
 
 ## Verification Checklist
 
-Before presenting the plan:
+After all phases complete:
 
-- [ ] Every tech-spec implementation step has a corresponding task
-- [ ] Every task has exact file paths matching tech-spec file inventory
-- [ ] Every task has TDD steps with run commands
-- [ ] Parallel groups have zero file overlap (check file lists)
-- [ ] Barriers exist after every parallel group
-- [ ] Execution order table matches task dependencies
-- [ ] All acceptance criteria from spec.md are covered by at least one task
-- [ ] Tasks reference tech-spec interfaces (not duplicated inline unless needed for subagent context)
+- [ ] All plan task checkboxes marked `[x]` in implementation-plan.md (no `[~]` or `[ ]` remaining)
+- [ ] All barrier verification commands passed (typecheck, tests)
+- [ ] Holistic reviewer returned `APPROVED`
+- [ ] No uncommitted changes from implementation
+- [ ] Read `.claude/verification.json` and run each required check — all pass
 
-## Red Flags
+## Integration
 
-**Never:**
-- Create tasks for work not in the tech-spec (scope creep)
-- Mark tasks as parallel when they share files
-- Skip the barrier/merge step after parallel groups
-- Duplicate tech-spec architecture in the plan (reference it)
-- Expand into more than ~20 tasks (if tech-spec has more steps, group related ones)
+**Called by:** `/myspec:feature-plan` (after plan approval)
+**Next:** `/myspec:feature-complete` — update docs after implementation is complete

@@ -1,36 +1,23 @@
 ---
+name: "memory-lookup"
 description: "Use when debugging, encountering errors, or researching past decisions. Searches across all memory types (procedural, semantic, episodic) in ${aiDir}/memory/. Do NOT use for first-time implementation with no prior context, research without a specific problem, or features with no existing memories."
 ---
 
 # Memory Lookup
 
-## Path Resolution
+## Workflow
 
-1. Read `.myspec.json` from project root
-2. Extract `aiDir` value (e.g., ".ai" or "ai")
-3. All paths below use `${aiDir}` — resolve before use
-4. If `.myspec.json` not found: STOP and tell user to run `/myspec:init`
+### 1. Classify Search Target
 
-## When to Use
-
-Invoke this skill when:
-- You're debugging a problem
-- You've encountered an error or unexpected behavior
-- You're about to repeat an approach that might have been tried before
-- You've made 2+ attempts without success
-- You're researching why a past decision was made
-
-## Procedure
-
-### 1. Identify Search Context
-
-Determine what you're looking for:
+Classify the search target:
 - Error messages or symptoms → search procedural (Use When column)
 - Facts about a system/API → search semantic (Topic column)
 - Past decisions or events → search episodic (Event column)
 - Unsure → search all three
 
 ### 2. Scan Procedural Index
+
+If search context excludes procedural (e.g., pure fact lookup), skip to step 3.
 
 Read `${aiDir}/memory/procedural/index.md`:
 - Match "Use When" column against: error message keywords, component/API names, symptoms
@@ -39,11 +26,15 @@ Read `${aiDir}/memory/procedural/index.md`:
 
 ### 3. Scan Semantic Index
 
+If search context excludes semantic (e.g., pure debugging), skip to step 4.
+
 Read `${aiDir}/memory/semantic/index.md`:
 - Match "Topic" column against current domain
 - Check for ⚠️ stale flags — verify anchor before trusting
 
 ### 4. Scan Episodic Index
+
+If search context excludes episodic, skip to step 5.
 
 Read `${aiDir}/memory/episodic/index.md`:
 - Check for events related to current feature/component
@@ -79,6 +70,15 @@ If a session is active, log which memory was used, whether it helped, and the re
 Memories with `validation_count >= 3` are proven patterns. Prioritize these when multiple memories match.
 
 If a memory has `validation_count = 0` and seems outdated, ask user before applying.
+
+## Verification Checklist
+
+- [ ] Search context classified (procedural/semantic/episodic/all)
+- [ ] Relevant index files scanned (procedural, semantic, episodic)
+- [ ] Matched memories loaded and read in full
+- [ ] Procedures followed exactly as written; semantic facts verified against current state
+- [ ] Tracking updated: `validation_count` incremented or staleness flagged
+- [ ] Session log updated (if session active)
 
 ## When NOT to Use
 

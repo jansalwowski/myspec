@@ -1,17 +1,10 @@
 ---
+name: "feature-tech-spec"
 description: "Use when designing implementation for an approved feature. Creates tech-spec.md with architecture and implementation steps. Requires approved spec.md. Do NOT use for features still in planning."
+tags: [technical, specification, architecture, implementation]
 ---
 
-# Create Technical Specification
-
-Create a technical specification from an approved product spec.
-
-## Path Resolution
-
-1. Read `.myspec.json` from project root
-2. Extract `aiDir` value (e.g., ".ai" or "ai")
-3. All paths below use `${aiDir}` — resolve before use
-4. If `.myspec.json` not found: STOP and tell user to run `/myspec:init`
+# Feature Tech-Spec
 
 ## Prerequisites
 - `${aiDir}/features/{feature}/spec.md` must exist with `status: approved`
@@ -49,9 +42,10 @@ Required sections:
 - Data flow diagram (if complex)
 
 ### Key Interfaces / Types
-```
+```typescript
 // New interfaces this feature introduces
-// Use your project's language conventions
+interface EntityInput { ... }
+interface EntityOutput { ... }
 ```
 
 ### Implementation Steps
@@ -62,14 +56,20 @@ Ordered task list:
 
 ### Database Changes
 ```
-// New models or field additions
-// Use your project's schema format (migrations, ORM models, etc.)
+// New models, tables, or field additions (use project's schema language)
+Entity {
+  id        ...
+  // ...
+}
 ```
 
-### API Design
+### API Schema (if applicable)
 ```
-// API endpoints, schema definitions, or RPC interfaces
-// Use your project's API format
+// New API types, GraphQL schema, REST endpoints, etc.
+type Entity {
+  id: ID!
+  # ...
+}
 ```
 
 ### API Endpoints (if applicable)
@@ -91,8 +91,8 @@ Document key architectural decisions as ADRs:
 ### File Inventory
 | File | Action | Purpose |
 |------|--------|---------|
-| `path/to/file` | Create | Description |
-| `path/to/existing` | Modify | What changes |
+| `path/to/file.ts` | Create | Description |
+| `path/to/existing.ts` | Modify | What changes |
 
 4. **Validate Alignment**
    - Ensure `based_on_spec_version` matches `spec.md`'s `spec_version`
@@ -101,3 +101,19 @@ Document key architectural decisions as ADRs:
 
 5. **Present for Review**
    Show the tech spec and ask for approval before implementation.
+
+## Verification Checklist
+
+- [ ] `${aiDir}/features/{feature}/tech-spec.md` created with valid YAML frontmatter
+- [ ] `based_on_spec_version` matches `spec_version` in spec.md
+- [ ] Every acceptance criterion from spec.md has at least one implementation step
+- [ ] All implementation steps have dependency notes where applicable
+- [ ] File Inventory table covers all files to be created/modified
+- [ ] Key Interfaces / Types section defines new types introduced
+- [ ] Database Changes section present (or explicitly marked "None")
+- [ ] Run verification checks from `.claude/verification.json` — all pass
+
+## Integration
+
+**Called by:** `/myspec:feature-spec-review` (after spec is approved and reviewed)
+**Next:** `/myspec:feature-plan` — REQUIRED: create execution-ready implementation plan from this tech-spec

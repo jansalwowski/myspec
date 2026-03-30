@@ -2,13 +2,12 @@
 title: "Feature Decompose Templates"
 purpose: "Full templates for sub-feature files"
 load_when: "using feature-decompose skill and creating sub-feature files"
+updated: 2025-01-19
 ---
 
 # Feature Decompose Templates
 
 Full templates for creating sub-feature files during feature decomposition.
-
-All paths use `${aiDir}` — resolve from `.myspec.json` before use.
 
 ## Sub-Feature spec.md Template
 
@@ -173,9 +172,9 @@ This feature is split into modular sub-features:
 
 | Feature | Phase | Status | Description | Priority |
 |---------|-------|--------|-------------|----------|
-| [{SubFeature 1}](./{sub1}/spec.md) | 1 | Complete | [Description] | P1 |
-| [{SubFeature 2}](./{sub2}/spec.md) | 2 | In Progress | [Description] | P1 |
-| [{SubFeature 3}](./{sub3}/spec.md) | 2 | Draft | [Description] | P2 |
+| [{SubFeature 1}](./{sub1}/spec.md) | 1 | ✅ Complete | [Description] | P1 |
+| [{SubFeature 2}](./{sub2}/spec.md) | 2 | 🔄 In Progress | [Description] | P1 |
+| [{SubFeature 3}](./{sub3}/spec.md) | 2 | ⬜ Draft | [Description] | P2 |
 
 See individual sub-feature specs for details.
 ```
@@ -196,8 +195,8 @@ Add this section:
 
 This feature is decomposed into:
 
-- **{sub-feature-1}**: [Description] -> [dependencies.md](./{sub1}/dependencies.md)
-- **{sub-feature-2}**: [Description] -> [dependencies.md](./{sub2}/dependencies.md)
+- **{sub-feature-1}**: [Description] → [dependencies.md](./{sub1}/dependencies.md)
+- **{sub-feature-2}**: [Description] → [dependencies.md](./{sub2}/dependencies.md)
 
 Dependencies for each sub-feature are tracked separately.
 ```
@@ -238,7 +237,7 @@ Add note at top:
 
 ## Feature-Level index.yaml Template
 
-Create `${aiDir}/features/{feature}/index.yaml`:
+Create `ai/features/{feature}/index.yaml`:
 
 ```yaml
 # Sub-feature manifest for {Feature Title}
@@ -267,4 +266,4 @@ sub-features:
 - Include `note` field for important context
 
 **Update main index.yaml:**
-After creating feature-level index.yaml, add `subfeatures: true` to parent feature entry in main `${aiDir}/features/index.yaml`.
+After creating feature-level index.yaml, add `subfeatures: true` to parent feature entry in main `ai/features/index.yaml`.

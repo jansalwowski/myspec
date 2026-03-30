@@ -1,20 +1,15 @@
 ---
+name: "feature-spec-sync"
 description: >
   Use when documentation seems outdated, after refactoring, or before feature completion.
   Detects documentation drift, validates tech-spec file paths, syncs spec versions.
   Do NOT use for creating new specs or mid-implementation.
+tags: [documentation, maintenance, verification, sync]
 ---
 
 # Spec Sync
 
 Detect and fix discrepancies between feature documentation (spec.md, tech-spec.md) and actual code. Interactive workflow with user confirmation for all changes.
-
-## Path Resolution
-
-1. Read `.myspec.json` from project root
-2. Extract `aiDir` value (e.g., ".ai" or "ai")
-3. All paths below use `${aiDir}` — resolve before use
-4. If `.myspec.json` not found: STOP and tell user to run `/myspec:init`
 
 ## Prerequisites
 
@@ -37,16 +32,16 @@ Scan for four types of issues:
 **A. File Path Validation**
 
 From tech-spec.md "File Inventory" section:
-- Extract all file paths from the inventory
+- Extract all file paths from the File Inventory section (adapt the regex below to the project's directory structure)
 - Use Glob to verify each path exists
-- For missing files, use fuzzy matching to find similar paths (e.g., `guide.ts` -> `guides.ts`)
+- For missing files, use fuzzy matching to find similar paths (e.g., `guide.ts` → `guides.ts`)
 - Categorize: EXISTS, MISSING, MOVED (similar file found)
 
 **B. Spec Version Alignment**
 
 Compare frontmatter fields:
-- `spec.md` -> `spec_version` field
-- `tech-spec.md` -> `based_on_spec_version` field
+- `spec.md` → `spec_version` field
+- `tech-spec.md` → `based_on_spec_version` field
 - Detect: MISMATCH (values differ), MISSING (field absent)
 
 **C. Implementation Checkboxes**
@@ -76,10 +71,10 @@ Discrepancies Found in {feature}
 
 | # | Type | Severity | Location | Description | Status |
 |---|------|----------|----------|-------------|--------|
-| 1 | File Path | High | tech-spec.md:145 | path/to/service.ts | MISSING |
-| 2 | File Path | Medium | tech-spec.md:146 | path/to/services.ts | MOVED (service.ts -> services.ts) |
+| 1 | File Path | High | tech-spec.md:145 | apps/api/src/services/guide.ts | MISSING |
+| 2 | File Path | Medium | tech-spec.md:146 | apps/api/src/services/guides.ts | MOVED (guide.ts → guides.ts) |
 | 3 | Spec Version | High | Frontmatter | spec_version=3 vs based_on_spec_version=2 | MISMATCH |
-| 4 | Checkbox | Medium | tech-spec.md:89 | "Create Service" (file exists) | SHOULD_BE_CHECKED |
+| 4 | Checkbox | Medium | tech-spec.md:89 | "Create GuideService" (file exists) | SHOULD_BE_CHECKED |
 | 5 | Feature Status | Medium | index.yaml | 12/15 steps (80%) but status=draft | MISMATCH |
 ```
 
@@ -106,9 +101,9 @@ Always include "skip" option. For file paths with fuzzy matches, list alternativ
 ### 6. Execute Changes
 
 For each user-approved change:
-- Show exact edit being made (old -> new)
+- Show exact edit being made (old → new)
 - Execute using Edit tool
-- Confirm: "Updated {file}:{line}"
+- Confirm: "✓ Updated {file}:{line}"
 
 **Non-destructive Rule**: Never auto-delete content. Always present options and wait for confirmation.
 
@@ -120,9 +115,9 @@ After all fixes, summarize: changes made, items skipped, files modified.
 
 Use these for scanning:
 
-**File paths in tech-spec.md:**
+**File paths in tech-spec.md** (adapt to project structure):
 ```regex
-[a-zA-Z0-9/_-]+\.[a-zA-Z]+
+(src|apps|packages|lib)/[a-zA-Z0-9/_-]+\.(ts|tsx|vue|js|jsx|py|rb|go|prisma|graphql)
 ```
 
 **Implementation checkboxes:**
@@ -152,6 +147,6 @@ After running spec-sync:
 - Work on one feature at a time for manageable output
 - Always present findings before making changes
 - Never auto-fix without user approval
-- Fuzzy matching helps catch file renames (service.ts -> services.ts, singular -> plural)
+- Fuzzy matching helps catch file renames (guide.ts → guides.ts, singular → plural)
 - High-severity issues should be fixed first
 - Status suggestions based on completion: <30% = draft, 30-80% = in-progress, >80% = complete or needs review

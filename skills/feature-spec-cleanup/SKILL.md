@@ -1,17 +1,12 @@
 ---
+name: "feature-spec-cleanup"
 description: "Use when cleaning up spec.md files that contain implementation details. Identifies SQL, TypeScript, GraphQL code, database indexes, file paths. Moves technical content to tech-spec.md. Do NOT use for creating new specs."
+tags: [documentation, cleanup, maintenance, spec]
 ---
 
 # Spec Cleanup
 
 Clean up spec.md files that violate the business-vs-technical documentation separation by moving implementation details to tech-spec.md.
-
-## Path Resolution
-
-1. Read `.myspec.json` from project root
-2. Extract `aiDir` value (e.g., ".ai" or "ai")
-3. All paths below use `${aiDir}` — resolve before use
-4. If `.myspec.json` not found: STOP and tell user to run `/myspec:init`
 
 ## Instructions
 
@@ -20,40 +15,35 @@ Clean up spec.md files that violate the business-vs-technical documentation sepa
 Read the target feature's documentation:
 - Read `${aiDir}/features/{feature}/spec.md`
 - Read `${aiDir}/features/{feature}/tech-spec.md` (if exists)
-- Read `${aiDir}/workflow.md` for documentation rules
+- Read `.claude/rules/workflow.md` for documentation rules (if it exists)
 
 ### 2. Detect Violations
 
 Scan spec.md for technical implementation content:
 
-**Code blocks** with language tags (common technical patterns):
+**Code blocks** with language tags (examples — adjust to project stack):
 - ` ```sql ` - SQL queries, DDL statements
 - ` ```typescript ` or ` ```ts ` - TypeScript implementation
 - ` ```javascript ` or ` ```js ` - JavaScript code
-- ` ```python ` or ` ```py ` - Python implementation
-- ` ```go ` - Go implementation
-- ` ```rust ` - Rust implementation
-- ` ```java ` - Java implementation
-- ` ```graphql ` - GraphQL schema implementations
 - ` ```prisma ` - ORM schema definitions
-- ` ```proto ` - Protocol buffer definitions
+- ` ```graphql ` - GraphQL schema implementations
+- Any language-specific code block that contains implementation details
 
-**SQL keywords** (case-insensitive):
+**SQL/database keywords** (case-insensitive):
 - `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `CREATE TABLE`, `ALTER TABLE`
 - `DROP`, `TRUNCATE`, `BEGIN`, `COMMIT`, `ROLLBACK`
 
-**ORM/query builder patterns**:
-- Common ORM operations: `findMany`, `findOne`, `findUnique`, `create`, `update`, `upsert`, `delete`
-- Schema decorators: `@@index`, `@@unique`, `@@id`, `@relation`, `@Column`, `@Entity`
+**ORM/database operation patterns** (examples for Prisma — adapt to project ORM):
+- `findMany`, `findUnique`, `create`, `update`, `upsert`, `delete`, `createMany`
+- `@@index`, `@@unique`, `@@id`, `@relation`
 
 **Database index specs**:
 - `GIN`, `B-tree`, `BRIN`, `Hash`, `GiST`, `SP-GiST`
 - `trigram`, `tsvector`, `gin_trgm_ops`
 
-**File paths** (implementation references):
-- `src/`, `lib/`, `internal/`, `cmd/`, `pkg/`
-- Common source file extensions: `.ts`, `.js`, `.py`, `.go`, `.rs`, `.java`, `.vue`, `.tsx`, `.jsx`
-- `import`, `export`, `from`, `require()`, `include`
+**File paths** (adapt `src/`, `apps/`, `packages/` to project structure):
+- Source directory patterns: `.ts`, `.vue`, `.tsx`, `.jsx`, `.py`, `.rb`, etc.
+- `import`, `export`, `from`, `require()`
 
 ### 3. Categorize Content
 
@@ -75,19 +65,19 @@ Violations Found in {feature}/spec.md
 | Type | Lines | Count | Example |
 |------|-------|-------|---------|
 | SQL code blocks | 99-149, 224-272 | 4 | SELECT query with WHERE clause |
-| Code blocks | 125-143, 150-180 | 2 | Service function implementations |
-| API schema | 224-272 | 1 | Full type definitions |
-| Database indexes | 88-91 | 1 | Index with GIN |
-| File paths | Various | 5 | src/services/example.ts |
+| TypeScript blocks | 125-143, 150-180 | 2 | Service function implementations |
+| GraphQL schema | 224-272 | 1 | Full type definitions |
+| Database indexes | 88-91 | 1 | @@index with GIN |
+| File paths | Various | 5 | src/services/guide.ts |
 ```
 
 ### 5. Propose Changes
 
 Explain what will be moved:
-- All code blocks with language tags -> tech-spec.md
-- All SQL queries -> tech-spec.md (in "Database Queries" section)
-- All implementation patterns -> tech-spec.md
-- File paths that are implementation references -> tech-spec.md
+- All code blocks with language tags → tech-spec.md
+- All SQL queries → tech-spec.md (in "Database Queries" section)
+- All implementation patterns → tech-spec.md
+- File paths that are implementation references → tech-spec.md
 
 **Keep in spec.md**:
 - High-level data model descriptions (conceptual, no code)
@@ -130,8 +120,8 @@ Add sections as needed:
 - **Architecture Overview** (if applicable)
 - **Data Model** (move database schemas, indexes)
 - **Database Queries** (move SQL code blocks)
-- **API Design** (move API schemas with full code)
-- **Service Layer** (move service implementation patterns)
+- **API Design** (move GraphQL schemas with full code)
+- **Service Layer** (move TypeScript service patterns)
 - **Implementation Steps** (if applicable)
 - **File Inventory** (move file path references)
 
@@ -159,25 +149,26 @@ Check that:
 Use these regex patterns for detection:
 
 **Code fences**:
-- ` ```(sql|typescript|ts|javascript|js|python|py|go|rust|java|graphql|prisma|proto) `
+- ` ```(sql|typescript|ts|javascript|js|prisma|graphql) `
 
 **SQL keywords** (word boundaries):
 - `\b(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|TRUNCATE)\b`
 
-**ORM operations**:
-- `\b(findMany|findUnique|findFirst|findOne|create|update|upsert|delete|createMany|updateMany|deleteMany)\b`
+**ORM operations** (examples — adapt to project ORM/database layer):
+- `\b(findMany|findUnique|findFirst|create|update|upsert|delete|createMany|updateMany|deleteMany)\b`
 
 **Database indexes**:
 - `@@index|@@unique|@@id`
 - `\b(GIN|B-tree|BRIN|Hash|GiST|trigram|tsvector)\b`
 
 **File paths**:
-- `\b(src|lib|internal|cmd|pkg)/[a-zA-Z0-9/_-]+\.(ts|tsx|js|jsx|py|go|rs|java|vue)\b`
+- `\b(src/|apps/|packages/)/[a-zA-Z0-9/_-]+\.(ts|tsx|js|jsx|vue)\b`
 
 ## Verification Checklist
 
 After cleanup:
 
+- [ ] Run project documentation audit command if configured
 - [ ] spec.md contains only business content (no code blocks with language tags)
 - [ ] tech-spec.md contains all moved technical content
 - [ ] Both files have valid frontmatter
@@ -187,7 +178,7 @@ After cleanup:
 
 ## Notes
 
-- API schemas are **always** moved to tech-spec.md (no borderline decisions)
+- GraphQL schemas are **always** moved to tech-spec.md (no borderline decisions)
 - High-level data model descriptions (field names, types, relationships) can stay in spec.md if they're conceptual
 - Database index specifications always move to tech-spec.md
 - Service layer patterns and transaction handling always move to tech-spec.md

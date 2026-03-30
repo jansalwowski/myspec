@@ -33,4 +33,4 @@ Generate entries under the `<!-- myspec:project-start -->` section:
 | AP1 | [pattern name] | [why it's harmful] | [how to detect it] |
 
 ## Output Location
-Write to `${aiDir}/anti-patterns.md` — append to existing project section if file exists.
+Write to `${aiDir}/memory-index.md` — append to existing project section if file exists.

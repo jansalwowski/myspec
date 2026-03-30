@@ -1,17 +1,10 @@
 ---
-description: "Use when starting a new feature. Creates spec.md, dependencies.md in the features directory. Handles requirements, user stories, acceptance criteria. Do NOT use for implementation or tech specs."
+name: "feature-spec"
+description: "Use when starting a new feature. Creates spec.md, dependencies.md in ai/features/. Handles requirements, user stories, acceptance criteria. Do NOT use for implementation or tech specs."
+tags: [feature, specification, planning, documentation]
 ---
 
-# Create Feature Specification
-
-Create a new feature specification following the project's documentation-first workflow.
-
-## Path Resolution
-
-1. Read `.myspec.json` from project root
-2. Extract `aiDir` value (e.g., ".ai" or "ai")
-3. All paths below use `${aiDir}` — resolve before use
-4. If `.myspec.json` not found: STOP and tell user to run `/myspec:init`
+# Feature Spec
 
 ## Instructions
 
@@ -47,7 +40,7 @@ Required sections:
    Create `${aiDir}/features/{feature-name}/dependencies.md`:
    - Feature Dependencies (what this depends on)
    - Dependent Features (what depends on this)
-   - External Dependencies (packages, APIs)
+   - External Dependencies (npm packages, APIs)
    - Rationale for non-obvious dependencies
 
 4. **Update Feature Manifest**
@@ -69,3 +62,18 @@ Required sections:
 - NO implementation details in spec (no file paths, class names)
 - Use "must" for requirements, "may" for optional
 - Ensure bidirectional dependency links are consistent
+
+## Verification Checklist
+
+- [ ] `${aiDir}/features/{feature}/spec.md` created with valid YAML frontmatter
+- [ ] `status: draft` field present in frontmatter
+- [ ] All required sections present: Overview, Goals, User Stories, Acceptance Criteria, Out of Scope, Open Questions
+- [ ] `${aiDir}/features/{feature}/dependencies.md` created
+- [ ] Entry added to `${aiDir}/features/index.yaml`
+- [ ] No implementation details in spec (no file paths, class names, SQL, code)
+- [ ] Run project documentation audit command if configured
+
+## Integration
+
+**Next:** `/myspec:feature-spec-review` — validate spec before proceeding to technical design
+**Next (large features):** `/myspec:feature-decompose` — split into sub-features before feature-spec-review

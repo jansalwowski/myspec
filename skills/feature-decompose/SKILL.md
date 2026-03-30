@@ -1,17 +1,12 @@
 ---
+name: "feature-decompose"
 description: "Use when splitting a large feature into sub-features. Keywords: decompose, split feature, break down, modularize, sub-features. Analyzes spec.md/tech-spec.md, identifies distinct capabilities, creates sub-feature directories. Requires existing feature with spec.md. Example use: '/feature-decompose search' to split search into core, filters, trending. Do NOT use for new features, single-capability features, or initial feature creation."
+tags: [feature, decompose, split, subfeatures, refactoring, modular]
 ---
 
 # Feature Decomposition Skill
 
-Splits a monolithic feature into modular sub-features.
-
-## Path Resolution
-
-1. Read `.myspec.json` from project root
-2. Extract `aiDir` value (e.g., ".ai" or "ai")
-3. All paths below use `${aiDir}` — resolve before use
-4. If `.myspec.json` not found: STOP and tell user to run `/myspec:init`
+Splits a monolithic feature into modular sub-features following the browser-extension pattern.
 
 ## Prerequisites
 
@@ -79,9 +74,9 @@ This feature is split into modular sub-features:
 
 | Feature | Phase | Status | Description | Priority |
 |---------|-------|--------|-------------|----------|
-| [{SubFeature 1}](./{sub1}/spec.md) | 1 | Complete | [Description] | P1 |
-| [{SubFeature 2}](./{sub2}/spec.md) | 2 | In Progress | [Description] | P1 |
-| [{SubFeature 3}](./{sub3}/spec.md) | 2 | Draft | [Description] | P2 |
+| [{SubFeature 1}](./{sub1}/spec.md) | 1 | ✅ Complete | [Description] | P1 |
+| [{SubFeature 2}](./{sub2}/spec.md) | 2 | 🔄 In Progress | [Description] | P1 |
+| [{SubFeature 3}](./{sub3}/spec.md) | 2 | ⬜ Draft | [Description] | P2 |
 
 See individual sub-feature specs for details.
 ```
@@ -93,8 +88,8 @@ See individual sub-feature specs for details.
 
 This feature is decomposed into:
 
-- **{sub-feature-1}**: [Description] -> [dependencies.md](./{sub1}/dependencies.md)
-- **{sub-feature-2}**: [Description] -> [dependencies.md](./{sub2}/dependencies.md)
+- **{sub-feature-1}**: [Description] → [dependencies.md](./{sub1}/dependencies.md)
+- **{sub-feature-2}**: [Description] → [dependencies.md](./{sub2}/dependencies.md)
 
 Dependencies for each sub-feature are tracked separately.
 ```
@@ -152,9 +147,7 @@ If `scenarios.md` exists, read it, analyze which scenarios belong to which sub-f
 
 ### 7. Run Verification
 
-Run documentation audit if configured.
-
-Check output for missing frontmatter, broken links, invalid YAML. Fix any issues before completing.
+Run verification checks from `.claude/verification.json`. Fix any issues before completing.
 
 ### 8. Present Summary
 
@@ -175,17 +168,17 @@ Show user:
 
 ### Updated Files
 
-- {feature}/spec.md - Added sub-features table, removed moved content
-- {feature}/dependencies.md - Added sub-features section
-- {feature}/tech-spec.md - Added sub-feature mapping
-- ${aiDir}/features/index.yaml - Added sub-features array
+- ✅ {feature}/spec.md - Added sub-features table, removed moved content
+- ✅ {feature}/dependencies.md - Added sub-features section
+- ✅ {feature}/tech-spec.md - Added sub-feature mapping
+- ✅ ${aiDir}/features/index.yaml - Added sub-features array
 
 ### Verification
 
-- All sub-features have required files
-- No duplicate content
-- All links work
-- Documentation audit passes
+- ✅ All sub-features have required files
+- ✅ No duplicate content
+- ✅ All links work
+- ✅ Verification checks pass
 
 ### Next Steps
 
@@ -262,7 +255,7 @@ After decomposition:
 - [ ] `subfeatures: true` added to parent feature in main `${aiDir}/features/index.yaml`
 - [ ] No duplicate content between parent and sub-features
 - [ ] All links between files work
-- [ ] Documentation audit passes - no errors
+- [ ] Verification checks from `.claude/verification.json` pass — no errors
 - [ ] Scenarios split appropriately (if scenarios.md existed)
 - [ ] Parent status updated to in-progress (if was draft)
 - [ ] Sub-feature dependencies properly set in feature-level index.yaml
