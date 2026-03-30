@@ -6,8 +6,13 @@
   "plugins": [
     {
       "name": "myspec",
-      "source": "./",
-      "description": "Specification-Driven Development framework with feature workflows, memory system, ideas pipeline, and project scaffolding"
+      "source": {
+        "source": "github",
+        "repo": "jansalwowski/myspec",
+        "ref": "v1.0.0"
+      },
+      "description": "Specification-Driven Development framework with feature workflows, memory system, ideas pipeline, and project scaffolding",
+      "version": "1.0.0"
     }
   ]
 }
