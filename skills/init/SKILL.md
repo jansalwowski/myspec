@@ -61,7 +61,21 @@ Write `.myspec.json` at project root:
   "frameworkFiles": {
     "memory-index.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
     "pre-flight.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
-    "memory-system.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" }
+    "memory-system.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
+    "templates/README.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
+    "templates/memory-procedural.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
+    "templates/memory-semantic.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
+    "templates/memory-episodic.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
+    "templates/index-procedural.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
+    "templates/index-semantic.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
+    "templates/index-episodic.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
+    "templates/session-log.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
+    "templates/feature-pre-flight.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
+    "templates/example-usage.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
+    "rules/workflow.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
+    "rules/memory-system.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
+    "rules/ideas.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
+    "rules/skill-optimization.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" }
   }
   // "topologyFile": "backbone.yml"  ← added by /myspec:setup backbone
 }
@@ -84,18 +98,18 @@ ${aiDir}/
     episodic/
       index.md         ← copy from framework-files/templates/index-episodic.md
     sessions/
-      .gitkeep
+      .gitkeep              ← create empty file
   .templates/
-    session-log.md     ← copy from framework-files/templates/session-log.md
-    memory-procedural.md
-    memory-semantic.md
-    memory-episodic.md
-    feature-pre-flight.md
-    README.md
+    session-log.md          ← copy from framework-files/templates/session-log.md
+    memory-procedural.md    ← copy from framework-files/templates/memory-procedural.md
+    memory-semantic.md      ← copy from framework-files/templates/memory-semantic.md
+    memory-episodic.md      ← copy from framework-files/templates/memory-episodic.md
+    feature-pre-flight.md   ← copy from framework-files/templates/feature-pre-flight.md
+    README.md               ← copy from framework-files/templates/README.md
   ideas/
-    INTAKE-INSTRUCTIONS.md   ← copy from scaffolding/ideas/
-    PRIORITY-LISTING.md
-    PROCESSING-INSTRUCTIONS.md
+    INTAKE-INSTRUCTIONS.md      ← copy from scaffolding/ideas/INTAKE-INSTRUCTIONS.md
+    PRIORITY-LISTING.md         ← copy from scaffolding/ideas/PRIORITY-LISTING.md
+    PROCESSING-INSTRUCTIONS.md  ← copy from scaffolding/ideas/PROCESSING-INSTRUCTIONS.md
   conventions/
     .gitkeep
   decisions/
@@ -178,7 +192,10 @@ Next steps:
 - Default to `ai/` for aiDir if user is uncertain
 - Skip empty verification commands gracefully (write placeholder, note it needs filling)
 - Never overwrite existing `.myspec.json` without explicit confirmation
-- If `.claude/settings.json` already exists, merge hooks — do not replace it
+- If `.claude/settings.json` already exists, deep-merge the `hooks` key only:
+  - For each hook type (`PreToolUse`, `PostToolUse`, `Stop`), append new hook entries that don't already exist (match by `command` field)
+  - Do not modify or remove existing hook entries or any other settings keys
+  - If no `hooks` key exists in the existing file, add it
 
 ## Verification Checklist
 

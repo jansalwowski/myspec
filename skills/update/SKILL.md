@@ -34,16 +34,20 @@ From `manifest.json`, collect all files. Each file has a `type`:
 - **`marker-merge`** — replace only the content between `<!-- myspec:framework-start -->` and `<!-- myspec:framework-end -->` markers, preserving everything outside the markers
 
 For `files` entries: destination is `{aiDir}/{filename}`.
-For `rules` entries: destination is the `dest` path (e.g., `.claude/rules/workflow.md`).
+For `rules` entries: source is `framework-files/rules/{filename}`, destination is the `dest` path (e.g., `.claude/rules/workflow.md`).
+For `hooks` entries: source is `hooks/{filename}`, destination is the `dest` path (e.g., `.claude/hooks/guard-git-branch.sh`).
+
+For `hooks`: only process if `.claude/hooks/` directory exists. If it doesn't exist, skip all hooks and note: "Hooks directory not found — skipping hook updates. Run `/myspec:init` with hooks enabled to set them up."
 
 ### Step 3: Apply Updates
 
 For each file in the manifest:
 
 **`overwrite` strategy:**
-1. Read the source file from `framework-files/{filename}` (or `framework-files/rules/{filename}` for rules)
+1. Read the source file from `framework-files/{filename}` (or `framework-files/rules/{filename}` for rules, or `hooks/{filename}` for hooks)
 2. Replace `${aiDir}` placeholders with the configured `aiDir` value
 3. Write to destination, replacing the existing file entirely
+4. For hooks: run `chmod +x {dest}` after writing
 
 **`marker-merge` strategy:**
 1. Read the source file from `framework-files/{filename}`
@@ -70,6 +74,8 @@ Updated files:
 
 Preserved (project-customized sections):
   {list marker-merge files where project content was kept}
+
+Hooks: {updated N scripts / skipped — hooks directory not found}
 
 Next: Run /myspec:bootstrap to verify the setup is still correct.
 ```

@@ -20,5 +20,11 @@
     "memory-system.md": { "type": "overwrite", "dest": ".claude/rules/memory-system.md" },
     "ideas.md": { "type": "overwrite", "dest": ".claude/rules/ideas.md" },
     "skill-optimization.md": { "type": "overwrite", "dest": ".claude/rules/skill-optimization.md" }
+  },
+  "hooks": {
+    "guard-git-branch.sh": { "type": "overwrite", "dest": ".claude/hooks/guard-git-branch.sh" },
+    "validate-frontmatter.sh": { "type": "overwrite", "dest": ".claude/hooks/validate-frontmatter.sh" },
+    "mark-code-changed.sh": { "type": "overwrite", "dest": ".claude/hooks/mark-code-changed.sh" },
+    "verify-before-stop.sh": { "type": "overwrite", "dest": ".claude/hooks/verify-before-stop.sh" }
   }
 }
