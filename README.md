@@ -45,6 +45,7 @@ Use `/reload-plugins` after making changes.
 | `/myspec:feature-spec` | Create feature specification (spec.md + dependencies.md) |
 | `/myspec:feature-decompose` | Split large feature into sub-features |
 | `/myspec:feature-spec-review` | Validate spec for completeness and consistency |
+| `/myspec:cross-spec-validation` | Check spec against related specs for contradictions and broken contracts |
 | `/myspec:feature-tech-spec` | Create technical design from approved spec |
 | `/myspec:feature-tech-spec-review` | Review tech-spec for implementability and pattern conformance |
 | `/myspec:feature-plan` | Create execution-ready implementation plan from tech-spec |
