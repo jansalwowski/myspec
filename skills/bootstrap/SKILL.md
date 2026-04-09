@@ -69,7 +69,7 @@ This step is informational only — do not auto-cleanup.
 Output a brief structured summary so the user can confirm Claude is properly oriented:
 
 ```
-## Session Ready
+## Bootstrap Complete
 
 **Project**: {project name from .myspec.json, or inferred from package.json/repo name}
 **Stack**: {tech stack from .myspec.json, or "not configured"}
@@ -78,10 +78,12 @@ Output a brief structured summary so the user can confirm Claude is properly ori
 **Memory loaded**: [count] procedural | [count] semantic | [count] episodic entries checked
 **Matches**: [list any memory entries that matched current task, or "none"]
 **Topology**: [{filename} loaded / not configured — run `/myspec:setup backbone` to create one]
-**Active session**: [yes (slug) / no]
+**Active session**: [yes (slug) / no — start one with `/session-start`]
 **Worktree health**: [clean (N active) / WARNING — N stale/orphaned. Run `/myspec:worktree-cleanup`]
 **Boundaries**: [any never_modify paths relevant to task, or "none relevant"]
 ```
+
+**Note**: Bootstrap satisfies the `/myspec:memory-preflight` prerequisite for `/myspec:session-start`. If the task involves implementation, debugging, or discovery work, suggest running `/session-start` next. Bootstrap does NOT create a session — it only orients the project context.
 
 ## When NOT to Use
 
