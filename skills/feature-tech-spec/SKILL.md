@@ -115,5 +115,5 @@ Document key architectural decisions as ADRs:
 
 ## Integration
 
-**Called by:** `/myspec:feature-spec-review` (after spec is approved and reviewed)
+**Called by:** `/myspec:feature-spec-review` or `/myspec:cross-spec-validation` (after spec is approved and optionally cross-validated)
 **Next:** `/myspec:feature-plan` — REQUIRED: create execution-ready implementation plan from this tech-spec

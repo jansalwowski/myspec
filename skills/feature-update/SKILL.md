@@ -78,7 +78,13 @@ Ask the user to confirm the changes look correct before handing off.
 
 ### Step 6: Hand Off
 
-After user approval, hand off to `/myspec:feature-plan` to create a new implementation plan scoped to the changes.
+After user approval, present the next step choice:
+
+> **What's next?**
+> - **A) `/myspec:cross-spec-validation`** — check updated spec against all related feature specs for contradictions or broken assumptions *(recommended — updates often break other specs)*
+> - **B) `/myspec:feature-plan`** — skip cross-check, go straight to implementation planning
+
+Wait for user to choose before proceeding.
 
 Note: `/myspec:feature-plan` will create a new `implementation-plan.md`. The previous plan (if any) has already been archived to `plans/` by `/myspec:feature-complete`. If there is still an active `implementation-plan.md` from an incomplete previous run, alert the user before proceeding.
 
@@ -104,5 +110,6 @@ Note: `/myspec:feature-plan` will create a new `implementation-plan.md`. The pre
 ## Integration
 
 **Replaces:** Manually editing spec.md and tech-spec.md for existing feature modifications
+**Suggests:** `/myspec:cross-spec-validation` — validate updated spec against related specs *(user chooses)*
 **Next:** `/myspec:feature-plan` — create execution-ready implementation plan for the changes
 **Related:** `/myspec:feature-spec-review`, `/myspec:feature-tech-spec-review` — optionally review updated docs before planning

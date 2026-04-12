@@ -54,10 +54,17 @@ tags: [feature-workflow, specification, validation, critical-thinking]
    - Increment `spec_version` in spec.md frontmatter
    - Update `updated` date in frontmatter
 
-9. **Summary**
+9. **Summary & Next Step**
    - Show changes made (file paths, sections affected)
    - List remaining issues (if any)
-   - Recommend next step: re-review, tech-spec, or address issues first
+   - If remaining Critical/High issues → recommend addressing those first
+   - If spec is approved (no Critical/High remaining), present the next step choice:
+
+   > **What's next?**
+   > - **A) `/myspec:cross-spec-validation`** — check this spec against all related feature specs for contradictions, broken contracts, or superseded assumptions *(recommended before tech-spec)*
+   > - **B) `/myspec:feature-tech-spec`** — skip cross-check, go straight to technical design
+
+   Wait for user to choose before proceeding.
 
 ## Review Dimensions Reference
 
@@ -200,4 +207,5 @@ User: /spec-review guide-versioning
 ## Integration
 
 **Called by:** `/myspec:feature-spec` (after spec is created and user approves review)
+**Suggests:** `/myspec:cross-spec-validation` — validate against related specs *(user chooses)*
 **Next:** `/myspec:feature-tech-spec` — create technical design once spec is approved
