@@ -7,13 +7,13 @@ description: "Use when starting a tracked work session (debugging, discovery, or
 
 ## Prerequisites
 
-Requires `/myspec:memory-preflight` completion before starting a session.
+Requires `/myspec:memory-preflight` or `/myspec:bootstrap` completion before starting a session.
 
 ## Workflow
 
 ### 1. Check Prerequisites
 
-Confirm `/myspec:memory-preflight` has been run this session.
+Confirm `/myspec:memory-preflight` or `/myspec:bootstrap` has been run this session.
 
 If `${aiDir}/memory/sessions/active.md` already exists:
 - When `status: active` — warn user and ask whether to archive via `/session-complete` first
@@ -71,7 +71,7 @@ After each significant action, append a row to the log table:
 
 ## Verification Checklist
 
-- [ ] `/myspec:memory-preflight` was run before session start
+- [ ] `/myspec:memory-preflight` or `/myspec:bootstrap` was run before session start
 - [ ] No pre-existing `active.md` with `status: active` was silently overwritten
 - [ ] `${aiDir}/memory/sessions/active.md` exists with correct frontmatter
 - [ ] Mode is one of: `debugging`, `discovery`, `implementation`
