@@ -1,6 +1,11 @@
 ---
 name: cross-spec-validation
-description: Use when a new or modified feature spec may contradict, supersede, or break assumptions in existing feature specs. Keywords: cross-spec, contradiction, spec conflict, supersede, breaking change, API contract, schema conflict, behavioral assumption. Do NOT use for single-spec review (use feature-spec-review) or code-level drift (use feature-spec-sync).
+description: >
+  Use when a new or modified feature spec may contradict, supersede, or break
+  assumptions in existing feature specs. Keywords: cross-spec, contradiction,
+  spec conflict, supersede, breaking change, API contract, schema conflict,
+  behavioral assumption. Do NOT use for single-spec review (use
+  feature-spec-review) or code-level drift (use feature-spec-sync).
 tags: [feature-workflow, validation, cross-cutting, specification]
 ---
 

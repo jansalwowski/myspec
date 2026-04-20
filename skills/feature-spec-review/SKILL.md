@@ -1,6 +1,11 @@
 ---
 name: feature-spec-review
-description: Use when reviewing spec.md for completeness, consistency, and logical gaps. Keywords: review spec, critique requirements, validate spec, check spec, spec analysis, requirements review. Identifies missing requirements, contradictions, scope creep, unclear acceptance criteria. Do NOT use for tech-spec review or implementation review.
+description: >
+  Use when reviewing spec.md for completeness, consistency, and logical gaps.
+  Keywords: review spec, critique requirements, validate spec, check spec, spec
+  analysis, requirements review. Identifies missing requirements,
+  contradictions, scope creep, unclear acceptance criteria. Do NOT use for
+  tech-spec review or implementation review.
 tags: [feature-workflow, specification, validation, critical-thinking]
 ---
 
