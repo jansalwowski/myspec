@@ -15,7 +15,7 @@
     "skills",
     "project-scaffolding"
   ],
-  "skills": "../../skills/",
+  "skills": "./skills/",
   "hooks": "./hooks.json",
   "interface": {
     "displayName": "myspec",
