@@ -1,8 +1,24 @@
 # myspec
 
-Specification-Driven Development framework for Claude Code. Provides skills for feature workflows, memory system, ideas pipeline, and project scaffolding.
+Specification-Driven Development framework for Claude Code and Codex. Provides skills for feature workflows, memory system, ideas pipeline, and project scaffolding.
 
 ## Installation
+
+### Codex
+
+This repository now includes a native Codex manifest at `.codex-plugin/plugin.json`.
+
+Install it as a local plugin by pointing Codex at this repository root, then use the skills from `skills/`.
+
+In Codex, use skill names directly, for example:
+
+```
+Use the myspec init skill to set up this project.
+Use the myspec bootstrap skill before making changes.
+Use the myspec feature-spec skill for the new authentication flow.
+```
+
+Current Codex support is skill-based. The Claude-specific hook/rules bootstrap under `.claude/` is still documented for Claude Code and is not yet auto-wired through the Codex plugin manifest.
 
 ### Add the marketplace (once per machine)
 
@@ -31,6 +47,8 @@ claude --plugin-dir /path/to/myspec
 ```
 
 Use `/reload-plugins` after making changes.
+
+For Codex, reload or reinstall the local plugin after editing the manifest or skills, depending on your Codex setup.
 
 ## Skills Reference
 
