@@ -7,6 +7,7 @@ Specification-Driven Development framework for Claude Code and Codex. Provides s
 ### Codex
 
 This repository now includes a native Codex manifest at `.codex-plugin/plugin.json`.
+It also includes a Codex marketplace manifest at `.agents/plugins/marketplace.json`.
 
 Install it as a local plugin by pointing Codex at this repository root, then use the skills from `skills/`.
 
@@ -55,6 +56,12 @@ claude --plugin-dir /path/to/myspec
 Use `/reload-plugins` after making changes.
 
 For Codex, reload or reinstall the local plugin after editing the manifest or skills, depending on your Codex setup.
+
+To add this repository as a Codex marketplace from Git, use:
+
+```bash
+codex marketplace add git@github.com:jansalwowski/myspec.git --ref feat/codex-plugin-support
+```
 
 ## Skills Reference
 
