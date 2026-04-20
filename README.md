@@ -7,7 +7,7 @@ Specification-Driven Development framework for Claude Code and Codex. Provides s
 ### Codex
 
 This repository now includes a native Codex manifest at `.codex-plugin/plugin.json`.
-It also includes a Codex marketplace manifest at `.agents/plugins/marketplace.json`.
+It also includes a Codex marketplace manifest at `.agents/plugins/marketplace.json` and a marketplace-compatible plugin wrapper at `plugins/myspec/`.
 
 Install it as a local plugin by pointing Codex at this repository root, then use the skills from `skills/`.
 

@@ -8,7 +8,7 @@
       "name": "myspec",
       "source": {
         "source": "local",
-        "path": "./"
+        "path": "./plugins/myspec"
       },
       "policy": {
         "installation": "AVAILABLE",
