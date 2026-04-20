@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # guard-git-branch.sh
 # PreToolUse hook (Bash matcher) — blocks branch-mutating git commands when
-# running in the main checkout. Agents must use `isolation: "worktree"` instead.
+# running in the main checkout. Works both as a copied Claude hook under
+# `.claude/hooks/` and as a Codex plugin hook invoked from the plugin repo.
 #
 # Worktree detection: worktrees have .git as a FILE (gitdir: pointer).
 # The main checkout has .git as a DIRECTORY.
@@ -15,15 +16,57 @@ set -euo pipefail
 INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
 
+resolve_repo_root() {
+  local candidate resolved
+
+  if command -v jq >/dev/null 2>&1; then
+    while IFS= read -r candidate; do
+      [ -n "$candidate" ] || continue
+      if resolved=$(git -C "$candidate" rev-parse --show-toplevel 2>/dev/null); then
+        printf '%s\n' "$resolved"
+        return 0
+      fi
+      if [ -f "$candidate/.myspec.json" ]; then
+        printf '%s\n' "$candidate"
+        return 0
+      fi
+    done <<EOF
+$(printf '%s' "$INPUT" | jq -r '
+  [
+    .cwd,
+    .workdir,
+    .workspace.cwd,
+    .session.cwd,
+    .tool_input.cwd,
+    .tool_input.workdir
+  ] | map(select(type == "string" and . != "")) | .[]
+' 2>/dev/null)
+EOF
+  fi
+
+  if resolved=$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null); then
+    printf '%s\n' "$resolved"
+    return 0
+  fi
+
+  candidate="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+  if resolved=$(git -C "$candidate" rev-parse --show-toplevel 2>/dev/null); then
+    printf '%s\n' "$resolved"
+    return 0
+  fi
+
+  return 1
+}
+
 if [ -z "$COMMAND" ]; then
   echo '{"decision": "approve"}'
   exit 0
 fi
 
-# Locate the repo root relative to this hook file's location:
-# .claude/hooks/guard-git-branch.sh → two levels up = repo root
-HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$HOOK_DIR/../.." && pwd)"
+if ! REPO_ROOT="$(resolve_repo_root)"; then
+  echo '{"decision": "approve"}'
+  exit 0
+fi
 
 # If .git is a FILE, we are inside a worktree — allow everything
 if [ -f "$REPO_ROOT/.git" ]; then

@@ -18,7 +18,13 @@ Use the myspec bootstrap skill before making changes.
 Use the myspec feature-spec skill for the new authentication flow.
 ```
 
-Current Codex support is skill-based. The Claude-specific hook/rules bootstrap under `.claude/` is still documented for Claude Code and is not yet auto-wired through the Codex plugin manifest.
+Codex support includes native plugin hooks via `hooks.json`. Claude compatibility remains project-local through `.claude/hooks/`, `.claude/settings.json`, and `.claude/verification.json`.
+
+The same hook scripts are now portable:
+- in Claude, `init` can copy them into `.claude/hooks/`
+- in Codex, the plugin runs them directly from this repository
+
+Both runtimes share the same project-level verification config at `.claude/verification.json` when it exists.
 
 ### Add the marketplace (once per machine)
 

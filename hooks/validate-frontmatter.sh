@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # validate-frontmatter.sh
 # PostToolUse hook — validates frontmatter on ${aiDir}/**/*.md writes/edits.
-# Outputs warnings that Claude sees as feedback and must fix before continuing.
+# Outputs warnings that the agent sees as feedback and must fix before continuing.
 # Reads aiDir from .myspec.json (defaults to "ai" if not configured).
 
 set -euo pipefail
@@ -14,6 +14,48 @@ fi
 # Read stdin JSON
 INPUT=$(cat)
 
+resolve_repo_root() {
+  local candidate resolved
+
+  if command -v jq >/dev/null 2>&1; then
+    while IFS= read -r candidate; do
+      [ -n "$candidate" ] || continue
+      if resolved=$(git -C "$candidate" rev-parse --show-toplevel 2>/dev/null); then
+        printf '%s\n' "$resolved"
+        return 0
+      fi
+      if [ -f "$candidate/.myspec.json" ]; then
+        printf '%s\n' "$candidate"
+        return 0
+      fi
+    done <<EOF
+$(printf '%s' "$INPUT" | jq -r '
+  [
+    .cwd,
+    .workdir,
+    .workspace.cwd,
+    .session.cwd,
+    .tool_input.cwd,
+    .tool_input.workdir
+  ] | map(select(type == "string" and . != "")) | .[]
+' 2>/dev/null)
+EOF
+  fi
+
+  if resolved=$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null); then
+    printf '%s\n' "$resolved"
+    return 0
+  fi
+
+  candidate="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+  if resolved=$(git -C "$candidate" rev-parse --show-toplevel 2>/dev/null); then
+    printf '%s\n' "$resolved"
+    return 0
+  fi
+
+  return 1
+}
+
 # Extract file path from tool input
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
 
@@ -21,8 +63,9 @@ if [ -z "$FILE_PATH" ]; then
   exit 0
 fi
 
-# Find repo root
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+if ! REPO_ROOT="$(resolve_repo_root)"; then
+  exit 0
+fi
 
 # Resolve to absolute path
 if [[ "$FILE_PATH" != /* ]]; then

@@ -1,6 +1,6 @@
 ---
 name: "init"
-description: "Use when setting up myspec in a new project for the first time. Keywords: initialize, setup, init, install myspec, new project setup, scaffold AI documentation. Creates .myspec.json, scaffolds ${aiDir}/ directory, copies framework files, sets up hooks and rules. Do NOT use to update framework files in an existing setup (use /myspec:update instead)."
+description: "Use when setting up myspec in a new project for the first time. Keywords: initialize, setup, init, install myspec, new project setup, scaffold AI documentation. Creates .myspec.json, scaffolds ${aiDir}/ directory, copies framework files, and can set up Claude-specific project hooks and rules. Do NOT use to update framework files in an existing setup (use update instead)."
 ---
 
 # Init
@@ -15,7 +15,7 @@ Interactive setup wizard. Run this once per project.
 
 Check if `.myspec.json` already exists in the project root.
 
-→ If it exists: warn user — "myspec is already initialized in this project. Run `/myspec:update` to update framework files. Continue anyway? (y/n)"
+→ If it exists: warn user — "myspec is already initialized in this project. Run the `update` skill to update framework files. Continue anyway? (y/n)"
 → If no: proceed.
 
 ### Step 2: Discovery Questions
@@ -39,11 +39,13 @@ Ask these **one at a time** and wait for each answer:
    - Test command (e.g., `npm test`, `pnpm test`, `pytest`):"
 
 5. **Hooks**
-   "Set up Claude Code hooks? (y/n, default: y)
+   "Set up Claude-compatible repo hooks and rules under `.claude/`? (y/n, default: y)
    This configures:
    - Git branch guard (prevents branch mutations on main checkout)
    - Frontmatter validation (enforces YAML frontmatter on AI docs)
-   - Verification on stop (runs lint/tests before agent completes)"
+   - Verification on stop (runs lint/tests before agent completes)
+
+   Note: Codex can use the plugin's built-in `hooks.json` directly. This option is for keeping project-local Claude compatibility."
 
 ### Step 3: Create `.myspec.json`
 
@@ -77,7 +79,7 @@ Write `.myspec.json` at project root:
     "rules/ideas.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
     "rules/skill-optimization.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" }
   }
-  // "topologyFile": "backbone.yml"  ← added by /myspec:setup backbone
+  // "topologyFile": "backbone.yml"  ← added by the setup skill with blueprint "backbone"
 }
 ```
 
@@ -152,18 +154,18 @@ If commands were left empty, write the placeholder structure and note: "Edit `.c
 Ask:
 "Would you like to set up project files now? I can guide you through any of these:
 
-1. **Backbone** — project topology file for agent orientation (`/myspec:setup backbone`) ← recommended first
-2. **CLAUDE.md** — project context file for Claude (`/myspec:setup claude-md`)
-3. **Conventions** — coding standards and testing patterns (`/myspec:setup conventions`)
-4. **INDEX.md** — documentation navigation index (`/myspec:setup index-md`)
-5. **Workflow** — development workflow definition (`/myspec:setup workflow`)
-6. **Pre-flight** — project-specific pre-flight checks (`/myspec:setup pre-flight`)
-7. **Anti-patterns** — project-specific anti-patterns (`/myspec:setup anti-patterns`)
-8. **Skip** — do it manually later with `/myspec:setup <name>`
+1. **Backbone** — project topology file for agent orientation (`setup` with blueprint `backbone`) ← recommended first
+2. **CLAUDE.md** — project context file for Claude (`setup` with blueprint `claude-md`)
+3. **Conventions** — coding standards and testing patterns (`setup` with blueprint `conventions`)
+4. **INDEX.md** — documentation navigation index (`setup` with blueprint `index-md`)
+5. **Workflow** — development workflow definition (`setup` with blueprint `workflow`)
+6. **Pre-flight** — project-specific pre-flight checks (`setup` with blueprint `pre-flight`)
+7. **Anti-patterns** — project-specific anti-patterns (`setup` with blueprint `anti-patterns`)
+8. **Skip** — do it manually later with the `setup` skill
 
 Which would you like? Enter numbers separated by commas, `all`, or `skip`."
 
-For each selected blueprint, invoke `/myspec:setup <name>` in order.
+For each selected blueprint, invoke the `setup` skill with that blueprint name in order.
 
 ### Step 7: Print Summary
 
@@ -181,9 +183,9 @@ Created:
   {if hooks: .claude/settings.json, .claude/verification.json}
 
 Next steps:
-  1. Run `/myspec:bootstrap` to verify the setup
-  2. Add your first feature: `/myspec:feature-spec`
-  3. Or process an existing idea: `/myspec:idea-process`
+  1. Run the `bootstrap` skill to verify the setup
+  2. Add your first feature with the `feature-spec` skill
+  3. Or process an existing idea with the `idea-process` skill
 ```
 
 ## Rules

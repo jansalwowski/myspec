@@ -18,7 +18,7 @@ fi
 # Only mark for code files (not docs, config, etc.)
 # Common extensions across multiple stacks — add more as needed
 if [[ "$FILE_PATH" =~ \.(ts|tsx|vue|js|jsx|mts|cts|py|rb|go|java|php|rs|cs|swift|kt)$ ]]; then
-  touch "/tmp/.claude-code-changed-${SESSION_ID}"
+  touch "/tmp/.myspec-code-changed-${SESSION_ID}"
 fi
 
 exit 0

@@ -1,11 +1,11 @@
 ---
 name: "bootstrap"
-description: "Use at the start of any work session to orient Claude. Reads project config, memory index (past decisions and mistakes), and pre-flight checklist. Run this before asking questions or starting implementation. Do NOT use mid-task or multiple times in one session."
+description: "Use at the start of any work session to orient the agent. Reads project config, memory index (past decisions and mistakes), and pre-flight checklist. Run this before asking questions or starting implementation. Do NOT use mid-task or multiple times in one session."
 ---
 
 # Bootstrap
 
-Orients Claude to the project at the start of a session. Single command replacing manual invocation of project config reading, memory index, and pre-flight.
+Orients the agent to the project at the start of a session. Single skill replacing manual invocation of project config reading, memory index, and pre-flight.
 
 ## Procedure
 
@@ -58,7 +58,7 @@ Run `git worktree list` and count non-main worktrees. For each:
 
 Run `git worktree prune --dry-run` to detect pruneable references.
 
-→ If issues found: include warning in Step 6 summary — "**Worktree health**: WARNING — N stale/orphaned worktrees. Run `/myspec:worktree-cleanup`"
+→ If issues found: include warning in Step 6 summary — "**Worktree health**: WARNING — N stale/orphaned worktrees. Use the `worktree-cleanup` skill."
 → If clean: include "**Worktree health**: clean (N active worktrees)"
 → If no worktrees: omit the line entirely.
 
@@ -66,7 +66,7 @@ This step is informational only — do not auto-cleanup.
 
 ### 6. Print Orientation Summary
 
-Output a brief structured summary so the user can confirm Claude is properly oriented:
+Output a brief structured summary so the user can confirm the agent is properly oriented:
 
 ```
 ## Bootstrap Complete
@@ -77,13 +77,13 @@ Output a brief structured summary so the user can confirm Claude is properly ori
 **Key paths**: [2-3 most relevant paths from project structure]
 **Memory loaded**: [count] procedural | [count] semantic | [count] episodic entries checked
 **Matches**: [list any memory entries that matched current task, or "none"]
-**Topology**: [{filename} loaded / not configured — run `/myspec:setup backbone` to create one]
-**Active session**: [yes (slug) / no — start one with `/session-start`]
-**Worktree health**: [clean (N active) / WARNING — N stale/orphaned. Run `/myspec:worktree-cleanup`]
+**Topology**: [{filename} loaded / not configured — use the `setup` skill with `backbone` to create one]
+**Active session**: [yes (slug) / no — start one with the `session-start` skill]
+**Worktree health**: [clean (N active) / WARNING — N stale/orphaned. Use the `worktree-cleanup` skill]
 **Boundaries**: [any never_modify paths relevant to task, or "none relevant"]
 ```
 
-**Note**: Bootstrap satisfies the `/myspec:memory-preflight` prerequisite for `/myspec:session-start`. If the task involves implementation, debugging, or discovery work, suggest running `/session-start` next. Bootstrap does NOT create a session — it only orients the project context.
+**Note**: Bootstrap satisfies the `memory-preflight` prerequisite for `session-start`. If the task involves implementation, debugging, or discovery work, suggest running the `session-start` skill next. Bootstrap does NOT create a session — it only orients the project context.
 
 ## When NOT to Use
 

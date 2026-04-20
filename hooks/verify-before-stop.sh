@@ -1,19 +1,67 @@
 #!/usr/bin/env bash
 # verify-before-stop.sh
-# Claude Code Stop hook — runs verification checks before agent completes.
+# Stop hook — runs verification checks before agent completes.
 # Reads commands from .claude/verification.json (requires jq).
 # Outputs {"decision": "block", "reason": "..."} on failure or {"decision": "approve"} on success.
 
 set -euo pipefail
 
-# Prevent infinite loop: if Claude is already running due to this hook, approve immediately
-if [ "${CLAUDE_STOP_HOOK_ACTIVE:-}" = "1" ]; then
+# Prevent infinite loop if the host sets a re-entry flag.
+if [ "${CLAUDE_STOP_HOOK_ACTIVE:-}" = "1" ] || [ "${MYSPEC_STOP_HOOK_ACTIVE:-}" = "1" ]; then
   echo '{"decision": "approve"}'
   exit 0
 fi
 
-# Find repo root (directory containing .claude/)
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Read stdin JSON (Stop hook receives session context)
+INPUT=$(cat)
+
+resolve_repo_root() {
+  local candidate resolved
+
+  if command -v jq >/dev/null 2>&1; then
+    while IFS= read -r candidate; do
+      [ -n "$candidate" ] || continue
+      if resolved=$(git -C "$candidate" rev-parse --show-toplevel 2>/dev/null); then
+        printf '%s\n' "$resolved"
+        return 0
+      fi
+      if [ -f "$candidate/.myspec.json" ]; then
+        printf '%s\n' "$candidate"
+        return 0
+      fi
+    done <<EOF
+$(printf '%s' "$INPUT" | jq -r '
+  [
+    .cwd,
+    .workdir,
+    .workspace.cwd,
+    .session.cwd,
+    .tool_input.cwd,
+    .tool_input.workdir
+  ] | map(select(type == "string" and . != "")) | .[]
+' 2>/dev/null)
+EOF
+  fi
+
+  if resolved=$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null); then
+    printf '%s\n' "$resolved"
+    return 0
+  fi
+
+  candidate="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+  if resolved=$(git -C "$candidate" rev-parse --show-toplevel 2>/dev/null); then
+    printf '%s\n' "$resolved"
+    return 0
+  fi
+
+  return 1
+}
+
+if ! REPO_ROOT="$(resolve_repo_root)"; then
+  echo '{"decision": "approve"}'
+  exit 0
+fi
+
 CONFIG_FILE="$REPO_ROOT/.claude/verification.json"
 
 # If no config file, skip (graceful degradation)
@@ -28,14 +76,11 @@ if ! command -v jq &>/dev/null; then
   exit 0
 fi
 
-# Read stdin JSON (Stop hook receives session context)
-INPUT=$(cat)
-
 # Check if this session actually changed code files.
-# mark-code-changed.sh (PostToolUse) touches a marker file when Claude edits code.
+# mark-code-changed.sh (PostToolUse) touches a marker file when the agent edits code.
 # This avoids running verification for brainstorming/planning sessions with pre-existing changes.
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
-MARKER_FILE="/tmp/.claude-code-changed-${SESSION_ID}"
+MARKER_FILE="/tmp/.myspec-code-changed-${SESSION_ID}"
 
 if [ -z "$SESSION_ID" ] || [ ! -f "$MARKER_FILE" ]; then
   # No code files changed by Claude this session — skip verification
@@ -70,7 +115,7 @@ for i in $(seq 0 $((CHECKS_COUNT - 1))); do
   else
     TIMEOUT_CMD=""
   fi
-  OUTPUT=$(cd "$REPO_ROOT" && $TIMEOUT_CMD bash -c "$COMMAND" 2>&1) && EXIT_CODE=0 || EXIT_CODE=$?
+  OUTPUT=$(cd "$REPO_ROOT" && MYSPEC_STOP_HOOK_ACTIVE=1 $TIMEOUT_CMD bash -c "$COMMAND" 2>&1) && EXIT_CODE=0 || EXIT_CODE=$?
 
   if [ "$EXIT_CODE" -ne 0 ]; then
     FAILED_CHECKS+=("$NAME")

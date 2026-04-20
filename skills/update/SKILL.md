@@ -1,6 +1,6 @@
 ---
 name: "update"
-description: "Use when updating myspec framework files in an existing project after the plugin has been updated. Keywords: update myspec, upgrade framework, sync framework files, update rules, update templates. Do NOT use for first-time setup (use /myspec:init instead)."
+description: "Use when updating myspec framework files in an existing project after the plugin has been updated. Keywords: update myspec, upgrade framework, sync framework files, update rules, update templates. Do NOT use for first-time setup (use init instead)."
 ---
 
 # Update
@@ -12,9 +12,9 @@ Updates framework-owned files in an existing project while preserving project cu
 ## Prerequisites
 
 - `.myspec.json` exists in project root (project is initialized)
-- myspec plugin has been updated via `/plugin marketplace update`
+- myspec plugin has been updated in the host tool
 
-→ If `.myspec.json` does not exist: stop and tell user to run `/myspec:init` first.
+→ If `.myspec.json` does not exist: stop and tell user to run the `init` skill first.
 
 ## Workflow
 
@@ -37,7 +37,7 @@ For `files` entries: destination is `{aiDir}/{filename}`.
 For `rules` entries: source is `framework-files/rules/{filename}`, destination is the `dest` path (e.g., `.claude/rules/workflow.md`).
 For `hooks` entries: source is `hooks/{filename}`, destination is the `dest` path (e.g., `.claude/hooks/guard-git-branch.sh`).
 
-For `hooks`: only process if `.claude/hooks/` directory exists. If it doesn't exist, skip all hooks and note: "Hooks directory not found — skipping hook updates. Run `/myspec:init` with hooks enabled to set them up."
+For `hooks`: only process if `.claude/hooks/` directory exists. If it doesn't exist, skip all hooks and note: "Hooks directory not found — skipping Claude hook updates. Run the `init` skill with Claude hooks enabled to set them up."
 
 ### Step 3: Apply Updates
 
@@ -77,7 +77,7 @@ Preserved (project-customized sections):
 
 Hooks: {updated N scripts / skipped — hooks directory not found}
 
-Next: Run /myspec:bootstrap to verify the setup is still correct.
+Next: Run the `bootstrap` skill to verify the setup is still correct.
 ```
 
 ## Rules
