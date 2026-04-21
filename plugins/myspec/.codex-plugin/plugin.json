@@ -1,0 +1,40 @@
+{
+  "name": "myspec",
+  "version": "1.0.0",
+  "description": "Specification-Driven Development framework for Codex. Provides skills for feature workflows, memory system, ideas pipeline, and project scaffolding.",
+  "author": {
+    "name": "Jan Salwowski",
+    "url": "https://github.com/jansalwowski"
+  },
+  "homepage": "https://github.com/jansalwowski/myspec",
+  "repository": "https://github.com/jansalwowski/myspec",
+  "keywords": [
+    "myspec",
+    "specification-driven-development",
+    "codex",
+    "skills",
+    "project-scaffolding"
+  ],
+  "skills": "./skills/",
+  "hooks": "./hooks.json",
+  "interface": {
+    "displayName": "myspec",
+    "shortDescription": "Specification-driven development workflow for Codex",
+    "longDescription": "Use myspec in Codex to scaffold AI documentation, create feature specs and technical plans, maintain project memory, and run a structured spec-to-implementation workflow.",
+    "developerName": "Jan Salwowski",
+    "category": "Coding",
+    "capabilities": [
+      "Interactive",
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/jansalwowski/myspec",
+    "defaultPrompt": [
+      "Use myspec to initialize this repository for specification-driven development.",
+      "Use myspec to create a feature spec and technical plan for this change.",
+      "Use myspec to bootstrap project context before implementation."
+    ],
+    "screenshots": [],
+    "brandColor": "#0F766E"
+  }
+}

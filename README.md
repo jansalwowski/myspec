@@ -1,8 +1,31 @@
 # myspec
 
-Specification-Driven Development framework for Claude Code. Provides skills for feature workflows, memory system, ideas pipeline, and project scaffolding.
+Specification-Driven Development framework for Claude Code and Codex. Provides skills for feature workflows, memory system, ideas pipeline, and project scaffolding.
 
 ## Installation
+
+### Codex
+
+This repository now includes a native Codex manifest at `.codex-plugin/plugin.json`.
+It also includes a Codex marketplace manifest at `.agents/plugins/marketplace.json` and a marketplace-compatible plugin wrapper at `plugins/myspec/`.
+
+Install it as a local plugin by pointing Codex at this repository root, then use the skills from `skills/`.
+
+In Codex, use skill names directly, for example:
+
+```
+Use the myspec init skill to set up this project.
+Use the myspec bootstrap skill before making changes.
+Use the myspec feature-spec skill for the new authentication flow.
+```
+
+Codex support includes native plugin hooks via `hooks.json`. Claude compatibility remains project-local through `.claude/hooks/`, `.claude/settings.json`, and `.claude/verification.json`.
+
+The same hook scripts are now portable:
+- in Claude, `init` can copy them into `.claude/hooks/`
+- in Codex, the plugin runs them directly from this repository
+
+Both runtimes share the same project-level verification config at `.claude/verification.json` when it exists.
 
 ### Add the marketplace (once per machine)
 
@@ -31,6 +54,14 @@ claude --plugin-dir /path/to/myspec
 ```
 
 Use `/reload-plugins` after making changes.
+
+For Codex, reload or reinstall the local plugin after editing the manifest or skills, depending on your Codex setup.
+
+To add this repository as a Codex marketplace from Git, use:
+
+```bash
+codex marketplace add git@github.com:jansalwowski/myspec.git --ref feat/codex-plugin-support
+```
 
 ## Skills Reference
 
