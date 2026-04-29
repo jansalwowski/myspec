@@ -1,13 +1,11 @@
 ---
 name: "bootstrap"
-description: "Use at the start of any work session to orient the agent. Reads project config, memory index (past decisions and mistakes), and pre-flight checklist. Run this before asking questions or starting implementation. Do NOT use mid-task or multiple times in one session."
+description: "Use when starting any work session and the agent needs project orientation before answering questions or making changes. Keywords: bootstrap, start session, orient, where am I, what is this project, project context, pre-flight, what's the state. Do NOT use mid-task, multiple times in one session, or for one-off questions with no code involvement."
 ---
 
 # Bootstrap
 
-Orients the agent to the project at the start of a session. Single skill replacing manual invocation of project config reading, memory index, and pre-flight.
-
-## Procedure
+## Workflow
 
 ### 1. Read Project Config
 
@@ -42,12 +40,36 @@ For each: check "Use When" / "Topic" columns for keyword matches against the cur
 
 → If match found: read the full memory file before proceeding.
 
-### 4. Check for Active Session
+### 4. Check for Active Sessions
 
-Check if `${aiDir}/memory/sessions/active.md` exists.
+List `${aiDir}/memory/sessions/active/*.md` (excluding `.gitkeep`).
 
-→ If exists and `status: active`: ask user — resume this session or archive it?
-→ If not exists: proceed.
+For each file, compare its mtime to the current epoch.
+
+**Auto-archive policy** (>60 minutes stale = orphaned):
+
+```bash
+NOW=$(date +%s)
+for f in ${aiDir}/memory/sessions/active/*.md; do
+  [ -f "$f" ] || continue
+  [[ "$f" == *.gitkeep ]] && continue
+  MTIME=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f")
+  AGE=$(( NOW - MTIME ))
+  if [ "$AGE" -gt 3600 ]; then
+    SLUG=$(basename "$f" .md | head -c 8)
+    DATE=$(date '+%Y-%m-%d')
+    sed -i.bak 's/^status: active/status: abandoned/' "$f" && rm "$f.bak"
+    mv "$f" "${aiDir}/memory/sessions/archive/${DATE}-orphaned-${SLUG}.md"
+  fi
+done
+```
+
+After cleanup, count remaining active sessions and report in summary:
+- `Active sessions: 0` → no active work
+- `Active sessions: N` → list each as `{session_id_first8} — {topic}`
+- If sessions were auto-archived: `Auto-archived M orphaned sessions`
+
+Sessions are auto-created by `mark-code-changed.sh` (PostToolUse hook) on first code edit, so manual `/myspec:session-start` is rarely needed for code-editing work.
 
 ### 5. Check for Stale Worktrees
 
@@ -78,12 +100,23 @@ Output a brief structured summary so the user can confirm the agent is properly 
 **Memory loaded**: [count] procedural | [count] semantic | [count] episodic entries checked
 **Matches**: [list any memory entries that matched current task, or "none"]
 **Topology**: [{filename} loaded / not configured — use the `setup` skill with `backbone` to create one]
-**Active session**: [yes (slug) / no — start one with the `session-start` skill]
+**Active sessions**: [N (list of session_id prefixes + topics) / 0]
+**Auto-archived**: [M orphaned sessions / 0 (omit line if 0)]
 **Worktree health**: [clean (N active) / WARNING — N stale/orphaned. Use the `worktree-cleanup` skill]
 **Boundaries**: [any never_modify paths relevant to task, or "none relevant"]
 ```
 
-**Note**: Bootstrap satisfies the `memory-preflight` prerequisite for `session-start`. If the task involves implementation, debugging, or discovery work, suggest running the `session-start` skill next. Bootstrap does NOT create a session — it only orients the project context.
+**Note**: Bootstrap satisfies the `memory-preflight` prerequisite for `session-start`. Sessions for code-editing work are auto-created by the `mark-code-changed.sh` hook on first code edit — no skill invocation needed. Manual `session-start` is only useful for non-code sessions (pure debugging, discovery, doc-only work). Bootstrap itself does NOT create a session; it only orients the project context and archives orphaned sessions.
+
+## Verification Checklist
+
+- [ ] `.myspec.json` was checked (or its absence noted)
+- [ ] Topology file was loaded if configured or found at root
+- [ ] All three memory indexes (procedural, semantic, episodic) were scanned
+- [ ] `${aiDir}/memory/sessions/active/` was listed and orphans (>60min) auto-archived
+- [ ] Worktree health was checked (or omitted if no worktrees)
+- [ ] Orientation summary was printed with all required fields populated
+- [ ] No session was created (bootstrap orients only — sessions auto-create on first code edit)
 
 ## When NOT to Use
 

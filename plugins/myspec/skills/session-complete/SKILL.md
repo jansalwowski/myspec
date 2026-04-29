@@ -1,34 +1,44 @@
 ---
 name: "session-complete"
 description: >
-  Use when work session is finished. Keywords: end session, finish session,
-  wrap up, close session, session done. Handles session archival and memory
-  extraction from session logs. Requires active session from /session-start.
-  Do NOT use mid-implementation, for abandoned sessions, or for quick tasks
-  that didn't use /session-start.
+  Use when a tracked work session is finished and ready to be archived.
+  Keywords: end session, finish session, wrap up, close session, session
+  done, archive session, extract memories. Pairs with the mark-code-changed.sh
+  hook that auto-creates active session files on first code edit. Do NOT use
+  mid-implementation, for abandoned sessions, or for quick fixes that left no
+  active session file.
 ---
 
 # Session Complete
 
 ## Prerequisites
 
-Requires an active `${aiDir}/memory/sessions/active.md` file. If missing, abort and inform user: "No active session found. Use /myspec:session-start first or archive manually."
+Requires at least one file in `${aiDir}/memory/sessions/active/` (excluding `.gitkeep`).
 
 ## Workflow
 
-### 1. Update Session Log
+### 1. Identify Target Session
 
-Check that `${aiDir}/memory/sessions/active.md` exists. If missing, inform user: "No active session found. Use /myspec:session-start first or archive manually." and stop.
+List `${aiDir}/memory/sessions/active/*.md` (excluding `.gitkeep`).
 
-Edit `${aiDir}/memory/sessions/active.md`:
+- **Zero files**: Abort. Tell user: "No active sessions found. Either no code was edited this session (the hook only auto-creates on code edits) or all sessions were already archived. Use `/myspec:session-start` to create one manually."
+- **Exactly one file**: Use it.
+- **Multiple files**: Pick the file with the latest mtime as the most likely target. Show the user a list of all active files (`session_id` prefix + topic + cwd + age) and confirm before proceeding. Multiple-active is normal in multi-agent workflows where subagents created their own sessions.
+
+Set `TARGET_FILE` to the chosen file path. Do NOT touch sibling active files.
+
+### 2. Update Session Log
+
+Edit `TARGET_FILE`:
 
 1. Set `status: completed` in frontmatter
-2. Fill the **Outcome** section with:
+2. Refine `topic` if it still starts with `auto:` (auto-created sessions need a real topic before archive)
+3. Fill the **Outcome** section with:
    - What worked (the successful solution)
    - What was the root cause of the issue (if applicable)
    - Key insights discovered
 
-### 2. Analyze Session for Typed Extractions
+### 3. Analyze Session for Typed Extractions
 
 Review the log table, paying attention to Type column hints:
 
@@ -36,9 +46,9 @@ Review the log table, paying attention to Type column hints:
 - `S` entries with 💡 → candidate semantic facts
 - Significant decisions or events → candidate episodic memories
 
-### 3. Propose Extractions to User
+### 4. Propose Extractions to User
 
-If no candidates meet the threshold (all trivial or duplicates), report: "No memories worth extracting from this session." and skip to step 5.
+If no candidates meet the threshold (all trivial or duplicates), report: "No memories worth extracting from this session." and skip to step 6.
 
 Otherwise, present a numbered list:
 
@@ -57,24 +67,26 @@ Filter out:
 - Things that aren't non-obvious
 - Duplicates of existing memories (check indexes first)
 
-### 4. Create Approved Memories
+### 5. Create Approved Memories
 
 For each approved extraction:
 → Invoke `/myspec:memory-create` (REQUIRED) with `type` parameter (procedural/semantic/episodic)
 → Pass the relevant log entries and context
 
-### 5. Archive Session
+### 6. Archive Session
 
-Move `${aiDir}/memory/sessions/active.md` to:
+Move `TARGET_FILE` to:
 `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md`
 
-Where slug is derived from the topic.
+Where slug is derived from the (refined) topic — never archive with `auto:` in the slug.
 
 **Slug format**: Use lowercase with hyphens, derived from the topic. Examples:
 - "Fix StreetView not updating" → `YYYY-MM-DD-fix-streetview-updating.md`
 - "Implement marker clustering" → `YYYY-MM-DD-implement-marker-clustering.md`
 
-### 6. Confirm Completion
+If the slug would collide with an existing archive file, append a short session_id prefix: `YYYY-MM-DD-{slug}-{session_id_first8}.md`.
+
+### 7. Confirm Completion
 
 Report to user:
 - Number of memories created (by type)
@@ -83,8 +95,8 @@ Report to user:
 ## When NOT to Use
 
 - Work is not finished (still implementing, debugging, or testing)
-- Session was abandoned without resolution (use `status: abandoned` and archive manually)
-- Quick tasks that didn't need a session log
+- Session was abandoned without resolution (use `status: abandoned` and let `/myspec:bootstrap` auto-archive it on next session)
+- Quick tasks where no session log was created
 
 ## Example Outcome Section
 
@@ -103,7 +115,8 @@ Report to user:
 
 ## Verification Checklist
 
-- [ ] `${aiDir}/memory/sessions/active.md` no longer exists (was archived)
+- [ ] `TARGET_FILE` no longer exists at `${aiDir}/memory/sessions/active/`
+- [ ] Sibling active sessions (other agents) were NOT touched
 - [ ] Archive file exists at `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md` with `status: completed`
 - [ ] Outcome section is filled (what worked, root cause, key insights)
 - [ ] Approved memories were created via `/myspec:memory-create` (check respective index files)
