@@ -15,7 +15,7 @@ updated: 2026-03-24
 - **Procedural Index**: `${aiDir}/memory/procedural/index.md`
 - **Semantic Index**: `${aiDir}/memory/semantic/index.md`
 - **Episodic Index**: `${aiDir}/memory/episodic/index.md`
-- **Active Session**: `${aiDir}/memory/sessions/active.md`
+- **Active Sessions**: `${aiDir}/memory/sessions/active/{session_id}.md` (per-agent, auto-created on first code edit)
 - **Templates**: `${aiDir}/.templates/memory-{procedural,semantic,episodic}.md`
 
 ## File Structure
@@ -33,7 +33,8 @@ ${aiDir}/memory/
 │   ├── index.md
 │   └── E{NNN}-{slug}.md
 └── sessions/
-    ├── active.md
+    ├── active/
+    │   └── {session_id}.md      # one per agent run with code edits
     └── archive/
 ```
 
@@ -43,10 +44,12 @@ ${aiDir}/memory/
 
 **Purpose**: Track in-progress work, survive context clears, detect loops.
 
-- Created at session start, lives at `${aiDir}/memory/sessions/active.md`
+- Auto-created on first code edit by `mark-code-changed.sh` at `${aiDir}/memory/sessions/active/{session_id}.md`
+- Per-session-id keying makes this multi-agent safe — each agent gets its own file
+- Manual `/myspec:session-start` only needed for non-code sessions (debugging without edits, discovery, doc-only)
 - Logs each significant action with result and attempt count
 - Triggers escalation when patterns repeat
-- Archived to `${aiDir}/memory/sessions/` on completion
+- Archived to `${aiDir}/memory/sessions/archive/` by `/myspec:session-complete`; orphans (>1h stale) auto-archived by `/myspec:bootstrap`
 
 ### 2. Procedural Memory — Patterns and Anti-Patterns
 

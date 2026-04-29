@@ -22,11 +22,12 @@ These are **BLOCKING REQUIREMENTS**. You MUST invoke the specified skill at the 
 
 | When | Action | Why |
 |------|--------|-----|
-| Session start | MUST invoke `/myspec:bootstrap` | Reads project config + all memory indexes + checks active session. Replaces manual `/myspec:memory-preflight` at session start. |
+| Session start | MUST invoke `/myspec:bootstrap` | Reads project config + memory indexes, lists active sessions, auto-archives orphans (>1h stale). Replaces manual `/myspec:memory-preflight` at session start. |
 | Before significant work mid-session (new feature, multi-file change, debugging) | Invoke `/myspec:memory-preflight` if `/myspec:bootstrap` was not run at session start | Scans all memory types, checks staleness |
 | Before trivial work (single-file fix, typo, config change) | Read `${aiDir}/memory/index.md` (Layer 1 only) | Quick check, skip full scan |
-| Starting work session | Invoke `/myspec:session-start` | Creates working memory with mode + Type tracking |
-| Work complete | Invoke `/myspec:session-complete` | Multi-type extraction + archival |
+| First code edit in any session | **Automatic — no skill** | `mark-code-changed.sh` (PostToolUse) creates `${aiDir}/memory/sessions/active/{session_id}.md` from the session-log template. Per-session-id keying makes this multi-agent safe — each agent gets its own file. |
+| Starting a non-code session (debugging without edits, discovery, doc-only work) | Invoke `/myspec:session-start` | Manual creation; auto-creation only fires on code edits |
+| Work complete | Invoke `/myspec:session-complete` | Multi-type extraction + archival of the agent's own session file (touches no sibling sessions) |
 | User approves memory | Invoke `/myspec:memory-create` | Creates typed memory (procedural/semantic/episodic) |
 | Debugging + repeated errors | Invoke `/myspec:memory-lookup` | Searches all memory types for solutions |
 
