@@ -92,8 +92,8 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref feat/codex-pl
 | `/myspec:memory-preflight` | Pre-work checks across all memory types |
 | `/myspec:memory-create` | Create typed memory (procedural/semantic/episodic) |
 | `/myspec:memory-lookup` | Search memories for solutions |
-| `/myspec:memorize <content>` | One-shot capture of an explicit user-provided fact or rule into a typed memory |
-| `/myspec:memorify` | Scan the current conversation, surface candidates, and save approved ones as memories |
+| `/myspec:memorize <content>` | One-shot capture of an explicit user-provided fact or rule into a typed memory ([examples](examples/README.md)) |
+| `/myspec:memorify` | Scan the current conversation, surface candidates, and save approved ones as memories ([examples](examples/README.md)) |
 | `/myspec:session-start` | Start tracked work session |
 | `/myspec:session-complete` | Archive session, extract memories |
 | **Ideas Pipeline** | |
