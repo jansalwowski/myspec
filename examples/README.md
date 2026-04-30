@@ -15,6 +15,7 @@ The eight skills you'll use to take a feature from idea to shipped:
 
 | Skill | Scenarios covered |
 |-------|-------------------|
+| [skills/feature-discover.md](skills/feature-discover.md) | Discovery only (capture tribal knowledge) · Full feature docs (pull existing code into pipeline) · Complex feature routes to decomposition |
 | [skills/feature-spec.md](skills/feature-spec.md) | Greenfield small feature · Cross-feature dependencies · Skill recommends decomposing first |
 | [skills/feature-decompose.md](skills/feature-decompose.md) | Mixed-priority split with deferred sub-features · Skill refuses to decompose |
 | [skills/feature-tech-spec.md](skills/feature-tech-spec.md) | Pattern-following design · ADR-heavy with alternatives · Discovers spec gap during design |

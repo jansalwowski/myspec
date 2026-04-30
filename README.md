@@ -73,6 +73,7 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref feat/codex-pl
 | `/myspec:setup <type>` | Generate project-specific files from guided wizards (backbone, claude-md, conventions, index-md, workflow, pre-flight, anti-patterns) |
 | `/myspec:bootstrap` | Load project context, memory indexes, and active session at session start |
 | **Feature Workflow** | |
+| `/myspec:feature-discover` | Reverse-engineer an undocumented feature from existing code into discovery.md (+ optional spec.md / tech-spec.md) ([examples](examples/skills/feature-discover.md)) |
 | `/myspec:feature-spec` | Create feature specification (spec.md + dependencies.md) |
 | `/myspec:feature-decompose` | Split large feature into sub-features |
 | `/myspec:feature-spec-review` | Validate spec for completeness and consistency |
