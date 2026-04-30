@@ -2,8 +2,64 @@
 
 Walk-throughs showing how myspec skills behave in practice. Two flavors:
 
-- **Single-skill examples** (memorize, memorify) — one skill, one transcript, one output.
-- **Multi-skill flows** (in [flows/](flows/)) — end-to-end scenarios where several skills compose. Start here if you're new to myspec; the flows show how the pieces fit together.
+- **Per-skill examples** in [skills/](skills/) — one document per skill, multiple scenarios as sections within. Start here if you want to understand how a single skill behaves across different inputs.
+- **Multi-skill flows** in [flows/](flows/) — end-to-end scenarios where several skills compose. Start here if you're new to myspec; the flows show how the pieces fit together.
+
+---
+
+## Per-skill examples
+
+### Feature lifecycle
+
+The eight skills you'll use to take a feature from idea to shipped:
+
+| Skill | Scenarios covered |
+|-------|-------------------|
+| [skills/feature-spec.md](skills/feature-spec.md) | Greenfield small feature · Cross-feature dependencies · Skill recommends decomposing first |
+| [skills/feature-decompose.md](skills/feature-decompose.md) | Mixed-priority split with deferred sub-features · Skill refuses to decompose |
+| [skills/feature-tech-spec.md](skills/feature-tech-spec.md) | Pattern-following design · ADR-heavy with alternatives · Discovers spec gap during design |
+| [skills/feature-plan.md](skills/feature-plan.md) | Single-milestone plan · Multi-milestone with parallel groups · Plan refuses, recommends decompose |
+| [skills/feature-implement.md](skills/feature-implement.md) | Sequential execution · Parallel group with worktree dispatch · Resume mid-milestone after interruption |
+| [skills/feature-update.md](skills/feature-update.md) | Add a capability to a shipped feature · Remove a deprecated capability |
+| [skills/feature-verify.md](skills/feature-verify.md) | Clean health check · Mixed report with severity-ranked routing |
+| [skills/feature-complete.md](skills/feature-complete.md) | Clean completion · Discovers late drift during completion |
+
+### Spec quality
+
+| Skill | Scenarios covered |
+|-------|-------------------|
+| [skills/cross-spec-validation.md](skills/cross-spec-validation.md) | Single sibling break · Multiple breaks across siblings · No conflicts (clean pass) |
+
+### Memory + sessions
+
+| Skill | Scenarios covered |
+|-------|-------------------|
+| [skills/bootstrap.md](skills/bootstrap.md) | Standard bootstrap with task-relevant memory · Stale session auto-archive · Fresh project (no memories yet) |
+| [skills/memory-lookup.md](skills/memory-lookup.md) | Direct procedural match · Partial match across types · No match (clean miss) |
+| [skills/memorize.md](skills/memorize.md) | Simple procedural rule · Semantic fact with anchor · Anti-pattern (negative polarity) · Critical decision with Layer 1 promotion |
+| [skills/memorify.md](skills/memorify.md) | Single candidate from a debugging session · Multiple candidates with cross-links · Nothing worth saving |
+| [skills/session-complete.md](skills/session-complete.md) | Multiple memories with cross-links · Nothing extractable · Multiple active sessions (multi-agent) |
+
+### When to use which memory skill
+
+- **`/memorize`** — you already know the exact thing to save. Hand it over inline.
+- **`/memorify`** — you want the agent to look back over the conversation and propose what's worth keeping.
+- **`/session-complete`** — wrapping up a tracked session; extracts memories from the session log table.
+- **`/memory-lookup`** — search before you start work or debug. The first thing to run on a new bug or unfamiliar area.
+
+### Ideas pipeline
+
+| Skill | Scenarios covered |
+|-------|-------------------|
+| [skills/idea-intake.md](skills/idea-intake.md) | Standard new idea · Scope clarification (split) · Blocked by unsatisfied dependencies |
+| [skills/idea-process.md](skills/idea-process.md) | Clean conversion of a queued idea · Blocked by dependencies · Idea too vague (bounces to brainstorm) |
+
+### Investigation + exploration
+
+| Skill | Scenarios covered |
+|-------|-------------------|
+| [skills/brainstorm.md](skills/brainstorm.md) | Standard divergent → convergent · Topic too large (decompose) · Devil's advocate / stress-test |
+| [skills/root-cause-debugging.md](skills/root-cause-debugging.md) | Single-component bug found in Phase 1 · Multi-component bug with boundary tracing · Stuck in a loop (3-attempt escalation) |
 
 ---
 
@@ -21,42 +77,11 @@ The complex stuff. Each flow stitches together 3–12 skill calls and shows the 
 
 ---
 
-## Single-skill examples
-
-### memorize
-
-| File | Scenario | Highlights |
-|------|----------|------------|
-| [memorize-simple-rule.md](memorize-simple-rule.md) | Capture a one-line procedural rule | Minimal questions, single draft, no anchor |
-| [memorize-semantic-fact.md](memorize-semantic-fact.md) | Save a stable system fact | Adds a code anchor for later re-verification |
-| [memorize-anti-pattern.md](memorize-anti-pattern.md) | Save a "never do this" rule | Negative polarity, explicit `not_for` exclusions |
-| [memorize-critical-decision.md](memorize-critical-decision.md) | Save a dated decision and pin it | Episodic type + Layer 1 promotion to always-loaded index |
-
-### memorify
-
-| File | Scenario | Highlights |
-|------|----------|------------|
-| [memorify-single-candidate.md](memorify-single-candidate.md) | One memory surfaces from a debugging session | Standard happy path |
-| [memorify-multi-candidate.md](memorify-multi-candidate.md) | Three memories saved with cross-links | Per-candidate confirmation, `related` linking |
-| [memorify-nothing-found.md](memorify-nothing-found.md) | Sweep yields nothing worth keeping | Skill stops cleanly without forcing a save |
-
-### When to use which memory skill
-
-- **`/memorize`** — you already know the exact thing to save. Hand it over inline.
-- **`/memorify`** — you want the agent to look back over the conversation and propose what's worth keeping.
-- **`/session-complete`** — wrapping up a tracked session; extracts memories from the session log table.
-
----
-
 ## Reading the examples
 
-Each file follows the same shape:
+Each per-skill document is one H1 (the skill) followed by an H2 per scenario, sub-divided into Setup → Invocation → Skill flow → Result → Why this example matters. Scroll to the scenario you care about, or read top-to-bottom.
 
-1. **Setup / situation** — the context that motivated the call.
-2. **At a glance** — for flows: a table summarizing the steps and approval gates.
-3. **Step-by-step transcript** — the agent's questions, the artifacts produced, and the user's confirmations.
-4. **Result** — the files written, manifest entries updated, branch state.
-5. **What this demonstrates** — the design intent behind the flow, in case you're trying to apply the same pattern to your own work.
+Each flow follows a similar shape, plus an "at a glance" summary table at the top so you can see the whole pipeline before diving in.
 
 For memory examples, the internal classification (procedural / semantic / episodic) appears in *italic side-notes* so you can see how the skill reasons — but in real usage those terms never reach the user.
 
@@ -64,4 +89,13 @@ For memory examples, the internal classification (procedural / semantic / episod
 
 ## Want examples for other skills?
 
-The single-skill catalog above only covers the memory skills. If you'd find walk-throughs useful for `feature-spec`, `brainstorm`, `feature-update`, `idea-process`, or any other skill in isolation, open an issue or send a PR — examples are intentionally easy to add.
+Skills not yet covered by per-skill examples:
+
+- **Spec quality** — `feature-spec-review`, `feature-tech-spec-review` (mostly gating; visible in flows)
+- **Drift fixers** — `feature-spec-sync`, `feature-spec-cleanup` (covered in [flows/spec-drift-recovery.md](flows/spec-drift-recovery.md))
+- **Auxiliary** — `feature-scenario`, `feature-seed-data`
+- **Project setup** — `init`, `update`, `setup`
+- **Memory + sessions** — `memory-preflight`, `memory-create`, `session-start`
+- **Utilities** — `skill-verify`, `worktree-cleanup`, `docs-sanitize`
+
+If you'd find walk-throughs useful for any of these in isolation, open an issue or send a PR — examples are easy to add: each skill gets one file in `skills/{skill-name}.md` with H2 sections per scenario.
