@@ -40,12 +40,14 @@ The eight skills you'll use to take a feature from idea to shipped:
 | [skills/memorize.md](skills/memorize.md) | Simple procedural rule · Semantic fact with anchor · Anti-pattern (negative polarity) · Critical decision with Layer 1 promotion |
 | [skills/memorify.md](skills/memorify.md) | Single candidate from a debugging session · Multiple candidates with cross-links · Nothing worth saving |
 | [skills/session-complete.md](skills/session-complete.md) | Multiple memories with cross-links · Nothing extractable · Multiple active sessions (multi-agent) |
+| [skills/session-clean.md](skills/session-clean.md) | Routine sweep (mixed empty + substantive) · Ambiguous siblings with live worktree · Nothing to do (clean directory) |
 
 ### When to use which memory skill
 
 - **`/memorize`** — you already know the exact thing to save. Hand it over inline.
 - **`/memorify`** — you want the agent to look back over the conversation and propose what's worth keeping.
 - **`/session-complete`** — wrapping up a tracked session; extracts memories from the session log table.
+- **`/session-clean`** — periodic sweep of the active sessions directory; deletes empty leftovers and archives substantive ones that were never closed.
 - **`/memory-lookup`** — search before you start work or debug. The first thing to run on a new bug or unfamiliar area.
 
 ### Ideas pipeline
