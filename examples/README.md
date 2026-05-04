@@ -41,6 +41,7 @@ The eight skills you'll use to take a feature from idea to shipped:
 | [skills/memorify.md](skills/memorify.md) | Single candidate from a debugging session · Multiple candidates with cross-links · Nothing worth saving |
 | [skills/session-complete.md](skills/session-complete.md) | Multiple memories with cross-links · Nothing extractable · Multiple active sessions (multi-agent) |
 | [skills/session-clean.md](skills/session-clean.md) | Routine sweep (mixed empty + substantive) · Ambiguous siblings with live worktree · Nothing to do (clean directory) |
+| [skills/memory-sanitize.md](skills/memory-sanitize.md) | Routine triage with mixed buckets (drop/promote/merge) · Promotion with ambiguous routing · Nothing to do (clean store) |
 
 ### When to use which memory skill
 
@@ -49,6 +50,7 @@ The eight skills you'll use to take a feature from idea to shipped:
 - **`/session-complete`** — wrapping up a tracked session; extracts memories from the session log table.
 - **`/session-clean`** — periodic sweep of the active sessions directory; deletes empty leftovers and archives substantive ones that were never closed.
 - **`/memory-lookup`** — search before you start work or debug. The first thing to run on a new bug or unfamiliar area.
+- **`/memory-sanitize`** — periodic groomer for the *user-level* auto-memory store at `~/.claude-personal/projects/{cwd}/memory/`. Triages every entry, drops stale, promotes feedback to CLAUDE.md / `.claude/rules/`, merges duplicates. Distinct from `session-clean`, which sweeps project-level session files.
 
 ### Ideas pipeline
 

@@ -98,6 +98,7 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref feat/codex-pl
 | `/myspec:session-start` | Start tracked work session |
 | `/myspec:session-complete` | Archive session, extract memories |
 | `/myspec:session-clean` | Sweep dangling auto-created sessions in `ai/memory/sessions/active/` — deletes empty, archives substantive, never touches the running agent's own session ([examples](examples/skills/session-clean.md)) |
+| `/myspec:memory-sanitize` | Audit the user-level auto-memory store in `~/.claude-personal/projects/`: triage entries (keep/drop/promote/merge), grep for live citations before any delete, never auto-promote ([examples](examples/skills/memory-sanitize.md)) |
 | **Ideas Pipeline** | |
 | `/myspec:idea-intake` | Process new idea into priority queue |
 | `/myspec:idea-process` | Convert idea to feature specification |
