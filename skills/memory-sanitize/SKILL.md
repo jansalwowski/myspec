@@ -21,6 +21,7 @@ Audit the user-level auto-memory store for this project, triage each entry, and 
 1. Resolve memory dir: `~/.claude-personal/projects/$(pwd | tr '/_' '-')/memory/`. Refuse if missing.
 2. Read `MEMORY.md` and every `*.md` entry it links to.
 3. Integrity check: list orphans (files not in `MEMORY.md`) and broken links (entries pointing to missing files). Report both.
+4. Index-line hygiene: flag any `MEMORY.md` lines whose length exceeds 150 chars (per `CLAUDE.md` auto-memory guidance — long hooks bury the takeaway). Surface in the Phase 4 report as **REWRITE-HOOK** candidates. This is a write-side fix, not a drop/promote — propose a shorter hook for each flagged entry.
 
 ### Phase 2 — Per-entry triage
 
@@ -41,7 +42,9 @@ For each memory, run cheap verifications and assign ONE bucket:
 - Dep version claims → check `package.json` or relevant config
 - Skip deep semantic verification — flag for human review instead
 
-**Skip files modified <7 days ago.** Recent memories haven't earned skepticism yet.
+**Age floor by type:**
+- **Feedback / semantic / reference:** skip files modified <7 days ago. Recent memories haven't earned skepticism yet.
+- **Project type:** include regardless of age. Project memories are point-in-time snapshots and decay fast — review them as soon as drift is suspected.
 
 ### Phase 3 — Cluster pass
 
@@ -54,34 +57,32 @@ Print one table grouped by bucket. For DROP entries: one-line reason. For PROMOT
 ### Phase 5 — Confirm and execute
 
 **Drops (low-risk, batch):** one confirmation for all drops.
-- Before deleting: `grep -r {filename}` across the repo. If any active doc/spec/rule still cites the memory, refuse the drop and reclassify as KEEP.
+- Before deleting: `grep -r {filename}` across the repo, **excluding agent worktree directories** (`.claude/worktrees/`, `.git/worktrees/`) and `node_modules/`. Worktrees are throwaway shadow checkouts containing stale copies from main; they inflate citation counts and produce false-positive KEEPs. Use `grep -r {filename} ai/ .claude/ apps/ packages/ --exclude-dir=worktrees --exclude-dir=node_modules --exclude-dir=.prisma` (adjust paths for the project layout). If any active doc/spec/rule still cites the memory, refuse the drop and reclassify as KEEP.
 
-**Promotions (medium-risk, individual):** for each, show:
+**Promotions (medium-risk):** before applying, show:
 - Source memory full text
 - Destination file + insertion location (which section, after which line)
 - Exact text to be inserted (verbatim, not "I will summarize…")
-- Then ask to apply
 
-**Merges (medium-risk, individual):** for each cluster, show:
+**Merges (medium-risk):** before applying, show:
 - Proposed merged-file path + content
 - List of source files to delete
-- Then ask to apply
 
-Use the AskUserQuestion tool for confirmations (one prompt per group/promotion/merge).
+**Confirmation flow:** a single `AskUserQuestion` call covering all drops + promotions + merges is acceptable **provided the verbatim insertion text (and merged-file content) is in the same message** — either inline above the question or in the option `description` field. Don't ask twice when the user already has the text in front of them. Ask per-action only when narrative context (long source memory, multi-block insertion) won't fit alongside the question.
 
 ### Phase 6 — Update index and verify
 
 After every executed action:
 1. Update `MEMORY.md` (remove dropped/merged entries, update merge survivors)
-2. Verify: `grep -c '^- \[' MEMORY.md` matches `ls memory/ | grep -v MEMORY.md | wc -l`
+2. Verify: `grep -c '^- \[' MEMORY.md` matches `ls memory/ | grep -vE '^(MEMORY\.md|audit-)' | wc -l` (audit reports are archived in the same directory and must be excluded from the entry-file count)
 3. Optional: archive the triage report to `~/.claude-personal/projects/{encoded-cwd}/memory/audit-{YYYY-MM-DD}.md`
 
 ## Hard guards
 
 - **Never auto-promote.** Destination + exact insertion text shown before each promotion.
-- **Never delete a still-cited memory.** Grep across `ai/`, `.claude/`, `apps/`, `packages/` before any rm.
+- **Never delete a still-cited memory.** Grep across `ai/`, `.claude/` (excluding `.claude/worktrees/`), `apps/`, `packages/` before any rm.
 - **MEMORY.md edits are atomic with file deletes.** Never leave the index out of sync.
-- **Don't sanitize entries <7 days old.**
+- **Don't sanitize feedback/semantic/reference entries <7 days old.** Project-type entries are exempt — they decay by design.
 - **Don't touch the project's `ai/memory/`.** Separate system, separate skill.
 
 ## Promotion routing reference
@@ -94,6 +95,7 @@ After every executed action:
 | Backend-specific pattern | `.claude/rules/backend.md` |
 | Frontend-specific pattern | `.claude/rules/frontend.md` |
 | Lint/TS rule | `.claude/rules/lint-and-types.md` |
+| Dep-management policy (visual regression, plan location, cluster rules) | `.claude/rules/deps.md` |
 | Skill prerequisite or workflow constraint | `.claude/skills/{name}/SKILL.md` body |
 | Skill-authoring meta-rule | `.claude/rules/skill-optimization.md` |
 
@@ -103,8 +105,8 @@ If the destination is ambiguous, leave as KEEP and flag in the report.
 
 ```bash
 # After execution:
-grep -c '^- \[' "$MEM_DIR/MEMORY.md"        # entry count
-ls "$MEM_DIR" | grep -v MEMORY.md | wc -l    # file count — must match
+grep -c '^- \[' "$MEM_DIR/MEMORY.md"                               # entry count
+ls "$MEM_DIR" | grep -vE '^(MEMORY\.md|audit-)' | wc -l            # entry-file count — must match
 ```
 
 - [ ] Every drop preceded by repo-wide grep for live citations
