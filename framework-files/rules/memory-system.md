@@ -9,6 +9,13 @@ updated: 2026-03-29
 
 # Agent Memory System
 
+> **Scope**: this file governs **project-level myspec memory** under `${aiDir}/memory/`
+> (sessions, procedural/semantic/episodic, written via `/myspec:memory-create`).
+> The **harness-managed user-level auto-memory store** at
+> `~/.claude-personal/projects/{encoded-cwd}/memory/` is governed by the
+> companion rule `.claude/rules/auto-memory-style.md` (length budget, cut list,
+> write-time ADD/UPDATE/NO-OP consolidation).
+
 ## Purpose
 
 Prevent AI agents from repeating mistakes and losing knowledge by:

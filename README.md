@@ -98,7 +98,7 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref feat/codex-pl
 | `/myspec:session-start` | Start tracked work session |
 | `/myspec:session-complete` | Archive session, extract memories |
 | `/myspec:session-clean` | Sweep dangling auto-created sessions in `ai/memory/sessions/active/` — deletes empty, archives substantive, never touches the running agent's own session ([examples](examples/skills/session-clean.md)) |
-| `/myspec:memory-sanitize` | Audit the user-level auto-memory store in `~/.claude-personal/projects/`: triage entries (keep/drop/promote/merge), grep for live citations before any delete, never auto-promote ([examples](examples/skills/memory-sanitize.md)) |
+| `/myspec:memory-sanitize` | Audit the user-level auto-memory store in `~/.claude-personal/projects/`: triage entries (keep/drop/promote/merge/compress/conflict), grep for live citations before any delete, compress bloated bodies against the length budget in `.claude/rules/auto-memory-style.md`, supersede contradictions non-destructively, never auto-promote or auto-rewrite ([examples](examples/skills/memory-sanitize.md)) |
 | **Ideas Pipeline** | |
 | `/myspec:idea-intake` | Process new idea into priority queue |
 | `/myspec:idea-process` | Convert idea to feature specification |
@@ -116,17 +116,19 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref feat/codex-pl
 ```json
 {
   "aiDir": ".ai",
-  "frameworkVersion": "1.0.0",
+  "frameworkVersion": "1.6.0",
   "project": {
     "name": "Project Name",
     "description": "One-line description",
     "techStack": "PHP 8.3, Laravel 11, PostgreSQL"
   },
   "frameworkFiles": {
-    "memory-index.md": { "version": "1.0.0", "lastUpdated": "2026-03-24" }
+    "memory-index.md": { "version": "1.6.0", "lastUpdated": "2026-05-11" }
   }
 }
 ```
+
+`frameworkVersion` is kept in lockstep across `framework-files/manifest.json`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` (with matching git `ref`), `.codex-plugin/plugin.json`, and `plugins/myspec/.codex-plugin/plugin.json`. Use `./scripts/bump-version.sh X.Y.Z` to update all five in one shot; see [RELEASING.md](RELEASING.md) for the full release workflow.
 
 ## Auto-setup for team repos
 
@@ -157,6 +159,20 @@ After updating the plugin (`/plugin marketplace update`), run in each project:
 ```
 
 This updates framework-owned files while preserving your project customizations.
+
+## Framework rules shipped to `.claude/rules/`
+
+`init` (first-time) and `update` (subsequent) install five always-loaded rule files into the consuming project's `.claude/rules/` directory:
+
+| File | Governs |
+|------|---------|
+| `workflow.md` | Feature workflow phases, when to invoke which skill |
+| `memory-system.md` | Project-level memory (`${aiDir}/memory/` — sessions, procedural/semantic/episodic). Escalation protocol, verification discipline. |
+| `auto-memory-style.md` | Harness-managed **user-level** auto-memory at `~/.claude-personal/projects/{encoded-cwd}/memory/`. Length budget per type, cut list, pre-write ADD/UPDATE/NO-OP consolidation, conflict resolution. |
+| `ideas.md` | Ideas pipeline (intake → priority → processing) |
+| `skill-optimization.md` | Skill-authoring meta-rules (frontmatter, naming, token efficiency) |
+
+The two memory rules cover different stores and do not overlap. `memory-system.md` is for the myspec-managed system in `${aiDir}/memory/`; `auto-memory-style.md` is for the harness-managed user-level store.
 
 ## Directory Structure (in consuming projects)
 

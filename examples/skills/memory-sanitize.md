@@ -1,13 +1,15 @@
 # `/myspec:memory-sanitize` — examples
 
-Audits the user-level auto-memory store at `~/.claude-personal/projects/{encoded-cwd}/memory/`. Triages every entry into one of six buckets (KEEP / DROP-stale / DROP-trivial / DROP-duplicate / PROMOTE / MERGE), then drops, promotes, or merges with explicit per-action confirmation. Never touches the project's own `ai/memory/` (myspec system) — that has separate skills.
+Audits the user-level auto-memory store at `~/.claude-personal/projects/{encoded-cwd}/memory/`. Triages every entry into one of eight buckets (KEEP / DROP-stale / DROP-trivial / DROP-duplicate / PROMOTE / MERGE / COMPRESS / CONFLICT), then drops, promotes, merges, compresses, or supersedes with explicit per-action confirmation. Never touches the project's own `ai/memory/` (myspec system) — that has separate skills.
 
-> **Related**: For *creating* user-level auto-memories, the harness handles that automatically as you work — see the `auto memory` instructions in your system prompt. For *project-level* memory in `ai/memory/`, use [`/myspec:memory-create`](memorize.md), [`/myspec:memory-lookup`](memory-lookup.md), and [`/myspec:session-clean`](session-clean.md). `memory-sanitize` is the periodic groomer for the *user-level* store only.
+> **Related**: For *creating* user-level auto-memories, the harness handles that automatically as you work — see the `auto memory` instructions in your system prompt and the project-level rule at `.claude/rules/auto-memory-style.md` (length budget + cut list + pre-write ADD/UPDATE/NO-OP consolidation). For *project-level* memory in `ai/memory/`, use [`/myspec:memory-create`](memorize.md), [`/myspec:memory-lookup`](memory-lookup.md), and [`/myspec:session-clean`](session-clean.md). `memory-sanitize` is the periodic groomer for the *user-level* store only.
 
 **Contents**
 
 - [Routine triage — mixed buckets](#routine-triage--mixed-buckets)
 - [Promotion needs a routing decision](#promotion-needs-a-routing-decision)
+- [Compressing a bloated entry](#compressing-a-bloated-entry)
+- [Resolving a conflict between two KEEP memories](#resolving-a-conflict-between-two-keep-memories)
 - [Nothing to do — clean store](#nothing-to-do--clean-store)
 
 ---
@@ -277,6 +279,195 @@ KEEP (1, flagged):
 - **Ambiguity is a signal, not an obstacle.** When two valid destinations both exist for one rule, the agent shouldn't roll dice — it should hand the choice back. The flag stays in the audit log so the user can resolve it deliberately.
 - **Reclassification preserves the memory.** A deferred promotion stays a working memory in the meantime; it doesn't get dropped because routing failed.
 - **Most-common mis-routing reminder.** The verification checklist explicitly calls out `skill-optimization.md` as a frequent wrong landing zone — it's for skill-*authoring* meta-rules, not arbitrary lint rules. The ambiguity gate exists in part to stop that drift.
+
+---
+
+## Compressing a bloated entry
+
+A KEEP memory whose rule is still correct but whose body exceeds the length budget in `.claude/rules/auto-memory-style.md`. The skill proposes a verbatim rewrite that conforms to the budget.
+
+### Setup
+
+A single feedback memory, 41 lines:
+
+```
+---
+name: Always snap to nearest panorama before instantiating StreetViewPanorama
+description: new google.maps.StreetViewPanorama at off-coverage lat/lng silently renders black
+type: feedback
+---
+Instantiating `new google.maps.StreetViewPanorama({ position: { lat, lng } })` at
+coordinates with no Street View coverage gives a **black render with no error** —
+the panorama just stays blank. This is what the user reported as "the view
+doesn't work" after picking a point in Tver, Russia (no Google SV coverage).
+
+**Why:** Google's API is forgiving by design — it doesn't throw when no panorama
+exists at a coordinate; it just renders nothing. UI feedback is the consumer's
+job.
+
+**How to apply:**
+
+```typescript
+const NEAREST_PANO_SEARCH_RADIUS_METERS = 50
+
+const svc = new google.maps.StreetViewService()
+svc.getPanorama(
+  { location: { lat, lng }, radius: NEAREST_PANO_SEARCH_RADIUS_METERS },
+  (data, status) => {
+    if (status !== 'OK' || data === null) {
+      // Show user-facing "no coverage" error — DO NOT instantiate panorama at this lat/lng
+      return
+    }
+    const snapped = data.location?.latLng
+    if (snapped) {
+      lat = snapped.lat()
+      lng = snapped.lng()
+    }
+    // Instantiate / setPano with data.location?.pano
+  },
+)
+```
+
+**50m radius** matches what Google Maps' own UI uses when you click on a non-covered road...
+
+**Status comparison: use string `'OK'` not `google.maps.StreetViewStatus.OK`** — the local Google Maps `.d.ts` doesn't declare `StreetViewStatus` as a typed enum...
+
+**Where applied**: `apps/web/src/pages/admin/StreetViewScreenshotPage.vue` (PRs #114, #117). Also wired into the modal picker...
+```
+
+`wc -l` reports 41 lines. Per the style guide, feedback bodies target ≤12 lines (hard cap 20). Triage flags it as **COMPRESS**.
+
+### Skill flow
+
+#### Phase 4 audit (excerpt)
+
+```
+COMPRESS (1):
+  feedback_streetview_snap_to_pano.md   41 → 11 lines (73% reduction)
+    Cuts: originating-incident narrative ("Tver, Russia"), 20-line code block
+          (replaced by one-paragraph prose), "Where applied" footer with PR refs.
+    Keeps: rule, trigger, snap procedure, 50m magic number, string-vs-enum gotcha.
+```
+
+#### Phase 5 confirmation (verbatim rewrite shown inline)
+
+> **Source** (41 lines) — see above.
+>
+> **Proposed rewrite** (11 lines, verbatim):
+>
+> ```markdown
+> Before `new StreetViewPanorama({position})` or `setPosition()`, snap to the
+> nearest covered pano. Off-coverage coords render black with no error.
+>
+> How: call `StreetViewService.getPanorama({location, radius: 50})`. If status
+> !== 'OK' or data === null → show "no coverage" error and do not instantiate.
+> Otherwise update your stored lat/lng to `data.location.latLng` before
+> instantiating.
+>
+> Caveats:
+> - 50m matches Google Maps' own snap radius. >50 grabs wrong panos; <50 fails at edges.
+> - Compare status against string `'OK'`, not `google.maps.StreetViewStatus.OK` —
+>   the local `.d.ts` doesn't declare it as a typed enum.
+> ```
+>
+> Apply? (yes / no / edit)
+
+User: `yes`. The file body is replaced in place; the frontmatter `name`/`description` are unchanged; the index hook in `MEMORY.md` is unchanged.
+
+#### Final summary
+
+> Compressed 1 entry, total reduction 73%, store now 779 lines (was 819).
+
+### Why this example matters
+
+- **COMPRESS is exempt from the 7-day age floor.** Rewriting for length is non-destructive — the same rule survives in a shorter form. DROP is the destructive action that needs the floor.
+- **The cut list is mechanical, not creative.** The agent removes the originating incident, oversized code block, and "where applied" footer — but it must not reinterpret the rule. If the proposed rewrite changes the *meaning*, the user should reject.
+- **The 50m magic number and the string-vs-enum gotcha survive.** Those are the two pieces a future agent could not guess from the API alone. The narrative around them is disposable; they are not.
+
+---
+
+## Resolving a conflict between two KEEP memories
+
+Two memories that contradict are paired in Phase 3. Newer wins; older becomes a one-line stub pointing at the survivor and drops out of `MEMORY.md`. The file stays on disk as an audit trail.
+
+### Setup
+
+Two feedback memories with overlapping triggers:
+
+```
+feedback_no_console_log.md         (mtime: 2025-12-10)
+  Body: "Never use console.log in this repo. Use console.warn or console.error
+        only. Extension code uses debugLogService."
+
+feedback_logging_policy.md         (mtime: 2026-04-22)
+  Body: "Use console.warn or console.error only — no console.log, no
+        console.info, no console.debug. Extension code uses debugLogService
+        (writes to popup debug panel). Server code uses the structured logger
+        in apps/api/src/lib/logger.ts; never raw console in API routes."
+```
+
+Both fire on "what logger should I use?" — but the newer one is strictly more specific (covers info/debug, calls out the server-side logger). The older one is a subset.
+
+### Skill flow
+
+#### Phase 3 pairing
+
+```
+CONFLICT (1 pair):
+  feedback_no_console_log.md  (2025-12-10)  ← LOSER (older, less specific)
+  feedback_logging_policy.md  (2026-04-22)  ← WINNER (newer, supersedes)
+
+  Resolution: mark feedback_no_console_log.md as superseded, body collapsed.
+  Newer is strictly more specific — no information lost.
+```
+
+#### Phase 5 confirmation
+
+> **Two contradicting (or one-superseding-the-other) memories:**
+>
+> [shows both bodies side by side]
+>
+> **Proposed action:**
+> - **Keep**: `feedback_logging_policy.md` (newer, broader)
+> - **Supersede**: `feedback_no_console_log.md` — body becomes:
+>   ```markdown
+>   ---
+>   name: superseded
+>   status: superseded
+>   ---
+>   Superseded by [feedback_logging_policy.md](./feedback_logging_policy.md).
+>   ```
+> - Remove `feedback_no_console_log.md` line from `MEMORY.md`.
+> - **The file stays on disk** as audit trail.
+>
+> Apply? (yes / override winner / no)
+
+User: `yes`. Stub written, `MEMORY.md` updated.
+
+#### Verify
+
+```
+$ grep -c '^- \[' MEMORY.md
+N-1                          # one entry removed from index
+
+$ ls memory/ | grep -vE '^(MEMORY\.md|audit-)' | wc -l
+N                            # file count unchanged — loser still on disk
+
+$ cat memory/feedback_no_console_log.md
+---
+name: superseded
+status: superseded
+---
+Superseded by [feedback_logging_policy.md](./feedback_logging_policy.md).
+```
+
+The mismatch between index count (N-1) and file count (N) is **expected** for superseded files. The verification command in the skill's checklist accounts for this — superseded files don't count toward the active index.
+
+### Why this example matters
+
+- **Newer wins by default, but the user can override.** If the older memory carries more nuance (rare), the user picks "override winner" and the newer one becomes the stub instead.
+- **Supersession is non-destructive.** The file stays on disk so future audits can see *what was once believed* and *why it changed*. This matters when the user later wonders "did we used to forbid X?" — the audit trail answers without spelunking through git history.
+- **CONFLICT is different from MERGE.** MERGE combines two compatible rules that fire in the same scenario. CONFLICT pairs two **incompatible** rules where only one can be current. Different downstream actions; different bucket.
 
 ---
 

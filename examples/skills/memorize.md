@@ -8,6 +8,7 @@
 - [Semantic fact with anchor](#semantic-fact-with-anchor) — one targeted question to capture a re-verification anchor
 - [Anti-pattern (negative polarity)](#anti-pattern-negative-polarity) — "never do this" with explicit `not_for` carve-outs
 - [Critical decision with Layer 1 promotion](#critical-decision-with-layer-1-promotion) — episodic memory pinned to the always-loaded index
+- [Consolidation: UPDATE existing instead of ADD new](#consolidation-update-existing-instead-of-add-new) — the Step 3 consolidation check that catches near-duplicates at write time
 
 In every scenario, the internal classification (*procedural / semantic / episodic*) is shown in *italic side-notes* so you can see how the skill reasons. In real usage those terms never reach the user.
 
@@ -390,3 +391,71 @@ The agent appends a one-line summary under the **Decisions** section of `${aiDir
 - **Episodic** memory carries the *why* a decision was made, which doesn't live in any commit.
 - **`persistent: true`** keeps it from being archived during normal memory pruning.
 - **Layer 1 promotion** is reserved for things that change how *every* session should reason — not for ordinary rules. The skill only offers it when the user signals criticality.
+
+---
+
+## Consolidation: UPDATE existing instead of ADD new
+
+Step 3 of `memory-create` runs an ADD / UPDATE / NO-OP check before drafting. When the user's new insight overlaps with an existing memory, the skill proposes editing the existing file rather than creating a near-duplicate.
+
+### Setup
+
+The procedural index already contains:
+
+```
+| ID    | Triggers                          | Capability                          | Not For       |
+|-------|-----------------------------------|-------------------------------------|---------------|
+| P012  | prisma, schema, pnpm db:generate  | Regenerate Prisma client after edit | data backfill |
+```
+
+`P012` body says: "After editing `prisma/schema.prisma`, run `pnpm db:generate` before continuing."
+
+The user now says:
+
+```
+/memorize also run pnpm typecheck after pnpm db:generate — the new types might break consumers
+```
+
+### Skill flow (Step 3 — Consolidation Check)
+
+The skill reads the index, sees `P012` matches the trigger keywords (`prisma`, `db:generate`), reads `P012`'s body, and decides **UPDATE**:
+
+> An existing memory already covers this trigger:
+>
+> **`P012` — Regenerate Prisma client after edit**
+> ```
+> After editing prisma/schema.prisma, run pnpm db:generate before continuing.
+> ```
+>
+> Your new insight extends the procedure rather than introducing a different rule. Propose updating `P012` in place instead of creating a new `P013`.
+>
+> **Proposed diff** (verbatim addition):
+>
+> ```diff
+>  After editing prisma/schema.prisma, run pnpm db:generate before continuing.
+> +
+> +Then run pnpm typecheck — the regenerated client types may break existing
+> +consumers (e.g. enum renames, optional → required field changes). Fix call
+> +sites before moving on.
+> ```
+>
+> Apply UPDATE to `P012`? (yes / no, create P013 instead)
+
+User: `yes`. Skill:
+
+- Appends the new paragraph to `P012`'s body
+- Bumps `validated` date in `P012`'s frontmatter to today
+- Updates the `Triggers` cell in the index to add `pnpm typecheck`
+- **Does not** allocate `P013` — the reserved ID is released
+
+### Final state
+
+> Updated `${aiDir}/memory/procedural/P012-prisma-regenerate.md` (2 lines added).
+> No new memory file created.
+
+### Why this example matters
+
+- **The check runs *before* drafting** — saves the user from a near-duplicate that sanitize would later have to merge.
+- **UPDATE preserves the original ID and triggers index row** — references from other memories (`related: ["P012"]`) keep working.
+- **NO-OP is also a valid outcome.** If the existing memory already says exactly what the user is proposing, the skill refuses to write and tells the user "Already covered by `P012` — open it?"
+- **Bias toward UPDATE.** Only ADD when the trigger scenario, anchor, or polarity meaningfully differs (e.g. an anti-pattern that contradicts the existing rule — that's a CONFLICT for `/memory-sanitize` to surface, not a new memory).

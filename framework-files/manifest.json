@@ -1,30 +1,84 @@
 {
-  "frameworkVersion": "1.0.0",
+  "frameworkVersion": "1.6.0",
   "files": {
-    "memory-index.md": { "type": "marker-merge" },
-    "pre-flight.md": { "type": "marker-merge" },
-    "memory-system.md": { "type": "overwrite" },
-    "templates/README.md": { "type": "overwrite" },
-    "templates/memory-procedural.md": { "type": "overwrite" },
-    "templates/memory-semantic.md": { "type": "overwrite" },
-    "templates/memory-episodic.md": { "type": "overwrite" },
-    "templates/index-procedural.md": { "type": "overwrite" },
-    "templates/index-semantic.md": { "type": "overwrite" },
-    "templates/index-episodic.md": { "type": "overwrite" },
-    "templates/session-log.md": { "type": "overwrite" },
-    "templates/feature-pre-flight.md": { "type": "overwrite" },
-    "templates/example-usage.md": { "type": "overwrite" }
+    "memory-index.md": {
+      "type": "marker-merge"
+    },
+    "pre-flight.md": {
+      "type": "marker-merge"
+    },
+    "memory-system.md": {
+      "type": "overwrite"
+    },
+    "templates/README.md": {
+      "type": "overwrite"
+    },
+    "templates/memory-procedural.md": {
+      "type": "overwrite"
+    },
+    "templates/memory-semantic.md": {
+      "type": "overwrite"
+    },
+    "templates/memory-episodic.md": {
+      "type": "overwrite"
+    },
+    "templates/index-procedural.md": {
+      "type": "overwrite"
+    },
+    "templates/index-semantic.md": {
+      "type": "overwrite"
+    },
+    "templates/index-episodic.md": {
+      "type": "overwrite"
+    },
+    "templates/session-log.md": {
+      "type": "overwrite"
+    },
+    "templates/feature-pre-flight.md": {
+      "type": "overwrite"
+    },
+    "templates/example-usage.md": {
+      "type": "overwrite"
+    }
   },
   "rules": {
-    "workflow.md": { "type": "overwrite", "dest": ".claude/rules/workflow.md" },
-    "memory-system.md": { "type": "overwrite", "dest": ".claude/rules/memory-system.md" },
-    "ideas.md": { "type": "overwrite", "dest": ".claude/rules/ideas.md" },
-    "skill-optimization.md": { "type": "overwrite", "dest": ".claude/rules/skill-optimization.md" }
+    "workflow.md": {
+      "type": "overwrite",
+      "dest": ".claude/rules/workflow.md"
+    },
+    "memory-system.md": {
+      "type": "overwrite",
+      "dest": ".claude/rules/memory-system.md"
+    },
+    "auto-memory-style.md": {
+      "type": "overwrite",
+      "dest": ".claude/rules/auto-memory-style.md"
+    },
+    "ideas.md": {
+      "type": "overwrite",
+      "dest": ".claude/rules/ideas.md"
+    },
+    "skill-optimization.md": {
+      "type": "overwrite",
+      "dest": ".claude/rules/skill-optimization.md"
+    }
   },
   "hooks": {
-    "guard-git-branch.sh": { "type": "overwrite", "dest": ".claude/hooks/guard-git-branch.sh" },
-    "validate-frontmatter.sh": { "type": "overwrite", "dest": ".claude/hooks/validate-frontmatter.sh" },
-    "mark-code-changed.sh": { "type": "overwrite", "dest": ".claude/hooks/mark-code-changed.sh" },
-    "verify-before-stop.sh": { "type": "overwrite", "dest": ".claude/hooks/verify-before-stop.sh" }
+    "guard-git-branch.sh": {
+      "type": "overwrite",
+      "dest": ".claude/hooks/guard-git-branch.sh"
+    },
+    "validate-frontmatter.sh": {
+      "type": "overwrite",
+      "dest": ".claude/hooks/validate-frontmatter.sh"
+    },
+    "mark-code-changed.sh": {
+      "type": "overwrite",
+      "dest": ".claude/hooks/mark-code-changed.sh"
+    },
+    "verify-before-stop.sh": {
+      "type": "overwrite",
+      "dest": ".claude/hooks/verify-before-stop.sh"
+    }
   }
 }
