@@ -58,10 +58,10 @@ Required sections:
    Show the created documents and ask for approval.
 
 6. **Commit Decision**
-   After approval, prompt the user about committing the spec. Uncommitted spec
-   files become dangling state by the time `/myspec:feature-implement` runs.
+   Prompt the user about committing the spec. **Why:** uncommitted spec files
+   dangle on the current branch by the time `/myspec:feature-implement` runs.
 
-   Detection (see [`skills/_shared/git-helpers.md`](../_shared/git-helpers.md)):
+   Detection (REQUIRED reference: [`skills/_shared/git-helpers.md`](../_shared/git-helpers.md)):
    - Resolve the default branch (main vs master)
    - Read current `HEAD` and working-tree cleanliness
    - Decide which option to mark `(Recommended)`

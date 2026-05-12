@@ -88,7 +88,7 @@ The plan must be committed before `/myspec:feature-implement` runs. Otherwise
 the spec + plan files dangle on the current branch and either confuse worktree
 creation or get left behind when implement spawns its own worktree.
 
-Detection (see [`skills/_shared/git-helpers.md`](../_shared/git-helpers.md)):
+Detection (REQUIRED reference: [`skills/_shared/git-helpers.md`](../_shared/git-helpers.md)):
 - Resolve the default branch (main vs master)
 - Read current `HEAD` and working-tree cleanliness
 - Decide which option to mark `(Recommended)`

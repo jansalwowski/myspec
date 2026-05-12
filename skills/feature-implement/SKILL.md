@@ -43,11 +43,9 @@ Plans use three checkbox states:
 ### Step 0: Confirm Implementation Flow (BLOCKING)
 
 Before parsing the plan or dispatching any work, confirm where implementation
-will happen. This replaces the old "never run on main/master" enforcement —
-the choice is now explicit and confirmed every time, even when prior state
-makes the answer obvious.
+will happen. Always ask — even when prior state makes the answer obvious.
 
-**1. Inspect current state** (see [`skills/_shared/git-helpers.md`](../_shared/git-helpers.md)):
+**1. Inspect current state** (REQUIRED reference: [`skills/_shared/git-helpers.md`](../_shared/git-helpers.md)):
 
 - Resolve default branch (main vs master)
 - Current `HEAD` branch name
