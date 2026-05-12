@@ -82,6 +82,38 @@ Save to the path shown in [## Plan Document Format](#plan-document-format).
 
 Present the plan. On approval, hand off to `/myspec:feature-implement`.
 
+### Step 7: Commit Decision (BLOCKING before feature-implement)
+
+The plan must be committed before `/myspec:feature-implement` runs. Otherwise
+the spec + plan files dangle on the current branch and either confuse worktree
+creation or get left behind when implement spawns its own worktree.
+
+Detection (REQUIRED reference: [`skills/_shared/git-helpers.md`](../_shared/git-helpers.md)):
+- Resolve the default branch (main vs master)
+- Read current `HEAD` and working-tree cleanliness
+- Decide which option to mark `(Recommended)`
+
+Call `AskUserQuestion` with:
+
+```
+question: "Plan is ready. Commit before /feature-implement to avoid dangling files."
+header:   "Commit plan"
+options:
+  - "Commit to {HEAD}"           → commit implementation-plan.md (+ any updated
+                                    spec/tech-spec) on the current branch
+  - "New branch feat/{name}"     → only when HEAD is the default branch;
+                                    create feat/{name}, switch, commit
+```
+
+- Order options so the recommended one is first with `(Recommended)` appended.
+- "Leave uncommitted" is **not** offered — it is the failure mode this prompt
+  exists to prevent. If the user genuinely needs it, they can use the
+  AskUserQuestion "Other" escape hatch.
+- Default commit message: `feat({name}): add implementation plan` (or
+  `feat({name}): add spec, tech-spec, and implementation plan` if those files
+  are also uncommitted in the same change). Show, accept-or-edit, commit.
+- Stage only the feature's files (no `git add -A`).
+
 ## Plan Document Format
 
 Save to `${aiDir}/features/{feature}/implementation-plan.md`.
@@ -202,6 +234,7 @@ Before presenting the plan:
 - [ ] Phase numbers are globally unique across all milestones
 - [ ] Cross-milestone dependencies use `Milestone N` in the Depends On column (not individual phase numbers from other milestones)
 - [ ] Each milestone is a coherent vertical slice
+- [ ] Commit decision presented to user (Step 7); plan committed before handoff
 
 ## Red Flags
 
