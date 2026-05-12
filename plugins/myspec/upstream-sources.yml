@@ -1,0 +1,25 @@
+# Upstream sources tracked by skills/upstream-sync.
+#
+# Each source is an external repo we draw inspiration from. For each source,
+# `last_checked_sha` is updated automatically after a successful sync run;
+# `divergences` are intentional differences from upstream that must not be
+# re-proposed on the next sync.
+#
+# To add a new source, append an entry with `last_checked_sha: ""` — the next
+# sync run will treat it as a first-time pull and show full history.
+
+sources:
+  - name: superpowers
+    repo: obra/superpowers
+    branch: main
+    last_checked_sha: "9f04f063"
+    last_checked_date: "2026-05-12"
+    mappings:
+      - upstream: skills/brainstorming
+        local: plugins/myspec/skills/brainstorm
+        divergences:
+          - "Output is optional (A/B/C wrap-up) — upstream mandates spec doc + writing-plans handoff."
+          - "We keep SCAMPER / Six Hats / reverse-brainstorm / first-principles techniques table; upstream removed it."
+          - "No HARD-GATE block — our skill is a thinking tool, not a pipeline kickoff."
+          - "Frontmatter description stays exploratory; upstream uses 'You MUST use this before any creative work' trigger language."
+          - "Local has no scripts/ — visual-companion server fixes (Windows foreground, idle exit, owner-PID lifecycle) are non-portable until we ship our own server."
