@@ -90,6 +90,10 @@ Goal is depth and clarity. Rules:
 - Present trade-offs honestly — do not soft-pedal weaknesses
 - Scale depth to complexity: a few sentences for simple topics, detailed analysis for nuanced ones
 
+### Design for isolation and clarity (software brainstorms only)
+
+When the brainstorm is shaping a piece of software, propose units that can each answer three questions: *what does it do, how do you use it, what does it depend on*. If a unit can't answer all three without referring to its internals, the boundary is wrong — narrow it before moving on. Smaller, well-bounded units are easier to reason about, edit reliably, and test independently.
+
 ### Working in existing codebases
 
 - Explore the current structure before proposing changes. Follow existing patterns.
@@ -121,9 +125,15 @@ After the user confirms the synthesis captures the thinking, ask once what to do
 >   - `/myspec:feature-plan` — if the feature spec already exists
 > - **C) Nothing** — the conversation is the output, we're done"
 
-**If A:** Ask for the file path. Write a clean summary: key insights, top ideas, trade-offs, open questions. Markdown format.
+**If A:** Ask for the file path. Write a clean summary: key insights, top ideas, trade-offs, open questions. Markdown format. Then do a quick inline self-review before declaring done:
+- **Placeholders** — no "TBD" / "TODO" / vague requirements left
+- **Internal consistency** — sections don't contradict each other
+- **Scope** — fits a single document; flag if it needs decomposition
+- **Ambiguity** — any requirement that could be read two ways is made explicit
 
-**If B:** Ask which skill if unclear. Pass the brainstorm context and invoke it.
+Fix issues inline. Do not loop with a subagent — a single pass is enough.
+
+**If B:** Ask which skill if unclear. If a spec file was written first, hand off with "Spec at `<path>` — review before I invoke `<skill>`" and wait for the user. When invoking, brief the next skill self-containedly — it does not see this conversation.
 
 **If C:** Done. Do not write anything.
 
@@ -132,7 +142,7 @@ After the user confirms the synthesis captures the thinking, ask once what to do
 ## Key Principles
 
 - **One question at a time** — do not overwhelm with multiple questions
-- **Multiple choice preferred** — easier to answer than open-ended when possible
+- **Multiple choice preferred** — easier to answer than open-ended when possible (use `AskUserQuestion` for batched options)
 - **Challenge, don't just validate** — devil's advocate is part of the job
 - **YAGNI ruthlessly** — challenge scope creep during convergent phase
 - **Explore alternatives** — always propose 2-3 approaches before settling
