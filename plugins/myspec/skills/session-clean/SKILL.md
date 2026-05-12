@@ -1,0 +1,118 @@
+---
+name: session-clean
+description: "Use when sweeping dangling session files in ai/memory/sessions/active/ or orphaned (untracked) files in ai/memory/sessions/archive/. Keywords: session cleanup, dangling sessions, archive sessions, session sweep, orphaned archives, empty session pruning. Skips the running agent's own session, tracked archive files, and files modified within the last hour. Do NOT use to archive the running agent's own active session (use /myspec:session-complete) or clean worktrees (use /myspec:worktree-cleanup)."
+---
+
+# Session Clean
+
+Sweep abandoned session files in `ai/memory/sessions/active/`, plus orphaned (untracked) files in `ai/memory/sessions/archive/`. Empty / no-value sessions are deleted; substantive active sessions are archived; substantive archived sessions are left alone.
+
+**Announce at start:** "Running session cleanup audit."
+
+**Hard rules** (apply throughout):
+- Never delete a substantive *active* session — archive instead.
+- Never touch a file with `mtime` < 1h without explicit confirmation.
+- Never touch a **tracked** file under `archive/` (committed history is out of scope). Untracked files in `archive/` are in scope but require per-file confirmation.
+- Never act on a session whose `cwd` matches a live worktree without per-file confirmation.
+
+## Workflow
+
+### Step 1: Inventory
+
+List `ai/memory/sessions/active/*.md` and `ai/memory/sessions/archive/*.md`. For each file capture: `session_id` (from filename and frontmatter), `mtime`, location (`active` | `archive`), tracked-by-git flag (`git ls-files --error-unmatch <path>` exits 0 if tracked), frontmatter fields (`status`, `cwd`, `auto_created`, `topic`, `feature`, `started`).
+
+**Drop from consideration immediately**:
+- Tracked files under `archive/` (committed history — out of scope).
+- The file whose `session_id` matches the current agent's session (env `CLAUDE_SESSION_ID` if set; otherwise treat the most recently mtime-bumped file in `active/` as potentially yours and route to ambiguous in Step 3).
+
+### Step 2: Classify Content
+
+For each file, parse the body. A session is **empty / no value** if it contains only template scaffolding or auto-generated boilerplate with no human or agent insight added:
+
+- **Empty / no value** — any of these patterns:
+  - Zero data rows in the `## Log` table (only header + separator), `## Insights` blank, all `## Outcome` bullets blank (`**What worked**:` etc. have no text after the colon).
+  - `## Log` contains only auto-generated boilerplate entries (e.g., `session started`, `auto-created`, generic status pings) AND `## Insights` is blank AND `## Outcome` bullets are blank. A row counts as boilerplate if its content adds no recoverable information beyond what the frontmatter already encodes.
+- **Substantive**: anything else — at least one log row with real content, or any text under `## Insights`, or any populated `## Outcome` bullet.
+
+When in doubt between boilerplate and substantive, treat as substantive (safer side).
+
+### Step 3: Liveness Gate
+
+A file is **safe to act on** only if ALL hold:
+
+- `mtime` is more than 1 hour ago (`date +%s` minus file mtime > 3600)
+- `cwd:` from frontmatter is **not** present in **non-main entries** of `git worktree list --porcelain` (the main checkout is always listed but considered shared — for sessions whose `cwd` is the main checkout, use mtime alone). `cwd` missing also passes.
+- For files in `active/`: `status:` is `active` (defensive: skip anything else). For untracked files in `archive/`: `status:` is `archived` or missing.
+
+If `mtime` is 1–6h old OR `cwd` matches a live worktree but no commits in last 1h → **ambiguous**.
+
+### Step 4: Decide Action
+
+| Location | Classification | Liveness | Action |
+|---|---|---|---|
+| `active/` | Empty / no value | safe | DELETE (`rm` if untracked; `git rm` if tracked) |
+| `active/` | Substantive | safe | ARCHIVE (`git mv` to `archive/{session_id}.md`, set `status: archived` in frontmatter) |
+| `active/` | Empty or Substantive | ambiguous | ASK per file |
+| `archive/` (untracked, orphaned) | Empty / no value | safe | ASK per file — recommend DELETE (`rm`); orphan with no value and no git history to preserve |
+| `archive/` (untracked, orphaned) | Substantive | safe | SKIP — already in archive, content has value, leave for the user to commit |
+| `archive/` (untracked, orphaned) | any | ambiguous | ASK per file |
+| Any | any | live (mtime <1h or live worktree+recent) | SKIP |
+
+### Step 5: Report
+
+Print a table before any mutation:
+
+```
+## Session Cleanup Audit
+
+| # | session_id (short) | loc | tracked | topic | classification | mtime | action | reason |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 40b2f520 | active | no | auto:mockups | empty | 1d ago | DELETE | no log/insights/outcome |
+| 2 | f73e26d3 | active | no | auto:calibration | substantive | 2d ago | ARCHIVE | 3 log rows |
+| 3 | abc12345 | active | no | bugfix-x | empty | 30m ago | SKIP | mtime <1h (likely live) |
+| 4 | 9981ee07 | archive | no (orphan) | auto:scratch | empty | 3d ago | ASK→DELETE | orphaned untracked, only boilerplate log |
+| 5 | 5512aa11 | archive | no (orphan) | refactor-auth | substantive | 5d ago | SKIP | orphaned but has content; leave for user to commit |
+
+Summary: 1 to delete, 1 to archive, 1 orphan-delete (after ask), 2 skipped, 0 ambiguous
+```
+
+### Step 6: Confirm and Execute
+
+Ask: "Proceed? (yes / no / selective)"
+
+- **yes**: execute all recommended actions; orphan-deletes in `archive/` still require per-file confirmation
+- **no**: exit
+- **selective**: prompt per row
+
+For ambiguous rows, ask per file: `delete / archive / skip`.
+For orphaned `archive/` rows marked ASK→DELETE, ask per file: `delete / skip`.
+
+For ARCHIVE: edit frontmatter `status: active` → `status: archived`, then `git mv` to `archive/`.
+For DELETE in `active/`: `rm` (or `git rm` if tracked).
+For DELETE in `archive/` (orphan): `rm` only — never run `git rm` here (in-scope archive files are always untracked by construction).
+
+Print one-line summary on completion.
+
+## Constraints
+
+- **Never** delete a substantive *active* session — archive instead. Content is signal even if abandoned.
+- **Never** touch a file with `mtime` < 1h without asking, even if it looks empty (live agent may not have logged yet).
+- **Never** touch a **tracked** file in `archive/`. Pruning committed history is out of scope.
+- **Never** delete a substantive orphaned archive file without explicit confirmation — content has value even if uncommitted.
+- **Never** act on a file whose `cwd:` matches a live worktree without explicit per-file confirmation.
+
+## Verification Checklist
+
+- [ ] Listed all `ai/memory/sessions/active/*.md` and `ai/memory/sessions/archive/*.md` files
+- [ ] Filtered out tracked files in `archive/`
+- [ ] Skipped current agent's own session (matched `CLAUDE_SESSION_ID` or marked ambiguous)
+- [ ] Each file classified empty/no-value or substantive (boilerplate-only logs counted as empty)
+- [ ] Liveness gate applied (mtime > 1h, cwd not in `git worktree list`, status check)
+- [ ] Audit table printed before any mutation (with `loc` and `tracked` columns)
+- [ ] User confirmed before any delete/archive
+- [ ] Orphaned archive deletes confirmed per file
+- [ ] Substantive active sessions archived with `status: archived` set in frontmatter
+- [ ] Empty active sessions removed (`rm`, or `git rm` if tracked)
+- [ ] Empty orphaned archive sessions removed (`rm` only)
+- [ ] No tracked file under `archive/` was touched
+- [ ] Final one-line summary printed

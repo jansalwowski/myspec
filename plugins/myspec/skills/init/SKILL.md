@@ -1,6 +1,6 @@
 ---
 name: "init"
-description: "Use when setting up myspec in a new project for the first time. Keywords: initialize, setup, init, install myspec, new project setup, scaffold AI documentation. Creates .myspec.json, scaffolds ${aiDir}/ directory, copies framework files, and can set up Claude-specific project hooks and rules. Do NOT use to update framework files in an existing setup (use update instead)."
+description: "Use when setting up myspec in a new project for the first time. Keywords: initialize, setup, init, install myspec, new project setup, scaffold AI documentation. Do NOT use to update framework files in an existing setup (use update instead)."
 ---
 
 # Init
@@ -54,30 +54,31 @@ Write `.myspec.json` at project root:
 ```json
 {
   "aiDir": "{aiDir from step 3}",
-  "frameworkVersion": "1.0.0",
+  "frameworkVersion": "1.6.0",
   "project": {
     "name": "{name from step 1}",
     "description": "{description from step 1}",
     "techStack": "{techStack from step 2}"
   },
   "frameworkFiles": {
-    "memory-index.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
-    "pre-flight.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
-    "memory-system.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
-    "templates/README.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
-    "templates/memory-procedural.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
-    "templates/memory-semantic.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
-    "templates/memory-episodic.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
-    "templates/index-procedural.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
-    "templates/index-semantic.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
-    "templates/index-episodic.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
-    "templates/session-log.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
-    "templates/feature-pre-flight.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
-    "templates/example-usage.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
-    "rules/workflow.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
-    "rules/memory-system.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
-    "rules/ideas.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" },
-    "rules/skill-optimization.md": { "version": "1.0.0", "lastUpdated": "{TODAY}" }
+    "memory-index.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
+    "pre-flight.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
+    "memory-system.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
+    "templates/README.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
+    "templates/memory-procedural.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
+    "templates/memory-semantic.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
+    "templates/memory-episodic.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
+    "templates/index-procedural.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
+    "templates/index-semantic.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
+    "templates/index-episodic.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
+    "templates/session-log.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
+    "templates/feature-pre-flight.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
+    "templates/example-usage.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
+    "rules/workflow.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
+    "rules/memory-system.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
+    "rules/auto-memory-style.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
+    "rules/ideas.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
+    "rules/skill-optimization.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" }
   }
   // "topologyFile": "backbone.yml"  ← added by the setup skill with blueprint "backbone"
 }
@@ -140,6 +141,7 @@ Make them executable: `chmod +x .claude/hooks/*.sh`
 Copy `.claude/rules/` framework rules from `framework-files/rules/`:
 - `workflow.md`
 - `memory-system.md`
+- `auto-memory-style.md`
 - `ideas.md`
 - `skill-optimization.md`
 
@@ -179,7 +181,7 @@ Hooks:   {enabled / skipped}
 Created:
   .myspec.json
   ${aiDir}/ (features, memory, ideas, templates)
-  {if hooks: .claude/hooks/ (4 hooks), .claude/rules/ (4 rules)}
+  {if hooks: .claude/hooks/ (4 hooks), .claude/rules/ (5 rules)}
   {if hooks: .claude/settings.json, .claude/verification.json}
 
 Next steps:
@@ -208,5 +210,5 @@ Next steps:
 - [ ] `${aiDir}/memory-index.md` created (framework memory index)
 - [ ] `${aiDir}/pre-flight.md` created
 - [ ] If hooks enabled: `.claude/hooks/` has 4 scripts, all executable
-- [ ] If hooks enabled: `.claude/rules/` has 4 framework rules
+- [ ] If hooks enabled: `.claude/rules/` has 5 framework rules
 - [ ] If hooks enabled: `.claude/settings.json` and `.claude/verification.json` created

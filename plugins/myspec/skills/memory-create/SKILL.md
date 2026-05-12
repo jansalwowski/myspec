@@ -35,7 +35,20 @@ Read `${aiDir}/memory/{type}/index.md`:
 - Find highest existing ID number
 - Increment by 1 (e.g., P008 -> P009, S001, E001)
 
-### 3. Draft Memory File
+### 3. Consolidation Check (ADD / UPDATE / NO-OP)
+
+**Before drafting a new file, check whether the insight already exists.** This prevents append-style growth where related rules accumulate as separate entries that later sanitize has to merge.
+
+1. Read `${aiDir}/memory/{type}/index.md` — scan keyword/topic/triggers columns for overlap with the planned memory
+2. For each candidate row, read the linked memory file body
+3. Decide:
+   - **NO-OP** — an existing memory already covers this. Tell the user "Already covered by `{id}` — open it?" and **stop without creating**. Release the reserved ID.
+   - **UPDATE** — an existing memory is close but missing this nuance. Propose a verbatim diff (new lines to append/insert into the existing file). **Do not create a new file** — release the reserved ID and bump the existing memory's `validated`/`verified` date instead.
+   - **ADD** — truly novel. Proceed to Step 3 with the reserved ID.
+
+Bias toward UPDATE when the rule overlaps; only ADD when the trigger scenario, anchor, or polarity meaningfully differs.
+
+### 4. Draft Memory File
 
 Use the type-appropriate template from `${aiDir}/.templates/memory-{type}.md`:
 
@@ -62,7 +75,7 @@ Use the type-appropriate template from `${aiDir}/.templates/memory-{type}.md`:
 - Default `persistent: false` -- will auto-archive after 30 days
 - Set `related`: IDs of related procedural/semantic memories (e.g., ["P009", "S001"])
 
-### 4. Update Type-Specific Index
+### 5. Update Type-Specific Index
 
 Add a row to `${aiDir}/memory/{type}/index.md`:
 
@@ -73,17 +86,17 @@ Add a row to `${aiDir}/memory/{type}/index.md`:
 **CRITICAL**: Index shows keywords/topics/summaries ONLY, never solutions or procedures.
 Set `updated` date in index frontmatter.
 
-### 5. Present to User for Refinement
+### 6. Present to User for Refinement
 
 Show the drafted memory. Ask:
 "Does this capture the key insight? Any adjustments?"
 
-### 6. Write Final Files
+### 7. Write Final Files
 
 Save memory file and updated index.
 Update `validated`/`verified` date in memory frontmatter.
 
-### 7. Consider Layer 1 Promotion
+### 8. Consider Layer 1 Promotion
 
 If the memory is critical enough to always be in context:
 - Ask user: "Should this be promoted to the global index (${aiDir}/memory/index.md)?"
@@ -92,7 +105,9 @@ If the memory is critical enough to always be in context:
 ## Verification Checklist
 
 - [ ] Memory type correctly identified (procedural/semantic/episodic)
-- [ ] Memory file uses correct template from `${aiDir}/.templates/memory-{type}.md`
+- [ ] Consolidation check performed (existing entries reviewed; ADD / UPDATE / NO-OP decision recorded)
+- [ ] If UPDATE / NO-OP: no new file created, reserved ID released
+- [ ] If ADD: memory file uses correct template from `${aiDir}/.templates/memory-{type}.md`
 - [ ] ID incremented correctly from highest existing in type index
 - [ ] Index row contains keywords/topics only — no solutions leaked
 - [ ] `anchors` field set for code-specific memories
