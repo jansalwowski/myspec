@@ -59,7 +59,7 @@ mode: ""
 started: "2026-04-30 14:04"
 status: active
 auto_created: true
-cwd: /Users/me/proj/billing
+cwd: <repo_root>
 ---
 ```
 

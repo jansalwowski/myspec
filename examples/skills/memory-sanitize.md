@@ -1,6 +1,6 @@
 # `/myspec:memory-sanitize` — examples
 
-Audits the user-level auto-memory store at `~/.claude-personal/projects/{encoded-cwd}/memory/`. Triages every entry into one of eight buckets (KEEP / DROP-stale / DROP-trivial / DROP-duplicate / PROMOTE / MERGE / COMPRESS / CONFLICT), then drops, promotes, merges, compresses, or supersedes with explicit per-action confirmation. Never touches the project's own `ai/memory/` (myspec system) — that has separate skills.
+Audits the user-level auto-memory store at `~/.claude-personal/projects/<encoded_cwd>/memory/`. Triages every entry into one of eight buckets (KEEP / DROP-stale / DROP-trivial / DROP-duplicate / PROMOTE / MERGE / COMPRESS / CONFLICT), then drops, promotes, merges, compresses, or supersedes with explicit per-action confirmation. Never touches the project's own `ai/memory/` (myspec system) — that has separate skills.
 
 > **Related**: For *creating* user-level auto-memories, the harness handles that automatically as you work — see the `auto memory` instructions in your system prompt and the project-level rule at `.claude/rules/auto-memory-style.md` (length budget + cut list + pre-write ADD/UPDATE/NO-OP consolidation). For *project-level* memory in `ai/memory/`, use [`/myspec:memory-create`](memorize.md), [`/myspec:memory-lookup`](memory-lookup.md), and [`/myspec:session-clean`](session-clean.md). `memory-sanitize` is the periodic groomer for the *user-level* store only.
 
@@ -20,7 +20,7 @@ The everyday case: the user hasn't sanitized in a couple of months and the memor
 
 ### Setup
 
-User runs the skill from `/Users/jane/public_html/myproj`. The resolved memory dir is `~/.claude-personal/projects/-Users-jane-public-html-myproj/memory/` (note `_` → `-` and `/` → `-`).
+User runs the skill from their project root (`<repo_root>`). The resolved memory dir is `~/.claude-personal/projects/<encoded_cwd>/memory/`, where `<encoded_cwd>` is the absolute project path with both `_` and `/` replaced by `-` (`pwd | tr '/_' '-'`).
 
 `MEMORY.md` lists 12 entries. A representative sample:
 
@@ -51,7 +51,7 @@ There's also a stray file `notes_scratch.md` not linked from `MEMORY.md`.
 
 #### 1. Inventory + integrity
 
-> Resolving memory dir: `~/.claude-personal/projects/-Users-jane-public-html-myproj/memory/`. Reading MEMORY.md and 12 linked entries.
+> Resolving memory dir: `~/.claude-personal/projects/<encoded_cwd>/memory/`. Reading MEMORY.md and 12 linked entries.
 
 Integrity report:
 
@@ -211,7 +211,7 @@ $ ls memory/ | grep -v MEMORY.md | wc -l
 6
 ```
 
-Match. Audit report archived to `~/.claude-personal/projects/-Users-jane-public-html-myproj/memory/audit-2026-05-04.md`.
+Match. Audit report archived to `~/.claude-personal/projects/<encoded_cwd>/memory/audit-2026-05-04.md`.
 
 #### Final summary
 
@@ -482,7 +482,7 @@ The store has been groomed recently and everything is current. The skill should 
 ### Skill flow
 
 ```
-Resolving memory dir: ~/.claude-personal/projects/-Users-jane-public-html-myproj/memory/.
+Resolving memory dir: ~/.claude-personal/projects/<encoded_cwd>/memory/.
 
 Reading MEMORY.md and 4 linked entries. No orphans. No broken links.
 

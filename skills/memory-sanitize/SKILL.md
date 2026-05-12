@@ -13,14 +13,14 @@ Audit the user-level auto-memory store for this project, triage each entry, and 
 
 ## Scope
 
-- **In scope:** `~/.claude-personal/projects/{encoded-cwd}/memory/` (user-level auto-memory). The encoded cwd is the absolute project path with `/` and `_` both replaced by `-` (e.g. `/Users/jane/public_html/foo` → `-Users-jane-public-html-foo`).
+- **In scope:** `~/.claude-personal/projects/<encoded_cwd>/memory/` (user-level auto-memory). The encoded cwd is the absolute project path with both `/` and `_` replaced by `-` — computed as `pwd | tr '/_' '-'`.
 - **Out of scope:** project `ai/memory/{procedural,semantic,episodic}/` (myspec system).
 
 ## Workflow
 
 ### Phase 1 — Inventory
 
-1. Resolve memory dir: `~/.claude-personal/projects/$(pwd | tr '/_' '-')/memory/`. Refuse if missing.
+1. Resolve memory dir. First **canonicalize to the main worktree** so agent worktrees do not splinter the memory store: set `MAIN=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)`; if `MAIN` ends in `.git`, set `ROOT=$(dirname "$MAIN")`, otherwise `ROOT=$(pwd)`. Then memory dir = `~/.claude-personal/projects/$(printf '%s' "$ROOT" | tr '/_' '-')/memory/`. Refuse if missing.
 2. Read `MEMORY.md` and every `*.md` entry it links to.
 3. Integrity check: list orphans (files not in `MEMORY.md`) and broken links (entries pointing to missing files). Report both.
 4. Index-line hygiene: flag any `MEMORY.md` lines whose length exceeds 150 chars (per `CLAUDE.md` auto-memory guidance — long hooks bury the takeaway). Surface in the Phase 4 report as **REWRITE-HOOK** candidates. This is a write-side fix, not a drop/promote — propose a shorter hook for each flagged entry.
@@ -103,7 +103,7 @@ Append a run summary line: `Compressed N entries, total reduction X%, store now 
 After every executed action:
 1. Update `MEMORY.md` (remove dropped/merged/superseded entries, update merge survivors, leave COMPRESS index lines untouched unless they exceed 150 chars)
 2. Verify: `grep -c '^- \[' MEMORY.md` + (count of files with `status: superseded`) equals `ls memory/ | grep -vE '^(MEMORY\.md|audit-)' | wc -l`. Audit reports are archived in the same directory and must be excluded from the entry-file count. Superseded files stay on disk as audit trail and are counted but not indexed.
-3. Optional: archive the triage report to `~/.claude-personal/projects/{encoded-cwd}/memory/audit-{YYYY-MM-DD}.md`
+3. Optional: archive the triage report to `~/.claude-personal/projects/<encoded_cwd>/memory/audit-{YYYY-MM-DD}.md`. The report **body** must reference paths via `<repo_root>` and `<encoded_cwd>` placeholders — never paste the resolved absolute form (the report may be shared or committed by the user).
 
 ## Hard guards
 

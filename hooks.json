@@ -22,6 +22,10 @@
           {
             "type": "command",
             "command": "./hooks/mark-code-changed.sh"
+          },
+          {
+            "type": "command",
+            "command": "./hooks/no-absolute-paths.sh"
           }
         ]
       }

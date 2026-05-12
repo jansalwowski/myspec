@@ -168,7 +168,7 @@ This updates framework-owned files while preserving your project customizations.
 |------|---------|
 | `workflow.md` | Feature workflow phases, when to invoke which skill |
 | `memory-system.md` | Project-level memory (`${aiDir}/memory/` — sessions, procedural/semantic/episodic). Escalation protocol, verification discipline. |
-| `auto-memory-style.md` | Harness-managed **user-level** auto-memory at `~/.claude-personal/projects/{encoded-cwd}/memory/`. Length budget per type, cut list, pre-write ADD/UPDATE/NO-OP consolidation, conflict resolution. |
+| `auto-memory-style.md` | Harness-managed **user-level** auto-memory at `~/.claude-personal/projects/<encoded_cwd>/memory/`. Length budget per type, cut list, pre-write ADD/UPDATE/NO-OP consolidation, conflict resolution. |
 | `ideas.md` | Ideas pipeline (intake → priority → processing) |
 | `skill-optimization.md` | Skill-authoring meta-rules (frontmatter, naming, token efficiency) |
 

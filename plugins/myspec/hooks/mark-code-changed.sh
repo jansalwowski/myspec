@@ -58,7 +58,6 @@ EOF
 
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
-INPUT_CWD=$(echo "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
 
 if [ -z "$FILE_PATH" ] || [ -z "$SESSION_ID" ]; then
   exit 0
@@ -112,7 +111,7 @@ mode: implementation
 started: $STARTED
 status: active
 auto_created: true
-cwd: $INPUT_CWD
+cwd: <repo_root>
 ---
 
 # Session $SHORT_ID — auto:$TOPIC_SEED

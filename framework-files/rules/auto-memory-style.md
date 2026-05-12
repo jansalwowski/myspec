@@ -8,7 +8,7 @@ updated: 2026-05-11
 # Auto-Memory Style Guide
 
 Governs entries in the harness-managed user-level auto-memory store at
-`~/.claude-personal/projects/{encoded-cwd}/memory/`.
+`~/.claude-personal/projects/<encoded_cwd>/memory/`.
 
 **Out of scope**: project-level myspec memory at `${aiDir}/memory/` — those use
 their own typed templates in `${aiDir}/.templates/`.
