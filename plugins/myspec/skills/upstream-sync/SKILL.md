@@ -1,11 +1,11 @@
 ---
 name: "upstream-sync"
-description: "Use when the user wants to check whether upstream repos we draw inspiration from (e.g. obra/superpowers) have new changes worth porting into our skills. Walks tracked source→local mappings, surfaces new commits and diffs, proposes adoptions one mapping at a time. Do NOT use for general dependency updates, package bumps, or git pulls on our own remotes."
+description: "Use when the user wants to check whether tracked upstream repos (e.g. obra/superpowers) have new changes worth porting into local skills. Surfaces a per-mapping diff + commit history for source→local pairs declared in upstream-sources.yml. Do NOT use for general dependency updates, package bumps, or git pulls on the project's own remotes."
 ---
 
 # Upstream Sync
 
-Check tracked upstream repos for new commits and diffs against our local skills, then propose adoptions. The skill **proposes** — every file change still goes through the normal Edit-tool approval path. Never silently overwrite local files.
+Check tracked upstream repos for new commits, diff each upstream path against its local counterpart, and propose adoptions. The skill **proposes** — every file change still goes through the normal Edit-tool approval path. Never silently overwrite local files.
 
 ## Config
 
@@ -83,7 +83,7 @@ What do you want to do?
   D) Show full diff
 ```
 
-Classify commits into **Substantive** (touches the file(s) you mirror locally) vs **Other** (touches sibling files we don't pull, e.g. scripts/, examples/, README). Use the commit's `files[].filename` from the API to classify.
+Classify commits into **Substantive** (touches files mirrored in the mapping's local path) vs **Other** (touches sibling files not pulled locally, e.g. scripts/, examples/, README). Use the commit's `files[].filename` from the API to classify.
 
 ## Filtering hunks against divergences
 
@@ -96,7 +96,7 @@ After diffing, walk each hunk:
 - **Never** `git checkout`, `git reset`, or `git pull` from the upstream.
 - **Never** apply the diff with `patch` or `git apply` — translate each accepted hunk into an Edit call so the user sees the change.
 - One mapping's adoptions get one logical commit (or none — committing is up to the user).
-- If a hunk depends on a file we don't have (e.g. upstream adds a section referencing `scripts/server.cjs` that we never shipped), flag this and ask before adopting.
+- If a hunk depends on a file the local skill does not ship (e.g. upstream adds a section referencing `scripts/server.cjs` that has no local counterpart), flag this and ask before adopting.
 
 ## Preflight for visual / scripted assets
 
