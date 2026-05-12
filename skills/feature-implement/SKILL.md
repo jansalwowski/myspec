@@ -40,6 +40,67 @@ Plans use three checkbox states:
 
 ## Workflow
 
+### Step 0: Confirm Implementation Flow (BLOCKING)
+
+Before parsing the plan or dispatching any work, confirm where implementation
+will happen. This replaces the old "never run on main/master" enforcement —
+the choice is now explicit and confirmed every time, even when prior state
+makes the answer obvious.
+
+**1. Inspect current state** (see [`skills/_shared/git-helpers.md`](../_shared/git-helpers.md)):
+
+- Resolve default branch (main vs master)
+- Current `HEAD` branch name
+- Working tree clean? (`git status --porcelain` empty)
+- Existing worktree for this feature? (`git worktree list` contains `feat-{name}`)
+- Plan has `[parallel:*]` groups?
+
+**2. Pre-flight: dirty tree must be resolved first.**
+
+If `git status --porcelain` is non-empty, ask the user to commit or stash
+before proceeding. Do not switch branches or create a worktree on top of
+unrelated changes. If the dirty files are exactly the feature's spec/plan
+files, this is the symptom Step 7 of `/myspec:feature-plan` is meant to
+prevent — offer to commit them now with the default message.
+
+**3. Compute recommendation:**
+
+| State | Recommended option |
+|-------|--------------------|
+| Worktree for this feature already exists | "Worktree" (reuse) |
+| Plan has `[parallel:*]` groups, no worktree yet | "Worktree" |
+| HEAD is already `feat/{name}` (or equivalent) | "Current branch" |
+| HEAD == default branch | "New branch feat/{name}" |
+
+**4. Ask via `AskUserQuestion`:**
+
+```
+question: "How should implementation proceed?"
+header:   "Impl flow"
+options:
+  - "Worktree feat-{name}"        → .claude/worktrees/feat-{name}
+                                     (best for parallel tasks; isolated)
+  - "Current branch {HEAD}"        → continue on the existing branch
+  - "New branch feat/{name}"       → create feat/{name} and switch
+  - "Main branch"                  → not recommended; only for trivial fixes
+```
+
+- Order so the recommended option is first with `(Recommended — {why})` appended
+  (e.g. `(Recommended — plan has parallel groups)`).
+- Always ask, even when the recommendation is unambiguous. Confirmation is cheap;
+  silent assumption is the bug.
+
+**5. Auto-execute the choice:**
+
+- **Worktree:** if path exists → enter it; else create via the EnterWorktree
+  tool (or `git worktree add .claude/worktrees/feat-{name} -b feat/{name}`
+  if EnterWorktree isn't available in this session).
+- **New branch:** `git checkout -b feat/{name}`. If branch exists, offer
+  checkout vs. numeric suffix (`feat/{name}-2`).
+- **Current branch:** no-op.
+- **Main branch:** require explicit confirmation; record the user's reason so
+  reviewers see it in the commit history.
+
 ### Step 1: Parse Plan → Execution DAG
 
 Read the implementation plan. Parse milestones first, then build a DAG within each:
@@ -67,7 +128,7 @@ Read the implementation plan. Parse milestones first, then build a DAG within ea
 
 ### Step 2: Setup
 
-1. Ensure you are on a feature branch (never `main` / `master`). Create one if needed.
+1. Verify Step 0's chosen branch/worktree is active (`git rev-parse --abbrev-ref HEAD` matches the chosen target). If not, bail out and re-run Step 0.
 2. Record `BASE_SHA`: `git rev-parse HEAD`
 3. Create task tracking with all tasks.
 
@@ -182,7 +243,8 @@ After all phases in a milestone complete (skip this step only for the final mile
 **Never:**
 - Dispatch parallel tasks that share files
 - Skip phase review after a barrier
-- Start work on `main`/`master` without user consent
+- Skip Step 0 — the flow prompt is BLOCKING, even when prior state seems obvious
+- Start work on `main`/`master` without an explicit Step 0 choice and a recorded reason
 - Make subagent read the plan file (provide full task text inline)
 - Skip barrier verification commands
 - Proceed past 3 failed attempts without escalating

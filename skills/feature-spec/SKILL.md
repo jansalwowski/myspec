@@ -57,6 +57,35 @@ Required sections:
 5. **Present for Review**
    Show the created documents and ask for approval.
 
+6. **Commit Decision**
+   After approval, prompt the user about committing the spec. Uncommitted spec
+   files become dangling state by the time `/myspec:feature-implement` runs.
+
+   Detection (see [`skills/_shared/git-helpers.md`](../_shared/git-helpers.md)):
+   - Resolve the default branch (main vs master)
+   - Read current `HEAD` and working-tree cleanliness
+   - Decide which option to mark `(Recommended)`
+
+   Then call `AskUserQuestion` with:
+
+   ```
+   question: "The spec is uncommitted. Where should it go?"
+   header:   "Commit spec"
+   options:
+     - "Commit to {HEAD}"           → stage spec.md, dependencies.md, index.yaml
+                                       on the current branch
+     - "New branch feat/{name}"     → create feat/{name}, switch, then commit
+     - "Leave uncommitted"          → skip; user will commit manually
+   ```
+
+   - Order options so the recommended one is first with `(Recommended)` appended.
+   - Default commit message: `feat({name}): add spec and dependencies`
+     — show the draft, accept-or-edit before committing.
+   - If working tree has unrelated dirty changes: warn and stage only the spec
+     files explicitly (no `git add -A`).
+   - If user picks "New branch" and the branch already exists: offer checkout
+     vs. a numeric suffix (`feat/{name}-2`).
+
 ## Rules
 - Use kebab-case for feature directory name
 - NO implementation details in spec (no file paths, class names)
@@ -72,6 +101,7 @@ Required sections:
 - [ ] Entry added to `${aiDir}/features/index.yaml`
 - [ ] No implementation details in spec (no file paths, class names, SQL, code)
 - [ ] Run project documentation audit command if configured
+- [ ] Commit decision presented to user (Step 6) and acted on
 
 ## Integration
 
