@@ -41,7 +41,7 @@ question: "Plan mode?"
 header:   "Plan mode"
 options:
   - "normal"        → single-executor implementer per task (default)
-  - "orchestrator"  → per-milestone Planner / Worker / SpecReview / QualityReview chain
+  - "orchestrator"  → per-milestone Worker / SpecReview / QualityReview chain (no Planner — tasks already atomic)
 ```
 
 Show the recommendation as `normal` unless the feature involves work where role separation pays off (large multi-task milestones, mixed model-tier optimization). Always show this disclaimer with the orchestrator option:

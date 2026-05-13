@@ -125,7 +125,7 @@ across roles is more surface for cascading errors. Use only for plans you have
 already reviewed.
 ```
 
-Record the user's choice. Only after the choice is captured, **REQUIRED:** read `references/orchestrator-dispatcher.md` for the 5-step chain (Planner → Worker(s) → SpecReview → QualityReview → Checkpoint), loop caps, and brief lifecycle. Steps 2, 4b, and 5 below still apply unchanged; orchestrator mode replaces Step 4 (Phase Review) with the per-milestone chain.
+Record the user's choice. Only after the choice is captured, **REQUIRED:** read `references/orchestrator-dispatcher.md` for the 4-step chain (Worker(s) → SpecReview → QualityReview → Checkpoint), loop caps, and the verdict-append retry protocol. Steps 2, 4b, and 5 below still apply unchanged; orchestrator mode replaces Step 4 (Phase Review) with the per-milestone chain.
 
 If `orchestration` is absent, continue in normal mode below — no run-mode prompt.
 
@@ -244,7 +244,7 @@ After all phases in a milestone complete (skip this step only for the final mile
 2. Dispatch holistic reviewer (`./holistic-reviewer-prompt.md`) for full diff `BASE_SHA..HEAD`.
 3. Hand off to `/myspec:feature-complete`.
 
-**Orchestrator mode interaction:** Step 5 runs identically in both modes. Per-milestone SpecReview + QualityReview are scoped to one milestone's diff; the holistic reviewer covers the whole feature. They do not overlap and orchestrator mode does NOT skip Step 5. On a green Step 5 with user acceptance at the final Checkpoint, also delete `${aiDir}/features/<feature>/briefs/` (orchestrator-mode brief lifecycle — see [references/orchestrator-dispatcher.md](references/orchestrator-dispatcher.md)).
+**Orchestrator mode interaction:** Step 5 runs identically in both modes. Per-milestone SpecReview + QualityReview are scoped to one milestone's diff; the holistic reviewer covers the whole feature. They do not overlap and orchestrator mode does NOT skip Step 5. No `briefs/` directory is created — Workers receive task text inline.
 
 ## Model Selection
 
@@ -256,7 +256,7 @@ Skill text uses **tier names** (`cheap` / `mid` / `premium`). Controller (main t
 | Implementer | Multi-file, integration | `mid` | e.g. Sonnet-tier, GPT-5-tier |
 | Phase reviewer | — | `mid` | e.g. Sonnet-tier, GPT-5-tier |
 | Final holistic reviewer | — | `premium` | e.g. Opus-tier |
-| Orchestrator Planner / SpecReviewer / QualityReviewer | — | `mid` | e.g. Sonnet-tier, GPT-5-tier |
+| Orchestrator SpecReviewer / QualityReviewer | — | `mid` | e.g. Sonnet-tier, GPT-5-tier |
 | Orchestrator Worker | — | `cheap` | e.g. Haiku-tier, GPT-5-mini-tier |
 
 Orchestrator-mode plans override defaults via the `roles:` front-matter block.

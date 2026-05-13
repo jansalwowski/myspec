@@ -1,6 +1,6 @@
 # Plan Document Templates
 
-Canonical normal-mode (single-executor) template. For orchestrator mode (per-milestone Planner / Worker / SpecReview / QualityReview chain), see [`plan-templates-orchestrator.md`](./plan-templates-orchestrator.md).
+Canonical normal-mode (single-executor) template. For orchestrator mode (per-milestone Worker / SpecReview / QualityReview chain — no Planner), see [`plan-templates-orchestrator.md`](./plan-templates-orchestrator.md).
 
 ## Task Status
 

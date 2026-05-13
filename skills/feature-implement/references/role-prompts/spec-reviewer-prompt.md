@@ -13,36 +13,41 @@ Task tool (general-purpose):
 
     - spec.md (paste relevant acceptance criteria for this milestone)
     - tech-spec.md (paste relevant interfaces and architectural decisions)
-    - implementation-plan.md milestone section (paste)
-    - Planner brief at `${aiDir}/features/<feature>/briefs/m<n>.md` (read it)
-    - Worker diffs: `git diff <milestone-base-sha>..HEAD`
+    - implementation-plan.md milestone section (paste — this is the source of truth for what was supposed to be built)
+    - Worker diff: `git diff <milestone-base-sha>..HEAD`
 
     ## Your Job
 
-    Verify the implementation matches the **spec and plan**. You are not checking
-    code quality — that is QualityReviewer's job. You are checking:
+    You check three independent gates in order. Stop at the first failure.
 
-    1. Every acceptance criterion this milestone targets is met by the diff
-    2. Every task in the plan was actually implemented (no silent skips)
-    3. Interfaces match tech-spec exactly (signatures, return types, side effects)
-    4. No scope creep: nothing built that the plan did not request
-    5. TDD evidence: tests exist and verify behavior the spec requires
+    **Gate 1 — plan ↔ spec alignment (rare, but blocking).**
+    Does the plan correctly translate the spec for this milestone? Are tasks missing or wrongly scoped relative to acceptance criteria?
+    - PASS → continue to Gate 2.
+    - FAIL → verdict `ESCALATE`. The plan itself is wrong. Workers cannot fix this. Controller pauses and asks user to fix the plan via `/myspec:feature-update` or re-run `/myspec:feature-plan`.
+
+    **Gate 2 — impl ↔ plan alignment.**
+    Does the diff match what the plan tasks specify? Exact file paths, interfaces, behaviors?
+    - PASS → continue to Gate 3.
+    - FAIL → verdict `FAIL-SPEC`. Worker(s) will be re-dispatched with your verdict appended.
+
+    **Gate 3 — TDD evidence.**
+    Do the tests added by Workers actually verify spec-required behavior (not just that code runs)?
+    - PASS → verdict `PASS`. Hand off to QualityReviewer.
+    - FAIL → verdict `FAIL-SPEC`.
 
     ## Verify Independently
 
-    Do not trust worker reports. Read the diff, run the test commands from the
-    brief, compare line by line to the spec.
+    Read the diff. Run the test commands from the plan tasks. Do not trust Worker reports.
 
     ## Report Format
 
     **Per-task verdict:**
-    - Task N: PASS | FAIL-SPEC: <specific spec gap with file:line>
+    - Task N: PASS | FAIL-SPEC: <specific gap with file:line and plan/spec reference>
 
-    **Overall verdict:**
-    - **PASS** — all spec gates met, hand off to QualityReviewer
-    - **FAIL-SPEC** — list every gap with file:line and which spec/plan section it violates
+    **Overall verdict — exactly one:**
+    - **PASS** — all gates met, hand off to QualityReviewer
+    - **FAIL-SPEC** — impl does not match plan. List every gap with file:line + concrete fix instruction the Worker should apply. Controller re-dispatches the Worker(s) with this verdict appended.
+    - **ESCALATE** — plan does not match spec. Pause the run. The plan must be fixed before any further dispatch. Include the spec/plan mismatch in one paragraph.
 
-    On FAIL-SPEC, the controller will re-invoke the Planner with your verdict.
-    Be specific: "applyTagSchema in tags.ts:15 does not enforce UUID format
-    required by spec.md §3.2" beats "missing validation".
+    Be specific. "applyTagSchema in tags.ts:15 does not enforce UUID format required by spec.md §3.2; add `uuid()` validator" beats "missing validation".
 ```

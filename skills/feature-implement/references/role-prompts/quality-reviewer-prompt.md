@@ -36,8 +36,8 @@ Task tool (general-purpose):
     - **PASS** — quality acceptable, hand off to Checkpoint
     - **FAIL-QUALITY** — list every issue with file:line, severity, and concrete fix suggestion
 
-    On FAIL-QUALITY, the controller re-invokes the **same Worker** (not the
-    Planner) with your verdict. Be precise. "Naming unclear" is bad.
+    On FAIL-QUALITY, the controller re-invokes the same Worker(s) with your
+    verdict appended verbatim to the task prompt. Be precise. "Naming unclear" is bad.
     "`doStuff` in tags.ts:42 should be `applyTagSchema` to match neighbors
     in tags-validator.ts" is good.
 ```
