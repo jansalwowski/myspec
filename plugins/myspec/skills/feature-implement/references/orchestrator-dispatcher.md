@@ -60,12 +60,13 @@ For each milestone (walked in declaration order):
 
 ## Verdict-append protocol (controller responsibility)
 
-When re-dispatching a Worker on `FAIL-SPEC` or `FAIL-QUALITY`, the controller appends one block to the worker prompt, after the inline task text:
+When re-dispatching a Worker on `FAIL-SPEC` or `FAIL-QUALITY`, the controller appends one block to the worker prompt, after the inline task text. Extract the inner contents of the reviewer's `<verdict>…</verdict>` block — drop the tags, keep the body verbatim — and paste under a literal markdown header so the Worker has stable structure to recognize:
 
 ```
 ## Reviewer verdict (retry N)
 
-<paste the FAIL-SPEC or FAIL-QUALITY findings verbatim from the reviewer>
+<paste the body of the reviewer's <verdict> block here — the FAIL-SPEC or
+FAIL-QUALITY token line followed by the bullet list, no tags>
 ```
 
 The Worker prompt instructs the agent to treat this block as authoritative and apply the listed fixes verbatim without re-interpretation.
@@ -89,17 +90,23 @@ All three role prompts (`worker-prompt.md`, `spec-reviewer-prompt.md`, `quality-
 - Reviewers run gates and report verdicts — they do not narrate the process.
 - Free-form prose dilutes signal, inflates cost, and breaks the controller's verdict-parsing contract.
 
-Output contracts (the controller's parser depends on these):
+Output contracts (the controller's parser depends on these). Every role agent wraps its verdict in a machine-parseable delimiter — the controller extracts the single `<result>…</result>` or `<verdict>…</verdict>` block and ignores everything else. Bare-token recognition was tried and bled prose preambles past the contract (caught in `7f758d3`); explicit delimiters make the failure mode loud ("no block found") instead of silent ("misread `PASS — nit:…` as PASS").
 
-| Role | Pass | Fail |
-|------|------|------|
-| Worker | `OK <sha>` | `ERR <one-line reason>` |
-| SpecReviewer | `PASS` | `FAIL-SPEC` + bullet list (`- <file:line>: <gap>; fix: …`) **OR** `ESCALATE` + one-paragraph plan-vs-spec mismatch |
-| QualityReviewer | `PASS` | `FAIL-QUALITY` + bullet list (`- <file:line>: <issue>; fix: …`) |
+| Role | Block tag | Pass body | Fail body |
+|------|-----------|-----------|-----------|
+| Worker | `<result>…</result>` | `OK <sha>` | `ERR <one-line reason>` |
+| SpecReviewer | `<verdict>…</verdict>` | `PASS` | `FAIL-SPEC` + bullet list (`- <file:line>: <gap>; fix: …`) **OR** `ESCALATE` + one-paragraph plan-vs-spec mismatch |
+| QualityReviewer | `<verdict>…</verdict>` | `PASS` | `FAIL-QUALITY` + bullet list (`- <file:line>: <issue>; fix: …`) |
 
-No prose around the verdict blocks. No `Verdict:` prefix. No closing summary. No "Here is my review:" preamble. No mid-execution narration ("Let me check…", "Now I'll…", "Aha!", "Perfect.", "I see…", "First,…").
+Anything outside the tags is logged but not parsed. No `Verdict:` prefix inside the tags. No closing summary. No "Here is my review:" preamble. No mid-execution narration ("Let me check…", "Now I'll…", "Aha!", "Perfect.", "I see…", "First,…").
 
-If a role agent reliably exceeds discipline, the issue is the prompt template, the inputs (under-specified plan task), or the model tier — not the controller parser. Tighten the prompt or escalate to a stronger tier. Do not loosen the contract.
+If a role agent reliably emits prose outside the tags or omits the tags entirely, the issue is the prompt template, the inputs (under-specified plan task), or the model tier — not the controller parser. Tighten the prompt or escalate to a stronger tier. Do not loosen the parser to accept bare tokens.
+
+### Controller parser semantics
+
+- `grep -ozP '(?s)<result>.*?</result>'` on Worker output → must match exactly one block. Zero or multiple matches → loud failure, pause the run.
+- Same for `<verdict>…</verdict>` on reviewer output.
+- Inside the block: first whitespace-trimmed line is the verdict token (`OK`, `ERR`, `PASS`, `FAIL-SPEC`, `FAIL-QUALITY`, `ESCALATE`). For Workers, the remainder of that line is the sha (OK) or reason (ERR). For reviewers, subsequent lines are the bullet list or escalate paragraph.
 
 If a Worker reliably exceeds this discipline, the issue is the plan task (under-specified) — not the Worker prompt. Tighten the plan.
 

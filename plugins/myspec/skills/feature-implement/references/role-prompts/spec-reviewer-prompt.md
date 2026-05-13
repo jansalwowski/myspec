@@ -35,21 +35,40 @@ Task tool (general-purpose):
 
     Verify independently. Run the test commands. Do not trust Worker reports.
 
-    Reply with EXACTLY ONE of the three verdict blocks below, nothing before, nothing after. No prose preamble, no "Verdict:" prefix, no closing remarks.
+    Routing examples (load-bearing — most reviewers conflate these axes):
 
-    PASS
+      ESCALATE — plan layer mismatch:
+        Spec §3.2 requires UUID format for tag IDs. The plan's Task 2 says
+        "add length check on tag IDs" with no mention of UUID validation.
+        Workers cannot derive UUID from "length check" — the plan must be
+        updated by the user. Pause the run.
+
+      FAIL-SPEC — impl layer mismatch:
+        Plan Task 2 says "add uuid() validator before length check in
+        applyTagSchema". Diff shows length check only; uuid() call is
+        absent. Worker can fix verbatim by inserting the missing call.
+
+      Heuristic: if the fix requires editing the plan task text, it is
+      ESCALATE. If the fix is editing code to match what the plan already
+      says, it is FAIL-SPEC. When in doubt, prefer ESCALATE — pausing for
+      a human is cheaper than three retries patching a plan-layer gap at
+      the impl layer.
+
+    Reply with EXACTLY ONE `<verdict>…</verdict>` block, NOTHING else. No prefix outside the tags, no suffix outside the tags, no "Verdict:" inside, no closing remarks. The controller parses the block by extracting `<verdict>` … `</verdict>`. Anything outside the tags is logged but not parsed — if you emit prose outside, you are spending tokens for nothing.
+
+    <verdict>PASS</verdict>
 
     or
 
-    FAIL-SPEC
+    <verdict>FAIL-SPEC
     - <file:line>: <gap>; fix: <one-line instruction the Worker can apply verbatim>
     - <file:line>: <gap>; fix: <one-line instruction>
-    [one bullet per gap, no blank lines, no prose around the list]
+    [one bullet per gap, no blank lines, no prose around the list]</verdict>
 
     or
 
-    ESCALATE
-    <one-paragraph plan-vs-spec mismatch; name the spec section and the plan gap. No bullets, no fix instructions — Workers cannot fix this.>
+    <verdict>ESCALATE
+    <one-paragraph plan-vs-spec mismatch; name the spec section and the plan gap. No bullets, no fix instructions — Workers cannot fix this.></verdict>
 
     Be specific in fix lines. "applyTagSchema in tags.ts:15 does not enforce UUID format required by spec §3.2; fix: add `uuid()` validator before length check" beats "missing validation".
 ```

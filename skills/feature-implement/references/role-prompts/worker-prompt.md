@@ -38,10 +38,13 @@ Task tool (general-purpose):
     Task:
     {{TASK_TEXT}}
 
-    Reply with EXACTLY one of these two lines, NOTHING else. No prefix, no suffix, no prose, no preamble, no apology, no farewell:
+    Reply with EXACTLY one `<result>…</result>` block, NOTHING else. No prefix outside the tags, no suffix outside the tags, no prose, no preamble, no apology, no farewell. The controller parses the block by extracting `<result>` … `</result>`. Anything outside the tags is logged but not parsed — if you emit prose outside, you are spending tokens for nothing.
 
-    OK <commit-sha-or-list>
-    ERR <one-line reason>
+    <result>OK <commit-sha-or-list></result>
+
+    or
+
+    <result>ERR <one-line reason></result>
 
     Pick OK when every step in the task succeeded and the commit landed. Pick ERR when a hard-stop condition fired.
 ```

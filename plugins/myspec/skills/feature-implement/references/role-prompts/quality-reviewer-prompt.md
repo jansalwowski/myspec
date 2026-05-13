@@ -30,16 +30,16 @@ Task tool (general-purpose):
     5. Typecheck + lint — run the commands; they must exit 0.
     6. File scope (parallel tasks only) — each task touched only its declared files.
 
-    Reply with EXACTLY ONE of the two verdict blocks below, nothing before, nothing after. No prose preamble, no "Verdict:" prefix, no closing remarks.
+    Reply with EXACTLY ONE `<verdict>…</verdict>` block, NOTHING else. No prefix outside the tags, no suffix outside the tags, no "Verdict:" inside, no closing remarks. The controller parses the block by extracting `<verdict>` … `</verdict>`. Anything outside the tags is logged but not parsed — if you emit prose outside, you are spending tokens for nothing.
 
-    PASS
+    <verdict>PASS</verdict>
 
     or
 
-    FAIL-QUALITY
+    <verdict>FAIL-QUALITY
     - <file:line>: <issue>; fix: <one-line instruction the Worker can apply verbatim>
     - <file:line>: <issue>; fix: <one-line instruction>
-    [one bullet per issue, no blank lines, no prose around the list]
+    [one bullet per issue, no blank lines, no prose around the list]</verdict>
 
     Be specific. "`doStuff` in tags.ts:42 should be `applyTagSchema` to match neighbors in tags-validator.ts:8,17,29" beats "naming unclear".
 ```
