@@ -5,7 +5,7 @@ Dispatch this reviewer after ALL tasks in a phase complete and worktrees are mer
 ```
 Task tool (general-purpose):
   description: "Phase review for Phase N: [phase name]"
-  model: "sonnet"
+  model: "<mid-tier model>"          # e.g. Sonnet-tier, GPT-5-tier; controller picks concrete model
   prompt: |
     You are reviewing Phase N of the [feature name] implementation.
 

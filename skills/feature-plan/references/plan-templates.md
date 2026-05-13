@@ -1,5 +1,7 @@
 # Plan Document Templates
 
+Canonical normal-mode (single-executor) template. For orchestrator mode (per-milestone Planner / Worker / SpecReview / QualityReview chain), see [`plan-templates-orchestrator.md`](./plan-templates-orchestrator.md).
+
 ## Task Status
 
 All task steps use checkbox syntax. Plans are generated with `[ ]` (todo). `feature-implement` updates them during execution:

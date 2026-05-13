@@ -80,8 +80,8 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref feat/codex-pl
 | `/myspec:cross-spec-validation` | Check spec against related specs for contradictions and broken contracts |
 | `/myspec:feature-tech-spec` | Create technical design from approved spec |
 | `/myspec:feature-tech-spec-review` | Review tech-spec for implementability and pattern conformance |
-| `/myspec:feature-plan` | Create execution-ready implementation plan from tech-spec |
-| `/myspec:feature-implement` | Execute implementation plan with subagent dispatch |
+| `/myspec:feature-plan` | Create execution-ready implementation plan from tech-spec. Step 0 picks **normal** (single-executor, default) or **orchestrator** (per-milestone Planner / Worker / SpecReview / QualityReview chain) — opt-in |
+| `/myspec:feature-implement` | Execute implementation plan with subagent dispatch. Auto-detects `orchestration: agent-chain` in plan front-matter and offers `orchestrator` / `orchestrator-auto` / `normal-fallback` run modes |
 | `/myspec:feature-update` | Plan changes to an already-implemented feature |
 | `/myspec:feature-verify` | Verify feature implementation matches spec |
 | `/myspec:feature-complete` | Mark feature done, update docs |

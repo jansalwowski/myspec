@@ -30,6 +30,34 @@ All gates pass → proceed to Workflow Step 1.
 
 ## Workflow
 
+### Step 0: Choose Plan Mode (BLOCKING)
+
+Ask the user which dispatch model the plan should target. The choice drives template selection in Step 5 and front-matter shape.
+
+Call `AskUserQuestion`:
+
+```
+question: "Plan mode?"
+header:   "Plan mode"
+options:
+  - "normal"        → single-executor implementer per task (default)
+  - "orchestrator"  → per-milestone Planner / Worker / SpecReview / QualityReview chain
+```
+
+Show the recommendation as `normal` unless the feature involves work where role separation pays off (large multi-task milestones, mixed model-tier optimization). Always show this disclaimer with the orchestrator option:
+
+```
+Orchestrator mode gives agents more autonomy across roles. It can recover from
+spec-fail and quality-fail loops without you, but chained autonomy = more
+surface for cascading errors. Review milestone checkpoints carefully.
+```
+
+Selection determines:
+- `normal` → **REQUIRED:** Read `references/plan-templates.md` before generating the plan.
+- `orchestrator` → **REQUIRED:** Read `references/plan-templates-orchestrator.md` before generating front-matter or any milestone block. Plan front-matter must include `orchestration: agent-chain` and a `roles:` block. Tier values are exactly `cheap`, `mid`, `premium` — never `fast`, `reasoning`, `pro`, or concrete model names.
+
+No CLI flag. No model names anywhere in plan text — tier vocabulary only.
+
 ### Step 1: Read Context
 
 1. Read `${aiDir}/features/{feature}/tech-spec.md` — note implementation steps, file inventory, interfaces

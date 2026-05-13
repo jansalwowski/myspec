@@ -5,7 +5,7 @@ Dispatch after ALL phases complete. Reviews the entire implementation as a whole
 ```
 Task tool (general-purpose):
   description: "Holistic review: [feature name] full implementation"
-  model: "opus"
+  model: "<premium-tier model>"      # e.g. Opus-tier; controller picks concrete model
   prompt: |
     You are doing a final holistic review of the complete [feature name] implementation.
 
