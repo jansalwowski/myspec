@@ -37,3 +37,12 @@ When writing or editing skills, follow the principles enforced by the `skill-ver
 
 - **Descriptions are triggers, not summaries.** Start with "Use when…", avoid sequential workflow verbs ("analyzes X, generates Y, validates Z") — the agent will skip loading the body.
 - **Format SKILL.md for the model, not humans.** No decorative blockquotes, horizontal rules inside body, ASCII diagrams, or all-caps imperative walls without rationale. Tables and numbered procedures are good; decoration is paid for in tokens on every load.
+
+## Paths in skills, blueprints, and templates
+
+Everything in `skills/`, `blueprints/`, `framework-files/`, and `templates/` is read by downstream models inside other people's repos. Hardcoded absolute paths (`/Users/<you>/...`) and resolved aiDir values (`ai/features/...`) leak local layout.
+
+- Use `${aiDir}/...` for any framework-managed doc — `init` substitutes per-project.
+- Use repo-relative paths (`src/foo.ts`) for codebase file references in examples and tables.
+- Use `<repo_root>` / `<encoded_cwd>` placeholders when an example genuinely needs to show an absolute path.
+- The `no-absolute-paths.sh` PostToolUse hook will block writes that violate this; the rule it enforces is also shipped to downstream projects as `framework-files/rules/paths.md`.

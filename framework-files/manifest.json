@@ -61,6 +61,10 @@
     "skill-optimization.md": {
       "type": "overwrite",
       "dest": ".claude/rules/skill-optimization.md"
+    },
+    "paths.md": {
+      "type": "overwrite",
+      "dest": ".claude/rules/paths.md"
     }
   },
   "hooks": {
@@ -79,6 +83,16 @@
     "verify-before-stop.sh": {
       "type": "overwrite",
       "dest": ".claude/hooks/verify-before-stop.sh"
+    },
+    "no-absolute-paths.sh": {
+      "type": "overwrite",
+      "dest": ".claude/hooks/no-absolute-paths.sh"
+    }
+  },
+  "lib": {
+    "path-normalize.sh": {
+      "type": "overwrite",
+      "dest": ".claude/lib/path-normalize.sh"
     }
   }
 }
