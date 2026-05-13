@@ -18,6 +18,16 @@ At Step 1 of `feature-implement` (after detecting `orchestration: agent-chain` i
 
 The disclaimer in SKILL.md is shown every invocation. Do not proceed on a default.
 
+## Controller hard constraint — dispatch only, never execute
+
+In orchestrator and orchestrator-auto modes the controller's job is dispatch + parse + checkpoint. NOT implementation. Every task goes through a Worker subagent. Direct controller edits to task-scoped files, direct `git commit`s of task work, direct execution of TDD commands as part of task execution — all forbidden. Verification commands at the Checkpoint are the ONLY controller-side execution allowed.
+
+This rule exists because the chain's value (SpecReview gate, QualityReview gate, Worker output contract, retry loop) is unreviewable work when the controller bypasses it. A "small" task done directly silently breaks the audit chain. A "I'll save tokens" shortcut produces the failure mode the chain was designed to eliminate.
+
+**Most common drift trigger seen in prod:** Worker hits environment friction (no `node_modules`, no `.eslintcache`, base-ref mismatch). Controller rationalizes "I'll just do this one directly". The correct response is ALWAYS to encode the fix into the Worker prompt's setup step (symlink / reset --hard / cherry-pick — see Known Limitation sections below) and re-dispatch. If the friction is genuinely unworkable, surface it to the user via `AskUserQuestion` with `normal-fallback` as an explicit option. Never silently switch lanes.
+
+Self-check before every controller action: *Am I about to Edit/Write a file in the feature scope, or run a build/test/commit command for task work? If yes — STOP and dispatch a Worker.*
+
 ## Per-milestone chain (4 steps)
 
 For each milestone (walked in declaration order):

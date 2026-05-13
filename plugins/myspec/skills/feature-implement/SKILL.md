@@ -127,6 +127,22 @@ already reviewed.
 
 Record the user's choice. Only after the choice is captured, **REQUIRED:** read `references/orchestrator-dispatcher.md` for the 4-step chain (Worker(s) → SpecReview → QualityReview → Checkpoint), loop caps, and the verdict-append retry protocol. Steps 2, 4b, and 5 below still apply unchanged; orchestrator mode replaces Step 4 (Phase Review) with the per-milestone chain.
 
+#### HARD CONSTRAINT — controller MUST NOT execute tasks directly (orchestrator + orchestrator-auto)
+
+Once the user selects `orchestrator` or `orchestrator-auto`, the controller's role is **dispatch only**. Every plan task is implemented by a Worker subagent dispatched via the `Agent` tool with `isolation: "worktree"`. The controller writes ZERO code, edits ZERO files in the feature scope, runs ZERO Bash commands that modify the working tree.
+
+**Forbidden controller actions in orchestrator mode:**
+- Using `Edit`, `Write`, or `NotebookEdit` on files declared in any task's file list
+- Running `git commit`, `git add`, `yarn install`, code-generation scripts, or test commands as part of task execution (verification commands at Checkpoint are the only exception)
+- "Just doing this one task directly" because Worker dispatch hit friction
+- Bypassing the chain on the final task, a small task, a "trivial" task, or a retry
+
+**Environment friction is NEVER a valid bypass reason.** If a Worker can't install deps, can't find `node_modules`, can't run lint, can't see prior milestone commits — fix it **inside the Worker prompt's setup step** (symlink, reset, cherry-pick — see `references/orchestrator-dispatcher.md` "Known limitation" sections). Then re-dispatch. Do not absorb the work into the controller.
+
+**Self-check before every action in orchestrator mode:** "Am I about to edit a file / run a build command / commit? If yes — STOP. Dispatch a Worker instead." If the friction looks insurmountable, surface it to the user with `AskUserQuestion` and let them choose `normal-fallback` explicitly. Do not silently drift to direct execution.
+
+Violating this constraint defeats the entire purpose of orchestrator mode (autonomous self-reviewing chain) and produces unreviewable work — no SpecReview, no QualityReview, no Worker output contract. It is a contract breach, not a shortcut.
+
 If `orchestration` is absent, continue in normal mode below — no run-mode prompt.
 
 Parse milestones first, then build a DAG within each:
