@@ -10,9 +10,10 @@ Sweep abandoned session files in `ai/memory/sessions/active/`, plus orphaned (un
 **Announce at start:** "Running session cleanup audit."
 
 **Hard rules** (apply throughout):
-- Never delete a substantive *active* session — archive instead.
-- Never touch a file with `mtime` < 1h without explicit confirmation.
-- Never touch a **tracked** file under `archive/` (committed history is out of scope). Untracked files in `archive/` are in scope but require per-file confirmation.
+- Never delete a substantive *active* session — archive instead. Content is signal even if abandoned.
+- Never touch a file with `mtime` < 1h without explicit confirmation — a live agent may not have logged yet.
+- Never touch a **tracked** file under `archive/` — pruning committed history is out of scope. Untracked files in `archive/` are in scope but require per-file confirmation.
+- Never delete a substantive orphaned archive file without explicit confirmation — content has value even if uncommitted.
 - Never act on a session whose `cwd` matches a live worktree without per-file confirmation.
 
 ## Workflow
@@ -92,14 +93,6 @@ For DELETE in `active/`: `rm` (or `git rm` if tracked).
 For DELETE in `archive/` (orphan): `rm` only — never run `git rm` here (in-scope archive files are always untracked by construction).
 
 Print one-line summary on completion.
-
-## Constraints
-
-- **Never** delete a substantive *active* session — archive instead. Content is signal even if abandoned.
-- **Never** touch a file with `mtime` < 1h without asking, even if it looks empty (live agent may not have logged yet).
-- **Never** touch a **tracked** file in `archive/`. Pruning committed history is out of scope.
-- **Never** delete a substantive orphaned archive file without explicit confirmation — content has value even if uncommitted.
-- **Never** act on a file whose `cwd:` matches a live worktree without explicit per-file confirmation.
 
 ## Verification Checklist
 

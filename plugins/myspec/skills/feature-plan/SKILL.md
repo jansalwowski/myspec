@@ -1,7 +1,11 @@
 ---
 name: feature-plan
 tags: [feature-workflow, planning, implementation, parallel]
-description: "Use when a feature has approved spec.md and tech-spec.md in ai/features/ and needs an execution-ready implementation plan with parallel task groups and milestone checkpoints. Converts tech-spec implementation steps into execution-ready plan with parallel task groups. Do NOT use for features without an approved tech-spec, projects outside ai/features/ (use writing-plans), or already-in-progress plans."
+description: >
+  Use when a feature in ai/features/ has approved spec.md and tech-spec.md and needs an
+  execution-ready implementation plan with parallel task groups and milestone checkpoints.
+  Do NOT use for features without an approved tech-spec, projects outside ai/features/
+  (use writing-plans instead), or plans already in progress.
 ---
 
 # Feature Plan

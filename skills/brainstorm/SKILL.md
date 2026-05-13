@@ -27,36 +27,6 @@ Complete these in order:
 6. **Synthesize** — summarize insights, confirm with user
 7. **Wrap up** — ask what to do with results (only at the end)
 
-## Process Flow
-
-```dot
-digraph brainstorm {
-    "Explore context" [shape=box];
-    "Scope: too large?" [shape=diamond];
-    "Help decompose topic" [shape=box];
-    "Visual questions ahead?" [shape=diamond];
-    "Offer Visual Companion\n(own message only)" [shape=box];
-    "DIVERGENT: Generate ideas" [shape=box];
-    "CONVERGENT: Evaluate & challenge" [shape=box];
-    "Synthesize insights" [shape=box];
-    "User satisfied?" [shape=diamond];
-    "Wrap up: ask what to do\nwith results" [shape=box];
-
-    "Explore context" -> "Scope: too large?";
-    "Scope: too large?" -> "Help decompose topic" [label="yes"];
-    "Help decompose topic" -> "Visual questions ahead?";
-    "Scope: too large?" -> "Visual questions ahead?" [label="no"];
-    "Visual questions ahead?" -> "Offer Visual Companion\n(own message only)" [label="yes"];
-    "Visual questions ahead?" -> "DIVERGENT: Generate ideas" [label="no"];
-    "Offer Visual Companion\n(own message only)" -> "DIVERGENT: Generate ideas";
-    "DIVERGENT: Generate ideas" -> "CONVERGENT: Evaluate & challenge";
-    "CONVERGENT: Evaluate & challenge" -> "Synthesize insights";
-    "Synthesize insights" -> "User satisfied?";
-    "User satisfied?" -> "CONVERGENT: Evaluate & challenge" [label="no, explore more"];
-    "User satisfied?" -> "Wrap up: ask what to do\nwith results" [label="yes"];
-}
-```
-
 ## The Process
 
 ### Understanding the topic
