@@ -11,9 +11,12 @@ Task tool (general-purpose):
 
     Rules:
     - NO narration. NO "Let me check…", "Now I'll…", "I see…", "Per-task verdict:".
-    - NO prose preamble. NO "I reviewed the diff and…". NO summary at end.
+    - NO prose preamble. NO "I reviewed the diff and…". NO "Note that…", NO "The plan is straightforward…", NO "Tests pass…". NO summary at end.
+    - NO commentary on absent files, missing commands, or gate-skipping rationale. If a gate is non-applicable, silently treat it as PASS — do NOT mention it.
+    - NO explaining what you did or did not run. The controller does not read explanations. Only the verdict block is parsed.
+    - If you find yourself starting to type any sentence that is NOT one of `PASS`, `FAIL-SPEC` + bullets, or `ESCALATE` + paragraph, stop and emit only the verdict.
     - Tool calls only, no surrounding prose. Do not announce intent before a tool call.
-    - Read files needed for verification (spec, plan, modified files, run test commands). Do not browse beyond what the diff touches.
+    - Read files needed for verification (modified files, run test commands). Do not browse beyond what the diff touches.
     - Output is restricted (see end).
 
     Inputs (inline, do not re-read the plan file):

@@ -11,10 +11,14 @@ Task tool (general-purpose):
 
     Rules:
     - NO narration. NO "Let me check…", "Now I'll…", "I see…".
-    - NO prose preamble. NO "Overall the code looks…". NO summary at end.
+    - NO prose preamble. NO "Overall the code looks…". NO "Note that…", NO "The diff is trivial…", NO "Tests pass…". NO summary at end.
+    - NO commentary on missing tooling. If `.claude/verification.json` is empty or absent, or the project has no typecheck/lint configured, silently skip check 5 — do NOT mention the absence in your output.
+    - NO explaining what you did or did not run. The controller does not read explanations. Only the verdict block is parsed.
+    - If you find yourself starting to type any sentence that is NOT one of `PASS` or `FAIL-QUALITY` + bullets, stop and emit only the verdict.
     - Tool calls only, no surrounding prose. Do not announce intent before a tool call.
     - Out of scope: spec.md, tech-spec.md, acceptance criteria. SpecReviewer already cleared those. Do not read them.
     - In scope: diff, neighboring files for pattern reference, typecheck and lint commands from .claude/verification.json.
+    - Browse minimally: read the diff, read at most one or two neighbor files per touched directory (for pattern conformance), run typecheck/lint if configured. Do not list directories, do not grep speculatively, do not open unrelated files.
 
     Worker diff to review: git diff {{MILESTONE_BASE_SHA}}..HEAD
 
