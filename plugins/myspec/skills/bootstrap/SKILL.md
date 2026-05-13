@@ -11,7 +11,7 @@ description: "Use when starting any work session and the agent needs project ori
 
 Read `.myspec.json` (if it exists) to get:
 - `project.name` and `project.techStack`
-- `aiDir` (the configured AI documentation directory, default: `${aiDir}/`)
+- `aiDir` (the configured AI documentation directory, default: `ai/`)
 
 Check `.myspec.json` for a `topologyFile` key. If set, read that file.
 

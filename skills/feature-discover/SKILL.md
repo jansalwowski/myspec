@@ -25,8 +25,6 @@ Collect from the user what they know. Ask only for what's missing:
 If only paths are provided, skip the description prompt — infer intent from the code itself.
 If only a description is provided, proceed directly to exploration.
 
----
-
 ### 2. Exploration
 
 Explore the codebase to build a complete picture of the feature. Use grep, file reads, and import tracing. Start from known paths or grep description keywords to locate entry points.
@@ -56,8 +54,6 @@ Explore the codebase to build a complete picture of the feature. Use grep, file 
 - All file categories above have been checked (even if empty)
 - All external integration points have been identified (purpose may still be unclear)
 
----
-
 ### 3. Grouped Q&A
 
 When exploration is complete, ask about unknowns in related batches. Never ask about one thing at a time — group by topic and present together. Wait for answers before continuing.
@@ -79,8 +75,6 @@ When exploration is complete, ask about unknowns in related batches. Never ask a
 
 Record all answers. They are embedded in the discovery document.
 
----
-
 ### 4. Confirmation
 
 Present the full findings summary using the **Confirmation Findings Template** from [references/templates.md](references/templates.md).
@@ -90,8 +84,6 @@ Present the full findings summary using the **Confirmation Findings Template** f
 Ask: "Does this match your understanding? Anything missing or incorrect?"
 
 Incorporate any corrections, then proceed.
-
----
 
 ### 5. Complexity Check
 
@@ -112,8 +104,6 @@ If yes: write discovery first, then follow the feature-decompose workflow.
 ```
 
 Note the answer — decomposition (if agreed) happens AFTER Step 8.
-
----
 
 ### 6. Write discovery.md
 
@@ -171,8 +161,6 @@ Unresolved items after Q&A. Format:
 **Reasoning**: [brief explanation]
 **Decompose candidate**: yes / no
 
----
-
 ### 7. Output Decision
 
 After writing discovery.md, ask:
@@ -188,8 +176,6 @@ B) Full feature docs — save to `${aiDir}/features/{feature-name}/` with spec.m
 
 C) Both — discovery in `${aiDir}/discoveries/` + full feature docs in `${aiDir}/features/`
 ```
-
----
 
 ### 8. Write Output Files
 
@@ -210,8 +196,6 @@ Load format templates from [references/templates.md](references/templates.md) be
 #### Option C — Both
 Do A and B.
 
----
-
 ### 9. Decompose (if flagged in Step 5)
 
 After all output files are written, if decomposition was agreed:
@@ -224,8 +208,6 @@ Shall I proceed?
 
 If yes: follow `/myspec:feature-decompose` [OPTIONAL — only when decomposition confirmed in Step 5] using the discovery findings as source material instead of an existing spec.
 
----
-
 ## Rules
 
 - NEVER write any file before user confirms findings in Step 4
@@ -235,8 +217,6 @@ If yes: follow `/myspec:feature-decompose` [OPTIONAL — only when decomposition
 - Do not ask one question per finding — always group Q&A by topic
 - Agent decides when exploration is complete — do not ask user whether to keep looking
 - Carry Open Questions forward from discovery → spec → tech-spec without dropping any
-
----
 
 ## Verification Checklist
 
@@ -250,8 +230,6 @@ If yes: follow `/myspec:feature-decompose` [OPTIONAL — only when decomposition
 - [ ] If full feature (B or C): spec.md, tech-spec.md, dependencies.md created; index.yaml updated
 - [ ] `tech-spec.md` File Inventory uses `Action: exists` for all discovered files
 - [ ] Open Questions carried through from discovery.md into spec.md
-
----
 
 ## Integration
 

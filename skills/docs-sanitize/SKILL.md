@@ -13,8 +13,7 @@ Find and fix files that violate naming conventions:
 
 ```bash
 # Find SCREAMING_CASE or PascalCase files (except README, INDEX)
-# Replace "${aiDir}/" with your configured aiDir
-find "${AI_DIR:-ai}/" -name "*.md" -type f | grep -E "[A-Z].*\.md$" | grep -v -E "(README|INDEX)\.md$"
+find "${aiDir}/" -name "*.md" -type f | grep -E "[A-Z].*\.md$" | grep -v -E "(README|INDEX)\.md$"
 ```
 
 **Fix**: Rename to kebab-case using `git mv`, update internal references.

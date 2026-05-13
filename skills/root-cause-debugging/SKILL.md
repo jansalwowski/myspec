@@ -10,17 +10,9 @@ description: >
 
 Find the root cause before proposing fixes. Symptom fixes waste time and create new bugs.
 
-## Iron Rule
-
-```
-NO FIXES WITHOUT ROOT CAUSE INVESTIGATION FIRST
-```
-
-If you haven't completed Phase 1, you cannot propose fixes.
-
 ## Workflow
 
-4 phases, in order. Do not skip ahead.
+4 phases, in order. Phase 1 is a hard prerequisite for proposing any fix — without a traced root cause, fixes are guesses, and stacked guesses produce new bugs in different places.
 
 ### Phase 1: Root Cause Investigation
 
@@ -49,8 +41,8 @@ Run once → analyze WHERE it breaks → investigate THAT component
 ### Phase 3: Hypothesis & Testing
 
 1. State hypothesis clearly: "X is the root cause because Y"
-2. Make the SMALLEST possible change to test it — one variable at a time
-3. Did it work? → Phase 4. Didn't work? → new hypothesis. Do NOT stack fixes.
+2. Make the smallest possible change to test it — one variable at a time, so a result is attributable
+3. Did it work? → Phase 4. Didn't work? → new hypothesis. Don't stack fixes — you'll lose the ability to isolate which one helped
 
 ### Phase 4: Implementation
 
@@ -61,9 +53,7 @@ Run once → analyze WHERE it breaks → investigate THAT component
 
 ## 3-Attempt Architecture Rule
 
-**If ≥ 3 fixes have failed:**
-
-STOP. Do not attempt fix #4. Instead:
+**If 3+ fixes have failed:** stop. Don't attempt fix #4 — repeated failure on the same surface usually means the diagnosis or the architecture is wrong, not that fix #4 will be the one. Ask:
 
 - Is this pattern fundamentally sound?
 - Are we persisting through inertia?
@@ -74,16 +64,16 @@ STOP. Do not attempt fix #4. Instead:
 
 This aligns with the escalation protocol in the memory-system rule.
 
-## Red Flags — STOP and Return to Phase 1
+## Red Flags — return to Phase 1
 
-If you catch yourself thinking any of these:
+These thoughts mean Phase 1 isn't done; they justify guessing rather than diagnosing:
 
 - "Quick fix for now, investigate later"
 - "Just try changing X and see"
 - "Add multiple changes, run tests"
 - "It's probably X, let me fix that"
 - "I don't fully understand but this might work"
-- "One more fix attempt" (when already tried 2+)
+- "One more fix attempt" (after 2+ tries)
 - Proposing solutions before tracing data flow
 - Each fix reveals a new problem in a different place
 
@@ -92,7 +82,7 @@ If you catch yourself thinking any of these:
 | Excuse | Reality |
 |--------|---------|
 | "Issue is simple, skip the process" | Simple issues have root causes. Process is fast for simple bugs. |
-| "Emergency, no time" | Systematic debugging is FASTER than guess-and-check thrashing. |
+| "Emergency, no time" | Systematic debugging is faster than guess-and-check thrashing. |
 | "Just try this first" | First fix sets the pattern. Do it right from the start. |
 | "I'll write the test after" | Untested fixes don't stick. Test first proves it. |
 | "Multiple fixes at once saves time" | Can't isolate what worked. Causes new bugs. |

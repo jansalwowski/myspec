@@ -35,9 +35,7 @@ Read these documents before starting:
 
 ### Step 3: Ask Clarifying Questions
 
-> **CRITICAL: NEVER SKIP THIS STEP**
->
-> Even if the idea seems clear, there are always details that need clarification.
+Always ask, even when the idea seems clear — every idea has details that need clarification, and a spec written from an unexamined idea encodes the wrong assumptions.
 
 Apply these question categories:
 
@@ -56,7 +54,7 @@ Apply these question categories:
 - What are the relationships to existing entities?
 - What validation rules apply?
 
-**Present questions to the user and WAIT for responses before proceeding.**
+Present the questions, then wait for responses before proceeding — answers shape the spec sections in Steps 5–8.
 
 ### Step 4: Create Feature Directory
 

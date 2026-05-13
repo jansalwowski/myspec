@@ -13,8 +13,6 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 ## Prerequisites
 - Implementation is complete (all planned tasks done)
 
----
-
 ## Phase 1 — Docs Sync
 
 1. **Read Current State**
@@ -76,7 +74,7 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
    - If dependencies changed, update `dependencies.md` bidirectionally
    - If this feature is now usable by others, update their docs
 
----
+**Phase 1 checklist:**
 
 - [ ] All implementation steps in tech-spec.md marked `[x]`
 - [ ] File Inventory updated to match actual created/modified files
@@ -85,8 +83,6 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 - [ ] Implementation plan archived to `plans/` directory (if plan existed)
 - [ ] `CHANGELOG.md` updated with new entry (if plan was archived)
 - [ ] Run project documentation audit command if configured
-
----
 
 ## Phase 2 — Verification
 
@@ -98,8 +94,6 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 - Analyze failures against files changed in this feature branch
 - **Failures are related to this feature → hard stop. Fix before proceeding.**
 - Failures appear unrelated (pre-existing or from parallel changes) → ask user to confirm before continuing
-
----
 
 ## Phase 3 — Branch Integration
 
@@ -162,8 +156,6 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
    ```bash
    git worktree remove <worktree-path>
    ```
-
----
 
 ## Integration
 
