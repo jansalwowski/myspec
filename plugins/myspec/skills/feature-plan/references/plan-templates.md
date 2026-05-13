@@ -36,10 +36,17 @@ Notes:
 ```markdown
 ### Task N: [Component Name]
 
+**Spec contract (verbatim quotes — do NOT paraphrase):**
+- `spec.md` §X.Y: "<exact sentence from spec covering this task's behavior>"
+- `tech-spec.md` step Z: "<exact sentence from tech-spec covering this task's interface/impl detail>"
+- (Add one bullet per spec/tech-spec passage that constrains this task. If the task is implementing AC #N, quote AC #N verbatim. If wording diverges from spec, the spec wording wins.)
+
 **Files:**
 - Create: `exact/path/to/file.ts`
 - Modify: `exact/path/to/existing.ts`
 - Test: `exact/path/to/file.test.ts`
+
+**Touch only (required when Files contains Modify):** the specific lines/sections this task adds or changes. Do NOT scan, audit, or modify pre-existing content even if you notice issues — pre-existing tech debt is out of scope. Reviewers will reject diffs that touch unrelated lines.
 
 **Depends on:** Task N-1
 
@@ -64,9 +71,15 @@ Notes:
 ```markdown
 ### Task N: [Component Name] [parallel:groupName]
 
+**Spec contract (verbatim quotes — do NOT paraphrase):**
+- `spec.md` §X.Y: "<exact sentence>"
+- `tech-spec.md` step Z: "<exact sentence>"
+
 **Files:**
 - Create: `exact/path/to/file.ts`
 - Test: `exact/path/to/file.test.ts`
+
+**Touch only (required when Files contains Modify):** the specific lines/sections this task adds or changes. Pre-existing tech debt is out of scope.
 
 **Depends on:** Task M (barrier)
 **Parallel with:** Tasks N+1, N+2, N+3

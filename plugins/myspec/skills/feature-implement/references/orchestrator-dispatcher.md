@@ -34,7 +34,7 @@ For each milestone (walked in declaration order):
 
 ### 1. Worker(s)
 - Dispatch one agent per task using `references/role-prompts/worker-prompt.md`.
-- Tier: from `roles.worker` in plan front-matter (default `cheap`).
+- Tier resolution (in order): `**Tier override:** worker=<tier>` line inside the task block → `roles.worker` in plan front-matter → built-in default `cheap`. First hit wins. SpecReviewer + QualityReviewer tiers are global only — they have no per-task override.
 - Parallel groups: dispatch all group tasks in one message with `isolation: "worktree"`, exactly as `SKILL.md:147–153` describes for normal mode.
 - Sequential tasks: dispatch one at a time.
 - Worker receives the full task text inline. Worker does NOT re-read the plan file.

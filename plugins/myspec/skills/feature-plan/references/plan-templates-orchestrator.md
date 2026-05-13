@@ -26,6 +26,27 @@ roles:
 
 `roles` values are tier names (`cheap`, `mid`, `premium`). The controller (main thread) maps tier → concrete model based on the runtime's available models. Skill text never names a concrete model. Three keys only — `worker`, `spec_reviewer`, `quality_reviewer`. Adding a `planner` key has no effect.
 
+### Per-task tier override
+
+Individual tasks can override the global Worker tier when the task is heavier than the default (complex AST manipulation, multi-system integration, intricate algorithm). Add a `**Tier override:**` line inside the task block:
+
+```markdown
+### Task 7: TypeScript program + module resolver
+
+**Tier override:** worker=mid
+(reason: ts.Compiler API setup, ~80 LoC, alias-resolution edge cases)
+
+**Spec contract (verbatim quotes):**
+...
+```
+
+Rules:
+- Only `worker` can be overridden per-task. SpecReviewer + QualityReviewer tiers stay global (consistent review bar across the milestone).
+- Use sparingly. The cost model assumes most tasks run at the global default; overriding > ~30% of tasks means the global tier is wrong and `roles.worker` should be bumped instead.
+- Always include a one-line reason in parentheses on the same or next line. The reason exists for the user reviewing the plan, not for the controller.
+- Resolution order in the controller: `task.tier_override.worker` (if present) → `roles.worker` → built-in default (`cheap`).
+- Reviewer tasks do not have task-local overrides — they are per-milestone agents, not per-task.
+
 ## Task Status
 
 Same checkbox semantics as normal mode:

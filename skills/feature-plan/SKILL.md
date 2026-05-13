@@ -92,6 +92,15 @@ Convert each tech-spec implementation step into a full task using the format in 
 **What the tech-spec provides:** High-level step description, file inventory, interfaces
 **What the plan adds:** Exact TDD steps, test code, run commands, commit messages, parallel group tags
 
+**Spec contract — verbatim quotes (REQUIRED per task):**
+For every task, populate the `**Spec contract:**` block with verbatim quotes from `spec.md` and/or `tech-spec.md` covering this task's behavior. Paste the sentence; do NOT paraphrase. In orchestrator mode the Worker subagent does NOT read `spec.md` or `tech-spec.md` — only the task text. Any requirement that does not make the spec → task translation is invisible to the Worker. If you find yourself rewording spec language, the original wording IS the contract — quote it. If a task has no spec/tech-spec passage that constrains it, ask whether the task should exist.
+
+**Touch only (REQUIRED for tasks with `Modify:` files):**
+For every task whose Files block contains a `Modify:` entry, populate the `**Touch only:**` line specifying which lines/sections the task is allowed to alter. This pairs with the QualityReviewer's diff-scope rule — without it, reviewers flag adjacent pre-existing tech debt as regressions and Workers waste retries on out-of-scope fixes.
+
+**Per-task tier override (orchestrator mode only, OPTIONAL):**
+If a task is materially heavier than the rest of the milestone (complex AST work, multi-system integration), add `**Tier override:** worker=mid` (or `premium`) with a one-line reason. See [`references/plan-templates-orchestrator.md`](references/plan-templates-orchestrator.md) "Per-task tier override". Use sparingly — if > 30% of tasks need an override, raise the global `roles.worker` instead.
+
 ### Step 4: Review Loop (large plans only)
 
 For plans with **10+ tasks or 3+ milestones**, review in chunks before finalizing:
@@ -261,6 +270,9 @@ Before presenting the plan:
 - [ ] Barriers exist after every parallel group
 - [ ] Execution order table matches task dependencies
 - [ ] All acceptance criteria from spec.md are covered by at least one task
+- [ ] Every task has a populated **Spec contract** block with verbatim quotes (not paraphrased) from spec.md / tech-spec.md
+- [ ] Every task whose Files contain `Modify:` has a populated **Touch only** line
+- [ ] (Orchestrator mode) Tier overrides — if any — list a one-line reason; total override count is ≤ ~30% of tasks
 - [ ] Tasks reference tech-spec interfaces (not duplicated inline unless needed for subagent context)
 - [ ] Within each milestone, lower-level layers (data, services) precede higher-level layers (UI, presentation) per project conventions
 - [ ] Phase numbers are globally unique across all milestones
