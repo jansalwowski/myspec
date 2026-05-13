@@ -28,7 +28,7 @@ Plans use three checkbox states:
 | `[~]` | In progress | Before dispatching a task's subagent |
 | `[x]` | Done | After task subagent completes AND phase review passes |
 
-**Rules (BLOCKING — must follow exactly):**
+**Rules:**
 
 1. **Before dispatching a task's subagent:** edit the plan file, change `[ ]` → `[~]`
 2. **After phase review passes for that task:** edit the plan file, change `[~]` → `[x]`
@@ -239,14 +239,10 @@ After all phases in a milestone complete (skip this step only for the final mile
 ## Constraints
 
 **Never:**
-- Dispatch parallel tasks that share files
-- Skip phase review after a barrier
-- Skip Step 0 — the flow prompt is BLOCKING, even when prior state seems obvious
-- Start work on `main`/`master` without an explicit Step 0 choice and a recorded reason
-- Make subagent read the plan file (provide full task text inline)
-- Skip barrier verification commands
-- Proceed past 3 failed attempts without escalating
-- Mark `[x]` before phase review confirms the task passes
+- Dispatch parallel tasks that share files — the worktree merge will conflict on shared paths
+- Make subagent read the plan file — provide full task text inline so the subagent has no parsing to do
+- Skip barrier verification commands — they're how the phase fails fast on broken merges
+- Proceed past 3 failed attempts without escalating — the issue won't fix itself on attempt 4
 
 ## Verification Checklist
 
