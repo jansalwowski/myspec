@@ -33,24 +33,40 @@ Replace documentary language with procedural commands:
 
 ## Frontmatter Rules
 
-- Only two fields: `name` and `description` (max 1024 chars total)
-- `name`: letters, numbers, hyphens only
-- `description`: 3rd person, starts with "Use when..."
+**Required:** `name`, `description`.
+
+**Constraints:**
+- `name`: 1-64 chars, lowercase letters, digits, hyphens only. Must match parent directory name.
+- `description`: 1-1024 chars. For model-invocable skills, third person and starts with "Use when…".
+
+**Allowed optional fields by portability tier:**
+
+| Tier | Fields |
+|------|--------|
+| Spec (cross-platform) | `license`, `compatibility`, `allowed-tools` (experimental) |
+| Claude Code + VS Code Copilot | `disable-model-invocation`, `user-invocable` |
+| Claude Code only | `model`, `effort`, `context`, `agent`, `hooks`, `paths`, `shell`, `argument-hint`, `arguments`, `when_to_use` |
+| Convention (ignored by agents) | `tags`, `triggers`, `metadata` |
+
+`triggers` is **not** used for activation — agents only match on `description`. Put trigger phrases in the description.
 
 ## Description Pattern
 
-**Critical**: Description is injected into system prompt. It's a **trigger mechanism**, not documentation.
+**Critical** (model-invocable skills): the description is injected into the system prompt and is a **trigger mechanism**, not documentation.
 
-Wrong: `"Generates composables with proper structure"` | Right: `"Use when creating composables: useEntity, useEntities. Handles data queries, mutations. Do NOT use for state stores or REST."`
+Wrong: `"Generates composables with proper structure"`
+Right: `"Use when creating composables: useEntity, useEntities. Handles data queries, mutations. Do NOT use for state stores or REST."`
 
-**NEVER summarize workflow in the description.** Tested finding: when a description summarizes the skill's workflow, Claude follows the description instead of reading the full skill body. A description saying "code review between tasks" caused Claude to do ONE review, even though the skill's flowchart showed TWO. When changed to just trigger conditions, Claude read and followed the full skill correctly.
+**Never summarize the workflow in the description.** Tested finding: when a description summarizes the skill's workflow, agents follow the description instead of reading the full skill body. A description saying "code review between tasks" caused one review pass instead of the two the skill's flowchart specified. When changed to just trigger conditions, agents read and followed the full skill correctly.
 
-**Requirements**:
+**Requirements:**
 - List specific examples users might type
-- Include tech stack keywords relevant to the skill
+- Include tech-stack keywords relevant to the skill
 - End with "Do NOT use for [specific exclusions]"
 - Prefix skill names with technology: `vue-component`, not `component`
-- **Never** describe the process or workflow — only triggering conditions
+- Describe trigger conditions only — never the procedure
+
+**Exception — manual-only skills (`disable-model-invocation: true`):** the description never enters context as a trigger. It becomes a human-readable label for slash-command pickers and skill catalogs. The "Use when…" rule and the no-workflow-summary rule no longer apply; write a clear human-readable summary instead.
 
 ## Verification Must Be Explicit
 
@@ -78,14 +94,15 @@ Agents don't verify unless commanded. Always include "Verification Checklist" se
 
 ## Token Efficiency
 
-Skills load into conversation context. Every token counts.
+When a skill activates, the full body lands in context — the cost is paid on every load. The Anthropic spec recommends body bodies under **5,000 tokens** (~3,750 words / ~500 lines).
 
-| Skill type | Target word count |
-|------------|------------------|
+| Skill type | Body target |
+|------------|-------------|
 | Frequently-loaded (rules, getting-started) | < 200 words |
-| Standard skills | < 500 words |
+| Standard | < 500 lines / < 5,000 tokens |
+| Complex (>500 lines) | Move reference material to `references/` for Phase 3 on-demand load |
 
-**Techniques:** Reference `--help` instead of documenting flags. Cross-reference other skills instead of repeating. One example per concept. Compress verbose examples.
+**Techniques:** Reference `--help` instead of documenting flags. Cross-reference other skills instead of repeating. One example per concept. Compress verbose examples. Move tables, templates, and long examples that are consulted only in specific steps to `references/`.
 
 ## Cross-Referencing Skills
 
@@ -95,9 +112,26 @@ Use skill name with explicit requirement markers:
 
 Do NOT use `@` file links to skill files — they force-load the full content immediately, burning context before it's needed.
 
-## Flowchart Usage
+## Format for the Model, Not for Humans
 
-Use `dot` flowcharts ONLY for non-obvious decision points and process loops where an agent might stop too early. Use markdown tables/lists for reference material, code examples, and linear instructions.
+When a skill activates, the body lands in the model's context window — not on a human's screen. Decoration costs tokens on every load and dilutes attention.
+
+**Drop:**
+- `dot` / mermaid / ASCII diagrams — agents read them as text noise; encode the flow as numbered steps or a small table instead
+- `> Note:` blockquote boxes — promote to a top-level instruction or delete
+- Hard-wrapped prose (let lines run as long as the sentence)
+- 3-deep bullet ladders — flatten or use a table
+- Horizontal rules `---` inside the body (the only `---` should be the YAML frontmatter delimiters)
+- Decorative dividers, emoji-prefixed headers, ASCII boxes
+- All-caps walls of MUST/ALWAYS/NEVER without rationale (`skill-creator`'s yellow flag)
+- Explanations for things the model already knows (mainstream libraries, common terms)
+
+**Keep:**
+- Imperative form (`Run X`, `Check Y`) over documentary (`You should run X`)
+- Numbered steps with concrete commands
+- Tables for parallel structured data (decision matrices, status mappings, error lookups)
+- Code fences for mechanical content; inline backticks for paths and identifiers
+- One concrete input/output pair beats a paragraph describing the format
 
 ## Self-Check Questions
 
