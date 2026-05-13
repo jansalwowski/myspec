@@ -1,9 +1,12 @@
 ---
 name: "feature-update"
 description: >
-  Use when modifying an existing, already-implemented feature. Updates spec.md and tech-spec.md in place (edit, not recreate), increments spec_version, then hands off to /feature-plan.
-  Keywords: modify feature, update feature, change feature, extend feature, add to feature, refine feature.
-  Do NOT use for new features (use /myspec:feature-spec), for first-time implementation (use /myspec:feature-tech-spec), or for bug fixes that don't change requirements.
+  Use when an already-implemented feature needs new or changed requirements — edits
+  the existing spec.md and tech-spec.md in place rather than recreating them.
+  Keywords: modify feature, update feature, change feature, extend feature, add to feature,
+  refine feature, spec_version bump.
+  Do NOT use for new features (use /myspec:feature-spec), for first-time implementation
+  (use /myspec:feature-tech-spec), or for bug fixes that don't change requirements.
 tags: [feature, specification, modification, workflow]
 ---
 

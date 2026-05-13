@@ -1,6 +1,6 @@
 ---
 name: "memory-preflight"
-description: "Use when starting implementation work, before writing code. Pre-flight memory scan across all types (procedural, semantic, episodic), anchor staleness checks, Layer 1 + matched Layer 2 loading. Keywords: preflight, memory check, pre-work scan. Do NOT use for research-only tasks, documentation updates, or answering questions."
+description: "Use when starting implementation work, before writing code, to surface relevant past memories. Keywords: preflight, memory check, pre-work scan, load memory, memory pre-flight. Do NOT use for research-only tasks, documentation updates, or answering questions."
 allowed-tools: [Read, Grep, Glob, Bash]
 ---
 

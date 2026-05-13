@@ -1,6 +1,6 @@
 ---
 name: "feature-decompose"
-description: "Use when splitting a large feature into sub-features. Keywords: decompose, split feature, break down, modularize, sub-features. Analyzes spec.md/tech-spec.md, identifies distinct capabilities, creates sub-feature directories. Requires existing feature with spec.md. Example use: '/feature-decompose search' to split search into core, filters, trending. Do NOT use for new features, single-capability features, or initial feature creation."
+description: "Use when an existing feature has grown to cover multiple distinct capabilities and should be split into sub-features. Keywords: decompose, split feature, break down, modularize, sub-features. Example: '/feature-decompose search' to split search into core, filters, trending. Do NOT use for new features, single-capability features, or initial feature creation."
 tags: [feature, decompose, split, subfeatures, refactoring, modular]
 ---
 

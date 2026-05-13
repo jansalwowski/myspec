@@ -1,6 +1,6 @@
 ---
 name: "docs-sanitize"
-description: "Automatically sanitize ${aiDir}/ documentation: fix naming, archive stale sessions, update references. Run after major documentation changes or periodically. Keywords: cleanup, naming conventions, session archiving, documentation maintenance. Do NOT use for code formatting or linting."
+description: "Use when the ai-docs tree needs maintenance — naming-convention violations, stale session files, or references to renamed/moved files. Keywords: cleanup, naming conventions, session archiving, documentation maintenance, sanitize docs. Do NOT use for code formatting or linting."
 ---
 
 # Docs Sanitize

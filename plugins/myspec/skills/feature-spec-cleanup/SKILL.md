@@ -1,6 +1,6 @@
 ---
 name: "feature-spec-cleanup"
-description: "Use when cleaning up spec.md files that contain implementation details. Identifies SQL, TypeScript, GraphQL code, database indexes, file paths. Moves technical content to tech-spec.md. Do NOT use for creating new specs."
+description: "Use when a spec.md has leaked implementation details (SQL, language code blocks, ORM patterns, database indexes, source file paths) that belong in tech-spec.md. Keywords: spec cleanup, separate business from technical, move code out of spec, spec hygiene. Do NOT use for creating new specs."
 tags: [documentation, cleanup, maintenance, spec]
 ---
 

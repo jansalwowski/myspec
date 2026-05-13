@@ -2,8 +2,8 @@
 name: "feature-complete"
 description: >
   Use when feature implementation is complete and all plan tasks are checked off.
-  Keywords: feature done, complete feature, finish feature, update feature status, implementation merged.
-  Updates tech-spec.md status, index.yaml, validates documentation matches code, then handles branch integration.
+  Keywords: feature done, complete feature, finish feature, update feature status,
+  implementation merged, archive plan, branch merge, finish PR.
   Do NOT use mid-implementation or before all planned tasks are done.
 tags: [feature, documentation, completion, workflow, branch, merge, pr]
 ---
