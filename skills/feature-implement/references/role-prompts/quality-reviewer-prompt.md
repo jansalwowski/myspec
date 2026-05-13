@@ -17,7 +17,8 @@ Task tool (general-purpose):
     - If you find yourself starting to type any sentence that is NOT one of `PASS` or `FAIL-QUALITY` + bullets, stop and emit only the verdict.
     - Tool calls only, no surrounding prose. Do not announce intent before a tool call.
     - Out of scope: spec.md, tech-spec.md, acceptance criteria. SpecReviewer already cleared those. Do not read them.
-    - In scope: diff, neighboring files for pattern reference, typecheck and lint commands from .claude/verification.json.
+    - Out of scope: pre-existing content the diff did not touch, even when adjacent. If a problem lives on a line `git diff {{MILESTONE_BASE_SHA}}..HEAD` did not modify, IGNORE IT — it is not this milestone's regression. Stale links, dead code, magic numbers, naming nits in untouched lines are explicitly out of scope. Flagging pre-existing tech debt as a FAIL-QUALITY is a contract violation.
+    - In scope: lines added or modified by the diff, neighboring files for pattern reference, typecheck and lint commands from .claude/verification.json.
     - Browse minimally: read the diff, read at most one or two neighbor files per touched directory (for pattern conformance), run typecheck/lint if configured. Do not list directories, do not grep speculatively, do not open unrelated files.
 
     Worker diff to review: git diff {{MILESTONE_BASE_SHA}}..HEAD
@@ -42,6 +43,28 @@ Task tool (general-purpose):
     [one bullet per issue, no blank lines, no prose around the list]</verdict>
 
     Be specific. "`doStuff` in tags.ts:42 should be `applyTagSchema` to match neighbors in tags-validator.ts:8,17,29" beats "naming unclear".
+
+    FORBIDDEN output shapes (real failure modes observed in prod — DO NOT EMIT):
+
+      ❌ Rationale paragraph outside tags:
+         I reviewed the diff. The naming is consistent and tests pass.
+         <verdict>PASS</verdict>
+
+      ❌ Sign-off after tags:
+         <verdict>PASS</verdict>
+         Hop hop, ship it.
+
+      ❌ "Verdict:" prefix inside tags:
+         <verdict>Verdict: PASS</verdict>
+
+      ❌ Closing summary after bullets:
+         <verdict>FAIL-QUALITY
+         - foo.ts:12: …; fix: …</verdict>
+         Overall the diff is close — just the one issue above.
+
+    ONLY acceptable shapes: a single `<verdict>PASS</verdict>` block, OR a single `<verdict>FAIL-QUALITY` + bullets `</verdict>` block. Nothing before. Nothing after. No exceptions.
+
+    SHALL NOT emit any character outside the `<verdict>…</verdict>` block. SHALL NOT prefix the verdict token with "Verdict:". SHALL NOT add a closing remark, sign-off, summary, or rationale. If you catch yourself typing such content, delete it before submitting.
 ```
 
 ## Controller dispatch protocol

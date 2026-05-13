@@ -71,6 +71,28 @@ Task tool (general-purpose):
     <one-paragraph plan-vs-spec mismatch; name the spec section and the plan gap. No bullets, no fix instructions — Workers cannot fix this.></verdict>
 
     Be specific in fix lines. "applyTagSchema in tags.ts:15 does not enforce UUID format required by spec §3.2; fix: add `uuid()` validator before length check" beats "missing validation".
+
+    FORBIDDEN output shapes (real failure modes observed in prod — DO NOT EMIT):
+
+      ❌ Rationale paragraph outside tags:
+         I reviewed the diff against the plan and spec. Tests pass.
+         <verdict>PASS</verdict>
+
+      ❌ Sign-off after tags:
+         <verdict>PASS</verdict>
+         Hop hop, ship it.
+
+      ❌ "Verdict:" prefix inside tags:
+         <verdict>Verdict: PASS</verdict>
+
+      ❌ Closing summary after bullets / escalate paragraph:
+         <verdict>FAIL-SPEC
+         - foo.ts:12: …; fix: …</verdict>
+         Overall the implementation is close — just the one gap.
+
+    ONLY acceptable shapes: a single `<verdict>PASS</verdict>`, OR `<verdict>FAIL-SPEC` + bullets `</verdict>`, OR `<verdict>ESCALATE` + one paragraph `</verdict>`. Nothing before. Nothing after.
+
+    SHALL NOT emit any character outside the `<verdict>…</verdict>` block. SHALL NOT prefix the verdict token with "Verdict:". SHALL NOT add a closing remark, sign-off, summary, or rationale. If you catch yourself typing such content, delete it before submitting.
 ```
 
 ## Controller dispatch protocol

@@ -128,6 +128,29 @@ Chain-level SpecReview + QualityReview are per-milestone scoped. Holistic is end
 - 4th retry of any kind always pauses.
 - `ESCALATE` (plan ↔ spec mismatch) always pauses immediately, regardless of mode.
 
+## Known limitation: subagent worktree base ref
+
+`isolation: "worktree"` on the `Agent` tool forks the child worktree off the **main checkout's HEAD**, not off the controller session's current worktree HEAD. When the controller is itself running inside a worktree (the common orchestrator case), sequential Workers in the same milestone do NOT see commits made by prior Workers — each Worker sees only the main checkout's branch state.
+
+Tracking: [Issue #11](https://github.com/jansalwowski/myspec/issues/11). Pending an `Agent`-tool-level fix (either fork-from-session-HEAD or `baseRef` parameter), apply this workaround in the controller dispatch flow:
+
+1. **Worker Step 0 (forced realignment).** When dispatching a Worker, prepend to the task block:
+   ```
+   ## Step 0 — realign worktree
+   git reset --hard <feature-branch-name>
+   ```
+   This pulls the feature branch's latest state into the freshly-forked worktree before the Worker starts editing.
+
+2. **Controller cherry-pick on Worker success.** After Worker returns `OK <sha>`, the controller cherry-picks `<sha>` from the worker worktree back onto the session's feature branch. A straight FF merge won't work because the Worker bases diverge from the session HEAD.
+
+3. **Parallel groups are unaffected** — they fork independently anyway. The issue only bites sequential dispatch within a milestone.
+
+This workaround is verbose; document it explicitly in the milestone's first Worker prompt so the Worker doesn't strip it as "setup meta the template forbids".
+
+## Known limitation: subagent worktrees lack node_modules and lint cache
+
+Subagent worktrees are bare checkouts. They have no `node_modules` and no `.eslintcache`. TDD verification commands and Stop-hook lint can fail spuriously. Workarounds (symlink parent's `node_modules`, copy `.eslintcache`) live in [Issue #11](https://github.com/jansalwowski/myspec/issues/11). Until the harness pre-populates these, Worker prompts may need a setup step that performs the symlink/copy before running verification.
+
 ## Smoke verification (manual)
 
 1. Create a throwaway feature with one milestone and one trivial task.
