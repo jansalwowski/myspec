@@ -34,18 +34,20 @@ For each milestone (walked in declaration order):
 ### 2. SpecReview (gate)
 - Dispatch ONE agent using `references/role-prompts/spec-reviewer-prompt.md`.
 - Tier: from `roles.spec_reviewer` (default `mid`).
+- **Dispatch wrapper discipline (BLOCKING):** paste the spec-reviewer template VERBATIM and substitute only `{{SPEC_RELEVANT_BLOCK}}`, `{{TECH_SPEC_RELEVANT_BLOCK}}`, `{{PLAN_MILESTONE_BLOCK}}`, and `{{MILESTONE_BASE_SHA}}`. Do NOT add "Job / Inputs / Verification / Report" wrapper sections. Reviewer output contract is one of three verdict blocks (`PASS` / `FAIL-SPEC` bullets / `ESCALATE` paragraph) with NO prose around them.
 - Verdicts (exactly one):
   - **PASS** → step 3.
-  - **FAIL-SPEC** → loop to step 1. Controller re-dispatches the failing Worker(s) with the SpecReviewer verdict appended to the task prompt under a `## Reviewer verdict` block. Cap: 3 retries; 4th failure pauses and surfaces full trail.
-  - **ESCALATE** → plan ↔ spec mismatch. Workers cannot fix. Controller pauses, surfaces SpecReviewer report, and asks user to fix the plan (`/myspec:feature-update` or re-run `/myspec:feature-plan`) before resuming.
+  - **FAIL-SPEC** → loop to step 1. Controller re-dispatches the failing Worker(s) with the SpecReviewer bullet list appended verbatim under a `## Reviewer verdict` header in the Worker prompt. Cap: 3 retries; 4th failure pauses and surfaces full trail.
+  - **ESCALATE** → plan ↔ spec mismatch. Workers cannot fix. Controller pauses, surfaces SpecReviewer verdict block to user, and asks for plan fix (`/myspec:feature-update` or re-run `/myspec:feature-plan`) before resuming.
 
 ### 3. QualityReview (gate)
 - Gated on SpecReview `PASS` only.
 - Dispatch ONE agent using `references/role-prompts/quality-reviewer-prompt.md`.
 - Tier: from `roles.quality_reviewer` (default `mid`).
+- **Dispatch wrapper discipline (BLOCKING):** paste the quality-reviewer template VERBATIM and substitute only `{{MILESTONE_BASE_SHA}}`. Do NOT add "Job / Inputs / Checks / Report" wrapper sections. Reviewer output contract is one of two verdict blocks (`PASS` / `FAIL-QUALITY` bullets) with NO prose around them.
 - Verdicts:
   - **PASS** → step 4.
-  - **FAIL-QUALITY** → loop to step 1. Controller re-dispatches the same Worker(s) with the QualityReviewer verdict appended. Cap: 3 retries; 4th failure pauses.
+  - **FAIL-QUALITY** → loop to step 1. Controller re-dispatches the same Worker(s) with the QualityReviewer bullet list appended verbatim under a `## Reviewer verdict` header. Cap: 3 retries; 4th failure pauses.
 
 ### 4. Checkpoint
 - Controller runs verification commands from the plan and `.claude/verification.json`.
@@ -80,17 +82,24 @@ Skill text never names a concrete model. Use tier names with example hints:
 
 Plan front-matter `roles:` block exposes the mapping. Three keys only: `worker`, `spec_reviewer`, `quality_reviewer`. No `planner` key.
 
-## Token discipline (Workers)
+## Token discipline (all role agents)
 
-Worker prompt enforces strict output format. Reasons:
-- Atomic plan tasks already contain the code — Worker reads, types, commits.
-- Workers in a chain do not need self-review, exploration, or design analysis. Reviewers handle that.
-- Free-form prose in Worker output dilutes signal in the diff and inflates cost.
+All three role prompts (`worker-prompt.md`, `spec-reviewer-prompt.md`, `quality-reviewer-prompt.md`) enforce ROBOT MODE: tool calls only, no narration, restricted output blocks. Reasons:
+- Atomic plan tasks already contain the code — Workers read, type, commit.
+- Reviewers run gates and report verdicts — they do not narrate the process.
+- Free-form prose dilutes signal, inflates cost, and breaks the controller's verdict-parsing contract.
 
-The `worker-prompt.md` template enforces:
-- No exploration, no analysis, no clarifying questions, no self-review, no commentary, no mid-execution narration ("Let me check…", "Now I'll…", "Aha!", "Perfect.")
-- Two-line output contract: `OK <sha>` or `ERR <one-line reason>` — nothing else, no prefix, no suffix
-- Hard-stop conditions narrowly scoped (missing file/dep, broken-before-start build, task self-contradiction)
+Output contracts (the controller's parser depends on these):
+
+| Role | Pass | Fail |
+|------|------|------|
+| Worker | `OK <sha>` | `ERR <one-line reason>` |
+| SpecReviewer | `PASS` | `FAIL-SPEC` + bullet list (`- <file:line>: <gap>; fix: …`) **OR** `ESCALATE` + one-paragraph plan-vs-spec mismatch |
+| QualityReviewer | `PASS` | `FAIL-QUALITY` + bullet list (`- <file:line>: <issue>; fix: …`) |
+
+No prose around the verdict blocks. No `Verdict:` prefix. No closing summary. No "Here is my review:" preamble. No mid-execution narration ("Let me check…", "Now I'll…", "Aha!", "Perfect.", "I see…", "First,…").
+
+If a role agent reliably exceeds discipline, the issue is the prompt template, the inputs (under-specified plan task), or the model tier — not the controller parser. Tighten the prompt or escalate to a stronger tier. Do not loosen the contract.
 
 If a Worker reliably exceeds this discipline, the issue is the plan task (under-specified) — not the Worker prompt. Tighten the plan.
 
