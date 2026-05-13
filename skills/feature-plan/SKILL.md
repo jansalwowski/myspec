@@ -20,7 +20,7 @@ Check these gates in order:
 2. **Tech-spec approved (or user confirms draft)?** → No: get approval first. Stop.
 3. **Feature in `${aiDir}/features/`?** → No: create a spec first with `/myspec:feature-spec`. Stop.
 
-All gates pass → proceed to Workflow Step 1.
+All gates pass → proceed to Workflow Step 0.
 
 ## Prerequisites
 
