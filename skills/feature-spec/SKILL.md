@@ -1,6 +1,6 @@
 ---
 name: "feature-spec"
-description: "Use when starting a new feature. Creates spec.md, dependencies.md in ai/features/. Handles requirements, user stories, acceptance criteria. Do NOT use for implementation or tech specs."
+description: "Use when starting a new feature. Creates spec.md, dependencies.md in ${aiDir}/features/. Handles requirements, user stories, acceptance criteria. Do NOT use for implementation or tech specs."
 tags: [feature, specification, planning, documentation]
 ---
 

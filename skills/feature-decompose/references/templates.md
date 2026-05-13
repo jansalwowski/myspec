@@ -237,7 +237,7 @@ Add note at top:
 
 ## Feature-Level index.yaml Template
 
-Create `ai/features/{feature}/index.yaml`:
+Create `${aiDir}/features/{feature}/index.yaml`:
 
 ```yaml
 # Sub-feature manifest for {Feature Title}
@@ -266,4 +266,4 @@ sub-features:
 - Include `note` field for important context
 
 **Update main index.yaml:**
-After creating feature-level index.yaml, add `subfeatures: true` to parent feature entry in main `ai/features/index.yaml`.
+After creating feature-level index.yaml, add `subfeatures: true` to parent feature entry in main `${aiDir}/features/index.yaml`.

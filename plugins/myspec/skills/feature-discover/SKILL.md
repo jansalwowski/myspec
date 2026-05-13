@@ -180,13 +180,13 @@ After writing discovery.md, ask:
 ```
 discovery.md is written. What would you like to do next?
 
-A) Discovery only — save to `.ai/discoveries/{TODAY}-{feature-slug}/`
+A) Discovery only — save to `${aiDir}/discoveries/{TODAY}-{feature-slug}/`
    Good when: knowledge is partial, no time for full spec, or this feeds into a larger feature
 
-B) Full feature docs — save to `.ai/features/{feature-name}/` with spec.md + tech-spec.md
+B) Full feature docs — save to `${aiDir}/features/{feature-name}/` with spec.md + tech-spec.md
    Good when: findings are solid and you want this in the feature pipeline
 
-C) Both — discovery in `.ai/discoveries/` + full feature docs in `.ai/features/`
+C) Both — discovery in `${aiDir}/discoveries/` + full feature docs in `${aiDir}/features/`
 ```
 
 ---
@@ -196,16 +196,16 @@ C) Both — discovery in `.ai/discoveries/` + full feature docs in `.ai/features
 Load format templates from [references/templates.md](references/templates.md) before generating any files.
 
 #### Option A — Discovery only
-- Write `discovery.md` to `.ai/discoveries/{TODAY}-{feature-slug}/discovery.md`
+- Write `discovery.md` to `${aiDir}/discoveries/{TODAY}-{feature-slug}/discovery.md`
 - No index.yaml update needed
 
 #### Option B — Full feature
-- Create `.ai/features/{feature-name}/` if it doesn't exist
-- Write `discovery.md` to `.ai/features/{feature-name}/discovery.md`
+- Create `${aiDir}/features/{feature-name}/` if it doesn't exist
+- Write `discovery.md` to `${aiDir}/features/{feature-name}/discovery.md`
 - Generate `spec.md` using the **spec.md Format** template
 - Generate `tech-spec.md` using the **tech-spec.md Format** template
 - Create `dependencies.md` using the **dependencies.md Format** template
-- Add entry to `.ai/features/index.yaml`
+- Add entry to `${aiDir}/features/index.yaml`
 
 #### Option C — Both
 Do A and B.

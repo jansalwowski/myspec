@@ -80,6 +80,6 @@ After completing all steps, proceed with implementation.
 ## When NOT to Use
 
 - Research-only tasks (reading code, answering questions)
-- Documentation updates in `ai/` or `docs/`
+- Documentation updates in `${aiDir}/` or `docs/`
 - Responding to user questions without code changes
 - Single-file trivial fixes (typos, config, formatting) — read `${aiDir}/memory/index.md` directly instead

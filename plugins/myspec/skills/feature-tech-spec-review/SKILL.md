@@ -233,7 +233,7 @@ User: /tech-spec-review tags
 ```
 
 **Expected behavior**:
-1. Load ai/features/tags/tech-spec.md, spec.md, dependencies.md, and index.yaml
+1. Load ${aiDir}/features/tags/tech-spec.md, spec.md, dependencies.md, and index.yaml
 2. Load backend.md, frontend.md, database.md for pattern reference
 3. Check all 9 dimensions against tech-spec.md
 4. Cross-validate spec alignment (requirements → steps, ACs → file inventory)

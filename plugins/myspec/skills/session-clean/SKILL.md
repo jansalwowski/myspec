@@ -1,11 +1,11 @@
 ---
 name: session-clean
-description: "Use when sweeping dangling session files in ai/memory/sessions/active/ or orphaned (untracked) files in ai/memory/sessions/archive/. Keywords: session cleanup, dangling sessions, archive sessions, session sweep, orphaned archives, empty session pruning. Skips the running agent's own session, tracked archive files, and files modified within the last hour. Do NOT use to archive the running agent's own active session (use /myspec:session-complete) or clean worktrees (use /myspec:worktree-cleanup)."
+description: "Use when sweeping dangling session files in ${aiDir}/memory/sessions/active/ or orphaned (untracked) files in ${aiDir}/memory/sessions/archive/. Keywords: session cleanup, dangling sessions, archive sessions, session sweep, orphaned archives, empty session pruning. Skips the running agent's own session, tracked archive files, and files modified within the last hour. Do NOT use to archive the running agent's own active session (use /myspec:session-complete) or clean worktrees (use /myspec:worktree-cleanup)."
 ---
 
 # Session Clean
 
-Sweep abandoned session files in `ai/memory/sessions/active/`, plus orphaned (untracked) files in `ai/memory/sessions/archive/`. Empty / no-value sessions are deleted; substantive active sessions are archived; substantive archived sessions are left alone.
+Sweep abandoned session files in `${aiDir}/memory/sessions/active/`, plus orphaned (untracked) files in `${aiDir}/memory/sessions/archive/`. Empty / no-value sessions are deleted; substantive active sessions are archived; substantive archived sessions are left alone.
 
 **Announce at start:** "Running session cleanup audit."
 
@@ -20,7 +20,7 @@ Sweep abandoned session files in `ai/memory/sessions/active/`, plus orphaned (un
 
 ### Step 1: Inventory
 
-List `ai/memory/sessions/active/*.md` and `ai/memory/sessions/archive/*.md`. For each file capture: `session_id` (from filename and frontmatter), `mtime`, location (`active` | `archive`), tracked-by-git flag (`git ls-files --error-unmatch <path>` exits 0 if tracked), frontmatter fields (`status`, `cwd`, `auto_created`, `topic`, `feature`, `started`).
+List `${aiDir}/memory/sessions/active/*.md` and `${aiDir}/memory/sessions/archive/*.md`. For each file capture: `session_id` (from filename and frontmatter), `mtime`, location (`active` | `archive`), tracked-by-git flag (`git ls-files --error-unmatch <path>` exits 0 if tracked), frontmatter fields (`status`, `cwd`, `auto_created`, `topic`, `feature`, `started`).
 
 **Drop from consideration immediately**:
 - Tracked files under `archive/` (committed history — out of scope).
@@ -96,7 +96,7 @@ Print one-line summary on completion.
 
 ## Verification Checklist
 
-- [ ] Listed all `ai/memory/sessions/active/*.md` and `ai/memory/sessions/archive/*.md` files
+- [ ] Listed all `${aiDir}/memory/sessions/active/*.md` and `${aiDir}/memory/sessions/archive/*.md` files
 - [ ] Filtered out tracked files in `archive/`
 - [ ] Skipped current agent's own session (matched `CLAUDE_SESSION_ID` or marked ambiguous)
 - [ ] Each file classified empty/no-value or substantive (boilerplate-only logs counted as empty)

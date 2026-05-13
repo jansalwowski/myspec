@@ -2,9 +2,9 @@
 name: feature-plan
 tags: [feature-workflow, planning, implementation, parallel]
 description: >
-  Use when a feature in ai/features/ has approved spec.md and tech-spec.md and needs an
+  Use when a feature in ${aiDir}/features/ has approved spec.md and tech-spec.md and needs an
   execution-ready implementation plan with parallel task groups and milestone checkpoints.
-  Do NOT use for features without an approved tech-spec, projects outside ai/features/
+  Do NOT use for features without an approved tech-spec, projects outside ${aiDir}/features/
   (use writing-plans instead), or plans already in progress.
 ---
 

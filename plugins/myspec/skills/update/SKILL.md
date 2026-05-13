@@ -58,13 +58,33 @@ For each file in the manifest:
 
 If a destination file doesn't exist for `marker-merge`, create it from the source (treat as overwrite for missing files).
 
-### Step 4: Update `.myspec.json`
+### Step 4: Refresh `${aiDir}` binding in project context
+
+Skills written in v1.10.0+ reference `${aiDir}/...` as a placeholder. Ensure the project's always-loaded context defines it. Determine target file:
+
+- If `AGENTS.md` exists at project root: target it.
+- Else if `CLAUDE.md` exists at project root: target it.
+- Else: create `AGENTS.md` at project root.
+
+Append (or replace, if a marker section already exists) this block:
+
+```markdown
+<!-- BEGIN myspec:paths -->
+## myspec paths
+
+Skill instructions reference `${aiDir}/`. Resolve to **`{aiDir}/`** (configured in `.myspec.json`).
+<!-- END myspec:paths -->
+```
+
+If the markers already exist, replace everything between them with the current value. Do not modify content outside the markers.
+
+### Step 5: Update `.myspec.json`
 
 Update `frameworkVersion` to the new version from `manifest.json`.
 
 Update `frameworkFiles` entries — set `lastUpdated` to today's date for each file that was updated.
 
-### Step 5: Print Summary
+### Step 6: Print Summary
 
 ```
 ✅ myspec updated to v{newVersion}

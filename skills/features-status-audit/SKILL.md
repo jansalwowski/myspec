@@ -6,7 +6,7 @@ allowed-tools: [Bash, Read]
 
 # Features Status Audit
 
-Batch cross-check of `ai/features/index.yaml` (and per-feature sub-indexes) against actual documentation files on disk. Complements `/myspec:feature-verify` — this skill scans **all** features in seconds; `/myspec:feature-verify` does a deep 8-category audit on **one** feature.
+Batch cross-check of `${aiDir}/features/index.yaml` (and per-feature sub-indexes) against actual documentation files on disk. Complements `/myspec:feature-verify` — this skill scans **all** features in seconds; `/myspec:feature-verify` does a deep 8-category audit on **one** feature.
 
 **Core principle:** Read-only. Never modifies files. Flags mismatches; routes to fix skills per feature.
 
@@ -83,7 +83,7 @@ The script encodes this policy. Reference when explaining flags:
 - [ ] Ran `node "${CLAUDE_PLUGIN_ROOT}/lib/features-status-audit/audit.mjs"` from project root
 - [ ] Reviewed summary counts (healthy vs with issues)
 - [ ] Read the issues table top-to-bottom, grouping by feature
-- [ ] Cross-checked at least one flagged "directory missing" by running `ls ai/features/<name>/`
+- [ ] Cross-checked at least one flagged "directory missing" by running `ls ${aiDir}/features/<name>/`
 - [ ] Noted orphan directories separately (they often represent renamed features)
 - [ ] Routed each flagged feature to the right fix skill rather than fixing ad-hoc
 - [ ] Did not modify any files during the audit

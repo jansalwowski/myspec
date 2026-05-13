@@ -128,6 +128,26 @@ Also create these framework files in `${aiDir}/`:
 
 Replace `${aiDir}` placeholders in all copied files with the configured value.
 
+### Step 4.5: Announce `${aiDir}` binding to project context
+
+So other myspec skills can resolve `${aiDir}/...` paths in their instructions, write the binding to the project's always-loaded agent context. Determine the target file:
+
+- If `AGENTS.md` exists at project root: target it.
+- Else if `CLAUDE.md` exists at project root: target it.
+- Else: create `AGENTS.md` at project root.
+
+Append (or replace, if a marker section already exists) the following block to the target file. Use the markers exactly — they make the block idempotent on re-runs and on subsequent `update` runs.
+
+```markdown
+<!-- BEGIN myspec:paths -->
+## myspec paths
+
+Skill instructions reference `${aiDir}/`. Resolve to **`{aiDir from step 3}/`** (configured in `.myspec.json`).
+<!-- END myspec:paths -->
+```
+
+If the markers already exist in the file, replace everything between them. Do not modify content outside the markers.
+
 ### Step 5: Set Up Hooks (if user said yes)
 
 Create `.claude/hooks/` directory. Copy these files from the plugin's `hooks/` directory:
@@ -209,6 +229,7 @@ Next steps:
 - [ ] `${aiDir}/ideas/` directory with instructions files
 - [ ] `${aiDir}/memory-index.md` created (framework memory index)
 - [ ] `${aiDir}/pre-flight.md` created
+- [ ] `${aiDir}` binding written to `AGENTS.md` (or `CLAUDE.md`) between `myspec:paths` markers
 - [ ] If hooks enabled: `.claude/hooks/` has 4 scripts, all executable
 - [ ] If hooks enabled: `.claude/rules/` has 5 framework rules
 - [ ] If hooks enabled: `.claude/settings.json` and `.claude/verification.json` created

@@ -1,20 +1,20 @@
 ---
 name: "memory-sanitize"
-description: "Use when grooming the user-level auto-memory store at ~/.claude-personal/projects/: drop stale, promote to CLAUDE.md/rules, merge duplicates, compress bloated bodies, supersede contradictions. Keywords: sanitize memory, prune memories, compress memory, memory triage. Do NOT use for project ai/memory/ (use memory-create), or for searching memories (use memory-lookup)."
+description: "Use when grooming the user-level auto-memory store at ~/.claude-personal/projects/: drop stale, promote to CLAUDE.md/rules, merge duplicates, compress bloated bodies, supersede contradictions. Keywords: sanitize memory, prune memories, compress memory, memory triage. Do NOT use for project ${aiDir}/memory/ (use memory-create), or for searching memories (use memory-lookup)."
 ---
 
 # Memory Sanitize
 
 Audit the user-level auto-memory store for this project, triage each entry, and execute drops / promotions / merges / compressions with explicit confirmation.
 
-**Critical constraints:** never auto-promote (always show destination + exact insertion text); never delete a still-cited memory (grep first); skip DROP for entries <7 days old (COMPRESS is allowed at any age); do not touch project `ai/memory/`. See [Hard guards](#hard-guards) for full set.
+**Critical constraints:** never auto-promote (always show destination + exact insertion text); never delete a still-cited memory (grep first); skip DROP for entries <7 days old (COMPRESS is allowed at any age); do not touch project `${aiDir}/memory/`. See [Hard guards](#hard-guards) for full set.
 
 **Companion rule:** `.claude/rules/auto-memory-style.md` defines the length budget, cut list, and worked example that COMPRESS rewrites must conform to.
 
 ## Scope
 
 - **In scope:** `~/.claude-personal/projects/<encoded_cwd>/memory/` (user-level auto-memory). The encoded cwd is the absolute project path with both `/` and `_` replaced by `-` — computed as `pwd | tr '/_' '-'`.
-- **Out of scope:** project `ai/memory/{procedural,semantic,episodic}/` (myspec system).
+- **Out of scope:** project `${aiDir}/memory/{procedural,semantic,episodic}/` (myspec system).
 
 ## Workflow
 
@@ -73,7 +73,7 @@ Append a run summary line: `Compressed N entries, total reduction X%, store now 
 ### Phase 5 — Confirm and execute
 
 **Drops (low-risk, batch):** one confirmation for all drops.
-- Before deleting: `grep -r {filename}` across the repo, **excluding agent worktree directories** (`.claude/worktrees/`, `.git/worktrees/`) and `node_modules/`. Worktrees are throwaway shadow checkouts containing stale copies from main; they inflate citation counts and produce false-positive KEEPs. Use `grep -r {filename} ai/ .claude/ apps/ packages/ --exclude-dir=worktrees --exclude-dir=node_modules --exclude-dir=.prisma` (adjust paths for the project layout). If any active doc/spec/rule still cites the memory, refuse the drop and reclassify as KEEP.
+- Before deleting: `grep -r {filename}` across the repo, **excluding agent worktree directories** (`.claude/worktrees/`, `.git/worktrees/`) and `node_modules/`. Worktrees are throwaway shadow checkouts containing stale copies from main; they inflate citation counts and produce false-positive KEEPs. Use `grep -r {filename} ${aiDir}/ .claude/ apps/ packages/ --exclude-dir=worktrees --exclude-dir=node_modules --exclude-dir=.prisma` (adjust paths for the project layout). If any active doc/spec/rule still cites the memory, refuse the drop and reclassify as KEEP.
 
 **Promotions (medium-risk):** before applying, show:
 - Source memory full text
@@ -109,11 +109,11 @@ After every executed action:
 
 - **Never auto-promote.** Destination + exact insertion text shown before each promotion.
 - **Never auto-rewrite (COMPRESS).** Proposed rewrite shown verbatim before each compression. The agent must conform to `.claude/rules/auto-memory-style.md` — no creative reinterpretation, only mechanical removal of cut-list items.
-- **Never delete a still-cited memory.** Grep across `ai/`, `.claude/` (excluding `.claude/worktrees/`), `apps/`, `packages/` before any rm.
+- **Never delete a still-cited memory.** Grep across `${aiDir}/`, `.claude/` (excluding `.claude/worktrees/`), `apps/`, `packages/` before any rm.
 - **MEMORY.md edits are atomic with file deletes.** Never leave the index out of sync.
 - **Don't DROP feedback/semantic/reference entries <7 days old.** COMPRESS is allowed at any age. Project-type entries are exempt from the floor — they decay by design.
 - **CONFLICT supersession is non-destructive.** The loser's file stays on disk with a one-line stub; only the `MEMORY.md` line is removed.
-- **Don't touch the project's `ai/memory/`.** Separate system, separate skill.
+- **Don't touch the project's `${aiDir}/memory/`.** Separate system, separate skill.
 
 ## Promotion routing reference
 
