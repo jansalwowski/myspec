@@ -50,8 +50,18 @@ tags: [feature-workflow, specification, validation, critical-thinking]
    - Explain rationale for each fix
 
 7. **Wait for Confirmation**
-   - Ask user which fixes to apply (all, by severity, or individually)
-   - Do NOT proceed without explicit approval
+   - Call `AskUserQuestion` so options are selectable — never render a plain bulleted list:
+     ```
+     question: "Which fixes should I apply?"
+     header:   "Apply fixes"
+     options:
+       - "All"            → apply every proposed fix
+       - "Critical+High"  → apply Critical and High severities only
+       - "Individually"   → pick fixes one at a time
+       - "None"           → leave spec unchanged
+     ```
+   - Order options so the recommended choice is first with `(Recommended)` appended.
+   - Do NOT proceed without explicit approval.
 
 8. **Execute Changes**
    - Apply approved fixes to spec.md and/or dependencies.md
@@ -62,13 +72,16 @@ tags: [feature-workflow, specification, validation, critical-thinking]
    - Show changes made (file paths, sections affected)
    - List remaining issues (if any)
    - If remaining Critical/High issues → recommend addressing those first
-   - If spec is approved (no Critical/High remaining), present the next step choice:
-
-   > **What's next?**
-   > - **A) `/myspec:cross-spec-validation`** — check this spec against all related feature specs for contradictions, broken contracts, or superseded assumptions *(recommended before tech-spec)*
-   > - **B) `/myspec:feature-tech-spec`** — skip cross-check, go straight to technical design
-
-   Wait for user to choose before proceeding.
+   - If spec is approved (no Critical/High remaining), call `AskUserQuestion`:
+     ```
+     question: "Spec is approved. What's next?"
+     header:   "Next step"
+     options:
+       - "/myspec:cross-spec-validation"  → check against related specs for contradictions, broken contracts, or superseded assumptions
+       - "/myspec:feature-tech-spec"      → skip cross-check, go straight to technical design
+     ```
+   - Mark `/myspec:cross-spec-validation` as `(Recommended)` — it is the default before tech-spec.
+   - Wait for the user's choice before proceeding.
 
 ## Review Dimensions Reference
 

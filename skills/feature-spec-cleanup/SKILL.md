@@ -90,7 +90,16 @@ Explain what will be moved:
 
 ### 6. Wait for Confirmation
 
-Ask: "Should I move this technical content to tech-spec.md?"
+Call `AskUserQuestion`:
+
+```
+question: "Move the identified technical content to tech-spec.md?"
+header:   "Move content"
+options:
+  - "Move all"       → apply every proposed move
+  - "Pick sections"  → choose which blocks to move individually
+  - "Leave as-is"    → no changes to spec.md
+```
 
 ### 7. Execute Changes
 

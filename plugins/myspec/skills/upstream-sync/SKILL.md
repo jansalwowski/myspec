@@ -48,7 +48,16 @@ Complete in order. Process **one mapping at a time** — do not batch.
          - Directory: list contents, fetch each file individually (do not recurse blindly — depth 1 unless config says otherwise).
       4. Diff against local: `diff -u <local> /tmp/upstream-<slug>` (or per-file for directories).
       5. **Render the per-mapping report** (see template below).
-      6. **Ask the user**: Adopt / Skip / Record-as-divergence / Show-full-diff.
+      6. **Ask the user** via `AskUserQuestion` so the choice is selectable:
+         ```
+         question: "How should I handle <upstream>?"
+         header:   "Upstream sync"
+         options:
+           - "Adopt"                 → write upstream changes to local file(s)
+           - "Skip"                  → ignore this mapping for now
+           - "Record-as-divergence"  → append a note under the mapping's `divergences:`
+           - "Show-full-diff"        → display the full diff before deciding
+         ```
       7. If Adopt: make Edit calls to the local file(s). Each edit shown for normal review.
       8. If Record-as-divergence: append a line under the mapping's `divergences:`.
 5. **Write back to config** — after all mappings for a source processed, update its `last_checked_sha` and `last_checked_date` (today). Do this even if user skipped some mappings — skipping is a decision; the next run should not re-show the same commits unless the user asks for `--since=<sha>`.

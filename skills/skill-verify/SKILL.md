@@ -91,8 +91,17 @@ description: >
     - Tag each: `[auto-fix]` for minor, `[requires confirmation]` for structural
 
 11. **Wait for Confirmation**
-    - Ask user which fixes to apply (all, by severity, individually)
-    - Do NOT apply `[requires confirmation]` fixes without explicit approval
+    - Call `AskUserQuestion` so options are selectable:
+      ```
+      question: "Which fixes should I apply?"
+      header:   "Apply fixes"
+      options:
+        - "All [auto-fix] only"       → apply small fixes; leave structural for review
+        - "All including structural"  → apply every proposed fix
+        - "Individually"              → pick fixes one at a time
+        - "None"                      → leave SKILL.md unchanged
+      ```
+    - Do NOT apply `[requires confirmation]` fixes without explicit approval.
 
 12. **Execute Changes**
     - Apply approved fixes to SKILL.md

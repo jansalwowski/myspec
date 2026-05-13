@@ -77,17 +77,31 @@ Do NOT show the full documents. Show only:
 - Which sections in tech-spec.md changed, and what changed in them (1-2 lines each)
 - The new `spec_version` value
 
-Ask the user to confirm the changes look correct before handing off.
+Call `AskUserQuestion` so the choice is selectable:
+
+```
+question: "Do the proposed changes look correct?"
+header:   "Confirm update"
+options:
+  - "Apply"   → write the changes and continue to Step 6
+  - "Revise"  → describe what to adjust
+  - "Cancel"  → discard the proposed changes
+```
 
 ### Step 6: Hand Off
 
-After user approval, present the next step choice:
+After user approval, call `AskUserQuestion`:
 
-> **What's next?**
-> - **A) `/myspec:cross-spec-validation`** — check updated spec against all related feature specs for contradictions or broken assumptions *(recommended — updates often break other specs)*
-> - **B) `/myspec:feature-plan`** — skip cross-check, go straight to implementation planning
+```
+question: "Update applied. What's next?"
+header:   "Next step"
+options:
+  - "/myspec:cross-spec-validation"  → check updated spec against related specs for contradictions or broken assumptions
+  - "/myspec:feature-plan"           → skip cross-check, go straight to implementation planning
+```
 
-Wait for user to choose before proceeding.
+Mark `/myspec:cross-spec-validation` as `(Recommended)` — updates often break other specs.
+Wait for the user's choice before proceeding.
 
 Note: `/myspec:feature-plan` will create a new `implementation-plan.md`. The previous plan (if any) has already been archived to `plans/` by `/myspec:feature-complete`. If there is still an active `implementation-plan.md` from an incomplete previous run, alert the user before proceeding.
 

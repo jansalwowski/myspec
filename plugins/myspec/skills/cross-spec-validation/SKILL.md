@@ -105,12 +105,20 @@ Features checked: {list with discovery method: dep-graph / keyword-scan / both}
 
 ### 6. Wait for Confirmation
 
-Present three action options:
-- **Apply notes**: Add "superseded by" notes to affected specs (non-destructive)
-- **Fix specific**: User picks which contradictions to resolve
-- **Report only**: No changes, user addresses manually
+Call `AskUserQuestion` so the user can select an option directly — never render a plain bulleted A/B/C list:
 
-Do NOT modify any spec without explicit approval.
+```
+question: "How should I proceed with the contradictions?"
+header:   "Apply fixes"
+options:
+  - "Apply notes"   → add "superseded by" notes to affected specs (non-destructive)
+  - "Fix specific"  → user picks which contradictions to resolve individually
+  - "Report only"   → no changes; user addresses manually
+```
+
+- Order options so the recommended one is first with `(Recommended)` appended.
+  Recommend "Fix specific" when any Critical findings exist; otherwise "Apply notes".
+- Do NOT modify any spec without explicit approval.
 
 ### 7. Execute Approved Changes
 
