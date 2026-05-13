@@ -22,19 +22,11 @@ Task tool (general-purpose):
 
     [Relevant acceptance criteria from spec.md for the work done in this phase]
 
-    ## CRITICAL: Do Not Trust the Reports
+    ## Verify Independently — Don't Trust the Reports
 
-    Read the actual code. Verify everything independently.
+    Implementer agents commonly over-report completeness, miss requirements, or misinterpret specs without realizing it. Skipping independent verification is how broken phases reach holistic review.
 
-    **DO NOT:**
-    - Take implementers' word for what they built
-    - Trust their claims about completeness or test passing
-    - Accept their interpretation of requirements
-
-    **DO:**
-    - Read the actual code written
-    - Run type-check and tests to verify they pass
-    - Compare implementation to requirements line by line
+    Read the actual code written, run type-check and tests yourself to verify they pass, and compare implementation to requirements line by line. Don't take implementers' word for what they built or accept their interpretation of requirements.
 
     ## Your Job
 

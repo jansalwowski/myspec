@@ -26,9 +26,9 @@ Task tool (general-purpose):
     | Scope | Focused enough for a single plan — not covering multiple independent subsystems |
     | Architecture | Units with clear boundaries, well-defined interfaces, independently understandable and testable |
 
-    ## CRITICAL
+    ## Look especially for
 
-    Look especially hard for:
+    These slip past general reviews and become problems at planning or implementation time:
     - Any TODO markers or placeholder text
     - Sections saying "to be defined later" or "will spec when X is done"
     - Sections noticeably less detailed than others

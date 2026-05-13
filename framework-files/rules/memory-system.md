@@ -9,12 +9,7 @@ updated: 2026-03-29
 
 # Agent Memory System
 
-> **Scope**: this file governs **project-level myspec memory** under `${aiDir}/memory/`
-> (sessions, procedural/semantic/episodic, written via `/myspec:memory-create`).
-> The **harness-managed user-level auto-memory store** at
-> `~/.claude-personal/projects/<encoded_cwd>/memory/` is governed by the
-> companion rule `.claude/rules/auto-memory-style.md` (length budget, cut list,
-> write-time ADD/UPDATE/NO-OP consolidation).
+This rule governs the **project-level myspec memory** under `${aiDir}/memory/` — sessions plus procedural/semantic/episodic entries, written via `/myspec:memory-create`. The separate **harness-managed user-level auto-memory store** at `~/.claude-personal/projects/<encoded_cwd>/memory/` is governed by the companion rule `.claude/rules/auto-memory-style.md` (length budget, cut list, write-time ADD/UPDATE/NO-OP consolidation).
 
 ## Purpose
 
@@ -23,16 +18,16 @@ Prevent AI agents from repeating mistakes and losing knowledge by:
 2. Learning from resolved issues (procedural, semantic, episodic memories)
 3. Running preventive checks before starting (pre-flight with staleness detection)
 
-## Triggers (BLOCKING)
+## Triggers
 
-These are **BLOCKING REQUIREMENTS**. You MUST invoke the specified skill at the specified time.
+These are blocking requirements — skip them and the agent loses context across sessions, repeats prior mistakes, or stomps on a sibling agent's session file.
 
 | When | Action | Why |
 |------|--------|-----|
-| Session start | MUST invoke `/myspec:bootstrap` | Reads project config + memory indexes, lists active sessions, auto-archives orphans (>1h stale). Replaces manual `/myspec:memory-preflight` at session start. |
+| Session start | Invoke `/myspec:bootstrap` | Reads project config + memory indexes, lists active sessions, auto-archives orphans (>1h stale). Replaces manual `/myspec:memory-preflight` at session start. |
 | Before significant work mid-session (new feature, multi-file change, debugging) | Invoke `/myspec:memory-preflight` if `/myspec:bootstrap` was not run at session start | Scans all memory types, checks staleness |
 | Before trivial work (single-file fix, typo, config change) | Read `${aiDir}/memory/index.md` (Layer 1 only) | Quick check, skip full scan |
-| First code edit in any session | **Automatic — no skill** | `mark-code-changed.sh` (PostToolUse) creates `${aiDir}/memory/sessions/active/{session_id}.md` from the session-log template. Per-session-id keying makes this multi-agent safe — each agent gets its own file. |
+| First code edit in any session | Automatic — no skill | `mark-code-changed.sh` (PostToolUse) creates `${aiDir}/memory/sessions/active/{session_id}.md` from the session-log template. Per-session-id keying makes this multi-agent safe — each agent gets its own file. |
 | Starting a non-code session (debugging without edits, discovery, doc-only work) | Invoke `/myspec:session-start` | Manual creation; auto-creation only fires on code edits |
 | Work complete | Invoke `/myspec:session-complete` | Multi-type extraction + archival of the agent's own session file (touches no sibling sessions) |
 | User approves memory | Invoke `/myspec:memory-create` | Creates typed memory (procedural/semantic/episodic) |
@@ -56,7 +51,7 @@ After each significant action, append a row to the session log table:
 
 ### Escalation Protocol
 
-Agent **MUST** pause and ask user when ANY of these triggers occur:
+Pause and ask the user when any of these triggers occur — past 2-3 attempts on the same surface, more iteration usually masks a misdiagnosis rather than converging on a fix:
 
 | Trigger | Detection |
 |---------|-----------|
@@ -70,7 +65,7 @@ Agent **MUST** pause and ask user when ANY of these triggers occur:
 
 ### Before Risky Changes
 
-Agent **SHOULD** warn user to commit when about to:
+Warn the user and offer to commit current state before any of these — they're easy to lose track of and hard to bisect later:
 - Refactor working code
 - Change component lifecycle/mounting
 - Modify state management

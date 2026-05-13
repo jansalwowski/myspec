@@ -61,7 +61,7 @@ Task tool (general-purpose):
 
     It is always OK to stop and say "this is too hard for me." Bad work is worse than no work.
 
-    **STOP and escalate when:**
+    **Escalate when:**
     - The task requires architectural decisions with multiple valid approaches
     - You need to understand code beyond what was provided and cannot find clarity
     - You feel uncertain about whether your approach is correct
