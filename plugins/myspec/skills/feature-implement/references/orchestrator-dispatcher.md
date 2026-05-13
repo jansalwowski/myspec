@@ -28,6 +28,8 @@ For each milestone (walked in declaration order):
 - Parallel groups: dispatch all group tasks in one message with `isolation: "worktree"`, exactly as `SKILL.md:147–153` describes for normal mode.
 - Sequential tasks: dispatch one at a time.
 - Worker receives the full task text inline. Worker does NOT re-read the plan file.
+- **Dispatch wrapper discipline (BLOCKING):** paste the worker-prompt template VERBATIM and substitute only `{{TASK_TEXT}}` (full task block from plan), `{{FILE_LIST}}` (task's declared file list), and `{{TASK_SHORT_NAME}}` (dispatch description). Do NOT add a "Job", "Brief", "Current state", "Verification", "Commit", or "Report Format" wrapper section around the task. Do NOT include working directory, branch name, brief file path, or session metadata. Every non-task sentence the controller adds dilutes the robot framing and produces yapping. Verification commands and commit messages already live inside the plan's task block — that is the controller's only payload.
+- Worker output contract is two-line max: `OK <sha>` or `ERR <reason>`. Anything else is a contract violation — log it for the SpecReviewer and tighten the Worker prompt or task text.
 
 ### 2. SpecReview (gate)
 - Dispatch ONE agent using `references/role-prompts/spec-reviewer-prompt.md`.
@@ -86,9 +88,9 @@ Worker prompt enforces strict output format. Reasons:
 - Free-form prose in Worker output dilutes signal in the diff and inflates cost.
 
 The `worker-prompt.md` template enforces:
-- No exploration, no analysis, no clarifying questions, no self-review, no commentary
-- Strict report block (Status / Commits / Files / Tests / Blocked-reason) — nothing else
-- Hard-stop conditions narrowly scoped (missing file/dep, broken-before-start build)
+- No exploration, no analysis, no clarifying questions, no self-review, no commentary, no mid-execution narration ("Let me check…", "Now I'll…", "Aha!", "Perfect.")
+- Two-line output contract: `OK <sha>` or `ERR <one-line reason>` — nothing else, no prefix, no suffix
+- Hard-stop conditions narrowly scoped (missing file/dep, broken-before-start build, task self-contradiction)
 
 If a Worker reliably exceeds this discipline, the issue is the plan task (under-specified) — not the Worker prompt. Tighten the plan.
 
