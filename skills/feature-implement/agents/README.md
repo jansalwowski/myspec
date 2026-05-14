@@ -21,20 +21,30 @@ The body of each agent (Role / Output Protocol / Forbidden Phrases / Rules / Fai
 
 These files are NOT auto-loaded from this directory. They are deliberately shipped under `skills/feature-implement/agents/` (not under `.claude/agents/`, `.cursor/agents/`, `.codex/agents/`) so they do not register as project-scope subagents in any harness. Project-scope registration would create "trash in the repo" — every project would inherit them whether it uses `feature-implement` or not.
 
-Install them to **user-scope** directories so they are available across all your projects:
+Install target is **user scope** (`~/.{harness}/agents/`) — available across all your projects.
+
+## Install via `/myspec:init` and `/myspec:update`
+
+Both skills handle the install automatically:
+
+- `/myspec:init` (first-time project setup) — prompts to install all six files, skips any harness whose `~/.{harness}/` does not exist.
+- `/myspec:update` (framework sync) — diffs the plugin source against the user-scope copies. If they differ, prompts before overwriting (preserves local customizations).
+
+Run one of those to install / refresh the agents.
+
+## Manual install fallback
+
+If you need to install without running the skills:
 
 ```bash
 # from repo root
+mkdir -p ~/.claude/agents ~/.cursor/agents ~/.codex/agents
 cp skills/feature-implement/agents/claude/*.md   ~/.claude/agents/
 cp skills/feature-implement/agents/cursor/*.md   ~/.cursor/agents/
 cp skills/feature-implement/agents/codex/*.toml  ~/.codex/agents/
 ```
 
 After install, the dispatcher's references to `~/.claude/agents/worker-base.md` etc. resolve.
-
-## Future: automated install via init/update
-
-`/myspec:init` and `/myspec:update` will eventually copy these files to user scope automatically. See the open follow-up issue on the repo. Until then, manual copy is the install path.
 
 ## Editing rules
 

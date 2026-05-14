@@ -104,7 +104,7 @@ Install target (user scope; the dispatcher reads from these paths at runtime):
 - `~/.claude/agents/worker-base.md` / `~/.cursor/agents/worker-base.md` / `~/.codex/agents/worker-base.toml` — Worker role.
 - `~/.claude/agents/reviewer-base.md` / `~/.cursor/agents/reviewer-base.md` / `~/.codex/agents/reviewer-base.toml` — Reviewer role (label `FAIL-SPEC` or `FAIL-QUALITY` selected by the envelope per dispatch).
 
-If the dispatch references above do not resolve, the agents have not been installed to user scope yet — copy them from `skills/feature-implement/agents/{harness}/` per the README. (Automated install via `/myspec:init` and `/myspec:update` is a planned follow-up.)
+If the dispatch references above do not resolve, the agents have not been installed to user scope yet. Run `/myspec:init` (first-time setup) or `/myspec:update` (sync) to install them — both skills handle this automatically. Manual install instructions are also in `skills/feature-implement/agents/README.md`.
 
 The dispatch envelopes in `references/role-prompts/` carry only per-call inputs (task text, file list, spec/plan blocks, milestone SHA, FAIL label, gate logic). Reasons:
 - Atomic plan tasks already contain the code — Workers read, type, commit.
