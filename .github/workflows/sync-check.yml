@@ -1,0 +1,35 @@
+name: Plugin Tree Sync Check
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  sync-check:
+    name: skills/ ↔ plugins/myspec/skills/ must match
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Diff feature-plan
+        run: diff -r skills/feature-plan plugins/myspec/skills/feature-plan
+
+      - name: Diff feature-implement
+        run: diff -r skills/feature-implement plugins/myspec/skills/feature-implement
+
+      - name: All other top-level skills mirrored
+        run: |
+          for d in skills/*/; do
+            name=$(basename "$d")
+            mirror="plugins/myspec/skills/$name"
+            if [ ! -d "$mirror" ]; then
+              echo "::error::Skill $name exists under skills/ but not under plugins/myspec/skills/"
+              exit 1
+            fi
+            diff -r "$d" "$mirror" || {
+              echo "::error::Skill $name drifted between skills/ and plugins/myspec/skills/"
+              exit 1
+            }
+          done

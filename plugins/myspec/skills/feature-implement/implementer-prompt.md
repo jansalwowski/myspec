@@ -5,7 +5,7 @@ Use this template when dispatching an implementer subagent.
 ```
 Task tool (general-purpose):
   description: "Implement Task N: [task name]"
-  model: "[haiku for 1-2 file mechanical tasks / sonnet for multi-file integration]"
+  model: "<tier: cheap for 1-2 file mechanical / mid for multi-file integration; controller maps to concrete model, e.g. Haiku-tier or Sonnet-tier>"
   isolation: "worktree"  # ONLY for parallel group tasks. Omit for sequential tasks.
   prompt: |
     You are implementing Task N: [task name]

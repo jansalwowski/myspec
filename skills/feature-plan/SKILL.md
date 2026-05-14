@@ -20,7 +20,7 @@ Check these gates in order:
 2. **Tech-spec approved (or user confirms draft)?** → No: get approval first. Stop.
 3. **Feature in `${aiDir}/features/`?** → No: create a spec first with `/myspec:feature-spec`. Stop.
 
-All gates pass → proceed to Workflow Step 1.
+All gates pass → proceed to Workflow Step 0.
 
 ## Prerequisites
 
@@ -29,6 +29,34 @@ All gates pass → proceed to Workflow Step 1.
 - For sub-features: `${aiDir}/features/{parent}/{subfeature}/tech-spec.md`
 
 ## Workflow
+
+### Step 0: Choose Plan Mode (BLOCKING)
+
+Ask the user which dispatch model the plan should target. The choice drives template selection in Step 5 and front-matter shape.
+
+Call `AskUserQuestion`:
+
+```
+question: "Plan mode?"
+header:   "Plan mode"
+options:
+  - "normal"        → single-executor implementer per task (default)
+  - "orchestrator"  → per-milestone Worker / SpecReview / QualityReview chain (no Planner — tasks already atomic)
+```
+
+Show the recommendation as `normal` unless the feature involves work where role separation pays off (large multi-task milestones, mixed model-tier optimization). Always show this disclaimer with the orchestrator option:
+
+```
+Orchestrator mode gives agents more autonomy across roles. It can recover from
+spec-fail and quality-fail loops without you, but chained autonomy = more
+surface for cascading errors. Review milestone checkpoints carefully.
+```
+
+Selection determines:
+- `normal` → **REQUIRED:** Read `references/plan-templates.md` before generating the plan.
+- `orchestrator` → **REQUIRED:** Read `references/plan-templates-orchestrator.md` before generating front-matter or any milestone block. Plan front-matter must include `orchestration: agent-chain` and a `roles:` block. Tier values are exactly `cheap`, `mid`, `premium` — never `fast`, `reasoning`, `pro`, or concrete model names.
+
+No CLI flag. No model names anywhere in plan text — tier vocabulary only.
 
 ### Step 1: Read Context
 
@@ -63,6 +91,15 @@ Convert each tech-spec implementation step into a full task using the format in 
 
 **What the tech-spec provides:** High-level step description, file inventory, interfaces
 **What the plan adds:** Exact TDD steps, test code, run commands, commit messages, parallel group tags
+
+**Spec contract — verbatim quotes (REQUIRED per task):**
+For every task, populate the `**Spec contract:**` block with verbatim quotes from `spec.md` and/or `tech-spec.md` covering this task's behavior. Paste the sentence; do NOT paraphrase. In orchestrator mode the Worker subagent does NOT read `spec.md` or `tech-spec.md` — only the task text. Any requirement that does not make the spec → task translation is invisible to the Worker. If you find yourself rewording spec language, the original wording IS the contract — quote it. If a task has no spec/tech-spec passage that constrains it, ask whether the task should exist.
+
+**Touch only (REQUIRED for tasks with `Modify:` files):**
+For every task whose Files block contains a `Modify:` entry, populate the `**Touch only:**` line specifying which lines/sections the task is allowed to alter. This pairs with the QualityReviewer's diff-scope rule — without it, reviewers flag adjacent pre-existing tech debt as regressions and Workers waste retries on out-of-scope fixes.
+
+**Per-task tier override (orchestrator mode only, OPTIONAL):**
+If a task is materially heavier than the rest of the milestone (complex AST work, multi-system integration), add `**Tier override:** worker=mid` (or `premium`) with a one-line reason. See [`references/plan-templates-orchestrator.md`](references/plan-templates-orchestrator.md) "Per-task tier override". Use sparingly — if > 30% of tasks need an override, raise the global `roles.worker` instead.
 
 ### Step 4: Review Loop (large plans only)
 
@@ -233,6 +270,9 @@ Before presenting the plan:
 - [ ] Barriers exist after every parallel group
 - [ ] Execution order table matches task dependencies
 - [ ] All acceptance criteria from spec.md are covered by at least one task
+- [ ] Every task has a populated **Spec contract** block with verbatim quotes (not paraphrased) from spec.md / tech-spec.md
+- [ ] Every task whose Files contain `Modify:` has a populated **Touch only** line
+- [ ] (Orchestrator mode) Tier overrides — if any — list a one-line reason; total override count is ≤ ~30% of tasks
 - [ ] Tasks reference tech-spec interfaces (not duplicated inline unless needed for subagent context)
 - [ ] Within each milestone, lower-level layers (data, services) precede higher-level layers (UI, presentation) per project conventions
 - [ ] Phase numbers are globally unique across all milestones
