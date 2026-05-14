@@ -95,10 +95,16 @@ Plan front-matter `roles:` block exposes the mapping. Three keys only: `worker`,
 
 ## Token discipline (all role agents)
 
-ROBOT MODE rules and output contracts live in the agent definition files, not in the dispatch envelopes:
+ROBOT MODE rules and output contracts live in the agent definition files, not in the dispatch envelopes.
+
+Canonical source (versioned in the repo): `skills/feature-implement/agents/{claude,cursor,codex}/` — see `skills/feature-implement/agents/README.md` for the install procedure.
+
+Install target (user scope; the dispatcher reads from these paths at runtime):
 
 - `~/.claude/agents/worker-base.md` / `~/.cursor/agents/worker-base.md` / `~/.codex/agents/worker-base.toml` — Worker role.
 - `~/.claude/agents/reviewer-base.md` / `~/.cursor/agents/reviewer-base.md` / `~/.codex/agents/reviewer-base.toml` — Reviewer role (label `FAIL-SPEC` or `FAIL-QUALITY` selected by the envelope per dispatch).
+
+If the dispatch references above do not resolve, the agents have not been installed to user scope yet — copy them from `skills/feature-implement/agents/{harness}/` per the README. (Automated install via `/myspec:init` and `/myspec:update` is a planned follow-up.)
 
 The dispatch envelopes in `references/role-prompts/` carry only per-call inputs (task text, file list, spec/plan blocks, milestone SHA, FAIL label, gate logic). Reasons:
 - Atomic plan tasks already contain the code — Workers read, type, commit.
