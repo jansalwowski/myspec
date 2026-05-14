@@ -24,6 +24,11 @@ Read `.myspec.json` from project root. Extract `frameworkVersion` and `aiDir`.
 
 Read `framework-files/manifest.json` from the plugin directory. Extract `frameworkVersion`.
 
+Resolve the plugin directory in this order:
+1. `$CLAUDE_PLUGIN_ROOT` if set.
+2. The directory containing this `SKILL.md`, walking up until a sibling `framework-files/manifest.json` is found (typically `…/myspec/{version}/framework-files/manifest.json`).
+3. If neither resolves, stop and tell the user: "Cannot locate plugin manifest. Verify the myspec plugin is installed."
+
 Compare versions. If they match, tell the user: "Already up to date (v{version}). No changes needed." and stop.
 
 ### Step 2: Inventory Files to Update
