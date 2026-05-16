@@ -59,12 +59,16 @@ esac
 
 [ -f "$FILE_PATH" ] || exit 0
 
-# Detection patterns:
-#   /Users/<name>...        e.g. /Users/alice/work/foo
-#   /home/<name>...         e.g. /home/alice/work/foo
-#   -Users-<name>-...       encoded form of /Users/<name>/...
-#   -home-<name>-...        encoded form of /home/<name>/...
-DETECT_RE='(/Users/[A-Za-z][A-Za-z0-9._-]*|/home/[A-Za-z][A-Za-z0-9._-]*|-Users-[A-Za-z][A-Za-z0-9._-]+|-home-[A-Za-z][A-Za-z0-9._-]+)'
+# Detection patterns. The absolute forms (/Users, /home) must be at a path
+# ROOT — preceded by start-of-line or a non-path character — so a relative
+# sub-segment like `apps/web/src/components/home/HomeFoo.vue` (a `home/` dir
+# followed by a Capitalized name) does NOT false-positive. grep ERE has no
+# lookbehind, so the boundary is captured and stripped below.
+#   /Users/<name>...        e.g. /Users/alice/work/foo   (root only)
+#   /home/<name>...         e.g. /home/alice/work/foo     (root only)
+#   -Users-<name>-...       encoded form of /Users/<name>/... (leading - kept)
+#   -home-<name>-...        encoded form of /home/<name>/...   (leading - kept)
+DETECT_RE='(^|[^A-Za-z0-9._/-])(/Users/[A-Za-z][A-Za-z0-9._-]*|/home/[A-Za-z][A-Za-z0-9._-]*)|(-Users-[A-Za-z][A-Za-z0-9._-]+|-home-[A-Za-z][A-Za-z0-9._-]+)'
 
 MATCHES=$(grep -noE "$DETECT_RE" "$FILE_PATH" 2>/dev/null | head -10 || true)
 
@@ -80,6 +84,14 @@ while IFS= read -r line; do
   LINENO_FOUND="${line%%:*}"
   REST="${line#*:}"
   MATCH="${REST}"
+  # The absolute-form branch captures one leading boundary char via
+  # (^|[^A-Za-z0-9._/-]) (grep ERE has no lookbehind). Strip it so the
+  # downstream prefix logic + hint see a clean path. Encoded -Users-/-home-
+  # forms and root-anchored matches start with - or / and are left as-is.
+  case "$MATCH" in
+    /*|-Users-*|-home-*) : ;;
+    *) MATCH="${MATCH#?}" ;;
+  esac
   SUGGESTION="use <repo_root>/<relative-path> for repo-internal paths, or ~/.claude-personal/projects/<encoded_cwd>/... for the harness memory dir"
 
   if [ -n "$REPO_ROOT" ]; then
