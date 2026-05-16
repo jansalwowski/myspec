@@ -12,6 +12,7 @@ description: "Use when starting any work session and the agent needs project ori
 Read `.myspec.json` (if it exists) to get:
 - `project.name` and `project.techStack`
 - `aiDir` (the configured AI documentation directory, default: `ai/`)
+- `frameworkVersion` (used in step 6 for version comparison; absent in older configs)
 
 Check `.myspec.json` for a `topologyFile` key. If set, read that file.
 
@@ -86,7 +87,25 @@ Run `git worktree prune --dry-run` to detect pruneable references.
 
 This step is informational only — do not auto-cleanup.
 
-### 6. Print Orientation Summary
+### 6. Check Framework Version
+
+Compare `frameworkVersion` from `.myspec.json` (read in step 1) against `frameworkVersion` from the plugin's `framework-files/manifest.json`.
+
+Resolve the plugin directory in this order:
+1. `$CLAUDE_PLUGIN_ROOT` if set.
+2. The directory containing this `SKILL.md`, walking up until a sibling `framework-files/manifest.json` is found (typically `…/myspec/{version}/framework-files/manifest.json`).
+3. If neither resolves, treat the manifest as unreadable.
+
+- If equal: omit the version line from the summary.
+- If plugin version > project version: include `**myspec version**: plugin v{plugin} ahead of project v{project} — run /myspec:update`.
+- If plugin version < project version: include `**myspec version**: plugin v{plugin} behind project v{project} — update your plugin`.
+- If either file is unreadable or missing the field: omit the line silently — do not error.
+
+Use semver ordering. If versions are not semver-parseable, fall back to string equality; on inequality, print `**myspec version**: project on v{project}, plugin has v{plugin}` without direction.
+
+This step is informational only — do not auto-run `/myspec:update`.
+
+### 7. Print Orientation Summary
 
 Output a brief structured summary so the user can confirm the agent is properly oriented:
 
@@ -103,6 +122,7 @@ Output a brief structured summary so the user can confirm the agent is properly 
 **Active sessions**: [N (list of session_id prefixes + topics) / 0]
 **Auto-archived**: [M orphaned sessions / 0 (omit line if 0)]
 **Worktree health**: [clean (N active) / WARNING — N stale/orphaned. Use the `worktree-cleanup` skill]
+**myspec version**: [omit if versions match / plugin v{plugin} ahead of project v{project} — run /myspec:update / plugin v{plugin} behind project v{project} — update your plugin / project on v{project}, plugin has v{plugin} (non-semver)]
 **Boundaries**: [any never_modify paths relevant to task, or "none relevant"]
 ```
 
@@ -115,6 +135,7 @@ Output a brief structured summary so the user can confirm the agent is properly 
 - [ ] All three memory indexes (procedural, semantic, episodic) were scanned
 - [ ] `${aiDir}/memory/sessions/active/` was listed and orphans (>60min) auto-archived
 - [ ] Worktree health was checked (or omitted if no worktrees)
+- [ ] Framework version was compared (or omitted silently if unreadable)
 - [ ] Orientation summary was printed with all required fields populated
 - [ ] No session was created (bootstrap orients only — sessions auto-create on first code edit)
 

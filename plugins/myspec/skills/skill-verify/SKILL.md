@@ -37,6 +37,13 @@ description: >
    - Allowed fields by tier (see Frontmatter Rules table). Flag fields outside the chosen portability target.
    - For model-invocable skills only: confirm description does NOT summarize workflow (Anti-Pattern #1)
 
+4.5. **Validate `dependencies:` block** (only if the frontmatter has one — optional Convention-tier field)
+   - For each entry under `dependencies.packages`: confirm the package name appears in some `package.json` under the project root.
+     `git ls-files '**/package.json' package.json | xargs grep -l "\"<pkg>\":"` — no match → Critical finding "declared dependency package `<pkg>` not found in any package.json".
+   - For each entry under `dependencies.paths`: confirm the path exists in the working tree (`[ -e "<path>" ]`). Missing → Critical finding "declared dependency path `<path>` does not exist".
+   - A skill that declares a dependency it does not actually have is broken (it will emit non-compiling or non-functional output). These are always Critical, never auto-fixed — the fix is either to add the dependency or delete/repair the skill, which requires human judgment.
+   - Skills without a `dependencies:` block skip this step entirely.
+
 5. **Detect Anti-Patterns** (check all 14 from Anti-Patterns Reference)
    - Scan description for workflow verbs in sequence
    - Scan description for vague/generic language without specific keywords
@@ -135,7 +142,7 @@ description: >
 | **Spec** (any agentskills.io platform) | `name`, `description`, `license`, `compatibility`, `allowed-tools` | `allowed-tools` is marked Experimental in the spec; support varies |
 | **Claude Code + VS Code Copilot** | adds `disable-model-invocation`, `user-invocable` | Not in open spec; ignored on other platforms |
 | **Claude Code only** | adds `model`, `effort`, `context`, `agent`, `hooks`, `paths`, `shell`, `argument-hint`, `arguments`, `when_to_use` | Single-vendor only |
-| **Convention** (ignored by agents, used by tooling) | `tags`, `triggers`, `metadata` | `triggers` is NOT used for activation — agents only match on `description` |
+| **Convention** (ignored by agents, used by tooling) | `tags`, `triggers`, `metadata`, `dependencies` | `triggers` is NOT used for activation — agents only match on `description`. `dependencies` is validated by step 4.5 (packages must be in a package.json, paths must exist) — see `.claude/rules/skill-self-test.md` |
 
 Flag fields outside the chosen portability tier. If portability target is unstated, infer from field usage and flag conflicts (e.g. mixing `disable-model-invocation` with cross-platform claims).
 
@@ -280,6 +287,7 @@ After running the skill:
 - [ ] `name` matches parent directory name
 - [ ] Invocation mode detected (`disable-model-invocation`, `user-invocable`); description rules adjusted accordingly
 - [ ] Frontmatter fields validated against the chosen portability tier (spec / Claude Code+Copilot / Claude Code only / convention)
+- [ ] If `dependencies:` block present: every package found in a package.json, every path exists on disk (else Critical)
 - [ ] If model-invocable: `description` starts with "Use when" and uses third person
 - [ ] All 14 anti-patterns were checked against description and body
 - [ ] Structure validated: Workflow, Rules/Constraints, Verification Checklist sections present

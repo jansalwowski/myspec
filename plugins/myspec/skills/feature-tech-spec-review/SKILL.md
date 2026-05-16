@@ -17,8 +17,15 @@ tags: [feature-workflow, tech-spec, validation, critical-thinking, review]
    - If sub-feature: also read parent tech-spec.md
 
 2. **Analyze Structure**
-   - Verify required sections exist: Architecture, Implementation Steps, Edge Cases, File Inventory
+   - Verify required sections exist: Architecture, Reuse audit, Implementation Steps, Edge Cases, File Inventory
    - Check optional sections present if relevant: Key Interfaces/Types, Database Changes, GraphQL Schema, API Endpoints, Decisions
+   - **Reuse-audit gate** (skip only if `.myspec.json` has `reuseAudit.enabled: false`). Flag and **refuse approval** (do not recommend `/myspec:feature-plan`) when the `### Reuse audit` section is:
+     - missing, OR
+     - an empty table (header + separator only, zero data rows), OR
+     - a blanket-skip audit (every row `skip`) with one or more rows lacking a `Reason`, OR
+     - has any `skip` row with an empty / dash-only `Reason`, OR
+     - has any row whose `Decision` is not exactly `reuse` or `skip`.
+   - A blanket-skip audit where every row has a substantive `Reason` is allowed but warrants a High finding asking the author to re-confirm nothing is reusable.
    - Validate frontmatter has `title`, `status`, `based_on_spec_version`, `created`, `last_updated`
    - Verify `based_on_spec_version` matches current `spec_version` in spec.md
 
@@ -125,6 +132,14 @@ When splitting is recommended:
 // Missing file inventory (Completeness)
 // Check: File Inventory section exists and has at least one row
 
+// Reuse audit (Spec Alignment) — see the Reuse-audit gate in step 2 for severities
+// Refuse approval (blocks feature-plan) if: section missing, OR table empty (0 data
+//   rows), OR any row Decision not exactly {reuse, skip}, OR any `skip` row without a
+//   non-dash Reason (this also covers a blanket-skip table with any Reason-less row).
+// High finding (not a refusal): every row is `skip` but each has a substantive Reason —
+//   ask the author to re-confirm nothing is reusable.
+// Skip this check entirely if .myspec.json has reuseAudit.enabled === false
+
 // Missing edge cases (Completeness)
 // Check: Edge Cases section exists and has at least one item
 
@@ -211,6 +226,7 @@ When splitting is recommended:
 After running the skill:
 
 - [ ] All 9 review dimensions checked against tech-spec.md
+- [ ] Reuse-audit gate applied: section present, >= 1 row, valid Decision/Reason (or `reuseAudit.enabled: false`)
 - [ ] `based_on_spec_version` matches spec.md `spec_version`
 - [ ] Every spec.md requirement has an implementation path in tech-spec
 - [ ] File inventory paths follow project conventions (per `.claude/rules/` or `${aiDir}/conventions/`)

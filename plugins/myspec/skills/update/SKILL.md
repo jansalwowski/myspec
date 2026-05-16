@@ -41,18 +41,19 @@ From `manifest.json`, collect all files. Each file has a `type`:
 For `files` entries: destination is `{aiDir}/{filename}`.
 For `rules` entries: source is `framework-files/rules/{filename}`, destination is the `dest` path (e.g., `.claude/rules/workflow.md`).
 For `hooks` entries: source is `hooks/{filename}`, destination is the `dest` path (e.g., `.claude/hooks/guard-git-branch.sh`).
+For `lib` entries: source is `lib/{filename}`, destination is the `dest` path (e.g., `.claude/lib/path-normalize.sh`).
 
-For `hooks`: only process if `.claude/hooks/` directory exists. If it doesn't exist, skip all hooks and note: "Hooks directory not found — skipping Claude hook updates. Run the `init` skill with Claude hooks enabled to set them up."
+For `hooks` and `lib`: only process if `.claude/hooks/` directory exists (hooks and their helper lib travel together). If it doesn't exist, skip all hooks AND lib entries and note: "Hooks directory not found — skipping Claude hook + lib updates. Run the `init` skill with Claude hooks enabled to set them up."
 
 ### Step 3: Apply Updates
 
 For each file in the manifest:
 
 **`overwrite` strategy:**
-1. Read the source file from `framework-files/{filename}` (or `framework-files/rules/{filename}` for rules, or `hooks/{filename}` for hooks)
+1. Read the source file from `framework-files/{filename}` (or `framework-files/rules/{filename}` for rules, `hooks/{filename}` for hooks, `lib/{filename}` for lib)
 2. Replace `${aiDir}` placeholders with the configured `aiDir` value
 3. Write to destination, replacing the existing file entirely
-4. For hooks: run `chmod +x {dest}` after writing
+4. For hooks: run `chmod +x {dest}` after writing (lib helpers are sourced, not executed — no chmod needed)
 
 **`marker-merge` strategy:**
 1. Read the source file from `framework-files/{filename}`
@@ -62,6 +63,21 @@ For each file in the manifest:
 5. Write the merged result back
 
 If a destination file doesn't exist for `marker-merge`, create it from the source (treat as overwrite for missing files).
+
+**Hook-wiring check (only if hooks were processed):** copying a hook file does nothing until it is registered in `.claude/settings.json`. After writing hooks, compare the project's `.claude/settings.json` against `templates/settings-hooks.json` (the canonical event→matcher→command shape):
+
+- For each `command` in the template, check whether that exact `command` string appears anywhere under the project's `settings.json` `hooks` key.
+- Collect every template command that is absent (typically a hook added in this version — e.g. a fresh `require-reuse-audit.sh`).
+- If any are missing, print — do NOT edit `settings.json` (it is user-owned and not in `manifest.json`):
+
+  ```
+  ⚠ Hooks copied but not wired. Add these to .claude/settings.json under the
+    shown event/matcher (deep-merge: append to existing `hooks` arrays, do not
+    replace), then they take effect:
+    {for each missing: event → matcher → "command": "<path>"}
+  ```
+
+  Cite `templates/settings-hooks.json` as the reference for the exact structure. If `.claude/settings.json` has no `hooks` key at all, instruct the user to copy the whole `hooks` block from the template.
 
 ### Step 4: Refresh `${aiDir}` binding in project context
 
@@ -101,6 +117,8 @@ Preserved (project-customized sections):
   {list marker-merge files where project content was kept}
 
 Hooks: {updated N scripts / skipped — hooks directory not found}
+Lib:   {updated N helpers / skipped — hooks directory not found}
+Hook wiring: {all N hooks already wired in settings.json / M hook(s) need manual settings.json entries — see above}
 
 Next: Run the `bootstrap` skill to verify the setup is still correct.
 ```
@@ -111,3 +129,18 @@ Next: Run the `bootstrap` skill to verify the setup is still correct.
 - Never modify files not listed in `manifest.json`
 - Never update `.myspec.json` project fields (`name`, `description`, `techStack`, `aiDir`)
 - If a source file is missing from the plugin, skip it and warn the user — do not delete the destination
+
+## Verification Checklist
+
+After running the skill:
+
+- [ ] `.myspec.json` `frameworkVersion` read and compared to `manifest.json`; stopped early if already current
+- [ ] Every `manifest.json` entry processed with its declared strategy (`overwrite` / `marker-merge`)
+- [ ] `marker-merge` files: content outside `<!-- myspec:framework-start/end -->` markers left untouched
+- [ ] `hooks` and `lib` entries processed only when `.claude/hooks/` exists (else both skipped with the note)
+- [ ] Each updated hook had `chmod +x` applied; lib helpers left non-executable (sourced, not run)
+- [ ] `${aiDir}` binding refreshed between `myspec:paths` markers; content outside markers unchanged
+- [ ] `.myspec.json` `frameworkVersion` bumped and `frameworkFiles[*].lastUpdated` set; project fields (`name`, `description`, `techStack`, `aiDir`) untouched
+- [ ] Hook-wiring check run: hooks absent from `.claude/settings.json` reported; `settings.json` NOT modified
+- [ ] No file outside `manifest.json` was modified
+- [ ] Summary printed with `Updated files`, `Preserved`, `Hooks`, `Lib`, and `Hook wiring` lines

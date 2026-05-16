@@ -26,6 +26,10 @@
           {
             "type": "command",
             "command": "./hooks/no-absolute-paths.sh"
+          },
+          {
+            "type": "command",
+            "command": "./hooks/require-reuse-audit.sh"
           }
         ]
       }

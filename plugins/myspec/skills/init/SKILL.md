@@ -156,10 +156,11 @@ Create `.claude/hooks/` directory. Copy these files from the plugin's `hooks/` d
 - `mark-code-changed.sh`
 - `verify-before-stop.sh`
 - `no-absolute-paths.sh`
+- `require-reuse-audit.sh`
 
 Make them executable: `chmod +x .claude/hooks/*.sh`
 
-Create `.claude/lib/` and copy `path-normalize.sh` from the plugin's `lib/` directory. It is sourced by skills and hooks that emit `<repo_root>` / `<encoded_cwd>` placeholders.
+Create `.claude/lib/` and copy the lib files listed in `manifest.json`'s `lib` block (currently `path-normalize.sh` and `markdown-section-check.sh`) from the plugin's `lib/` directory. Use the manifest as the source of truth — do not glob the directory (it also holds non-shipped helpers like `lib/features-status-audit/`). These are sourced by skills and hooks (e.g. `<repo_root>`/`<encoded_cwd>` placeholders; the reuse-audit table validator).
 
 Copy `.claude/rules/` framework rules from `framework-files/rules/`:
 - `workflow.md`
@@ -168,6 +169,7 @@ Copy `.claude/rules/` framework rules from `framework-files/rules/`:
 - `ideas.md`
 - `skill-optimization.md`
 - `paths.md`
+- `skill-self-test.md`
 
 Create `.claude/settings.json` using `templates/settings-hooks.json` as the base.
 
@@ -205,7 +207,7 @@ Hooks:   {enabled / skipped}
 Created:
   .myspec.json
   ${aiDir}/ (features, memory, ideas, templates)
-  {if hooks: .claude/hooks/ (5 hooks), .claude/lib/ (1 helper), .claude/rules/ (6 rules)}
+  {if hooks: .claude/hooks/ (6 hooks), .claude/lib/ (2 helpers), .claude/rules/ (7 rules)}
   {if hooks: .claude/settings.json, .claude/verification.json}
 
 Next steps:
@@ -234,7 +236,7 @@ Next steps:
 - [ ] `${aiDir}/memory-index.md` created (framework memory index)
 - [ ] `${aiDir}/pre-flight.md` created
 - [ ] `${aiDir}` binding written to `AGENTS.md` (or `CLAUDE.md`) between `myspec:paths` markers
-- [ ] If hooks enabled: `.claude/hooks/` has 5 scripts, all executable
-- [ ] If hooks enabled: `.claude/lib/path-normalize.sh` present
-- [ ] If hooks enabled: `.claude/rules/` has 6 framework rules
+- [ ] If hooks enabled: `.claude/hooks/` has 6 scripts, all executable
+- [ ] If hooks enabled: `.claude/lib/` has `path-normalize.sh` and `markdown-section-check.sh`
+- [ ] If hooks enabled: `.claude/rules/` has 7 framework rules
 - [ ] If hooks enabled: `.claude/settings.json` and `.claude/verification.json` created
