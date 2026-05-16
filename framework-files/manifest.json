@@ -1,5 +1,5 @@
 {
-  "frameworkVersion": "1.13.0",
+  "frameworkVersion": "1.14.0",
   "files": {
     "memory-index.md": {
       "type": "marker-merge"
@@ -65,6 +65,10 @@
     "paths.md": {
       "type": "overwrite",
       "dest": ".claude/rules/paths.md"
+    },
+    "skill-self-test.md": {
+      "type": "overwrite",
+      "dest": ".claude/rules/skill-self-test.md"
     }
   },
   "hooks": {
@@ -87,12 +91,20 @@
     "no-absolute-paths.sh": {
       "type": "overwrite",
       "dest": ".claude/hooks/no-absolute-paths.sh"
+    },
+    "require-reuse-audit.sh": {
+      "type": "overwrite",
+      "dest": ".claude/hooks/require-reuse-audit.sh"
     }
   },
   "lib": {
     "path-normalize.sh": {
       "type": "overwrite",
       "dest": ".claude/lib/path-normalize.sh"
+    },
+    "markdown-section-check.sh": {
+      "type": "overwrite",
+      "dest": ".claude/lib/markdown-section-check.sh"
     }
   }
 }
