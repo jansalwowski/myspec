@@ -124,3 +124,18 @@ Next: Run the `bootstrap` skill to verify the setup is still correct.
 - Never modify files not listed in `manifest.json`
 - Never update `.myspec.json` project fields (`name`, `description`, `techStack`, `aiDir`)
 - If a source file is missing from the plugin, skip it and warn the user — do not delete the destination
+
+## Verification Checklist
+
+After running the skill:
+
+- [ ] `.myspec.json` `frameworkVersion` read and compared to `manifest.json`; stopped early if already current
+- [ ] Every `manifest.json` entry processed with its declared strategy (`overwrite` / `marker-merge`)
+- [ ] `marker-merge` files: content outside `<!-- myspec:framework-start/end -->` markers left untouched
+- [ ] `hooks` and `lib` entries processed only when `.claude/hooks/` exists (else both skipped with the note)
+- [ ] Each updated hook had `chmod +x` applied; lib helpers left non-executable (sourced, not run)
+- [ ] `${aiDir}` binding refreshed between `myspec:paths` markers; content outside markers unchanged
+- [ ] `.myspec.json` `frameworkVersion` bumped and `frameworkFiles[*].lastUpdated` set; project fields (`name`, `description`, `techStack`, `aiDir`) untouched
+- [ ] Hook-wiring check run: hooks absent from `.claude/settings.json` reported; `settings.json` NOT modified
+- [ ] No file outside `manifest.json` was modified
+- [ ] Summary printed with `Updated files`, `Preserved`, `Hooks`, `Lib`, and `Hook wiring` lines
