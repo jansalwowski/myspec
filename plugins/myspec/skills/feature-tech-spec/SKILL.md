@@ -20,6 +20,15 @@ tags: [technical, specification, architecture, implementation]
    - Examine similar implementations in the codebase
    - Check related features for consistency
    - Review database schema for related entities
+   - **Enumerate reuse candidates** (feeds the `### Reuse audit` section in step 3):
+     - This is **required by default**. Skip ONLY if `.myspec.json` has `reuseAudit: { "enabled": false }`.
+     - Read the topology file (`.myspec.json` → `topologyFile`, falling back to `backbone.yml` at the project root). If neither exists, enumerate surfaces by inspection instead of skipping.
+     - Enumerate the project's shared surfaces:
+       - Every top-level key under `packages:` — read its `path:` and `entry:` (or the package's `src/index.ts`) for exported primitives.
+       - Each app's `src.lib` and `src.lib/validators` paths, if present.
+       - Each app's `src.composables` path, if present (read its barrel/index file if one exists).
+       - If a surface key is absent from the topology file, skip that surface (do not fail).
+     - For each surface, list the primitives relevant to this feature's scope. These become the rows of the reuse-audit table.
 
 3. **Create Tech Spec Document**
    Create `${aiDir}/features/{feature}/tech-spec.md`:
@@ -40,6 +49,20 @@ Required sections:
 - How this fits into the system
 - Key components and their responsibilities
 - Data flow diagram (if complex)
+
+### Reuse audit
+
+Required (default-on; omit only when `.myspec.json` sets `reuseAudit.enabled: false`). Comes before Key Interfaces because interface decisions depend on what is reused. Populate from the step-2 enumeration. At least one row.
+
+| Candidate | Surface | Decision | Reason |
+|-----------|---------|----------|--------|
+| BaseDialog | packages/uikit | reuse | matches modal need in REQ-12 |
+| useFormState | apps/web/src/composables | skip | needs multi-step state outside its scope |
+
+Rules (mechanically enforced by the `require-reuse-audit` hook; also checked by `feature-tech-spec-review`):
+- `Decision` is exactly `reuse` or `skip` — one token, no prose.
+- `Reason` is mandatory for every `skip` row; optional for `reuse`.
+- Do not proceed to "Validate Alignment" with an empty audit.
 
 ### Key Interfaces / Types
 ```typescript
@@ -109,6 +132,7 @@ Document key architectural decisions as ADRs:
 - [ ] Every acceptance criterion from spec.md has at least one implementation step
 - [ ] All implementation steps have dependency notes where applicable
 - [ ] File Inventory table covers all files to be created/modified
+- [ ] `### Reuse audit` section present with >= 1 row; every `skip` row has a Reason (unless `reuseAudit.enabled: false`)
 - [ ] Key Interfaces / Types section defines new types introduced
 - [ ] Database Changes section present (or explicitly marked "None")
 - [ ] Run verification checks from `.claude/verification.json` — all pass
