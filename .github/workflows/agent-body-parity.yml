@@ -1,0 +1,49 @@
+name: Base Subagent Body Parity
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  parity:
+    name: worker-base / reviewer-base body must match across claude/cursor/codex
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check body parity
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re, sys, pathlib
+          base = pathlib.Path("skills/feature-implement/agents")
+
+          def md_body(p):
+              t = p.read_text()
+              # strip YAML frontmatter between leading --- ... ---
+              m = re.match(r"^---\n.*?\n---\n", t, re.S)
+              return (t[m.end():] if m else t).strip()
+
+          def toml_body(p):
+              t = p.read_text()
+              m = re.search(r'developer_instructions\s*=\s*"""\n(.*)\n"""\s*$', t, re.S)
+              if not m:
+                  print(f"::error::cannot extract body from {p}")
+                  sys.exit(1)
+              return m.group(1).strip()
+
+          fail = False
+          for agent in ("worker-base", "reviewer-base"):
+              claude = md_body(base / "claude" / f"{agent}.md")
+              cursor = md_body(base / "cursor" / f"{agent}.md")
+              codex  = toml_body(base / "codex" / f"{agent}.toml")
+              for name, other in (("cursor", cursor), ("codex", codex)):
+                  if claude != other:
+                      print(f"::error::{agent} body differs: claude vs {name}")
+                      fail = True
+              if not fail:
+                  print(f"✓ {agent} body parity OK ({len(claude)} chars)")
+          sys.exit(1 if fail else 0)
+          PY

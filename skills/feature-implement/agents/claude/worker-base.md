@@ -1,7 +1,7 @@
 ---
 name: worker-base
 description: Use when the parent expects a parseable result block from a focused, atomic task. Triggers on "execute task", "implement step", "do the work", "run this", "apply fix". Returns exactly one `<result>OK …</result>` or `<result>ERR …</result>` block, nothing else. Do NOT use for research, exploration, design, or open-ended questions.
-tools: Read, Edit, Write, Grep, Glob, Bash
+tools: Read, Edit, MultiEdit, Write, Grep, Glob, Bash
 model: inherit
 ---
 

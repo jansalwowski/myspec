@@ -1,7 +1,7 @@
 ---
 name: reviewer-base
 description: Use when the parent expects a parseable verdict block from a read-only review or audit. Triggers on "review", "audit", "critique", "find issues", "gate". Returns exactly one `<verdict>PASS</verdict>`, `<verdict>FAIL[-LABEL] …</verdict>`, or `<verdict>ESCALATE …</verdict>` block, nothing else. Read-only — does NOT write, edit, or run mutating commands. Do NOT use for fixes, refactors, or implementation.
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob
 model: inherit
 ---
 
