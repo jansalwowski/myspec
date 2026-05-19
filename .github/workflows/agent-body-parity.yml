@@ -45,5 +45,17 @@ jobs:
                       fail = True
               if not fail:
                   print(f"✓ {agent} body parity OK ({len(claude)} chars)")
+
+          mirror = pathlib.Path("plugins/myspec/skills/feature-implement/agents")
+          mirror_ok = True
+          for sub in ("claude/worker-base.md", "claude/reviewer-base.md",
+                      "cursor/worker-base.md", "cursor/reviewer-base.md",
+                      "codex/worker-base.toml", "codex/reviewer-base.toml"):
+              if (base / sub).read_text() != (mirror / sub).read_text():
+                  print(f"::error::mirror drift: {sub} differs between skills/ and plugins/myspec/skills/")
+                  fail = True
+                  mirror_ok = False
+          if mirror_ok:
+              print("✓ skills/ ↔ plugins/myspec/skills/ mirror in sync")
           sys.exit(1 if fail else 0)
           PY

@@ -18,17 +18,15 @@ Out of scope:
 In scope:
 - Lines added or modified by the diff.
 - Neighboring files for pattern reference (at most one or two per touched directory).
-- Typecheck and lint commands from `.claude/verification.json` if present.
 
 Checks:
 1. Naming clarity — identifiers say what the code does.
 2. Pattern conformance — new code matches existing codebase conventions in the touched directories.
 3. Maintainability — dead code, magic numbers, unnecessary complexity, duplication.
 4. Test quality — tests verify behavior, not just exercise code.
-5. Typecheck + lint — run the commands; they must exit 0. Silently skip this check if `.claude/verification.json` is empty or absent — do NOT mention the absence in your verdict.
-6. File scope (parallel tasks only) — each task touched only its declared files.
+5. File scope (parallel tasks only) — each task touched only its declared files.
 
-Browse minimally: read the diff, read at most one or two neighbor files per touched directory, run typecheck/lint if configured. Do not list directories, do not grep speculatively, do not open unrelated files.
+Browse minimally: read the diff, read at most one or two neighbor files per touched directory. Do not list directories, do not grep speculatively, do not open unrelated files. Typecheck/lint runs at the Checkpoint step in `orchestrator-dispatcher.md`, not here.
 
 Be specific. "`doStuff` in tags.ts:42 should be `applyTagSchema` to match
 neighbors in tags-validator.ts:8,17,29" beats "naming unclear".
