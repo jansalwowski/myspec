@@ -79,6 +79,23 @@ If a destination file doesn't exist for `marker-merge`, create it from the sourc
 
   Cite `templates/settings-hooks.json` as the reference for the exact structure. If `.claude/settings.json` has no `hooks` key at all, instruct the user to copy the whole `hooks` block from the template.
 
+### Step 3.5: Sync Base Subagents (user scope)
+
+The plugin ships `worker-base` and `reviewer-base` source under `skills/feature-implement/agents/{claude,cursor,codex}/`. They install to **user scope** (`~/.{harness}/agents/`) — never project scope. This step keeps the user-scope copies in sync with the plugin source while preserving any local customizations.
+
+For each harness in `[claude, cursor, codex]`:
+
+1. **Skip condition:** if `~/.{harness}/` does NOT exist as a directory, skip this harness silently (user does not use it).
+2. `mkdir -p ~/.{harness}/agents` if needed.
+3. **For each file** (`worker-base.{md|toml}`, `reviewer-base.{md|toml}` — `.md` for claude/cursor, `.toml` for codex):
+   - **Source:** plugin's `skills/feature-implement/agents/{harness}/{file}`.
+   - **Destination:** `~/.{harness}/agents/{file}`.
+   - If destination missing: copy source → destination. Note as "installed (was missing)".
+   - If destination identical to source: skip silently. Note as "up-to-date".
+   - If destination differs from source: show a short diff (or note that the file has been locally customized) and ask: "Sync `~/.{harness}/agents/{file}` to plugin version? (y/n, default: n)". On `y`: copy. On `n`: skip and warn that the local version may diverge from the plugin's `<verdict>` / `<result>` contract.
+
+Do not write anywhere outside `~/.{harness}/agents/`. Never install as project-scope (`.claude/agents/`, `.cursor/agents/`, `.codex/agents/` in the repo root).
+
 ### Step 4: Refresh `${aiDir}` binding in project context
 
 Skills written in v1.10.0+ reference `${aiDir}/...` as a placeholder. Ensure the project's always-loaded context defines it. Determine target file:
@@ -120,6 +137,9 @@ Hooks: {updated N scripts / skipped — hooks directory not found}
 Lib:   {updated N helpers / skipped — hooks directory not found}
 Hook wiring: {all N hooks already wired in settings.json / M hook(s) need manual settings.json entries — see above}
 
+Base subagents (user scope, ~/.{harness}/agents/):
+  {per harness: list each file as installed / up-to-date / synced / kept-local / skipped (~/.{harness}/ not present)}
+
 Next: Run the `bootstrap` skill to verify the setup is still correct.
 ```
 
@@ -129,6 +149,9 @@ Next: Run the `bootstrap` skill to verify the setup is still correct.
 - Never modify files not listed in `manifest.json`
 - Never update `.myspec.json` project fields (`name`, `description`, `techStack`, `aiDir`)
 - If a source file is missing from the plugin, skip it and warn the user — do not delete the destination
+- Base subagents (`skills/feature-implement/agents/`) install to user scope only. Never copy to project-scope `.claude/agents/`, `.cursor/agents/`, `.codex/agents/` in the repo root.
+- Skip a harness entirely if `~/.{harness}/` does not exist — the user does not use that tool.
+- Never silently overwrite a locally-customized agent file; always diff + prompt.
 
 ## Verification Checklist
 
