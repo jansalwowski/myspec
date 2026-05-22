@@ -1,7 +1,7 @@
 {
   "name": "myspec",
   "description": "Specification-Driven Development framework. Provides skills for feature workflows (spec, tech-spec, review, decompose), memory system (preflight, create, lookup, sessions), ideas pipeline, and project scaffolding.",
-  "version": "1.14.1",
+  "version": "1.15.0",
   "author": {
     "name": "Jan Salwowski"
   },

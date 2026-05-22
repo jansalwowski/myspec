@@ -9,10 +9,10 @@
       "source": {
         "source": "github",
         "repo": "jansalwowski/myspec",
-        "ref": "v1.14.1"
+        "ref": "v1.15.0"
       },
       "description": "Specification-Driven Development framework with feature workflows, memory system, ideas pipeline, and project scaffolding",
-      "version": "1.14.1"
+      "version": "1.15.0"
     }
   ]
 }
