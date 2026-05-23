@@ -22,5 +22,5 @@ sources:
           - "We keep SCAMPER / Six Hats / reverse-brainstorm / first-principles techniques table; upstream removed it."
           - "No HARD-GATE block — our skill is a thinking tool, not a pipeline kickoff."
           - "Frontmatter description stays exploratory; upstream uses 'You MUST use this before any creative work' trigger language."
-          - "Visual-companion server ported from upstream scripts/ to lib/brainstorm-server/ (invoked via ${CLAUDE_PLUGIN_ROOT}/lib/...), matching the features-status-audit lib convention. Root lib/ only — not mirrored into plugins/myspec/lib/ (same as features-status-audit)."
+          - "Visual-companion server ported from upstream scripts/ to lib/brainstorm-server/ (invoked via ${CLAUDE_PLUGIN_ROOT}/lib/...). Mirrored into plugins/myspec/lib/brainstorm-server/ so it resolves under the Codex plugin root too (where ${CLAUDE_PLUGIN_ROOT} → plugins/myspec/)."
           - "Server session dir + frame branding rebranded .superpowers/ → .myspec/ and 'Superpowers Brainstorming' → 'myspec Brainstorming'."
