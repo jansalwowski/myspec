@@ -267,11 +267,13 @@ options:
   - "feature-implement-review" → independent audit that the code fulfills the spec and
                                   plan (traceability + behavioral), persists a report
                                   (Recommended for anything non-trivial)
-  - "feature-complete"          → skip the deep review; sync docs, archive plan, merge
+  - "code-review"               → quality, standards, and bug review of the changes
+                                  (universal dimensions + any project rules)
+  - "feature-complete"          → skip the reviews; sync docs, archive plan, merge
   - "Stop here"                 → leave the branch as-is; continue later
 ```
 
-Execute the choice: invoke `/myspec:feature-implement-review`, `/myspec:feature-complete`, or stop and report the branch name.
+Execute the choice: invoke `/myspec:feature-implement-review`, `/myspec:code-review`, `/myspec:feature-complete`, or stop and report the branch name. The two review passes are complementary, not exclusive (conformance vs. code quality) — after one finishes, offer this choice again so the user can run the other or proceed.
 
 **Orchestrator mode interaction:** Step 5 runs identically in both modes. Per-milestone SpecReview + QualityReview are scoped to one milestone's diff; the holistic reviewer covers the whole feature. They do not overlap and orchestrator mode does NOT skip Step 5. No `briefs/` directory is created — Workers receive task text inline.
 
@@ -322,4 +324,4 @@ After all phases complete:
 ## Integration
 
 **Called by:** `/myspec:feature-plan` (after plan approval)
-**Next:** `/myspec:feature-implement-review` (independent conformance audit) or `/myspec:feature-complete` — chosen by the user in Step 5
+**Next:** `/myspec:feature-implement-review` (conformance audit) and/or `/myspec:code-review` (quality review), then `/myspec:feature-complete` — chosen by the user in Step 5
