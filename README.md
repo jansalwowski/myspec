@@ -83,6 +83,7 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref feat/codex-pl
 | `/myspec:feature-plan` | Create execution-ready implementation plan from tech-spec. Step 0 picks **normal** (single-executor, default) or **orchestrator** (per-milestone Worker / SpecReview / QualityReview chain — no Planner since plan tasks are already atomic) — opt-in |
 | `/myspec:feature-implement` | Execute implementation plan with subagent dispatch. Auto-detects `orchestration: agent-chain` in plan front-matter and offers `orchestrator` / `orchestrator-auto` / `normal-fallback` run modes |
 | `/myspec:feature-implement-review` | Independently audit that the built code fulfills the spec and plan (traceability + behavioral); writes conformance-report.md and routes findings — never edits code |
+| `/myspec:code-review` | Review changed code for quality, standards, and bugs — universal dimensions plus project rules. Configurable via `/myspec:setup code-review` |
 | `/myspec:feature-update` | Plan changes to an already-implemented feature |
 | `/myspec:feature-verify` | Verify feature implementation matches spec |
 | `/myspec:feature-complete` | Mark feature done, update docs |
