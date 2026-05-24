@@ -22,8 +22,9 @@ Roughly two milestones of work, touches the data layer, a background job system,
 | 8 | `/myspec:feature-tech-spec-review` | Tech-spec marked approved | yes |
 | 9 | `/myspec:feature-plan` | `implementation-plan.md` with milestones + parallel groups | yes |
 | 10 | `/myspec:feature-implement` | Code + tests committed; phase reviews | per-milestone checkpoint |
-| 11 | `/myspec:feature-verify` | Health report (drift check) | — |
-| 12 | `/myspec:feature-complete` | Status flipped, plan archived, branch merged | merge confirmation |
+| 11 | `/myspec:feature-implement-review` | `conformance-report.md`; independent trace of code vs. spec/plan | route findings |
+| 12 | `/myspec:feature-verify` | Health report (drift check) | — |
+| 13 | `/myspec:feature-complete` | Status flipped, plan archived, branch merged | merge confirmation |
 
 ---
 
