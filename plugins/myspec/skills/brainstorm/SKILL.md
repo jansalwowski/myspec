@@ -1,87 +1,74 @@
 ---
 name: brainstorm
 description: >
-  Use when the user wants to brainstorm, explore ideas, think through problems, design features,
-  stress-test assumptions, or challenge a direction with devil's advocate thinking.
-  Works for ideation, feature specs, implementation approaches, or pure research — user decides what to do with results.
-  Covers SCAMPER, Six Hats, reverse brainstorming, first-principles analysis.
+  Use when the user wants to brainstorm, explore ideas, think a problem through, generate
+  options, name something, frame a fuzzy problem, or pressure-test / stress-test a direction
+  with devil's-advocate thinking. Infers the mode (frame, generate, solve, sharpen) rather than
+  interviewing. Covers "what if" branching, analogy transfer, SCAMPER, Six Hats, reverse
+  brainstorming, first-principles, pre-mortem. Do NOT use to plan an approved spec's
+  implementation (use feature-plan) or to queue an idea (use idea-intake).
 ---
 
 # Brainstorm
 
-Run this skill to explore, challenge, and refine ideas through structured phases. The conversation is the product — artifacts are optional, and the user decides what (if anything) to produce at the end.
+Run this skill to explore, challenge, and refine ideas. **The conversation is the product** — artifacts are optional, and the user decides what (if anything) to produce at the end.
 
-## Anti-Pattern: "This Is Too Simple To Need A Brainstorm"
+It runs 1-on-1: you facilitate, the user thinks. That setup removes the worst failure of group brainstorming (people losing ideas while they wait their turn), but it introduces two a room of people doesn't have — and you cannot fix either by telling the user to watch for them. Defend against them structurally, through the stance below.
 
-Every idea benefits from examination. Even "obvious" ideas have hidden assumptions worth surfacing. The brainstorm can be short (a few exchanges for simple topics), but skip it and you risk building on unexamined foundations.
+## Facilitator stance — always on, in every mode
+
+- **Generate across angles, not down one.** Spread ideas over genuinely different categories and present them as *provocations to react to*, not a recommendation. Variety beats volume — five ideas in five directions beat ten in one. *(Your first ideas anchor the user; breadth keeps their space open.)*
+- **Lead with the disagreement.** When you see a weakness, say it first and plainly — never bury it under praise. Be an adviser, not a cheerleader. Here, agreement is the failure mode, not rudeness. *(A validating partner is groupthink with two participants.)*
+- **Protect divergence.** Don't collapse to a single answer while ideas are still flowing. When you do shift to narrowing, say so out loud.
+- **Pull the user's own thinking in.** Ask "what's your instinct?" / "what am I missing?" often, so they build *with* you instead of just reacting *to* you.
+- **Output is hypotheses, not decisions.** A long, satisfying list isn't progress. Non-obvious and varied is.
+
+The failure modes behind these (anchoring, sycophancy, premature convergence, the illusion of productivity) and why each fix is structural → `skills/brainstorm/techniques.md`.
 
 ## Workflow
 
-Complete these in order:
+1. **Pre-flight** — decide whether a brainstorm is warranted; if the topic spans multiple independent areas, decompose and pick one first.
+2. **Infer and name the mode** — read what the user brought, state the mode in one line, start producing in it.
+3. **Work the mode** — generate or challenge per the mode while holding to the stance above; keep divergence and judgment in separate beats.
+4. **Pivot when the framing shifts** — re-read the mode and name the switch out loud; the modes are not a fixed sequence.
+5. **Synthesize** — summarize the thinking and confirm it before any output.
+6. **Wrap up** — only at the end, ask what to do with the results.
 
-1. **Explore context** — understand what the user is working with (code, docs, conversation history, existing patterns — whatever is relevant)
-2. **Assess scope** — if the topic spans multiple independent areas, flag it and help decompose before diving in
-3. **Offer visual companion** — if visual questions ahead, offer the browser companion (own message, no other content)
-4. **DIVERGENT: Generate** — open ideation, quantity over quality, no filtering
-5. **CONVERGENT: Evaluate & challenge** — narrow down, devil's advocate, stress-test assumptions; propose 2-3 approaches with trade-offs
-6. **Synthesize** — summarize insights, confirm with user
-7. **Wrap up** — ask what to do with results (only at the end)
+## Before diving in
 
-## The Process
+**Should we even brainstorm?** Don't skip examination just because a topic looks simple — "obvious" ideas hide assumptions worth surfacing, and a brainstorm can be short. But brainstorming is a tool, not a ritual: if the answer is genuinely known, the task is purely mechanical, or it's time-critical, say so and skip the ceremony. Match depth to the task.
 
-### Understanding the topic
+**Scope check.** If the topic spans multiple independent areas (e.g., "build a platform with chat, file storage, billing, and analytics"), flag it immediately — don't refine details of something that needs decomposing first. Help the user name the independent pieces, how they relate, and what order to tackle them; then brainstorm the first piece through the normal flow.
 
-- Check relevant context first — files, docs, conversation history, existing patterns — but only if applicable. Not all brainstorms are about code.
-- **Scope check before diving in**: if the topic spans multiple independent areas (e.g., "build a platform with chat, file storage, billing, and analytics"), flag it immediately. Don't spend questions refining details of a project that needs decomposing first. Help the user identify the independent pieces, how they relate, and what order to tackle them — then brainstorm the first piece through the normal flow.
-- Ask questions one at a time to understand what the user is working on
-- Prefer multiple choice questions when possible
-- Focus on: what problem are we really solving, what constraints exist, what does success look like
+## Infer the mode, name it, start producing
 
-### Divergent thinking (GENERATE)
+Do **not** open with an interview. Read what the user brought, **name the mode you're treating it as in one line, then start producing** — and leave the door open to switch:
 
-Goal is breadth and variety, not quality. Rules:
+> "Reading this as *generate-from-scratch* — I'll go wide first, no filtering yet. (Say so if you'd rather pressure-test an idea or decide between options.)"
 
-- Generate freely — no filtering, no judgment during this phase
-- Encourage wild ideas: "What if we did the opposite?", "What would the most extreme version look like?"
-- Cover multiple directions, not just the obvious ones
-- Use brainstorming techniques when the conversation stalls or a technique fits naturally (see Techniques)
-- Ask one question per message to keep the user engaged
-- Keep generating until the user signals they have enough on the table
+Infer the mode from how the user frames the request. Ask only when it's genuinely ambiguous.
 
-### Convergent thinking (EVALUATE & CHALLENGE)
+| Mode | Triggered by | What you do | Guard against |
+|---|---|---|---|
+| **Frame** | "not sure what the real problem is", vague or broad | Explore, then sharpen, the *problem*: "How might we…" reframes, ladder up ("why does this matter?") and down ("what specifically?"), decompose. **Don't solve yet.** | jumping to solutions before the problem is clear |
+| **Generate** | "ideas for…", blank page, "what could we…", "name / tagline for…" | Adaptive open — *brought a seed*: expand theirs first; *blank page*: lead with a wide, hedged set. Then push past the obvious: "what if…", "what else?", analogy, other personas, constraints. | the obvious five / everything sounding the same |
+| **Solve** | "X is broken / slow / failing", "we keep hitting…" | **Find the root cause first** — ask "why?" down to it — *then* generate fixes: reverse-brainstorm, first-principles, drop the binding constraint. | fixing the symptom instead of the cause |
+| **Sharpen** | "poke holes in this", "talk me out of it", "which of these?", "help me decide" | Adviser stance: lead with the strongest objection, devil's-advocate by severity, pre-mortem, audit the load-bearing assumptions. To choose: surface criteria first → trade-offs → steel-man each option. | sycophancy; and when deciding, don't generate *more* options |
 
-Goal is depth and clarity. Rules:
+The technique menu for each mode — and when to reach for one — lives in `skills/brainstorm/techniques.md`. Load it when a mode's default isn't moving or the conversation stalls. Don't force techniques; reach for one when you need it.
 
-- Narrow to the most promising ideas and examine them closely
-- Propose 2-3 approaches with trade-offs and your recommendation
-- Lead with your recommended option and explain why
-- **Play devil's advocate**: actively challenge the top ideas, find weaknesses
-- Stress-test assumptions: "What breaks if X?", "What are we assuming that might not be true?", "Who would disagree with this and why?"
-- Present trade-offs honestly — do not soft-pedal weaknesses
-- Scale depth to complexity: a few sentences for simple topics, detailed analysis for nuanced ones
+## Pivots are normal
 
-### Design for isolation and clarity (software brainstorms only)
+A real brainstorm walks between modes — usually **Frame → Generate → Sharpen**, with Solve dropping in when something's stuck. Re-read the mode whenever the user's framing shifts, and name the shift when you make it. Don't lock to the mode you opened in.
 
-When the brainstorm is shaping a piece of software, propose units that can each answer three questions: *what does it do, how do you use it, what does it depend on*. If a unit can't answer all three without referring to its internals, the boundary is wrong — narrow it before moving on. Smaller, well-bounded units are easier to reason about, edit reliably, and test independently.
+Two things stay out of scope here — hand them off rather than doing them in the brainstorm:
 
-### Working in existing codebases
+- **Planning / sequencing an implementation** → `/myspec:feature-plan`
+- **Queuing an idea for later** → `/myspec:idea-intake` (triage) or `/myspec:idea-process` (turn into a spec)
 
-- Explore the current structure before proposing changes. Follow existing patterns.
-- Where existing code has problems that affect the work (e.g., a file that's grown too large, unclear boundaries), include targeted improvements as part of the design — the way a good developer improves code they're working in.
-- Don't propose unrelated refactoring. Stay focused on what serves the current goal.
+## Software brainstorms
 
-## Brainstorming Techniques
-
-Deploy these when the conversation stalls or a technique naturally fits. Do not force them.
-
-| Technique | When to use | How |
-|-----------|-------------|-----|
-| **Reverse brainstorming** | Stuck on how to achieve X | Ask "How would we guarantee failure?" then invert the answers |
-| **SCAMPER** | Improving an existing concept | Substitute, Combine, Adapt, Modify, Put to other use, Eliminate, Reverse |
-| **Six Thinking Hats** | Need structured multi-angle view | Facts (white), Emotions (red), Caution (black), Benefits (yellow), Creativity (green), Process (blue) — one at a time |
-| **First principles** | Assumptions feel constraining | Strip to fundamentals, rebuild from scratch without inherited constraints |
-| **Constraint removal** | Idea seems blocked | "If [constraint] didn't exist, what would you do?" |
-| **Analogy transfer** | Fresh perspective needed | "What domain has solved a similar problem? How did they approach it?" |
+When shaping software, design units that each answer *what does it do / how do you use it / what does it depend on*, and follow the existing patterns in the codebase. Fuller guidance — designing for isolation, and working inside an existing codebase — is in `skills/brainstorm/techniques.md`.
 
 ## Wrap Up
 
@@ -111,13 +98,11 @@ Fix issues inline. Do not loop with a subagent — a single pass is enough.
 
 ## Key Principles
 
-- **One question at a time** — do not overwhelm with multiple questions
-- **Multiple choice preferred** — easier to answer than open-ended when possible (use `AskUserQuestion` for batched options)
-- **Challenge, don't just validate** — devil's advocate is part of the job
-- **YAGNI ruthlessly** — challenge scope creep during convergent phase
-- **Explore alternatives** — always propose 2-3 approaches before settling
-- **Incremental validation** — confirm understanding before moving on
-- **The conversation is the product** — output artifacts are optional, not the goal
+- **Don't interview — produce.** Lead with ideas and provocations; ask sparingly, one question at a time, multiple-choice where possible (`AskUserQuestion`).
+- **Name the mode, allow the pivot** — the user should always know which mode they're in and be able to switch.
+- **YAGNI ruthlessly** — challenge scope creep when sharpening.
+- **Always offer alternatives** — propose 2-3 approaches with honest trade-offs, recommendation first, before settling.
+- **Confirm before moving on**, and remember **the conversation is the product** — artifacts are optional.
 
 ## Visual Companion
 
@@ -138,12 +123,13 @@ If they agree to the companion, read the detailed guide before proceeding:
 
 ## Verification Checklist
 
-- [ ] Did NOT ask about output destination at the beginning
-- [ ] Explored context before jumping to ideas
+- [ ] Named the mode instead of opening with an interview
+- [ ] Did NOT ask about output destination until the end
+- [ ] Generated across distinct angles, framed as provocations — did not anchor on the first idea
+- [ ] Pulled in the user's own thinking, not just had them react
+- [ ] Led with the disagreement when sharpening — challenged, did not just validate
+- [ ] Protected divergence before narrowing, and named the shift to converging
+- [ ] Framed the problem before solutioning (Frame) / found root cause before fixes (Solve)
 - [ ] Checked scope — flagged multi-area topics before diving in
-- [ ] Asked questions one at a time
-- [ ] Divergent phase generated multiple ideas without premature filtering
-- [ ] Convergent phase included explicit challenge / devil's advocate
-- [ ] Presented 2-3 approaches with trade-offs for key decisions
-- [ ] Synthesis captured key insights and open questions
-- [ ] Asked user what to do with results only at the end
+- [ ] Offered 2-3 approaches with trade-offs for key decisions
+- [ ] Asked what to do with results only at the end
