@@ -257,8 +257,21 @@ After all phases in a milestone complete (skip this step only for the final mile
 ### Step 5: Completion
 
 1. Run Final Verification section from the plan.
-2. Dispatch holistic reviewer (`./holistic-reviewer-prompt.md`) for full diff `BASE_SHA..HEAD`.
-3. Hand off to `/myspec:feature-complete`.
+2. Dispatch holistic reviewer (`./holistic-reviewer-prompt.md`) for full diff `BASE_SHA..HEAD`. This is the quick in-flight gate; the deeper independent conformance audit lives in `/myspec:feature-implement-review`.
+3. **Ask the user what to do next** via `AskUserQuestion` — do not auto-hand-off:
+
+```
+question: "Implementation complete. What next?"
+header:   "Next step"
+options:
+  - "feature-implement-review" → independent audit that the code fulfills the spec and
+                                  plan (traceability + behavioral), persists a report
+                                  (Recommended for anything non-trivial)
+  - "feature-complete"          → skip the deep review; sync docs, archive plan, merge
+  - "Stop here"                 → leave the branch as-is; continue later
+```
+
+Execute the choice: invoke `/myspec:feature-implement-review`, `/myspec:feature-complete`, or stop and report the branch name.
 
 **Orchestrator mode interaction:** Step 5 runs identically in both modes. Per-milestone SpecReview + QualityReview are scoped to one milestone's diff; the holistic reviewer covers the whole feature. They do not overlap and orchestrator mode does NOT skip Step 5. No `briefs/` directory is created — Workers receive task text inline.
 
@@ -309,4 +322,4 @@ After all phases complete:
 ## Integration
 
 **Called by:** `/myspec:feature-plan` (after plan approval)
-**Next:** `/myspec:feature-complete` — update docs after implementation is complete
+**Next:** `/myspec:feature-implement-review` (independent conformance audit) or `/myspec:feature-complete` — chosen by the user in Step 5
