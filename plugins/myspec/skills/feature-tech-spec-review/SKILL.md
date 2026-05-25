@@ -1,6 +1,6 @@
 ---
 name: feature-tech-spec-review
-description: "Use when reviewing tech-spec.md for implementability, spec alignment, and pattern conformance. Keywords: review tech-spec, validate technical design, check implementation plan, critique tech-spec, tech-spec analysis, technical review. Checks spec alignment, feasibility, completeness, pattern conformance, step granularity, dependency ordering, testability, YAGNI, and scope. Do NOT use for spec.md review (use feature-spec-review), implementation review, or code review."
+description: "Use when reviewing tech-spec.md for implementability, spec alignment, and pattern conformance. Keywords: review tech-spec, validate technical design, check implementation plan, critique tech-spec, tech-spec analysis, technical review. Checks spec alignment, feasibility, completeness, pattern conformance, step granularity, dependency ordering, testability, task extractability, YAGNI, and scope. Do NOT use for spec.md review (use feature-spec-review), implementation review, or code review."
 tags: [feature-workflow, tech-spec, validation, critical-thinking, review]
 ---
 
@@ -29,7 +29,7 @@ tags: [feature-workflow, tech-spec, validation, critical-thinking, review]
    - Validate frontmatter has `title`, `status`, `based_on_spec_version`, `created`, `last_updated`
    - Verify `based_on_spec_version` matches current `spec_version` in spec.md
 
-3. **Apply Review Dimensions** (Check tech-spec.md against all 9 dimensions below)
+3. **Apply Review Dimensions** (Check tech-spec.md against all 10 dimensions below)
    - Spec Alignment: Every spec.md requirement has an implementation path; no orphan tech-spec items without spec backing
    - Feasibility: Implementation steps achievable with the project's tech stack (from `.myspec.json` or CLAUDE.md)
    - Completeness: Missing sections, empty checklists, no file inventory, no edge cases, TBD/TODO present
@@ -37,6 +37,7 @@ tags: [feature-workflow, tech-spec, validation, critical-thinking, review]
    - Step Granularity: Steps not too coarse (multi-day, multi-concern) or too fine (single-line changes)
    - Dependency Ordering: Steps in logical order; dependencies created before consumers
    - Testability: Each step verifiable, test files present in file inventory
+   - Task-extractability: Each step concrete enough that `feature-plan` can extract a task block without interpretation; vague steps are gap predictors (see Task-Extractability section)
    - YAGNI / Over-Engineering: No unnecessary abstractions, premature optimization, "future-proof" scope
    - Scope / Size Assessment: Judgment-based split detection (see Scope Assessment section)
 
@@ -86,6 +87,7 @@ tags: [feature-workflow, tech-spec, validation, critical-thinking, review]
 | **Step Granularity** | Steps joining unrelated work with "and", single-line steps | Each step = single responsibility, ~1–4 hours |
 | **Dependency Ordering** | Step N references types/files from Step N+M | Steps ordered so dependencies created before consumers |
 | **Testability** | Steps without test files in inventory, no test strategy | Each step has verifiable output, test file in inventory |
+| **Task-extractability** | Steps phrased as outcomes/intents ("handle errors", "add validation") with no named files, contracts, or concrete behavior | Each step is concrete enough to become a plan task without interpretation (see Task-Extractability section) |
 | **YAGNI** | `future`, `extensible`, `scalable`, `flexible`, generic abstractions | No unused abstractions, no premature optimization |
 | **Scope / Size** | Multiple independent capabilities, unrelated domains mixed | See Scope Assessment section |
 
@@ -106,6 +108,25 @@ When splitting is recommended:
 - Propose concrete sub-feature boundaries with names
 - Reference `/myspec:feature-decompose` skill for execution
 - Flag as High severity (tech-spec is valid but should be restructured)
+
+## Task-Extractability
+
+This dimension catches the spec→plan translation gap: `feature-plan` turns each implementation step into a task block that a worker executes **verbatim, without reading the tech-spec**. Any requirement a step leaves implicit becomes invisible downstream. The reviewer's job here is to make sure each step carries enough concrete detail that a plan task can be extracted from it without interpretation.
+
+This is **judgment-based**, not a keyword count. A step is a gap predictor when a competent plan author would have to *guess* to turn it into a task. Signals:
+
+| Signal | Indicates Gap Predictor |
+|--------|-------------------------|
+| Step states an outcome but not the mechanism ("handle errors", "add validation", "wire up the API") | Yes |
+| Step names no file, function, endpoint, or data shape it touches | Likely |
+| Step references a spec AC by intent but not the observable behavior that satisfies it ("fail gracefully") | Yes |
+| Step defers detail to "as appropriate" / "if needed" / "etc." | Yes |
+| Step is concrete on the happy path but silent on the error/edge behavior the spec requires | Likely |
+
+When flagging:
+- **Medium severity** by default — the tech-spec is valid but will leak a requirement at plan time.
+- Quote the vague step and name the missing concretion (which file, which behavior, which contract), so the author can tighten it before `feature-plan` runs.
+- Stay **medium-agnostic**: do not prescribe a language, framework, or test tool — "concrete" means the *what and where* are pinned down, not that any particular stack is named.
 
 ## Fix Policy
 
@@ -225,7 +246,8 @@ When splitting is recommended:
 
 After running the skill:
 
-- [ ] All 9 review dimensions checked against tech-spec.md
+- [ ] All 10 review dimensions checked against tech-spec.md
+- [ ] Each implementation step is task-extractable (concrete enough for a plan task without interpretation)
 - [ ] Reuse-audit gate applied: section present, >= 1 row, valid Decision/Reason (or `reuseAudit.enabled: false`)
 - [ ] `based_on_spec_version` matches spec.md `spec_version`
 - [ ] Every spec.md requirement has an implementation path in tech-spec
@@ -251,7 +273,7 @@ User: /tech-spec-review tags
 **Expected behavior**:
 1. Load ${aiDir}/features/tags/tech-spec.md, spec.md, dependencies.md, and index.yaml
 2. Load backend.md, frontend.md, database.md for pattern reference
-3. Check all 9 dimensions against tech-spec.md
+3. Check all 10 dimensions against tech-spec.md
 4. Cross-validate spec alignment (requirements → steps, ACs → file inventory)
 5. Validate pattern conformance against codebase conventions
 6. Present findings table with severity, dimension, file, line numbers
