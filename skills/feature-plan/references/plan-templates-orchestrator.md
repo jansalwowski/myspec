@@ -69,10 +69,11 @@ Same checkbox semantics as normal mode:
 | 3 | Task 3: [Tests] | sequential | Phase 2 |
 
 **Chain:**
-- Workers — tier `${roles.worker}` — one per task, parallel where Mode allows. Receive full inline task text.
+- Workers — tier `${roles.worker}` — one per task, parallel where Mode allows. Receive full inline task text. Writes only — no shell, no git.
 - SpecReviewer — tier `${roles.spec_reviewer}` — gates QualityReviewer. Verdicts: `PASS`, `FAIL-SPEC`, `ESCALATE`.
-- QualityReviewer — tier `${roles.quality_reviewer}` — gates Checkpoint. Verdicts: `PASS`, `FAIL-QUALITY`.
-- Checkpoint — controller runs verification, prompts unless `orchestrator-auto`.
+- QualityReviewer — tier `${roles.quality_reviewer}` — runs verification commands (test, lint, type-check) and gates Commit. Verdicts: `PASS`, `FAIL-QUALITY`.
+- Commit — controller stages the Worker's reported file list and commits with the message from the task block. One commit per task, after both reviewers pass.
+- Checkpoint — controller runs milestone-level verification, prompts unless `orchestrator-auto`.
 
 **Notes for controller:**
 - Retry cap: 3 per failure kind per milestone (`FAIL-SPEC`, `FAIL-QUALITY`).
@@ -86,9 +87,35 @@ Phase numbers stay globally unique across milestones. Cross-milestone dependenci
 
 ## Task Details
 
-Structurally identical to normal-mode plan template — keep the same Files / Depends on / TDD steps / Run commands / Commit message shape so a feature can flip between modes without rewriting tasks. See `plan-templates.md` for the per-task block.
+Structurally similar to normal-mode plan template (same Files / Depends on / Spec contract / Touch only shape so a feature can flip between modes without rewriting tasks). See `plan-templates.md` for the per-task block shape.
 
-The only orchestrator-specific additions per milestone are the **Chain** and **Notes for controller** blocks above.
+**Orchestrator-specific step ownership.** In orchestrator mode each step inside a task block is owned by exactly one chain role. The Worker has no shell — it cannot run tests, lint, or git. The plan must reflect that. Annotate every step with its owner:
+
+```markdown
+- [ ] **Step 1 (Worker): Write the failing test**
+  [test code]
+
+- [ ] **Step 2 (Reviewer): Run test — expect FAIL**
+  Test command from `.claude/verification.json` (`test` check)
+
+- [ ] **Step 3 (Worker): Implement**
+  [implementation code]
+
+- [ ] **Step 4 (Reviewer): Run test — expect PASS**
+  Same test command. Reviewer folds non-zero exits into FAIL-QUALITY bullets.
+
+- [ ] **Step 5 (Controller): Commit**
+  `git commit -m "feat({feature}): add component-name"`
+```
+
+Rules:
+- Only `Worker` steps may write files. Only `Reviewer` steps may run verification commands. Only `Controller` steps may run git mutations. No step mixes roles.
+- The Worker dispatch envelope strips `Reviewer` and `Controller` steps from `{{TASK_TEXT}}` before substitution — they exist in the plan so the human reviewer sees the full picture, not so the Worker reads them.
+- Single `Commit` step per task, always last, always Controller-owned, always exact `git commit -m "..."`.
+
+The orchestrator-specific additions per milestone are:
+- The **Chain** and **Notes for controller** blocks above (milestone level).
+- The `(Worker|Reviewer|Controller)` owner annotation on every task step.
 
 ## Mode interaction with Step 5
 

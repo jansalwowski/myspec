@@ -101,6 +101,9 @@ For every task whose Files block contains a `Modify:` entry, populate the `**Tou
 **Per-task tier override (orchestrator mode only, OPTIONAL):**
 If a task is materially heavier than the rest of the milestone (complex AST work, multi-system integration), add `**Tier override:** worker=mid` (or `premium`) with a one-line reason. See [`references/plan-templates-orchestrator.md`](references/plan-templates-orchestrator.md) "Per-task tier override". Use sparingly — if > 30% of tasks need an override, raise the global `roles.worker` instead.
 
+**Step ownership annotation (orchestrator mode only, REQUIRED):**
+In orchestrator mode every step inside a task block must be annotated with its chain role: `**Step N (Worker): …**`, `**Step N (Reviewer): …**`, or `**Step N (Controller): …**`. The Worker has no shell — it cannot run tests, lint, or git. Without owner annotation the dispatcher cannot strip non-Worker steps from the Worker envelope, and Worker subagents end up trying to run shell commands they cannot run. Only `Worker` steps may write files. Only `Reviewer` steps may run verification commands. Only `Controller` steps may run `git commit`. See [`references/plan-templates-orchestrator.md`](references/plan-templates-orchestrator.md) "Orchestrator-specific step ownership".
+
 ### Step 4: Review Loop (large plans only)
 
 For plans with **10+ tasks or 3+ milestones**, review in chunks before finalizing:
@@ -273,6 +276,7 @@ Before presenting the plan:
 - [ ] Every task has a populated **Spec contract** block with verbatim quotes (not paraphrased) from spec.md / tech-spec.md
 - [ ] Every task whose Files contain `Modify:` has a populated **Touch only** line
 - [ ] (Orchestrator mode) Tier overrides — if any — list a one-line reason; total override count is ≤ ~30% of tasks
+- [ ] (Orchestrator mode) Every task step is annotated with its owner: `Worker`, `Reviewer`, or `Controller`. No step mixes roles. Every task ends with exactly one `Controller` commit step.
 - [ ] Tasks reference tech-spec interfaces (not duplicated inline unless needed for subagent context)
 - [ ] Within each milestone, lower-level layers (data, services) precede higher-level layers (UI, presentation) per project conventions
 - [ ] Phase numbers are globally unique across all milestones
