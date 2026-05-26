@@ -125,7 +125,7 @@ across roles is more surface for cascading errors. Use only for plans you have
 already reviewed.
 ```
 
-Record the user's choice. Only after the choice is captured, **REQUIRED:** read `references/orchestrator-dispatcher.md` for the 4-step chain (Worker(s) → SpecReview → QualityReview → Checkpoint), loop caps, and the verdict-append retry protocol. Steps 2, 4b, and 5 below still apply unchanged; orchestrator mode replaces Step 4 (Phase Review) with the per-milestone chain.
+Record the user's choice. Only after the choice is captured, **REQUIRED:** read `references/orchestrator-dispatcher.md` for the 5-step chain (Worker(s) → SpecReview → QualityReview → Commit → Checkpoint), loop caps, and the verdict-append retry protocol. Steps 2, 4b, and 5 below still apply unchanged; orchestrator mode replaces Step 4 (Phase Review) with the per-milestone chain.
 
 #### HARD CONSTRAINT — controller MUST NOT execute tasks directly (orchestrator + orchestrator-auto)
 

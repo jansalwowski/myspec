@@ -32,31 +32,27 @@ All gates pass → proceed to Workflow Step 0.
 
 ### Step 0: Choose Plan Mode (BLOCKING)
 
-Ask the user which dispatch model the plan should target. The choice drives template selection in Step 5 and front-matter shape.
-
-Call `AskUserQuestion`:
+Drives template selection in Step 5 and front-matter shape. Call `AskUserQuestion`:
 
 ```
 question: "Plan mode?"
 header:   "Plan mode"
 options:
   - "normal"        → single-executor implementer per task (default)
-  - "orchestrator"  → per-milestone Worker / SpecReview / QualityReview chain (no Planner — tasks already atomic)
+  - "orchestrator"  → per-milestone Worker / SpecReview / QualityReview chain
 ```
 
-Show the recommendation as `normal` unless the feature involves work where role separation pays off (large multi-task milestones, mixed model-tier optimization). Always show this disclaimer with the orchestrator option:
+Recommend `normal` unless the feature has large multi-task milestones or benefits from mixed model-tier optimization. Show this disclaimer with the orchestrator option:
 
 ```
-Orchestrator mode gives agents more autonomy across roles. It can recover from
+Orchestrator mode gives agents more autonomy across roles. Recovers from
 spec-fail and quality-fail loops without you, but chained autonomy = more
 surface for cascading errors. Review milestone checkpoints carefully.
 ```
 
-Selection determines:
+Selection:
 - `normal` → **REQUIRED:** Read `references/plan-templates.md` before generating the plan.
-- `orchestrator` → **REQUIRED:** Read `references/plan-templates-orchestrator.md` before generating front-matter or any milestone block. Plan front-matter must include `orchestration: agent-chain` and a `roles:` block. Tier values are exactly `cheap`, `mid`, `premium` — never `fast`, `reasoning`, `pro`, or concrete model names.
-
-No CLI flag. No model names anywhere in plan text — tier vocabulary only.
+- `orchestrator` → **REQUIRED:** Read `references/plan-templates-orchestrator.md`. Front-matter must include `orchestration: agent-chain` and a `roles:` block. Tier values: `cheap`, `mid`, `premium` only — no concrete model names anywhere in plan text.
 
 ### Step 1: Read Context
 
@@ -98,8 +94,50 @@ For every task, populate the `**Spec contract:**` block with verbatim quotes fro
 **Touch only (REQUIRED for tasks with `Modify:` files):**
 For every task whose Files block contains a `Modify:` entry, populate the `**Touch only:**` line specifying which lines/sections the task is allowed to alter. This pairs with the QualityReviewer's diff-scope rule — without it, reviewers flag adjacent pre-existing tech debt as regressions and Workers waste retries on out-of-scope fixes.
 
-**Per-task tier override (orchestrator mode only, OPTIONAL):**
-If a task is materially heavier than the rest of the milestone (complex AST work, multi-system integration), add `**Tier override:** worker=mid` (or `premium`) with a one-line reason. See [`references/plan-templates-orchestrator.md`](references/plan-templates-orchestrator.md) "Per-task tier override". Use sparingly — if > 30% of tasks need an override, raise the global `roles.worker` instead.
+**Orchestrator-mode additions (REQUIRED in orchestrator mode):**
+- **Step ownership annotation:** every step inside a task block carries its chain role — `**Step N (Worker|Reviewer|Controller): …**`. Worker has no shell; steps that run tests/lint/git must be Reviewer or Controller. Without annotation, the dispatcher cannot strip non-Worker steps from the Worker envelope. See [`references/plan-templates-orchestrator.md`](references/plan-templates-orchestrator.md) "Task Details".
+- **Per-task tier override (OPTIONAL):** for tasks heavier than the milestone default (complex AST, multi-system integration), add `**Tier override:** worker=<tier>` with a one-line reason. Sparingly — > 30% of tasks needing override means bump `roles.worker` instead.
+
+### Step 3.5: Worker Context Budget Pass (orchestrator mode only)
+
+Skip in normal mode. Run after Step 3, before Step 4. Goal: keep each task within the cheap-tier Worker's effective context window so the implement session does not burn tokens on size estimation at dispatch time.
+
+Heuristic per task (no LLM call — pure `wc -l` + arithmetic):
+
+```
+est_tokens =
+    3000                                       # fixed overhead (agent + envelope + tool calls)
+  + (loc(task_text) + loc(Modify files) + loc(Create inline code)) * 10
+                                                # 10 tokens/LoC — conservative upper bound
+                                                # for mixed code+prose (TS source typically
+                                                # 6-10 tok/LoC; padded for safety)
+```
+
+One ratio uniformly across task text and file content. Earlier drafts used two ratios (1.3 prose vs 12 code) — the 12× gap was undocumented and the prose ratio was too low for inline code blocks. Single 10-tok/LoC factor is conservative everywhere and easy to tune.
+
+Per-task caps (full table in `references/plan-templates-orchestrator.md` "Worker context budget"):
+
+| Tier | Files | LoC modify | LoC create | est_tokens |
+|------|-------|------------|------------|------------|
+| cheap | 7 | 2200 | 1200 | 35k |
+| mid | 12 | 6000 | 3000 | 80k |
+
+For each task in the plan:
+
+1. Parse Files block → count files; classify Create vs Modify.
+2. For each Modify file → `wc -l <path>`.
+3. For each Create file → count LoC in the task block's inline code fences for that file.
+4. Compute `est_tokens` per the formula above.
+5. Resolve target tier (task `Tier override:` if set, else `roles.worker`).
+6. Compare to that tier's caps.
+
+If any cap exceeded:
+- **Preferred:** split the task. Identify a natural seam (one file, one Files-block subset, one TDD cycle) and emit two subtasks. Renumber. Update Execution Order table.
+- **Fallback (genuinely indivisible task):** add `**Tier override:** worker=mid` with reason `(est Xk tokens > cheap cap)`. If `est_tokens` > 80k even at mid, splitting is mandatory.
+
+Surface the math in the plan's task block as a one-line comment after the Files block: `<!-- budget: est 28k tokens, 5 files, 1800 LoC modify, 600 LoC create -->`. Lets the user audit. Stripped by the Worker dispatch envelope before substitution.
+
+This pass is silent on normal mode. Normal-mode plans do not carry the comment and do not enforce caps.
 
 ### Step 4: Review Loop (large plans only)
 
@@ -273,6 +311,8 @@ Before presenting the plan:
 - [ ] Every task has a populated **Spec contract** block with verbatim quotes (not paraphrased) from spec.md / tech-spec.md
 - [ ] Every task whose Files contain `Modify:` has a populated **Touch only** line
 - [ ] (Orchestrator mode) Tier overrides — if any — list a one-line reason; total override count is ≤ ~30% of tasks
+- [ ] (Orchestrator mode) Every task step is annotated with its owner: `Worker`, `Reviewer`, or `Controller`. No step mixes roles. Every task ends with exactly one `Controller` commit step.
+- [ ] (Orchestrator mode) Step 3.5 ran: every task has an estimated-budget comment and respects its tier's caps (cheap ≤ 35k est_tokens / 7 files / 2200 LoC modify). Oversized tasks were split or carry a `Tier override:`.
 - [ ] Tasks reference tech-spec interfaces (not duplicated inline unless needed for subagent context)
 - [ ] Within each milestone, lower-level layers (data, services) precede higher-level layers (UI, presentation) per project conventions
 - [ ] Phase numbers are globally unique across all milestones
