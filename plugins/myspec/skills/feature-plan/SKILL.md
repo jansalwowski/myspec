@@ -32,31 +32,27 @@ All gates pass → proceed to Workflow Step 0.
 
 ### Step 0: Choose Plan Mode (BLOCKING)
 
-Ask the user which dispatch model the plan should target. The choice drives template selection in Step 5 and front-matter shape.
-
-Call `AskUserQuestion`:
+Drives template selection in Step 5 and front-matter shape. Call `AskUserQuestion`:
 
 ```
 question: "Plan mode?"
 header:   "Plan mode"
 options:
   - "normal"        → single-executor implementer per task (default)
-  - "orchestrator"  → per-milestone Worker / SpecReview / QualityReview chain (no Planner — tasks already atomic)
+  - "orchestrator"  → per-milestone Worker / SpecReview / QualityReview chain
 ```
 
-Show the recommendation as `normal` unless the feature involves work where role separation pays off (large multi-task milestones, mixed model-tier optimization). Always show this disclaimer with the orchestrator option:
+Recommend `normal` unless the feature has large multi-task milestones or benefits from mixed model-tier optimization. Show this disclaimer with the orchestrator option:
 
 ```
-Orchestrator mode gives agents more autonomy across roles. It can recover from
+Orchestrator mode gives agents more autonomy across roles. Recovers from
 spec-fail and quality-fail loops without you, but chained autonomy = more
 surface for cascading errors. Review milestone checkpoints carefully.
 ```
 
-Selection determines:
+Selection:
 - `normal` → **REQUIRED:** Read `references/plan-templates.md` before generating the plan.
-- `orchestrator` → **REQUIRED:** Read `references/plan-templates-orchestrator.md` before generating front-matter or any milestone block. Plan front-matter must include `orchestration: agent-chain` and a `roles:` block. Tier values are exactly `cheap`, `mid`, `premium` — never `fast`, `reasoning`, `pro`, or concrete model names.
-
-No CLI flag. No model names anywhere in plan text — tier vocabulary only.
+- `orchestrator` → **REQUIRED:** Read `references/plan-templates-orchestrator.md`. Front-matter must include `orchestration: agent-chain` and a `roles:` block. Tier values: `cheap`, `mid`, `premium` only — no concrete model names anywhere in plan text.
 
 ### Step 1: Read Context
 
@@ -98,11 +94,9 @@ For every task, populate the `**Spec contract:**` block with verbatim quotes fro
 **Touch only (REQUIRED for tasks with `Modify:` files):**
 For every task whose Files block contains a `Modify:` entry, populate the `**Touch only:**` line specifying which lines/sections the task is allowed to alter. This pairs with the QualityReviewer's diff-scope rule — without it, reviewers flag adjacent pre-existing tech debt as regressions and Workers waste retries on out-of-scope fixes.
 
-**Per-task tier override (orchestrator mode only, OPTIONAL):**
-If a task is materially heavier than the rest of the milestone (complex AST work, multi-system integration), add `**Tier override:** worker=mid` (or `premium`) with a one-line reason. See [`references/plan-templates-orchestrator.md`](references/plan-templates-orchestrator.md) "Per-task tier override". Use sparingly — if > 30% of tasks need an override, raise the global `roles.worker` instead.
-
-**Step ownership annotation (orchestrator mode only, REQUIRED):**
-In orchestrator mode every step inside a task block must be annotated with its chain role: `**Step N (Worker): …**`, `**Step N (Reviewer): …**`, or `**Step N (Controller): …**`. The Worker has no shell — it cannot run tests, lint, or git. Without owner annotation the dispatcher cannot strip non-Worker steps from the Worker envelope, and Worker subagents end up trying to run shell commands they cannot run. Only `Worker` steps may write files. Only `Reviewer` steps may run verification commands. Only `Controller` steps may run `git commit`. See [`references/plan-templates-orchestrator.md`](references/plan-templates-orchestrator.md) "Orchestrator-specific step ownership".
+**Orchestrator-mode additions (REQUIRED in orchestrator mode):**
+- **Step ownership annotation:** every step inside a task block carries its chain role — `**Step N (Worker|Reviewer|Controller): …**`. Worker has no shell; steps that run tests/lint/git must be Reviewer or Controller. Without annotation, the dispatcher cannot strip non-Worker steps from the Worker envelope. See [`references/plan-templates-orchestrator.md`](references/plan-templates-orchestrator.md) "Task Details".
+- **Per-task tier override (OPTIONAL):** for tasks heavier than the milestone default (complex AST, multi-system integration), add `**Tier override:** worker=<tier>` with a one-line reason. Sparingly — > 30% of tasks needing override means bump `roles.worker` instead.
 
 ### Step 4: Review Loop (large plans only)
 
