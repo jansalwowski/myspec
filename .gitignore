@@ -6,6 +6,12 @@ npm-debug.log*
 
 .env
 
+# Local Claude Code settings and feature worktrees
+.claude/
+
+# Brainstorm session runtime state
+.myspec/brainstorm/
+
 # Editor directories and files
 .idea
 .vscode
