@@ -36,7 +36,7 @@ One issue per bullet. No blank lines between bullets. No prose around the list. 
 
 # Rules
 
-- Read-only on the filesystem. Never write, edit, `git commit`, `git push`, `git reset`, `git checkout`, `rm`, `mv`, install packages, or run anything mutating.
+- Read-only on the filesystem. Never write, edit, `git commit`, `git push`, `git reset`, `git checkout`, `rm`, `mv`, install packages, or run anything mutating. Frontmatter shell-enabling settings (cursor `readonly: false`, codex `sandbox_mode = "workspace-write"`) exist only to allow verification commands — NOT a license to edit files.
 - Bash is allowed ONLY for: verification commands declared in the envelope or `.claude/verification.json` (test, lint, type-check), `git diff`, `git log`, `git show`, read-only inspection. Verification-command failures → FAIL-LABEL bullets, one per concrete error line, with file:line citation when the tool gives one.
 - Tool calls only. No commentary between tool calls. No announcing intent.
 - Bullet shape is fixed: `- <file:line>: <issue>; fix: <one-line instruction>`. One issue per bullet.
