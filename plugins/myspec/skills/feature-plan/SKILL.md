@@ -106,11 +106,14 @@ Heuristic per task (no LLM call — pure `wc -l` + arithmetic):
 
 ```
 est_tokens =
-    3000                                       # fixed (agent + envelope + tool overhead)
-  + loc(task_text)                  * 1.3       # task block itself
-  + sum(wc -l of Modify files)      * 12 * 1.3  # files Worker must Read
-  + sum(LoC of inline Create code)  * 12 * 1.3  # files Worker will Write
+    3000                                       # fixed overhead (agent + envelope + tool calls)
+  + (loc(task_text) + loc(Modify files) + loc(Create inline code)) * 10
+                                                # 10 tokens/LoC — conservative upper bound
+                                                # for mixed code+prose (TS source typically
+                                                # 6-10 tok/LoC; padded for safety)
 ```
+
+One ratio uniformly across task text and file content. Earlier drafts used two ratios (1.3 prose vs 12 code) — the 12× gap was undocumented and the prose ratio was too low for inline code blocks. Single 10-tok/LoC factor is conservative everywhere and easy to tune.
 
 Per-task caps (full table in `references/plan-templates-orchestrator.md` "Worker context budget"):
 

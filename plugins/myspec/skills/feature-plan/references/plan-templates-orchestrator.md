@@ -58,10 +58,10 @@ When a task exceeds cheap caps:
 Estimation heuristic (used by `feature-plan` Step 3.5 — see SKILL.md):
 ```
 est_tokens =
-    3000                                  # fixed overhead (agent + envelope + tool overhead)
-  + loc(task_text)             * 1.3      # token ratio (1 LoC ≈ 1.3 tokens for prose/code mix)
-  + sum(wc -l of Modify files) * 12 * 1.3 # file content reads
-  + sum(LoC of inline Create code blocks) * 12 * 1.3
+    3000                                  # fixed overhead (agent + envelope + tool calls)
+  + (loc(task_text) + loc(Modify files) + loc(Create inline code)) * 10
+                                          # 10 tokens/LoC conservative upper bound
+                                          # for mixed code+prose
 ```
 
 Above 35k → bump tier or split. Above 80k → split mandatory (no mid-tier rescue).
@@ -104,24 +104,34 @@ Each step inside a task block is owned by exactly one chain role. Worker has no 
 
 ```markdown
 - [ ] **Step 1 (Worker): Write the failing test**
+  Test must be crafted to fail on the current codebase (asserts behavior the
+  Step 2 implementation will add). Reviewer cannot observe a red gate — the
+  Worker writes test and impl in the same dispatch and the chain runs
+  verification only after — so this "failing on current code" property is
+  the plan-author's responsibility.
   [test code]
 
-- [ ] **Step 2 (Reviewer): Run test — expect FAIL**
-  Test command from `.claude/verification.json` (`test` check)
-
-- [ ] **Step 3 (Worker): Implement**
+- [ ] **Step 2 (Worker): Implement**
   [implementation code]
 
-- [ ] **Step 4 (Reviewer): Run test — expect PASS**
-  Same test command. Reviewer folds non-zero exits into FAIL-QUALITY bullets.
+- [ ] **Step 3 (Reviewer): Verification**
+  Single pass. Reviewer runs the test, lint, and type-check commands from
+  `.claude/verification.json`. Non-zero exits become FAIL-QUALITY bullets.
 
-- [ ] **Step 5 (Controller): Commit**
+- [ ] **Step 4 (Controller): Commit**
   `git commit -m "feat({feature}): add component-name"`
 ```
+
+Honesty note: the chain fires QualityReviewer once per task, AFTER the Worker
+finishes both test and impl. An "expect FAIL → expect PASS" red-then-green gate
+is NOT observed by the chain. If you need true observed-red TDD, split the task
+into two chain tasks (test-only → impl) — out of scope for current chain
+design; tracked as a future enhancement.
 
 Rules:
 - Worker steps write files. Reviewer steps run verification. Controller steps run git mutations. No step mixes roles.
 - Worker dispatch envelope strips Reviewer/Controller steps from `{{TASK_TEXT}}` — they exist for the human reviewing the plan, not the Worker.
+- Exactly one Reviewer verification step per task. Single dispatch covers test + lint + type-check.
 - Exactly one Commit step per task, always last, always Controller, always exact `git commit -m "..."`.
 - **Edit steps must inline both `old_string` and `new_string` verbatim** (full snippet, not "around line 42"). Goal: Worker performs the Edit without reading the file. For 5-line changes in a 500-LoC file this saves ~5k tokens of context per file. If the snippet is so large that inlining bloats the task text past its own cap, the task is too big — split.
 

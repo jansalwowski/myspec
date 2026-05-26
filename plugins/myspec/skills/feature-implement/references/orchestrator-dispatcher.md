@@ -24,6 +24,8 @@ Three roles, three responsibilities, no overlap:
 | Reviewer (SpecReviewer + QualityReviewer) | Read, Grep, Glob, run verification commands from plan / `.claude/verification.json`, `git diff`, `git log` | Edit files, commit, push, install, mutate state |
 | Controller | Dispatch + parse + commit + checkpoint | Edit task-scoped files, run task TDD commands directly |
 
+**Reviewer Bash = accepted residual risk.** The reviewer agent has `Bash` (claude) / `readonly: false` (cursor) / `sandbox_mode = "workspace-write"` (codex) so it can run verification commands. The "read-only on the filesystem" guarantee is prompt-enforced via the rule list — no harness offers per-command allowlist. A reviewer that violated the rules could mutate state. Accepted because (a) reviewers are tier `mid`+ and follow rules more reliably than cheap workers, (b) the alternative (no shell) means controller does verification and pollutes its context, (c) violations would be loud in `git status` post-dispatch. Treat as a known limit, not a hidden bug.
+
 Controller commits AFTER QualityReview returns `PASS`, using the Worker's reported file list and the commit message from the task block. No exceptions for "small" tasks. The chain's value (gates, retry loop) is unreviewable when the controller bypasses it.
 
 **Most common drift in prod:** Worker hits environment friction (no `node_modules`, no `.eslintcache`, base-ref mismatch). Controller rationalizes "I'll just do this one directly". The fix is ALWAYS to pre-stage in the controller's pre-dispatch step (see "Known limitation: subagent worktrees" below) and re-dispatch. If genuinely unworkable, surface via `AskUserQuestion` with `normal-fallback` as explicit option. Never silently switch lanes.
@@ -43,8 +45,9 @@ For each milestone (walked in declaration order). Per task: Worker → SpecRevie
 ### 1. Worker(s)
 - Dispatch one `worker-base` agent per task with the envelope from `references/role-prompts/worker-prompt.md`.
 - Worker toolset (enforced in agent file): `Read, Edit, MultiEdit, Write` only. Before substituting `{{TASK_TEXT}}`: strip `Reviewer` and `Controller` steps (verify, commit), and strip the `<!-- budget: … -->` audit comment if present (it is plan-author-facing only).
+- **Worker step annotation lint (pre-dispatch).** After step-stripping, controller greps the remaining Worker-annotated step bodies for shell tokens: `git `, `npm `, `yarn `, `pnpm `, `bash `, `sh `, `python `, `node `, `make `, `pytest`, `jest`. Any hit → fail-fast WITHOUT dispatching: `ERR plan-annotation: Worker step N contains shell token "<token>" — re-annotate as Reviewer or Controller`. This catches plan-author mis-annotation that would otherwise be a silent fail (Worker has no shell — would either ignore or hallucinate).
 - Tier resolution: `**Tier override:** worker=<tier>` in the task block → `roles.worker` in plan front-matter → built-in default `cheap`. First hit wins. Reviewer tiers are global. Controller resolves tier to concrete model and passes as per-call `model` parameter.
-- Parallel groups: dispatch all group tasks in one message with `isolation: "worktree"` (see `SKILL.md:147–153`). Each worktree carries Worker + both Reviewers + Commit to completion before next group starts.
+- Parallel groups: dispatch all group tasks in one message with `isolation: "worktree"` (see `feature-implement/SKILL.md` § "Step 1: Parse Plan → Execution DAG"). Each worktree carries Worker + both Reviewers + Commit to completion before next group starts.
 - Sequential tasks: one at a time. Reviewer runs in the same worktree as the Worker so it sees unstaged edits.
 - Output contract: `<result>OK <file-list></result>` (comma-separated paths) or `<result>ERR <reason></result>`. Controller records the file list for the Commit step.
 
@@ -68,7 +71,7 @@ For each milestone (walked in declaration order). Per task: Worker → SpecRevie
 - Runs only after that task's SpecReview PASS + QualityReview PASS.
 - Stage exactly the file list the Worker reported (no `git add -A`). If the list is empty or includes a path outside the task's declared Files block, fail the task with `ERR scope` and surface both lists for human inspection.
 - Commit message comes from the task block's `**Commit:**` line or `git commit -m "..."` literal. Controller does not invent a message.
-- Sequential tasks: commit on the feature branch in the controller's worktree. Parallel tasks: commit on each task's worktree; merge at the parallel-group barrier (see `SKILL.md:147–153`).
+- Sequential tasks: commit on the feature branch in the controller's worktree. Parallel tasks: commit on each task's worktree; merge at the parallel-group barrier (see `feature-implement/SKILL.md` § "Step 1: Parse Plan → Execution DAG").
 - Workers and Reviewers do not commit. No exceptions.
 
 ### 5. Checkpoint (controller, per milestone)

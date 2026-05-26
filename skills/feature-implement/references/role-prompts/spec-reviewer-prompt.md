@@ -1,8 +1,10 @@
 # Spec Reviewer Dispatch Envelope (Orchestrator Mode)
 
-Controller renders this envelope and dispatches `reviewer-base`. The agent definition owns the verdict-block contract and rules. This file owns the per-milestone inputs and gate logic.
+Controller renders this envelope and dispatches `reviewer-base`. The agent definition owns the verdict-block contract and rules. This file owns the per-task inputs and gate logic.
 
-Dispatched after all Workers in a milestone report `OK`. Verdict gates QualityReviewer. Substitution + dispatch invocation discipline lives in `orchestrator-dispatcher.md` → "Dispatch envelope discipline (shared)".
+Dispatched after each Worker reports `OK`. Verdict gates QualityReviewer. Substitution + dispatch invocation discipline lives in `orchestrator-dispatcher.md` → "Dispatch envelope discipline (shared)".
+
+Per-task scope: Worker's edits are uncommitted at review time (controller commits only after both reviewers PASS). `git diff HEAD` shows the working-tree changes for the current task. `git diff A..HEAD` would compare two commits and silently miss the unstaged worker output — do not use it.
 
 ## Envelope template
 
@@ -14,16 +16,16 @@ Inputs (inline, do not re-read the plan file):
 
 {{TECH_SPEC_RELEVANT_BLOCK}}
 
-{{PLAN_MILESTONE_BLOCK}}
+{{PLAN_TASK_BLOCK}}
 
-Worker diff to review: git diff {{MILESTONE_BASE_SHA}}..HEAD
+Worker diff to review: git diff HEAD
 
 Gates (run in order, stop at first fail):
-1. plan ↔ spec — does the plan cover the spec's acceptance criteria for this milestone? Missing or wrongly-scoped tasks? FAIL → ESCALATE.
-2. impl ↔ plan — does the diff implement every task in the plan? Exact file paths, interfaces, behaviors? FAIL → FAIL-SPEC.
-3. TDD evidence — do tests added by Workers verify spec-required behavior (not just exercise code)? Run the plan's test commands. FAIL → FAIL-SPEC.
+1. plan ↔ spec — does the plan task cover the spec's acceptance criteria it claims to address? Missing or wrongly-scoped requirements? FAIL → ESCALATE.
+2. impl ↔ plan — does the diff implement the task in the plan? Exact file paths, interfaces, behaviors? FAIL → FAIL-SPEC.
+3. TDD evidence (STATIC ONLY — do NOT run tests; QualityReviewer runs them) — does the diff add or modify a test that exercises the spec-required behavior named in this task? For each in-scope acceptance criterion, confirm a test exists in the diff. If a test is missing or exercises only happy-path while the spec calls out edge/error behavior, FAIL → FAIL-SPEC.
 
-Verify independently. Run the test commands. Do not trust Worker reports.
+Verify independently against the spec quotes inline above. Do not trust Worker reports.
 
 Routing — load-bearing (most reviewers conflate these axes):
 
@@ -48,8 +50,7 @@ length check" beats "missing validation".
 
 ## Slots
 
-- `{{SPEC_RELEVANT_BLOCK}}`, `{{TECH_SPEC_RELEVANT_BLOCK}}`, `{{PLAN_MILESTONE_BLOCK}}` — verbatim relevant sections (paste, do not summarize).
-- `{{MILESTONE_BASE_SHA}}` — SHA recorded at milestone start.
+- `{{SPEC_RELEVANT_BLOCK}}`, `{{TECH_SPEC_RELEVANT_BLOCK}}`, `{{PLAN_TASK_BLOCK}}` — verbatim relevant sections (paste, do not summarize).
 
 ## Verdict routing
 
