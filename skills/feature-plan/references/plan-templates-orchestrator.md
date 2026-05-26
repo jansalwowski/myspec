@@ -38,6 +38,34 @@ Rules:
 - Resolution order: `task.tier_override.worker` → `roles.worker` → built-in `cheap`.
 - Sparingly. > ~30% of tasks needing override means `roles.worker` is wrong — bump the global instead.
 
+## Worker context budget (orchestrator-specific)
+
+Worker subagents have one context window per dispatch. Reading large files burns it fast. Plans that exceed the cheap-tier budget either fail mid-task (Worker drift, hallucination, contract violations) or silently degrade. Plan-time enforcement keeps the implement session clean — controller does NO size estimation at dispatch time, it trusts the plan.
+
+Hard caps per task:
+
+| Cap | Cheap (Haiku-tier) | Mid (Sonnet-tier) |
+|-----|--------------------|--------------------|
+| Files in Files block (create + modify) | 7 | 12 |
+| Sum LoC of `Modify:` files (on disk) | 2200 | 6000 |
+| Sum LoC of `Create:` files (inline code in task) | 1200 | 3000 |
+| Estimated context budget | 35k tokens | 80k tokens |
+
+When a task exceeds cheap caps:
+- **Preferred:** split into subtasks. Each subtask = one Worker dispatch, scope-bounded.
+- **Fallback:** add `**Tier override:** worker=mid` with reason `(est Xk tokens > cheap cap)`. Use when the task is genuinely indivisible (e.g. one large file rewrite).
+
+Estimation heuristic (used by `feature-plan` Step 3.5 — see SKILL.md):
+```
+est_tokens =
+    3000                                  # fixed overhead (agent + envelope + tool overhead)
+  + loc(task_text)             * 1.3      # token ratio (1 LoC ≈ 1.3 tokens for prose/code mix)
+  + sum(wc -l of Modify files) * 12 * 1.3 # file content reads
+  + sum(LoC of inline Create code blocks) * 12 * 1.3
+```
+
+Above 35k → bump tier or split. Above 80k → split mandatory (no mid-tier rescue).
+
 ## Task Status
 
 Same `[ ]` / `[~]` / `[x]` semantics as normal mode (see `plan-templates.md`). `[~]` set when Worker starts; `[x]` set after both reviewers PASS.
@@ -95,6 +123,7 @@ Rules:
 - Worker steps write files. Reviewer steps run verification. Controller steps run git mutations. No step mixes roles.
 - Worker dispatch envelope strips Reviewer/Controller steps from `{{TASK_TEXT}}` — they exist for the human reviewing the plan, not the Worker.
 - Exactly one Commit step per task, always last, always Controller, always exact `git commit -m "..."`.
+- **Edit steps must inline both `old_string` and `new_string` verbatim** (full snippet, not "around line 42"). Goal: Worker performs the Edit without reading the file. For 5-line changes in a 500-LoC file this saves ~5k tokens of context per file. If the snippet is so large that inlining bloats the task text past its own cap, the task is too big — split.
 
 ## Mode interaction with Step 5
 

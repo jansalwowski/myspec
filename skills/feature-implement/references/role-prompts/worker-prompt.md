@@ -14,6 +14,10 @@ Touch nothing else. Do not import sibling parallel tasks' files (they do not exi
 
 You have Read, Edit, MultiEdit, Write only. No shell, no Grep/Glob, no git. Reviewer runs tests/lint after you finish; controller commits. Ignore any "Run …", "Commit", or shell-command step in the task block.
 
+Edit steps inline `old_string` and `new_string` verbatim — prefer the inline snippet over a Read of the whole file. Read only if the snippet is absent or a target line is missing from it.
+
+If a single Read returns more than ~15k tokens, the plan-time estimate was wrong. Stop and emit `<result>ERR context-overflow</result>` instead of continuing.
+
 Return: <result>OK <file-list></result> where <file-list> is the comma-separated paths you created or modified.
 
 Task:

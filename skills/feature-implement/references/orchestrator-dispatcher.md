@@ -42,7 +42,7 @@ For each milestone (walked in declaration order). Per task: Worker → SpecRevie
 
 ### 1. Worker(s)
 - Dispatch one `worker-base` agent per task with the envelope from `references/role-prompts/worker-prompt.md`.
-- Worker toolset (enforced in agent file): `Read, Edit, MultiEdit, Write` only. If the plan's task block contains `Reviewer` or `Controller` steps (verify, commit), strip them from `{{TASK_TEXT}}` before substitution.
+- Worker toolset (enforced in agent file): `Read, Edit, MultiEdit, Write` only. Before substituting `{{TASK_TEXT}}`: strip `Reviewer` and `Controller` steps (verify, commit), and strip the `<!-- budget: … -->` audit comment if present (it is plan-author-facing only).
 - Tier resolution: `**Tier override:** worker=<tier>` in the task block → `roles.worker` in plan front-matter → built-in default `cheap`. First hit wins. Reviewer tiers are global. Controller resolves tier to concrete model and passes as per-call `model` parameter.
 - Parallel groups: dispatch all group tasks in one message with `isolation: "worktree"` (see `SKILL.md:147–153`). Each worktree carries Worker + both Reviewers + Commit to completion before next group starts.
 - Sequential tasks: one at a time. Reviewer runs in the same worktree as the Worker so it sees unstaged edits.

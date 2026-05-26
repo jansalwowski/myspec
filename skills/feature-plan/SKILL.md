@@ -98,6 +98,44 @@ For every task whose Files block contains a `Modify:` entry, populate the `**Tou
 - **Step ownership annotation:** every step inside a task block carries its chain role — `**Step N (Worker|Reviewer|Controller): …**`. Worker has no shell; steps that run tests/lint/git must be Reviewer or Controller. Without annotation, the dispatcher cannot strip non-Worker steps from the Worker envelope. See [`references/plan-templates-orchestrator.md`](references/plan-templates-orchestrator.md) "Task Details".
 - **Per-task tier override (OPTIONAL):** for tasks heavier than the milestone default (complex AST, multi-system integration), add `**Tier override:** worker=<tier>` with a one-line reason. Sparingly — > 30% of tasks needing override means bump `roles.worker` instead.
 
+### Step 3.5: Worker Context Budget Pass (orchestrator mode only)
+
+Skip in normal mode. Run after Step 3, before Step 4. Goal: keep each task within the cheap-tier Worker's effective context window so the implement session does not burn tokens on size estimation at dispatch time.
+
+Heuristic per task (no LLM call — pure `wc -l` + arithmetic):
+
+```
+est_tokens =
+    3000                                       # fixed (agent + envelope + tool overhead)
+  + loc(task_text)                  * 1.3       # task block itself
+  + sum(wc -l of Modify files)      * 12 * 1.3  # files Worker must Read
+  + sum(LoC of inline Create code)  * 12 * 1.3  # files Worker will Write
+```
+
+Per-task caps (full table in `references/plan-templates-orchestrator.md` "Worker context budget"):
+
+| Tier | Files | LoC modify | LoC create | est_tokens |
+|------|-------|------------|------------|------------|
+| cheap | 7 | 2200 | 1200 | 35k |
+| mid | 12 | 6000 | 3000 | 80k |
+
+For each task in the plan:
+
+1. Parse Files block → count files; classify Create vs Modify.
+2. For each Modify file → `wc -l <path>`.
+3. For each Create file → count LoC in the task block's inline code fences for that file.
+4. Compute `est_tokens` per the formula above.
+5. Resolve target tier (task `Tier override:` if set, else `roles.worker`).
+6. Compare to that tier's caps.
+
+If any cap exceeded:
+- **Preferred:** split the task. Identify a natural seam (one file, one Files-block subset, one TDD cycle) and emit two subtasks. Renumber. Update Execution Order table.
+- **Fallback (genuinely indivisible task):** add `**Tier override:** worker=mid` with reason `(est Xk tokens > cheap cap)`. If `est_tokens` > 80k even at mid, splitting is mandatory.
+
+Surface the math in the plan's task block as a one-line comment after the Files block: `<!-- budget: est 28k tokens, 5 files, 1800 LoC modify, 600 LoC create -->`. Lets the user audit. Stripped by the Worker dispatch envelope before substitution.
+
+This pass is silent on normal mode. Normal-mode plans do not carry the comment and do not enforce caps.
+
 ### Step 4: Review Loop (large plans only)
 
 For plans with **10+ tasks or 3+ milestones**, review in chunks before finalizing:
@@ -271,6 +309,7 @@ Before presenting the plan:
 - [ ] Every task whose Files contain `Modify:` has a populated **Touch only** line
 - [ ] (Orchestrator mode) Tier overrides — if any — list a one-line reason; total override count is ≤ ~30% of tasks
 - [ ] (Orchestrator mode) Every task step is annotated with its owner: `Worker`, `Reviewer`, or `Controller`. No step mixes roles. Every task ends with exactly one `Controller` commit step.
+- [ ] (Orchestrator mode) Step 3.5 ran: every task has an estimated-budget comment and respects its tier's caps (cheap ≤ 35k est_tokens / 7 files / 2200 LoC modify). Oversized tasks were split or carry a `Tier override:`.
 - [ ] Tasks reference tech-spec interfaces (not duplicated inline unless needed for subagent context)
 - [ ] Within each milestone, lower-level layers (data, services) precede higher-level layers (UI, presentation) per project conventions
 - [ ] Phase numbers are globally unique across all milestones
