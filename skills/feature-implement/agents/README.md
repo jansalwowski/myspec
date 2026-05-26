@@ -15,7 +15,7 @@ agents/
     └── reviewer-base.toml
 ```
 
-The body of each agent (Role / Output Protocol / Forbidden Phrases / Rules / Failure Mode) is byte-identical across the three harnesses per agent. Per-harness wrappers differ (Claude YAML frontmatter + `tools`; Cursor YAML frontmatter + `readonly`; Codex TOML + `sandbox_mode` + `developer_instructions`).
+The body of each agent (Role / Output Protocol / Rules) is byte-identical across the three harnesses per agent. Per-harness wrappers differ (Claude YAML frontmatter + `tools`; Cursor YAML frontmatter + `readonly`; Codex TOML + `sandbox_mode` + `developer_instructions`).
 
 ## Install target: **user scope**, never project scope
 
