@@ -4,7 +4,7 @@ Controller renders this envelope and dispatches `reviewer-base`. Agent definitio
 
 Dispatched only after SpecReviewer returns `PASS`. Reviews code quality, not spec compliance. Substitution + dispatch invocation discipline lives in `orchestrator-dispatcher.md` → "Dispatch envelope discipline (shared)".
 
-Per-task scope: Worker's edits are uncommitted at review time (controller commits only after both reviewers PASS). `git diff HEAD` shows the working-tree changes for the current task. `git diff A..HEAD` would compare two commits and silently miss the unstaged worker output — do not use it.
+Per-task scope: Worker's edits are uncommitted at review time (controller commits only after both reviewers PASS). `git diff HEAD` shows the working-tree changes for the current task — including new files, because the controller stages worker-created paths as intent-to-add (`git add --intent-to-add`) before dispatching you. `git diff A..HEAD` would compare two commits and silently miss the unstaged worker output — do not use it.
 
 ## Envelope template
 

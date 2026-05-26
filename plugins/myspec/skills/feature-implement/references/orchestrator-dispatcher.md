@@ -52,6 +52,7 @@ For each milestone (walked in declaration order). Per task: Worker → SpecRevie
 - Output contract: `<result>OK <file-list></result>` (comma-separated paths) or `<result>ERR <reason></result>`. Controller records the file list for the Commit step.
 
 ### 2. SpecReview (gate)
+- **Pre-dispatch index hygiene (controller, BLOCKING):** before dispatching the reviewer, run `git add --intent-to-add -- <worker-file-list>` for the files the Worker reported in `<result>OK <file-list></result>`. This adds untracked new files to the index as zero-content entries so `git diff HEAD` shows them as full additions. Without this, `git diff HEAD` silently misses new files (they exist on disk but are not in HEAD), and the reviewer sees an incomplete diff → false PASS. Modified-only worker outputs are unaffected (intent-to-add is a no-op for already-tracked paths). Idempotent on retry — re-run the same command before each re-dispatch with the latest reported file list.
 - Dispatch ONE `reviewer-base` agent with the envelope from `references/role-prompts/spec-reviewer-prompt.md`. Envelope sets `FAIL label = FAIL-SPEC`.
 - Tier: `roles.spec_reviewer` (default `mid`).
 - Verdicts:
@@ -61,6 +62,7 @@ For each milestone (walked in declaration order). Per task: Worker → SpecRevie
 
 ### 3. QualityReview (gate)
 - Gated on SpecReview `PASS`.
+- **Index state carries over from step 2** — the intent-to-add entries from SpecReview pre-dispatch are still in the index, so `git diff HEAD` already includes new files. On a Worker retry path that lands here fresh (without going through step 2's pre-dispatch), re-run `git add --intent-to-add -- <worker-file-list>` first.
 - Dispatch ONE `reviewer-base` agent with the envelope from `references/role-prompts/quality-reviewer-prompt.md`. Envelope sets `FAIL label = FAIL-QUALITY`. Reviewer runs verification commands (test, lint, type-check) declared in plan / `.claude/verification.json`.
 - Tier: `roles.quality_reviewer` (default `mid`).
 - Verdicts:
@@ -69,7 +71,7 @@ For each milestone (walked in declaration order). Per task: Worker → SpecRevie
 
 ### 4. Commit (controller, per task)
 - Runs only after that task's SpecReview PASS + QualityReview PASS.
-- Stage exactly the file list the Worker reported (no `git add -A`). If the list is empty or includes a path outside the task's declared Files block, fail the task with `ERR scope` and surface both lists for human inspection.
+- Stage exactly the file list the Worker reported (`git add -- <worker-file-list>`, no `git add -A`). This is a real stage and overrides any intent-to-add entries from the review steps. If the list is empty or includes a path outside the task's declared Files block, fail the task with `ERR scope` and surface both lists for human inspection.
 - Commit message comes from the task block's `**Commit:**` line or `git commit -m "..."` literal. Controller does not invent a message.
 - Sequential tasks: commit on the feature branch in the controller's worktree. Parallel tasks: commit on each task's worktree; merge at the parallel-group barrier (see `feature-implement/SKILL.md` § "Step 1: Parse Plan → Execution DAG").
 - Workers and Reviewers do not commit. No exceptions.
@@ -94,6 +96,8 @@ Worker treats this block as authoritative and applies listed fixes verbatim.
 ## Loop cap
 
 3 retries per failure kind (`FAIL-SPEC`, `FAIL-QUALITY`) per milestone. 4th failure pauses with the full trail. `ESCALATE` pauses immediately — no retry.
+
+On any FAIL re-dispatch, the controller refreshes the index hygiene step (step 2 pre-dispatch) with the Worker's latest reported file list before the next reviewer dispatch. Stale intent-to-add entries for files the Worker no longer touches surface as deletions in `git diff HEAD` — acceptable noise; they collapse when the controller's final real `git add` runs at the Commit step.
 
 ## Tier vocabulary
 
