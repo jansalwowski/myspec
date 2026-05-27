@@ -19,11 +19,20 @@ The eight skills you'll use to take a feature from idea to shipped:
 | [skills/feature-spec.md](skills/feature-spec.md) | Greenfield small feature · Cross-feature dependencies · Skill recommends decomposing first |
 | [skills/feature-decompose.md](skills/feature-decompose.md) | Mixed-priority split with deferred sub-features · Skill refuses to decompose |
 | [skills/feature-tech-spec.md](skills/feature-tech-spec.md) | Pattern-following design · ADR-heavy with alternatives · Discovers spec gap during design |
-| [skills/feature-plan.md](skills/feature-plan.md) | Single-milestone plan · Multi-milestone with parallel groups · Plan refuses, recommends decompose |
-| [skills/feature-implement.md](skills/feature-implement.md) | Sequential execution · Parallel group with worktree dispatch · Resume mid-milestone after interruption |
+| [skills/feature-plan.md](skills/feature-plan.md) | Single-milestone plan (normal mode) · Multi-milestone with parallel groups + worker context budget (orchestrator mode) · Plan refuses, recommends decompose |
+| [skills/feature-implement.md](skills/feature-implement.md) | Sequential execution with per-phase review · Parallel group with worktree dispatch (orchestrator role chain) · Resume mid-milestone after interruption |
 | [skills/feature-update.md](skills/feature-update.md) | Add a capability to a shipped feature · Remove a deprecated capability |
 | [skills/feature-verify.md](skills/feature-verify.md) | Clean health check · Mixed report with severity-ranked routing |
 | [skills/feature-complete.md](skills/feature-complete.md) | Clean completion · Discovers late drift during completion |
+
+### Code & conformance review
+
+The two complementary review passes that run on built code before completion — conformance to spec vs. code quality:
+
+| Skill | Scenarios covered |
+|-------|-------------------|
+| [skills/feature-implement-review.md](skills/feature-implement-review.md) | Clean conformance pass · Scope drift detected · Missing acceptance criterion caught and routed |
+| [skills/code-review.md](skills/code-review.md) | Clean pass (Approve) · Mixed findings ranked across severities · Project-specific rule violation caught |
 
 ### Spec quality
 
@@ -63,7 +72,7 @@ The eight skills you'll use to take a feature from idea to shipped:
 
 | Skill | Scenarios covered |
 |-------|-------------------|
-| [skills/brainstorm.md](skills/brainstorm.md) | Standard divergent → convergent · Topic too large (decompose) · Devil's advocate / stress-test |
+| [skills/brainstorm.md](skills/brainstorm.md) | Generate mode (infer + name, go wide then converge) · Topic too large (scope check → decompose) · Sharpen mode that pivots to Generate |
 | [skills/root-cause-debugging.md](skills/root-cause-debugging.md) | Single-component bug found in Phase 1 · Multi-component bug with boundary tracing · Stuck in a loop (3-attempt escalation) |
 
 ---
@@ -74,7 +83,7 @@ The complex stuff. Each flow stitches together 3–12 skill calls and shows the 
 
 | Flow | Skills involved | Use it to understand |
 |------|-----------------|----------------------|
-| [flows/full-feature-delivery.md](flows/full-feature-delivery.md) | `brainstorm` → `idea-intake` → `idea-process` → `feature-spec-review` → `cross-spec-validation` → `feature-tech-spec` → `feature-tech-spec-review` → `feature-plan` → `feature-implement` → `feature-verify` → `feature-complete` | The full pipeline from "I have an idea" to "merged and shipped." |
+| [flows/full-feature-delivery.md](flows/full-feature-delivery.md) | `brainstorm` → `idea-intake` → `idea-process` → `feature-spec-review` → `cross-spec-validation` → `feature-tech-spec` → `feature-tech-spec-review` → `feature-plan` → `feature-implement` → `feature-implement-review` → `code-review` → `feature-verify` → `feature-complete` | The full pipeline from "I have an idea" to "merged and shipped." |
 | [flows/feature-decomposition.md](flows/feature-decomposition.md) | `feature-decompose` → per-sub-feature `feature-tech-spec` + `feature-plan` + `feature-implement` + `feature-complete`, with `cross-spec-validation` between them | Splitting a too-large feature into independently shippable sub-features. |
 | [flows/session-with-memory-extraction.md](flows/session-with-memory-extraction.md) | `bootstrap` → auto-session via hook → `session-complete` (vs. `memorify` as the alternative) | How session tracking, the `mark-code-changed.sh` hook, and memory extraction fit together. |
 | [flows/debugging-with-memory.md](flows/debugging-with-memory.md) | `memory-lookup` → `root-cause-debugging` (4 phases) → `memorize` | The full debugging loop: check what's known, investigate methodically, save the lesson. |
