@@ -1,22 +1,22 @@
 # `/myspec:feature-implement` — examples
 
-Executes an approved `implementation-plan.md` by dispatching subagents per task. Handles parallel groups via worktree isolation, runs phase reviews at each barrier, and pauses at milestone checkpoints.
+Executes an approved `implementation-plan.md` by dispatching write-only Worker subagents per task, reviewing at each phase barrier (SpecReviewer then QualityReviewer), and pausing at milestone checkpoints. The Controller commits; Workers never run tests, lint, or git. Always starts with a blocking question about *where* implementation should happen.
 
 **Contents**
 
-- [Sequential plan execution](#sequential-plan-execution) — one task at a time
-- [Parallel group with worktree dispatch](#parallel-group-with-worktree-dispatch) — concurrent agents, barrier merge
-- [Resume mid-milestone after interruption](#resume-mid-milestone-after-interruption) — picking up `[~]` markers from a stopped run
+- [Sequential execution](#sequential-execution) — one task at a time, single phase, the Controller commits, per-phase review at the barrier
+- [Parallel group with worktree dispatch under orchestrator mode](#parallel-group-with-worktree-dispatch-under-orchestrator-mode) — concurrent Workers in `.claude/worktrees/feat-*`, the role chain
+- [Resume mid-milestone after interruption](#resume-mid-milestone-after-interruption) — `[x]`/`[~]`/`[ ]` handling and stale-worktree cleanup
 
 ---
 
-## Sequential plan execution
+## Sequential execution
 
-The simple shape: a plan with no parallel groups. The agent walks tasks one at a time, runs phase reviews, hits the milestone checkpoint, asks the user.
+The simple shape: a single-phase plan with no parallel groups. The skill first asks *where* to work, then walks tasks one at a time. Workers only write files; the Controller commits; the phase review runs once at the barrier — not per task.
 
 ### Setup
 
-`favorite-reports` has a 6-task, single-milestone plan (see [feature-plan.md single-milestone](feature-plan.md#single-milestone-plan)). All tasks `[ ]`.
+`favorite-reports` has a 6-task, single-milestone, single-phase plan (see [feature-plan.md single-milestone](feature-plan.md#single-milestone-plan)). All tasks `[ ]`. No `orchestration:` front-matter (normal mode). The user is on `main`, working tree clean.
 
 ### Invocation
 
@@ -26,51 +26,58 @@ The simple shape: a plan with no parallel groups. The agent walks tasks one at a
 
 ### Skill flow
 
-#### 1. Parse plan → DAG
+#### Step 0 — Confirm implementation flow (BLOCKING)
 
-The skill announces:
+The skill announces, then inspects git state *before* parsing the plan:
 
 > Executing feature-implement on `ai/features/favorite-reports/implementation-plan.md`.
 
-Parses the Execution Order table. Detects 6 sequential tasks, no barriers, one milestone.
+- Default branch: `main`. HEAD: `main`. Working tree clean.
+- No existing worktree for this feature. Plan has no `[parallel:*]` groups.
 
-#### 2. Resume detection
+HEAD is the default branch, so the recommendation is a new branch. The skill asks via `AskUserQuestion` and **waits** — it never assumes, even when the recommendation is obvious:
 
-Scans checkboxes — all `[ ]`. Fresh run.
+> **How should implementation proceed?**
+>
+> - **New branch feat/favorite-reports** (Recommended — HEAD is on main) → create and switch
+> - **Worktree feat-favorite-reports** → `.claude/worktrees/feat-favorite-reports` (best for parallel tasks; isolated)
+> - **Current branch main** → continue on main
+> - **Main branch** → not recommended; only for trivial fixes
 
-#### 3. Task dispatch loop
+User picks **New branch**. The skill runs `git checkout -b feat/favorite-reports`, then records `BASE_SHA` (`git rev-parse HEAD`).
+
+#### Step 1 — Parse plan → DAG
+
+No `orchestration: agent-chain` in front-matter, so no run-mode prompt. Parses the Execution Order table: 6 sequential tasks, no barriers between them — they form a single phase ending at one barrier. One milestone.
+
+**Resume detection:** all checkboxes `[ ]`. Fresh run.
+
+#### Step 2–3 — Task dispatch loop
 
 For T1 (migration):
 
-1. Edits the plan file: `[ ] T1: migration` → `[~] T1: migration`.
-2. Dispatches a subagent with the task text + tech-spec interfaces context. Subagent writes the migration file, the test, runs `pnpm db:migrate:test`, commits.
-3. Subagent reports back. The orchestrator runs phase review:
-   - Spec compliance: AC-1 ("favoriting persists across sessions") — yes, table has `(user_id, report_id)` PK and a `created_at` column ✓
-   - Code quality: matches existing migration style ✓
-   - Tests pass ✓
-4. Edits the plan: `[~]` → `[x]`.
+1. Edits the plan file: `[ ] T1` → `[~] T1` (before dispatching).
+2. Dispatches one Worker subagent with the task text inline (the Worker never reads the plan file). The Worker's toolset is **Read / Edit / MultiEdit / Write only** — no shell, no git, no Grep/Glob. It writes the migration file and its test, then reports `<result>OK src/db/migrations/004_report_favorites.ts, src/db/migrations/__tests__/004_report_favorites.test.ts</result>`. **It does not run the migration, does not run tests, and does not commit.**
+3. The skill leaves T1 at `[~]`. No per-task review, no per-task commit yet.
 
-Repeats for T2–T6. Each task takes ~2–4 minutes with a single dispatch.
+Repeats the *dispatch* for T2–T6 in order, each leaving its checkbox at `[~]`. Workers write code and tests only.
 
-#### 4. Milestone checkpoint
+#### Step 4 — Phase review (once, at the barrier)
 
-After T6:
+After all 6 tasks' Workers have reported `OK`, the phase hits its barrier and the review runs **once for the whole phase** — two complementary reviewers in sequence:
 
-> **Milestone 1 complete** — Favorite Reports.
->
-> All 6 tasks `[x]`, phase reviews passed.
->
-> - Migration applied
-> - Service + API tested
-> - UI integrated, sort logic verified
->
-> **Reply `continue` to proceed (no further milestones), `stop` to commit and exit, or `fresh` to spawn a new agent.**
+1. **SpecReviewer** (mid-tier) — reviews `git diff HEAD` against the spec/tech-spec/plan blocks for the phase. Static checks only:
+   - plan ↔ spec: the 6 tasks cover AC-1 ("favoriting persists across sessions"), AC-2 (pin-to-top) ✓
+   - impl ↔ plan: each task's declared files and interfaces are present ✓
+   - TDD evidence (static, does **not** run tests): each in-scope acceptance criterion has a test in the diff ✓
+   - Verdict: `PASS`.
+2. **QualityReviewer** (mid-tier) — gated on SpecReviewer `PASS`. This is the **sole verification pass**: it runs the test / lint / type-check commands from `.claude/verification.json` (Workers and SpecReviewer never ran them). Then naming, pattern conformance, maintainability, test quality.
+   - `pnpm test` green, `pnpm typecheck` green, lint clean ✓
+   - Verdict: `PASS`.
 
-The plan only has one milestone, so `continue` ends the run. The user replies `continue` (or `stop` — same outcome here).
+#### Controller commits
 
-### Result
-
-All 6 tasks `[x]`, six commits on the feature branch:
+Only now — after both reviewers `PASS` — the **Controller** commits. It stages exactly the file lists the Workers reported (`git add -- <paths>`, never `git add -A`) and uses each task block's `**Commit:**` message verbatim. It then flips all six checkboxes `[~]` → `[x]`.
 
 ```
 feat(favorite-reports): add report_favorites migration
@@ -81,25 +88,47 @@ feat(favorite-reports): add StarButton component
 feat(favorite-reports): pin favorited reports to top of list
 ```
 
-The skill ends with:
+This is the only milestone, so the skill goes directly to Step 5 (no Milestone Checkpoint prompt).
 
-> Implementation complete. Run `/myspec:feature-verify favorite-reports` to check for drift, then `/myspec:feature-complete favorite-reports`.
+#### Step 5 — Completion + review choice
+
+1. Runs the plan's Final Verification section.
+2. Dispatches the holistic reviewer (premium tier) over the full `BASE_SHA..HEAD` diff — the quick in-flight gate. Returns `APPROVED`.
+3. Asks via `AskUserQuestion` — it does **not** auto-hand-off:
+
+> **Implementation complete. What next?**
+>
+> - **feature-implement-review** → independent audit that the code fulfills the spec + plan, persists a report (Recommended for anything non-trivial)
+> - **code-review** → quality, standards, and bug review of the changes
+> - **feature-complete** → skip the reviews; sync docs, archive plan, merge
+> - **Stop here** → leave the branch as-is; continue later
+
+The two review passes are **complementary, not exclusive** (conformance vs. code quality). After whichever the user picks finishes, the skill offers this same choice again so they can run the other or proceed to `feature-complete`.
+
+User picks **feature-implement-review**. The skill invokes `/myspec:feature-implement-review favorite-reports`.
+
+### Result
+
+- All 6 tasks `[x]`, six commits on `feat/favorite-reports` — all authored by the Controller after the phase passed review.
+- One phase review (SpecReviewer → QualityReviewer), not six.
+- Routed to `/myspec:feature-implement-review` by the user's Step 5 choice.
 
 ### Why this example matters
 
-- **Phase review per task, not per milestone.** Catching a quality issue at T2 means T3–T6 don't build on it. The skill's design assumes early detection beats late rollback.
-- **Checkbox states are load-bearing.** `[~]` during dispatch, `[x]` after phase review — these are what `resume detection` uses if the agent crashes. Without them, a resumed run can't tell what was completed.
-- **Conventional-commit messages from the plan** mean the git history reads cleanly. The plan author writes them once; subagents copy them verbatim.
+- **Step 0 is blocking and always asked.** Even on a clean `main` with an obvious recommendation, the skill confirms *where* to work. Silent assumption is the bug Step 0 exists to prevent; worktrees live at `.claude/worktrees/feat-{name}`, never `/tmp`.
+- **Workers are write-only.** They produce files and tests and nothing else — no shell, no test runs, no commits. This keeps their context lean and makes their output a clean, reviewable artifact. The QualityReviewer is the *sole* place tests/lint run.
+- **Review is per-phase, at the barrier.** All six tasks' Workers finish, then one SpecReviewer + one QualityReviewer cover the whole phase's diff at once. The two passes are complementary: spec conformance first (static), code quality + verification second.
+- **The Controller is the only committer.** It stages exactly the reported file lists and copies the plan's commit messages verbatim, so the history reads cleanly and nothing outside the declared scope sneaks in.
 
 ---
 
-## Parallel group with worktree dispatch
+## Parallel group with worktree dispatch under orchestrator mode
 
-The interesting case: concurrent subagents in isolated worktrees, merged at the barrier.
+The interesting case: a plan authored for orchestrator mode. Concurrent Workers in isolated `.claude/worktrees/feat-*` checkouts, each carried through the full role chain — Worker → SpecReview → QualityReview → Controller commit — before the group's barrier.
 
 ### Setup
 
-`scheduled-reports` has the multi-milestone plan with three parallel groups (see [feature-plan.md multi-milestone](feature-plan.md#multi-milestone-with-parallel-groups)). All tasks `[ ]`.
+`scheduled-reports` has the multi-milestone plan with parallel groups (see [feature-plan.md multi-milestone](feature-plan.md#multi-milestone-with-parallel-groups)). All tasks `[ ]`. Its front-matter declares `orchestration: agent-chain` and a `roles:` block (`worker: cheap`, `spec_reviewer: mid`, `quality_reviewer: mid`).
 
 ### Invocation
 
@@ -109,69 +138,87 @@ The interesting case: concurrent subagents in isolated worktrees, merged at the 
 
 ### Skill flow
 
-#### Phases 1, 2 (parallel:repos), 3 — the interesting bit
+#### Step 0 — Confirm implementation flow (BLOCKING)
 
-**Phase 1 (sequential)**: T1 migration. Standard dispatch. `[x]`.
+Git state: on `main`, clean, no existing worktree, **plan has `[parallel:*]` groups**. That last fact drives the recommendation to a worktree:
 
-**Phase 2 (parallel:repos)**: T2 ScheduleRepository, T3 ExportRunRepository.
-
-The orchestrator:
-
-1. Marks T2 and T3 both `[~]` in the plan file.
-2. Dispatches **two subagents simultaneously**, each with `isolation: "worktree"`:
-   - Agent A worktree: gets T2's task text + tech-spec interfaces. Constraint passed: "Do not modify files outside `src/features/schedules/repository.ts` and its test file."
-   - Agent B worktree: gets T3's task text + same shared interfaces. Constraint: "Do not modify files outside `src/features/schedules/run-repository.ts` and its test file."
-3. Both agents work concurrently. ~3 minutes each.
-4. Both report back. The orchestrator now does the **merge barrier**:
-   - Pulls Agent A's worktree → merges into main feature branch. Verifies no conflicts (file constraint held).
-   - Pulls Agent B's worktree → merges. Verifies no conflicts.
-   - Runs `pnpm typecheck` across the merged tree. Passes.
-   - Runs the verification commands from `.claude/verification.json`. Passes.
-5. Phase review (one reviewer for both tasks):
-   - T2 spec compliance ✓, code quality ✓, tests pass ✓
-   - T3 spec compliance ✓, code quality ✓, tests pass ✓
-   - Cross-task: no inadvertent shared types between T2 and T3 ✓
-6. Marks both `[x]`.
-
-**Phase 3 (sequential barrier)**: T4 shared types file. Single agent. The barrier task is the natural place for a "standard" model — it has integration judgment, while the parallel tasks were mechanical.
-
-#### Continuing through Milestone 1
-
-Phases 4 (parallel:services) and 5 (barrier integration test) follow the same pattern. End of Milestone 1 — checkpoint:
-
-> **Milestone 1 complete** — Scheduled Reports core CRUD + cron infrastructure.
+> **How should implementation proceed?**
 >
-> All 7 tasks `[x]`. Tests pass. Branch in working state.
+> - **Worktree feat-scheduled-reports** (Recommended — plan has parallel groups) → `.claude/worktrees/feat-scheduled-reports` (isolated)
+> - **New branch feat/scheduled-reports** → create and switch
+> - **Current branch main** → continue on main
+> - **Main branch** → not recommended
+
+User picks **Worktree**. The skill creates `.claude/worktrees/feat-scheduled-reports` on branch `feat/scheduled-reports` (via the EnterWorktree tool, or `git worktree add .claude/worktrees/feat-scheduled-reports -b feat/scheduled-reports`). Records `BASE_SHA`.
+
+#### Step 1 — Orchestrator run-mode gate (BLOCKING)
+
+Front-matter has `orchestration: agent-chain`, so **before dispatching anything** the skill shows the disclaimer and asks via `AskUserQuestion`:
+
+> Orchestrator-auto runs end-to-end without per-milestone prompts. Chained autonomy across roles is more surface for cascading errors. Use only for plans you have already reviewed.
 >
-> **Reply `continue` for Milestone 2 (UI + notifications), `stop` to commit and exit, or `fresh` to spawn a new agent.**
+> **Plan was authored in orchestrator mode. Run mode?**
+>
+> - **orchestrator** (Recommended) → matches plan; pauses at every Milestone Checkpoint
+> - **orchestrator-auto** → no checkpoint prompts on green verification; only pauses on FAIL-SPEC ≥ 3, FAIL-QUALITY ≥ 3, ESCALATE, or verification failure
+> - **normal-fallback** → treat as single-executor; skip the role chain
 
-User: `continue`.
+User picks **orchestrator**. From here the Controller is **dispatch-only** — it writes zero code and runs zero task commands; every task goes through a Worker.
 
-#### Milestone 2
+#### Milestone 1 — the role chain in action
 
-Phase 6 (parallel:ui) dispatches **three** subagents — SchedulesList, ScheduleForm, RunHistoryTable — each with their own file lock list. Three worktrees, three merges, one phase review.
+The skill walks the DAG. **Phase 2 (`parallel:repos`)** is the showcase: T2 ScheduleRepository, T3 ExportRunRepository, disjoint file lists.
 
-Phase 7 (barrier): SchedulesPage wires components. Single agent.
+1. Marks T2 and T3 both `[~]`.
+2. Dispatches **two Workers in one message**, each with `isolation: "worktree"`. The harness forks each child worktree off the main checkout's HEAD, so the Controller pre-stages each one: `git reset --hard feat/scheduled-reports`, symlink `node_modules`, copy `.eslintcache`. Each Worker gets only its file list and task text inline:
+   - Worker A → `src/features/schedules/repository.ts` (+ test)
+   - Worker B → `src/features/schedules/run-repository.ts` (+ test)
+3. Both Workers write code + tests and report `<result>OK …</result>`. **Neither runs tests nor commits.**
+4. **Per task, in each worktree, the chain runs to completion before the group's barrier:**
+   - Controller stages the Worker's reported files as intent-to-add (`git add --intent-to-add -- …`) so `git diff HEAD` shows new files in full.
+   - **SpecReviewer** (mid) reviews `git diff HEAD` → `PASS`.
+   - **QualityReviewer** (mid) — gated on SpecReviewer PASS — runs `.claude/verification.json` commands (test/lint/typecheck) in that worktree → `PASS`.
+   - **Controller commits** the task in its worktree using the task block's commit message, staging exactly the reported files.
+5. **Barrier merge:** the Controller merges each worktree's commit back onto `feat/scheduled-reports` (cherry-picking, since child bases diverge from session HEAD), one at a time. No conflicts — the file lists were disjoint. Runs the barrier verification commands across the merged tree.
+6. Both checkboxes are now `[x]`.
 
-Final checkpoint. User: `continue`. Done.
+A FAIL on either reviewer would loop back to the same Worker with the reviewer's `<verdict>` bullets appended verbatim under `## Reviewer verdict (retry N)` — capped at 3 retries (4th pauses); an `ESCALATE` (plan ↔ spec mismatch the Worker can't fix) pauses immediately for a plan fix.
+
+#### Milestone Checkpoint
+
+After every task in Milestone 1 has gone through Worker → SpecReview → QualityReview → Commit, the Controller runs the milestone verification commands and pauses (this is `orchestrator`, not `-auto`):
+
+> ═══ Milestone 1 complete: Scheduled Reports core CRUD + cron infra ═══
+>
+>   Completed: T1 migration, T2 ScheduleRepository, T3 ExportRunRepository, T4 shared types, …
+>   Next: Milestone 2 — UI + notifications (4 tasks)
+>
+>   continue / stop / fresh — Choice?
+
+User: `continue`. **Milestone 2's** `parallel:ui` phase dispatches three Workers (SchedulesList, ScheduleForm, RunHistoryTable) in three worktrees under `.claude/worktrees/feat-scheduled-reports`, each carried through the same chain, then merged at the barrier.
+
+#### Step 5 — Completion (identical in both modes)
+
+Orchestrator mode does **not** skip Step 5. The skill runs Final Verification, dispatches the holistic reviewer over `BASE_SHA..HEAD` (this covers the whole feature; the per-milestone SpecReview/QualityReview were per-milestone-diff — no overlap), then offers the same 4-option choice (feature-implement-review / code-review / feature-complete / Stop here). No `briefs/` directory is created — Workers received task text inline.
 
 ### Result
 
-11 tasks `[x]`, ~14 commits on the feature branch. Total wall-clock time: roughly 40 minutes (vs. ~70 minutes if everything had been sequential).
+- All tasks `[x]`, committed by the Controller after each passed its chain.
+- Parallel Workers ran in `.claude/worktrees/feat-scheduled-reports`, merged at barriers.
+- Per-milestone reviews via the role chain; one holistic review at the end; user-chosen completion.
 
 ### Why this example matters
 
-- **Worktree isolation is what makes parallelism safe.** Without it, two subagents racing on the same branch corrupt the working tree. With it, they can't see each other's writes until merge — and the merge is the barrier's job.
-- **File lock lists are the contract** between the plan author and the dispatched subagents. Plans that omit them produce broken parallel groups.
-- **Phase review is one reviewer for the whole group**, not per-task. It checks both individual quality *and* cross-task consistency (e.g., no overlap, types align). One reviewer keeps the global picture coherent.
-- **Model selection optimization**: parallel tasks (mechanical, isolated, well-specified) use a fast model; barrier tasks (integration judgment) use the standard model. The skill makes this choice automatically based on the plan's Mode column.
-- **Milestone checkpoints are a session boundary**, not just a status line. The user can hit `stop` at the end of M1, log off, come back tomorrow, and run `/myspec:feature-implement scheduled-reports` again — see the next scenario for the resume mechanics.
+- **The role chain is per task, the checkpoint is per milestone.** Worker → SpecReview → QualityReview → Controller commit runs for *every* task; the `continue/stop/fresh` pause only happens at milestone boundaries.
+- **Worktrees live under `.claude/worktrees/feat-*`,** not `/tmp`. They are bare checkouts, so the Controller pre-stages `node_modules`/`.eslintcache` before each Worker dispatch — environment friction is fixed in the dispatch setup, never absorbed by the Controller doing the work directly.
+- **The Controller never executes tasks in orchestrator mode.** "Just doing this one directly" because a Worker hit friction is a contract breach — the value of the chain (gates, retry loop, reviewable Worker output) evaporates if bypassed. If genuinely unworkable, the skill surfaces it and offers explicit `normal-fallback`.
+- **Reviewers, not Workers, run verification.** The QualityReviewer is the sole place tests/lint run; the Controller's only Bash for task work is the cherry-pick/merge and the checkpoint verification.
 
 ---
 
 ## Resume mid-milestone after interruption
 
-The user's laptop crashed during Milestone 1, Phase 4. Some tasks are `[x]`, the in-flight task is `[~]`, the rest are `[ ]`. The user runs the skill again.
+The user's session died during Milestone 1, Phase 4. Some tasks are `[x]`, the in-flight ones are `[~]`, the rest `[ ]`. Re-running the skill detects this and cleans up the stale worktrees.
 
 ### Setup
 
@@ -196,65 +243,70 @@ The plan file when resumed:
 
 ### Skill flow
 
-#### 1. Resume detection
+#### Step 0 — Confirm implementation flow (still asked)
 
-The skill scans checkboxes:
+Git state inspection finds an **existing worktree for this feature** (`.claude/worktrees/feat-scheduled-reports`), so the recommendation is to reuse it:
+
+> **How should implementation proceed?**
+>
+> - **Worktree feat-scheduled-reports** (Recommended — worktree already exists) → reuse `.claude/worktrees/feat-scheduled-reports`
+> - **Current branch feat/scheduled-reports** → continue on the branch
+> - **New branch feat/scheduled-reports-2** → fresh branch
+> - **Main branch** → not recommended
+
+User picks **Worktree** (reuse).
+
+#### Step 1 — Resume detection
+
+The skill scans every checkbox:
 
 ```
 Detected resume state:
-  - 4 tasks [x] (already complete)
-  - 2 tasks [~] (in-progress when previous run stopped)
-  - 6 tasks [ ] (todo)
+  - 4 tasks [x]  → already complete, skip entirely
+  - 2 tasks [~]  → in-progress when the previous run stopped
+  - 6 tasks [ ]  → todo
 
-[~] tasks will be re-executed from scratch — they may have written
-partial code that needs cleanup. The orchestrator will inspect the
-working tree before dispatching.
+[~] is NOT "almost done" — it means a previous agent started the task and
+we don't know how far it got. T5 and T6 will be re-executed from scratch.
+The skill never silently flips [~] → [x]; the only path to [x] is
+"task completes + phase review passes" in this run.
 ```
 
-#### 2. Inspect working-tree state
+The first milestone with a non-`[x]` task is Milestone 1, Phase 4 — resume there.
 
-The skill runs `git status` on the feature branch and any leftover worktrees:
+#### Step 2 — Inspect working tree, clean stale worktrees
+
+Stale child worktrees from the dead run remain under `.claude/worktrees/`:
 
 ```
-On branch feature/scheduled-reports
-Your branch is ahead of 'origin/feature/scheduled-reports' by 4 commits.
-
-Worktrees still present:
-  /tmp/feature-implement/scheduled-reports-T5  (last activity: 2 hours ago)
-  /tmp/feature-implement/scheduled-reports-T6  (last activity: 2 hours ago)
-
-Both worktrees have uncommitted changes.
+Worktrees still present (git worktree list):
+  .claude/worktrees/feat-scheduled-reports-T5   (last activity: 2 hours ago, uncommitted changes)
+  .claude/worktrees/feat-scheduled-reports-T6   (last activity: 2 hours ago, uncommitted changes)
 ```
 
-The skill reports:
-
-> Found two stale worktrees from the interrupted run. They have uncommitted partial work.
+> Found two stale worktrees from the interrupted run, both with uncommitted partial work. Their `[~]` markers mean they never passed review, so the partial code isn't trustworthy.
 >
-> Recommended: delete the stale worktrees and re-execute T5 and T6 from scratch. Their `[~]` markers indicate they didn't pass phase review, so the partial work isn't trustworthy.
+> Recommended: prune the stale worktrees and re-execute T5 and T6 from scratch.
 >
-> Alternative: if you remember exactly what was happening when the crash occurred, you can manually inspect the worktrees and salvage. But re-execution is faster and more reliable.
+> Alternative: pause so you can inspect and salvage manually — but re-execution is faster and more reliable.
 >
-> Reply `clean` to delete worktrees and re-execute T5/T6, or `inspect` to pause for manual review.
+> Reply `clean` to prune and re-execute, or `inspect` to pause.
 
-User: `clean`.
+User: `clean`. The skill prunes both worktrees (`git worktree remove`), leaving T5/T6 at `[~]`.
 
-#### 3. Cleanup and re-dispatch
+#### Step 3 — Re-dispatch and continue
 
-The skill:
-
-1. Removes the two stale worktrees.
-2. Marks T5 and T6 as `[~]` (already were) and re-dispatches both in fresh worktrees.
-3. Continues the rest of Milestone 1.
-
-From here on, execution proceeds normally — Phase 4 completes, Phase 5 barrier runs, Milestone 1 checkpoint, etc.
+T5 and T6 are re-dispatched as fresh Workers in new worktrees under `.claude/worktrees/feat-scheduled-reports`, each carried through the role chain (Worker → SpecReview → QualityReview → Controller commit). Only after both pass does the Controller flip them `[~]` → `[x]`. Phase 4 completes, the Phase 5 barrier (T7) runs, and the Milestone 1 checkpoint is reached normally.
 
 ### Result
 
-T5 and T6 produce fresh, complete work. The interrupted run's partial commits are not in the history — only the clean re-execution lands. Milestone 1 finishes; Milestone 2 begins normally.
+- The 4 `[x]` tasks were skipped untouched; T5/T6 re-executed cleanly; the 6 `[ ]` tasks proceed in order.
+- Stale `.claude/worktrees/feat-scheduled-reports-T5/T6` pruned; only the clean re-execution's commits land.
+- Milestone 1 finishes, Milestone 2 begins.
 
 ### Why this example matters
 
-- **`[~]` is not "almost done."** It means *"a previous agent started this and we don't know how far it got."* The default move is re-execute, not patch up.
-- **Stale worktrees are a real failure mode.** Without explicit cleanup, the next run can't create worktrees with the same names, or worse, picks up half-finished code. The skill checks for this.
-- **`fresh` and `stop` checkpoints are designed for this.** A user who knows they'll be interrupted can preempt by hitting `stop` at a milestone boundary — that gives them a clean exit point with no `[~]` markers.
-- **The skill never silently flips `[~]` to `[x]`.** The only path to `[x]` is "task completes + phase review passes" in the current run. This means crashes always re-execute the in-flight task; they never accidentally skip work.
+- **The three checkbox states are load-bearing.** `[x]` skip, `[ ]` execute, `[~]` *re-execute from scratch*. The skill reads them on startup to find the resume point — without them a crashed run couldn't tell what was finished.
+- **`[~]` never silently becomes `[x]`.** The only route to `[x]` is completing the task *and* passing review in the current run, so an interruption always re-runs the in-flight task — it never accidentally skips work.
+- **Stale worktrees are a real failure mode** and the skill checks for them at `.claude/worktrees/feat-*`. Left behind, they collide with new dispatches or leak half-finished code into the merge. Pruning before re-dispatch is the safe default.
+- **`stop` / `fresh` at a milestone checkpoint is the clean way to preempt this.** A user who expects to be interrupted can exit at a milestone boundary, leaving no `[~]` markers and a fully committed tree to resume from.

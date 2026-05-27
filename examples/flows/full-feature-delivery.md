@@ -35,23 +35,37 @@ Roughly two milestones of work, touches the data layer, a background job system,
 /myspec:brainstorm scheduled exports for reports
 ```
 
-**Divergent phase**: the agent fans out — push email vs. Slack vs. webhook? CSV vs. Parquet? Daily-only vs. cron? Should past runs be visible?
+The agent infers and names the mode out loud: *"Reading this as **Generate** — you have a direction but the shape's open, so I'll go wide first, then we'll narrow."*
 
-**Convergent phase**: the agent challenges — *"Email-only adds an SMTP dependency you don't have. Is that a deal-breaker for v1?"* — and surfaces three approaches:
+**Going wide** (divergence beat): push email vs. Slack vs. webhook? CSV vs. Parquet? Daily-only vs. cron? Should past runs be visible?
+
+**Narrowing** (judgment beat, kept separate): the agent challenges — *"Email-only adds an SMTP dependency you don't have. Is that a deal-breaker for v1?"* — and converges on three approaches:
 
 1. Email-only, daily/weekly cadence, no run history (smallest scope).
 2. Email + a "Recent Exports" UI showing the last 10 runs.
 3. Pluggable destinations (email now, webhook later) with full run history.
 
-User picks **option 2**. The agent writes a one-paragraph synthesis and asks what to do with it.
+User picks **option 2**. The agent writes a one-paragraph synthesis and offers the A/B/C wrap-up menu (save to a file / hand off to a skill / nothing).
 
 **User**: *"Drop it into the ideas pipeline."*
 
-The agent writes `ideas/scheduled-exports.md` containing the synthesized problem, scope, and the rejected alternatives.
+That's wrap-up option **A** — the agent writes `ideas/scheduled-exports.md` containing the synthesized problem, scope, and the rejected alternatives, then does an inline self-review of the file (no placeholders, scope consistent, no ambiguity).
 
 ---
 
-## 2. Idea intake — get on the queue
+## 2. Capture the idea file
+
+The artifact from step 1 is the hand-off into the pipeline:
+
+```
+ideas/scheduled-exports.md   # synthesized problem, chosen scope (option 2), rejected alternatives
+```
+
+Nothing automated happens here — it's a plain file on disk waiting for triage. (Alternatively, brainstorm's wrap-up option **B** can hand straight off to `/myspec:idea-intake` and skip the manual file.)
+
+---
+
+## 3. Idea intake — get on the queue
 
 ```
 /myspec:idea-intake scheduled-exports
@@ -76,7 +90,7 @@ The agent updates `ideas/PRIORITY-LISTING.md`:
 
 ---
 
-## 3. Idea process — convert to a real spec
+## 4. Idea process — convert to a real spec
 
 ```
 /myspec:idea-process
@@ -114,7 +128,7 @@ It also adds an entry to `ai/features/index.yaml`:
 
 ---
 
-## 4. Spec review — first approval gate
+## 5. Spec review — first approval gate
 
 ```
 /myspec:feature-spec-review scheduled-exports
@@ -134,7 +148,7 @@ last_updated: 2026-04-30
 
 ---
 
-## 5. Cross-spec validation — catch conflicts early
+## 6. Cross-spec validation — catch conflicts early
 
 ```
 /myspec:cross-spec-validation scheduled-exports
@@ -148,7 +162,7 @@ The user resolves by adding a "saved templates" requirement to `report-templates
 
 ---
 
-## 6. Tech-spec — design the implementation
+## 7. Tech-spec — design the implementation
 
 ```
 /myspec:feature-tech-spec scheduled-exports
@@ -169,17 +183,17 @@ The agent reads the approved spec, examines existing patterns (the notification-
 
 ---
 
-## 7. Tech-spec review — second approval gate
+## 8. Tech-spec review — second approval gate
 
 ```
 /myspec:feature-tech-spec-review scheduled-exports
 ```
 
-Verifies every acceptance criterion has at least one implementation step, every step has a file path matching the inventory, every interface is defined. Passes. Status flipped to `approved`.
+Verifies every acceptance criterion has at least one implementation step, every step has a file path matching the inventory, every interface is defined, and — the Task-extractability dimension — each step is self-contained enough to hand to a single implementation task without cross-step guesswork. Passes. Status flipped to `approved`.
 
 ---
 
-## 8. Plan — execution-ready breakdown
+## 9. Plan — execution-ready breakdown
 
 ```
 /myspec:feature-plan scheduled-exports
@@ -216,7 +230,7 @@ Each task expands into TDD steps with exact code, file paths, run commands, and 
 
 ---
 
-## 9. Implement — dispatch subagents
+## 10. Implement — dispatch subagents
 
 ```
 /myspec:feature-implement scheduled-exports
@@ -247,7 +261,39 @@ The plan file now has every task checked, with phase-review notes inline.
 
 ---
 
-## 10. Verify — pre-merge health check
+## 11. Implementation review — does the built code match the spec?
+
+```
+/myspec:feature-implement-review scheduled-exports
+```
+
+A fresh reviewer (no memory of how the code got written) traces **spec/plan ↔ code** in both directions and produces `conformance-report.md`. It checks for unmet acceptance criteria, scope drift (code that does things the spec never asked for), and faked-done checkboxes. Finding:
+
+> **Drift (Medium)**: `ScheduleForm` exposes a "send a test export now" button. No requirement or AC covers it — it crept in during implementation.
+
+The skill never edits code. It routes: the test-export button is genuinely useful, so the user chooses to **document it** rather than rip it out — the agent points them at `/myspec:feature-update` to add the requirement. Everything else is conformant. Verdict: `divergent`, resolved.
+
+---
+
+## 12. Code review — quality and standards
+
+```
+/myspec:code-review
+```
+
+Reviews the same diff against the universal dimensions (correctness, error handling, security, tests, readability) plus the project's configured rules in `.claude/` (e.g. "repositories never throw — return a Result"). Findings, severity-ranked:
+
+| Severity | Finding |
+|----------|---------|
+| High | `ScheduleRunner` swallows email-send errors with a bare `catch {}` — violates the retry-on-failure AC and the project's "no silent catch" rule. |
+| Medium | `ExportRunRepository.list()` has no pagination; run history is unbounded. |
+| Low | Two test files duplicate a `makeSchedule()` factory — extract to a shared fixture. |
+
+The agent leads with what's solid (clean migration, good worktree isolation), then the user resolves the High before merge. This pass is **complementary** to step 11 — conformance asks *did we build the right thing*, code-review asks *did we build it well*.
+
+---
+
+## 13. Verify — pre-merge health check
 
 ```
 /myspec:feature-verify scheduled-exports
@@ -271,7 +317,7 @@ User runs the suggested sync, the stale scenario is updated, re-runs verify — 
 
 ---
 
-## 11. Complete — flip status, archive, merge
+## 14. Complete — flip status, archive, merge
 
 ```
 /myspec:feature-complete scheduled-exports
@@ -300,4 +346,5 @@ Phase 2 — branch integration:
 - **The spec / tech-spec / plan layering is load-bearing.** Spec answers *what*, tech-spec answers *how*, plan answers *who-does-what-in-what-order*. Skipping a layer breaks the next one.
 - **Parallel groups are real concurrency**, not just labels — `feature-implement` dispatches actual subagents with worktree isolation and merges at barriers.
 - **Milestone checkpoints exist for a reason** — long features can run across multiple sessions; the checkpoint is where you switch agents without losing state.
+- **Two complementary review passes before merge** — `feature-implement-review` asks *did we build the right thing* (conformance to spec), `code-review` asks *did we build it well* (quality + standards). Neither replaces the other.
 - **`feature-verify` before `feature-complete`** catches the drift you didn't notice.
