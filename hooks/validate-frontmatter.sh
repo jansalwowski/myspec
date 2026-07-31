@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # validate-frontmatter.sh
 # PostToolUse hook — validates frontmatter on ${aiDir}/**/*.md writes/edits.
-# Outputs warnings that the agent sees as feedback and must fix before continuing.
+# Emits a block-decision JSON so the agent sees the issues as feedback and
+# fixes them before continuing (exit-0 stdout alone never reaches the agent).
 # Reads aiDir from .myspec.json (defaults to "ai" if not configured).
+# Accepted fields mirror the framework's own templates: identity is any of
+# title/name/topic/id/type; temporal is any of updated/last_updated/created/
+# started/date. ${aiDir}/ideas/ is exempt (its seed docs ship frontmatter-less).
 
 set -euo pipefail
 
@@ -86,9 +90,16 @@ if [ -f "$REPO_ROOT/.myspec.json" ] && command -v jq &>/dev/null; then
   fi
 fi
 
-# Only check files inside the AI documentation directory
-RELATIVE=$(python3 -c "import os; print(os.path.relpath('$FILE_PATH', '$REPO_ROOT'))" 2>/dev/null || echo "$FILE_PATH")
+# Only check files inside the AI documentation directory (pure-shell prefix
+# strip — no python3 dependency, no quote-injection via the file path)
+RELATIVE="${FILE_PATH#"$REPO_ROOT"/}"
 if [[ "$RELATIVE" != ${AI_DIR}/* ]]; then
+  exit 0
+fi
+
+# The ideas queue ships frontmatter-less seed docs (PRIORITY-LISTING.md,
+# *-INSTRUCTIONS.md) that idea skills edit on every triage — exempt the subtree
+if [[ "$RELATIVE" == ${AI_DIR}/ideas/* ]]; then
   exit 0
 fi
 
@@ -106,23 +117,31 @@ if ! echo "$CONTENT" | grep -qE "^---"; then
 else
   FRONTMATTER=$(echo "$CONTENT" | awk '/^---/{p++; if(p==2) exit} p' | grep -v "^---")
 
-  # Check title or name field
-  if ! echo "$FRONTMATTER" | grep -qE "^(title|name):"; then
-    ISSUES+=("missing required field: 'title' or 'name'")
+  # Check an identity field (matches every framework template:
+  # docs use title, skills use name, sessions use topic, memories use id,
+  # type indexes use type)
+  if ! echo "$FRONTMATTER" | grep -qE "^(title|name|topic|id|type):"; then
+    ISSUES+=("missing identity field: one of 'title', 'name', 'topic', 'id', 'type'")
   fi
 
-  # Check at least one temporal field
-  if ! echo "$FRONTMATTER" | grep -qE "^(updated|last_updated|created):"; then
-    ISSUES+=("missing temporal field: 'updated', 'last_updated', or 'created'")
+  # Check at least one temporal field (sessions use started, episodic
+  # memories use date)
+  if ! echo "$FRONTMATTER" | grep -qE "^(updated|last_updated|created|started|date):"; then
+    ISSUES+=("missing temporal field: one of 'updated', 'last_updated', 'created', 'started', 'date'")
   fi
 fi
 
 if [ ${#ISSUES[@]} -gt 0 ]; then
-  echo "⚠️  Frontmatter issue in $RELATIVE:"
+  REASON="Frontmatter issue in ${RELATIVE}:"
   for ISSUE in "${ISSUES[@]}"; do
-    echo "   - $ISSUE"
+    REASON="${REASON}
+  - ${ISSUE}"
   done
-  echo "   Fix frontmatter before completing this task."
+  REASON="${REASON}
+Fix the frontmatter before continuing (templates: \${aiDir}/.templates/)."
+  # Emit a block decision — the harness surfaces the reason back to the agent;
+  # plain stdout with exit 0 would be transcript-only and never seen.
+  printf '{"decision":"block","reason":%s}\n' "$(printf '%s' "$REASON" | jq -Rs .)"
 fi
 
 exit 0

@@ -114,12 +114,15 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 3. **Execute choice:**
 
    **Option 1 — Merge locally:**
+
+   The `guard-git-branch.sh` hook (if installed) blocks branch mutations on the main checkout; the `MYSPEC_ALLOW_BRANCH_OPS=1` prefix marks this as a user-confirmed integration flow and is required for these commands to pass:
+
    ```bash
-   git checkout <base-branch>
+   MYSPEC_ALLOW_BRANCH_OPS=1 git checkout <base-branch>
    git pull
-   git merge <feature-branch>
+   MYSPEC_ALLOW_BRANCH_OPS=1 git merge <feature-branch>
    # Run verification again on merged result
-   git branch -d <feature-branch>
+   MYSPEC_ALLOW_BRANCH_OPS=1 git branch -d <feature-branch>
    ```
 
    **Option 2 — Push and create PR:**
@@ -146,10 +149,10 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 
    Type 'discard' to confirm.
    ```
-   Wait for exact `discard` input, then:
+   Wait for exact `discard` input, then (prefix required — see Option 1):
    ```bash
-   git checkout <base-branch>
-   git branch -D <feature-branch>
+   MYSPEC_ALLOW_BRANCH_OPS=1 git checkout <base-branch>
+   MYSPEC_ALLOW_BRANCH_OPS=1 git branch -D <feature-branch>
    ```
 
 4. **Worktree cleanup** (only for options 1 & 4, and only if worktree was detected):

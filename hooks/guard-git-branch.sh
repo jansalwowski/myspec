@@ -9,6 +9,10 @@
 #
 # Note: `git checkout -- <file>` is also blocked. Use `git restore <file>` instead.
 #
+# Escape hatch: a command prefixed with MYSPEC_ALLOW_BRANCH_OPS=1 is approved.
+# This marks a deliberate, user-confirmed flow (e.g. feature-complete's branch
+# integration) as opposed to a casual branch mutation by a parallel agent.
+#
 # Output contract: {"decision": "block", "reason": "..."} or {"decision": "approve"}
 
 set -euo pipefail
@@ -74,6 +78,12 @@ if [ -f "$REPO_ROOT/.git" ]; then
   exit 0
 fi
 
+# Explicit opt-out for user-confirmed integration flows (see header)
+if echo "$COMMAND" | grep -qE '(^|[[:space:]])MYSPEC_ALLOW_BRANCH_OPS=1[[:space:]]'; then
+  echo '{"decision": "approve"}'
+  exit 0
+fi
+
 # We are on the main checkout — enforce the block list
 BLOCKED_PATTERNS=(
   'git[[:space:]]+checkout([[:space:]]|$)'
@@ -86,7 +96,7 @@ BLOCKED_PATTERNS=(
 for PATTERN in "${BLOCKED_PATTERNS[@]}"; do
   if echo "$COMMAND" | grep -qE "$PATTERN"; then
     BLOCKED_CMD=$(echo "$COMMAND" | head -c 200)
-    REASON="BLOCKED: Branch-mutating git commands are not allowed on the main checkout. Use isolation: \"worktree\" in your Agent tool call instead. If you need to restore a file, use \`git restore <file>\` not \`git checkout\`. Blocked: ${BLOCKED_CMD}"
+    REASON="BLOCKED: Branch-mutating git commands are not allowed on the main checkout. Use isolation: \"worktree\" in your Agent tool call instead. If you need to restore a file, use \`git restore <file>\` not \`git checkout\`. For a user-confirmed integration flow (e.g. feature-complete branch merge), prefix the command with MYSPEC_ALLOW_BRANCH_OPS=1. Blocked: ${BLOCKED_CMD}"
     echo "{\"decision\": \"block\", \"reason\": $(printf '%s' "$REASON" | jq -Rs .)}"
     exit 0
   fi
