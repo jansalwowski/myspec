@@ -131,36 +131,10 @@ Run these checks against spec.md content:
 
 ## Output Format
 
-### Findings Table
+**REQUIRED:** Follow [../\_shared/review-output.md](../_shared/review-output.md) for the findings table, fix-proposal shape, and tagging rules. Example row for this skill:
 
 ```markdown
-| Severity | Dimension | Issue | File | Line(s) | Finding |
-|----------|-----------|-------|------|---------|---------|
 | Critical | Consistency | Contradictory requirements | spec.md | 45-47, 89 | REQ-003 requires admin approval, but AC-007 allows auto-approval |
-| High | Dependencies | Undeclared dependency | spec.md | 67 | Mentions "notification system" but not in dependencies.md |
-| Medium | Clarity | Vague language | spec.md | 123 | "User may receive email" - unclear when this happens |
-| Low | Completeness | Generic statement | spec.md | 200 | "Out of Scope: Future features" - too vague |
-```
-
-### Fix Proposals
-
-```markdown
-## Fix 1: Resolve contradictory requirements (Critical)
-
-**File**: spec.md:45-47,89
-
-**Issue**: REQ-003 requires admin approval, but AC-007 allows auto-approval.
-
-**Current**:
-- REQ-003: All submissions must be approved by an admin
-- AC-007: System auto-approves submissions from verified users
-
-**Proposed**:
-- REQ-003: All submissions must be approved by an admin, except for verified users (see REQ-012)
-+ REQ-012: Verified users (account age > 30 days AND reputation > 100) have submissions auto-approved
-- AC-007: System auto-approves submissions from verified users as defined in REQ-012
-
-**Rationale**: Clarifies the exception case and creates a traceable requirement for verified users.
 ```
 
 ## Severity Classification
@@ -207,22 +181,6 @@ After running the skill:
 - [ ] If changes were made: `last_updated` was set to today
 - [ ] Summary shows files changed and remaining issues
 - [ ] Skill did NOT flag technical content (spec-cleanup's job)
-
-## Example Usage
-
-```
-User: /spec-review guide-versioning
-```
-
-**Expected behavior**:
-1. Load ${aiDir}/features/guide-versioning/spec.md, dependencies.md, and index.yaml
-2. Check all 8 dimensions against spec.md
-3. Validate dependencies.md ↔ spec.md ↔ index.yaml alignment
-4. Present findings table with severity, dimension, file, line numbers
-5. Propose concrete fixes for each issue
-6. Wait for user to approve fixes
-7. Apply approved fixes and increment spec_version
-8. Show summary of changes made
 
 ## Integration
 

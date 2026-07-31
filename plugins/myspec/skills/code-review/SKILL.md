@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: "Use when reviewing implemented code for quality, standards conformance, and potential issues — after a feature is built, before feature-complete or a PR. Keywords: code review, review code, review changes, review my code, review diff, pre-merge review, quality review, find bugs in changes, check code quality. Configurable per-repo and technology-agnostic — universal dimensions plus project rules. Do NOT use for spec.md (use feature-spec-review), tech-spec.md (use feature-tech-spec-review), or SKILL.md (use skill-verify)."
+description: "Use when reviewing implemented code for quality, standards conformance, and potential issues — after a feature is built, before feature-complete or a PR. Keywords: code review, review changes, review diff, pre-merge review, find bugs in changes. Universal dimensions plus per-repo rules. Do NOT use for spec.md (feature-spec-review), tech-spec.md (feature-tech-spec-review), or SKILL.md (skill-verify)."
 tags: [code-review, quality, validation, critical-thinking, review]
 ---
 
@@ -101,32 +101,10 @@ What the reviewer must stay silent about (owned by tooling or intentional).
 
 ## Output Format
 
-### Findings Table
+**REQUIRED:** Follow [../\_shared/review-output.md](../_shared/review-output.md) for the findings table, fix-proposal shape, and tagging rules. Example row for this skill:
 
 ```markdown
-| Severity | Dimension | Issue | File | Line(s) | Finding |
-|----------|-----------|-------|------|---------|---------|
 | Critical | Input & Trust | Unvalidated path | src/files/read.ts | 42 | User-supplied `name` concatenated into FS path — directory traversal |
-| High | Error Handling | Swallowed failure | src/sync/run.ts | 88-91 | `catch {}` hides write failures; sync reports success on error |
-| Medium | Test Adequacy | New branch untested | src/billing/calc.ts | 30 | Proration path added, no test exercises it |
-| Low | Maintainability | Duplicated guard | src/util/parse.ts | 12, 47 | Same null-check inlined twice — extract |
-```
-
-### Fix Proposal
-
-```markdown
-## Fix 1: Validate path before read (Critical)
-
-**File**: src/files/read.ts:42
-**Issue**: User input flows unvalidated into a filesystem path (directory traversal).
-
-- const p = base + "/" + name;
-- return fs.readFileSync(p);
-+ const p = path.resolve(base, name);
-+ if (!p.startsWith(path.resolve(base))) throw new Error("invalid path");
-+ return fs.readFileSync(p);
-
-**Rationale**: Constrains the resolved path to `base`, blocking `../` traversal.
 ```
 
 ### Verdict

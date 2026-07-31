@@ -1,7 +1,7 @@
 ---
 name: feature-implement
 tags: [feature-workflow, implementation, execution, parallel, worktree]
-description: "Use when executing an implementation-plan.md from ${aiDir}/features/. Uses subagents per task — parallelizes when plan allows (worktree isolation). Handles [parallel:groupName] tags, Execution Order tables, barrier sections, dual-stream fork/join. Keywords: execute plan, implement feature, run plan, start implementation. Do NOT use for creating plans (use feature-plan), for debugging (use root-cause-debugging), or for plans without Execution Order table."
+description: "Use when executing an implementation-plan.md from ${aiDir}/features/ — dispatches subagents per task, parallelizing when the plan allows (worktree isolation). Keywords: execute plan, implement feature, run plan, start implementation. Do NOT use for creating plans (feature-plan), for debugging (root-cause-debugging), or for plans without an Execution Order table."
 ---
 
 # Feature Implement

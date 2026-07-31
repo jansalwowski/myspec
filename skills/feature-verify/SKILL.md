@@ -1,13 +1,12 @@
 ---
 name: feature-verify
 description: >
-  Use when auditing a feature's overall health, before starting work on a feature,
-  or when unsure if documentation matches reality. Covers spec, tech-spec, plan,
+  Use when auditing a feature's overall health — before starting work, or when
+  unsure documentation matches reality. Covers spec, tech-spec, plan,
   implementation, sub-features, memories, and manifest sync.
-  Keywords: feature health, feature audit, feature check, verify feature, feature status,
-  feature sync, feature drift, check feature, health check, pre-flight.
-  Do NOT use for fixing drift (use feature-spec-sync), completing features
-  (use feature-complete), or creating new specs (use feature-spec).
+  Keywords: feature health, feature audit, verify feature, feature drift, health check.
+  Do NOT use for fixing drift (feature-spec-sync), completing features
+  (feature-complete), or creating new specs (feature-spec).
 allowed-tools: [Read, Grep, Glob]
 ---
 

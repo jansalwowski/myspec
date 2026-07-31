@@ -46,7 +46,7 @@ Replace documentary language with procedural commands:
 | Spec (cross-platform) | `license`, `compatibility`, `allowed-tools` (experimental) |
 | Claude Code + VS Code Copilot | `disable-model-invocation`, `user-invocable` |
 | Claude Code only | `model`, `effort`, `context`, `agent`, `hooks`, `paths`, `shell`, `argument-hint`, `arguments`, `when_to_use` |
-| Convention (ignored by agents) | `tags`, `triggers`, `metadata` |
+| Convention (ignored by agents) | `tags`, `triggers`, `metadata`, `dependencies` |
 
 `triggers` is **not** used for activation — agents only match on `description`. Put trigger phrases in the description.
 

@@ -1,6 +1,6 @@
 ---
 name: "memorify"
-description: "Use when the user asks to scan the current conversation for things worth remembering — phrasings like 'memorify this', 'anything to remember from this?', 'save what we learned'. Yields zero, one, or many memories; memory-type vocabulary stays internal. Do NOT use when the exact content is already named (use /memorize), when wrapping a tracked session (use /session-complete), or for trivial config visible in code."
+description: "Use when the user asks to scan the current conversation for things worth remembering — phrasings like 'memorify this', 'anything to remember from this?', 'save what we learned'. Yields zero, one, or many memories. Do NOT use when the exact content is already named (memorize), when wrapping a tracked session (session-complete), or for trivial config visible in code."
 ---
 
 # Memorify
@@ -71,40 +71,17 @@ Only ask what cannot be inferred from the conversation. Examples of plain-langua
 
 Batch questions per candidate so the user gets one prompt per memory, not a flood.
 
-### 5. Draft Each Memory
+### 5. Delegate Each Selected Candidate to memory-create
 
-Use `${aiDir}/.templates/memory-{type}.md`. Find next ID from `${aiDir}/memory/{type}/index.md` (highest + 1). Fill fields:
+**REQUIRED:** For each candidate the user selected, invoke `/myspec:memory-create` with the classified type, the extracted content, and the Step 4 answers — sequentially, so the user can stop the run at any point. It owns the shared write path: the consolidation check (ADD / UPDATE / NO-OP — prevents duplicates), ID assignment, template fill, draft approval, index row, and optional Layer 1 promotion. Do not draft or write memory files in this skill.
 
-**Procedural**: `polarity` (positive/negative), `triggers`, `not_for`, `anchors` if code-specific. Body: Procedure → Why → What Fails → Verification.
-**Semantic**: `topic`, `anchor` (file + pattern) if code-anchored, `source_session` if a session is active. Body: 1-3 sentence fact → Source → Implication.
-**Episodic**: `date` (today or user-supplied), `outcome`, `persistent` (default false), `source_session` if active. Body: Context → Decision → Outcome → Consequence.
+The Constraints above still govern the user-facing conversation: type vocabulary stays internal, and each draft is confirmed individually before write.
 
-For multiple memories from one conversation, use `related` to cross-link IDs once they're all drafted.
-
-### 6. Show Each Draft, Confirm One at a Time
-
-For each candidate:
-
-1. Render the full drafted file (frontmatter + body) plus the proposed index row.
-2. Ask: "Save this one? **yes** to write, **edit** with changes, or **skip**."
-3. Apply edits or skip; loop until user approves or skips.
-4. On approval: write `${aiDir}/memory/{type}/{id}-{slug}.md` and append the row to the type index. Bump `updated` date in index frontmatter.
-
-Do this sequentially per candidate so the user can stop the run at any point.
-
-### 7. Cross-Link Related Memories
+### 6. Cross-Link Related Memories
 
 After all approved memories are written, if two or more came from the same conversation, edit each file's `related:` field to reference the others' IDs.
 
-### 8. Optional: Layer 1 Promotion
-
-For any memory the user flagged as critical (or that you believe is critical based on their answers in step 4), ask:
-
-> "Should this be in the always-loaded index so I see it every session?"
-
-If yes, add a one-line summary to the appropriate section of `${aiDir}/memory/index.md`.
-
-### 9. Report
+### 7. Report
 
 End with a short tally: "Saved N memories: <ID> <ID> <ID>. Skipped M." No type names.
 
@@ -113,15 +90,13 @@ End with a short tally: "Saved N memories: <ID> <ID> <ID>. Skipped M." No type n
 - [ ] Conversation actually scanned — candidate list reflects real turns, not invented content
 - [ ] Memory types chosen silently — never named in user-facing output
 - [ ] User explicitly chose which candidates to save (not auto-saved)
-- [ ] Each draft shown and confirmed individually before write
-- [ ] IDs incremented correctly per type
-- [ ] Index rows contain keywords/topics only — no rule/fact/narrative leaked
+- [ ] Each selected candidate routed through `/myspec:memory-create` individually (consolidation check ran — no duplicates)
 - [ ] `related` cross-links added when multiple memories came from one run
 - [ ] Final tally reported
 
 ## When NOT to Use
 
-- User specified the exact content to save → use `/memorize` (REQUIRED for that path)
-- User is wrapping up a tracked session → use `/session-complete` (REQUIRED for session wrap; extracts memories from the session log)
+- User specified the exact content to save → use `/myspec:memorize` (REQUIRED for that path)
+- User is wrapping up a tracked session → use `/myspec:session-complete` (REQUIRED for session wrap; extracts memories from the session log)
 - Conversation was research-only with no decisions or surprises
 - Conversation is short and contains nothing beyond a code edit already visible in the diff

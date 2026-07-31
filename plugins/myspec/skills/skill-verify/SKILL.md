@@ -44,7 +44,7 @@ description: >
    - A skill that declares a dependency it does not actually have is broken (it will emit non-compiling or non-functional output). These are always Critical, never auto-fixed — the fix is either to add the dependency or delete/repair the skill, which requires human judgment.
    - Skills without a `dependencies:` block skip this step entirely.
 
-5. **Detect Anti-Patterns** (check all 14 from Anti-Patterns Reference)
+5. **Detect Anti-Patterns** (check all 14 from Anti-Patterns Reference; read [references/detection-patterns.md](references/detection-patterns.md) for the scan regexes before starting)
    - Scan description for workflow verbs in sequence
    - Scan description for vague/generic language without specific keywords
    - Scan body for README-style documentary language
@@ -137,14 +137,7 @@ description: >
 
 ### Allowed fields by portability tier
 
-| Tier | Fields | Notes |
-|------|--------|-------|
-| **Spec** (any agentskills.io platform) | `name`, `description`, `license`, `compatibility`, `allowed-tools` | `allowed-tools` is marked Experimental in the spec; support varies |
-| **Claude Code + VS Code Copilot** | adds `disable-model-invocation`, `user-invocable` | Not in open spec; ignored on other platforms |
-| **Claude Code only** | adds `model`, `effort`, `context`, `agent`, `hooks`, `paths`, `shell`, `argument-hint`, `arguments`, `when_to_use` | Single-vendor only |
-| **Convention** (ignored by agents, used by tooling) | `tags`, `triggers`, `metadata`, `dependencies` | `triggers` is NOT used for activation — agents only match on `description`. `dependencies` is validated by step 4.5 (packages must be in a package.json, paths must exist) — see `.claude/rules/skill-self-test.md` |
-
-Flag fields outside the chosen portability tier. If portability target is unstated, infer from field usage and flag conflicts (e.g. mixing `disable-model-invocation` with cross-platform claims).
+The tier table lives in `.claude/rules/skill-optimization.md` (co-loaded with this skill via its `load_when`) — do not duplicate it here. Flag fields outside the chosen portability tier. If the portability target is unstated, infer from field usage and flag conflicts (e.g. mixing `disable-model-invocation` with cross-platform claims). `dependencies` is validated by step 4.5 (packages must be in a package.json, paths must exist) — see `.claude/rules/skill-self-test.md`.
 
 ## Anti-Patterns Reference
 
@@ -178,14 +171,7 @@ Flag fields outside the chosen portability tier. If portability target is unstat
 
 ## Token Targets
 
-The Anthropic spec recommends keeping the body under **5,000 tokens** (≈500 lines, ≈3,750 words). Phase 2 loads the entire body on activation, so every token competes with conversation history.
-
-| Skill Type | Limit | How to Detect |
-|------------|-------|--------------|
-| Getting-started | <150 words (~200 tokens) | Name contains "getting-started" |
-| Frequently-loaded | <200 words (~270 tokens) | Referenced by 3+ skills or loaded by rules |
-| Standard | <500 lines / <5,000 tokens | Default — Anthropic spec recommendation |
-| Complex | Split to `references/` if >500 lines | Move on-demand reference content to subdirectory (Phase 3 loading) |
+Per-type body targets are in the Token Efficiency table of `.claude/rules/skill-optimization.md` (co-loaded with this skill). Detection hints: "getting-started" in the name → getting-started tier; referenced by 3+ skills or loaded by rules → frequently-loaded tier; otherwise standard (<500 lines / <5,000 tokens), splitting to `references/` beyond that.
 
 ## Severity Classification
 
@@ -198,130 +184,23 @@ The Anthropic spec recommends keeping the body under **5,000 tokens** (≈500 li
 
 ## Output Format
 
-### Findings Table
+**REQUIRED:** Follow [../\_shared/review-output.md](../_shared/review-output.md) for the findings table, fix-proposal shape, and tagging rules (this skill reviews a single file: use `Category` for `Dimension`, drop the `File` column). Example row:
 
 ```markdown
-| Severity | Category | Issue | Line(s) | Finding |
-|----------|----------|-------|---------|---------|
 | Critical | Anti-Pattern #1 | Workflow in description | 3 | Description contains "analyzes X, generates Y" — agent will skip body |
-| High | Anti-Pattern #9 | Force-loading reference | 45 | Uses `@testing-skills.md` — burns tokens on load |
-| Medium | Structure | Missing verification checklist | — | No "Verification Checklist" section with `- [ ]` items |
-| Low | Token Efficiency | Verbose example | 78-95 | Code block is 17 lines; could compress to 8 |
-```
-
-### Fix Proposals
-
-```markdown
-## Fix 1: Remove workflow from description (Critical) [requires confirmation]
-
-**Line**: 3
-
-**Current**:
-- description: Analyzes code, generates migration files, validates schema changes
-
-**Proposed**:
-+ description: >
-+   Use when making database schema changes. Handles Prisma migrations and
-+   destructive operation detection. Do NOT use for query-only changes.
-
-**Rationale**: Description must be trigger mechanism, not workflow summary.
-```
-
-## Detection Patterns
-
-```
-# name format (frontmatter)
-/^[a-z0-9-]{1,64}$/
-
-# description starts with "Use when"
-/^Use when/
-
-# Anti-Pattern #1 — workflow in description (sequential action verbs)
-/\b(analyzes?|generates?|creates?|validates?|checks?)\b.*(then|next|after|finally)/i
-
-# Anti-Pattern #3 — README-style language
-/This skill (helps|is|provides|enables)|Understanding .* is important/i
-
-# Anti-Pattern #5 — first/second person
-/\b(I can|I will|you should|you can|your |we |our |my )\b/i
-
-# Anti-Pattern #9 — force-loading
-/@[a-zA-Z][\w\/.-]+/
-
-# Documentary language in steps
-/\b(You should|It's important to|Make sure you|Remember to)\b/
-
-# Anti-Pattern #10 — no progressive disclosure (>300 lines with inlined refs)
-# Count body lines; if >300, scan for tables/examples that are only used in one step
-
-# Anti-Pattern #8 extended — no conditional branching
-# Check workflow section for absence of: if, when, unless, otherwise
-/\b(if |when |unless |otherwise)\b/i
-
-# Anti-Pattern #12 — decorative formatting
-/^>\s*(\*\*)?Note[:\*]/m              # blockquote "Note:" boxes
-/^---\s*$/m                            # horizontal rules inside body (not frontmatter)
-/^#{1,6}\s+[\u{1F300}-\u{1FAFF}]/mu    # emoji-prefixed headers
-/^\s{6,}[-*]\s/m                       # 3-deep (or deeper) bullet ladders
-
-# Anti-Pattern #13 — all-caps imperative density
-# Count occurrences of \b(MUST|ALWAYS|NEVER|SHOULD NOT|DO NOT)\b
-# Flag if >5 occurrences without nearby rationale ("because", "since", "to avoid")
-
-# Anti-Pattern #14 — model-known explanations
-# Heuristic: paragraphs that define common terms or explain mainstream libraries
-/\b(is a popular|is a JavaScript library|allows you to|is used to)\b/i
-
-# Manual-only invocation (skip Anti-Pattern #1 and "Use when" check)
-/^disable-model-invocation:\s*true/m
-
-# Oversized code blocks (flag if > 20 lines between ``` markers)
 ```
 
 ## Verification Checklist
 
-After running the skill:
+Outcome checks (not a workflow echo — per `.claude/rules/skill-optimization.md`):
 
-- [ ] Skill path was resolved and SKILL.md was read
-- [ ] YAML frontmatter was parsed; `name` and `description` both present
-- [ ] `name` matches parent directory name
-- [ ] Invocation mode detected (`disable-model-invocation`, `user-invocable`); description rules adjusted accordingly
-- [ ] Frontmatter fields validated against the chosen portability tier (spec / Claude Code+Copilot / Claude Code only / convention)
-- [ ] If `dependencies:` block present: every package found in a package.json, every path exists on disk (else Critical)
-- [ ] If model-invocable: `description` starts with "Use when" and uses third person
-- [ ] All 14 anti-patterns were checked against description and body
-- [ ] Structure validated: Workflow, Rules/Constraints, Verification Checklist sections present
-- [ ] Procedural language verified (no documentary patterns); decorative formatting checked (Anti-Pattern #12)
-- [ ] All-caps imperative density checked (Anti-Pattern #13); model-known explanations checked (Anti-Pattern #14)
-- [ ] Token efficiency assessed: word count, line count, progressive disclosure compliance, 5,000-token body limit
-- [ ] Description quality checked: concrete keywords, synonyms, negative triggers, no workflow summary
-- [ ] `triggers` field misuse checked (warn if author put activation phrases there)
-- [ ] Findings table output grouped by severity with line numbers
-- [ ] Fixes proposed in diff format with `[auto-fix]` or `[requires confirmation]` tags
-- [ ] User confirmation requested before `[requires confirmation]` changes
-- [ ] Final word and line count reported after changes
-- [ ] Summary shows sections changed and remaining issues
-- [ ] Trigger testing recommended: 5-10 queries (should-trigger, paraphrased, should-NOT-trigger)
-
-## Example Usage
-
-```
-User: /skill-verify vue-component
-```
-
-**Expected behavior**:
-1. Resolve to `.claude/skills/vue-component/SKILL.md`
-2. Detect invocation mode (model-invocable vs. manual-only)
-3. Validate frontmatter: `name`, `description`, fields-by-portability-tier
-4. Confirm `name: vue-component` matches directory `vue-component/`
-5. Check description for workflow summary, voice, keywords, negative triggers (skip trigger checks if manual-only)
-6. Scan body for all 14 anti-patterns
-7. Validate structure: Workflow, Rules, Verification sections
-8. Count words/lines/tokens, compare to 5,000-token body target
-9. Present findings table grouped by severity
-10. Propose fixes in diff format
-11. Wait for user confirmation on structural changes
-12. Apply approved fixes and report final metrics
+- [ ] Every frontmatter finding cites the violated constraint (field, tier, or format rule)
+- [ ] All 14 anti-patterns and the three structure rules were scanned — none skipped silently; regexes taken from `references/detection-patterns.md`
+- [ ] If a `dependencies:` block exists: every package located in a package.json and every path confirmed on disk, or a Critical finding raised
+- [ ] Findings table is grouped by severity and every row has a line number (or `—` for absent-section findings)
+- [ ] Every proposed fix is a concrete diff tagged `[auto-fix]` or `[requires confirmation]`; no `[requires confirmation]` fix applied without explicit approval
+- [ ] Post-fix word/line/token counts reported and compared against the token target for the skill's type
+- [ ] Trigger testing recommended (should-trigger, paraphrased, should-NOT-trigger queries)
 
 ## Integration
 

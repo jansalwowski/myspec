@@ -1,12 +1,11 @@
 ---
 name: brainstorm
 description: >
-  Use when the user wants to brainstorm, explore ideas, think a problem through, generate
-  options, name something, frame a fuzzy problem, or pressure-test / stress-test a direction
-  with devil's-advocate thinking. Infers the mode (frame, generate, solve, sharpen) rather than
-  interviewing. Covers "what if" branching, analogy transfer, SCAMPER, Six Hats, reverse
-  brainstorming, first-principles, pre-mortem. Do NOT use to plan an approved spec's
-  implementation (use feature-plan) or to queue an idea (use idea-intake).
+  Use when the user wants to brainstorm, explore ideas, think a problem through,
+  generate options, name something, frame a fuzzy problem, or pressure-test /
+  stress-test a direction with devil's-advocate thinking. Infers the mode (frame,
+  generate, solve, sharpen) rather than interviewing. Do NOT use to plan an
+  approved spec's implementation (feature-plan) or to queue an idea (idea-intake).
 ---
 
 # Brainstorm

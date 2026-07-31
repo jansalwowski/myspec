@@ -1,6 +1,6 @@
 ---
 name: "memory-create"
-description: "Use when creating a new memory entry from a completed session, direct capture, or user-approved insight. Handles procedural (how-to), semantic (facts), and episodic (events) memory types. Triggers: save memory, record insight, capture learning, log finding. Do NOT use without user approval, for trivial insights (typos, obvious config), or if first approach worked without surprises."
+description: "Use as the shared memory write path — invoked by session-complete, memorize, and memorify, or directly for a user-approved insight. Handles procedural (how-to), semantic (facts), and episodic (events) types with a consolidation check. Do NOT use for user-facing capture requests (memorize for inline content, memorify for conversation sweeps), without user approval, or for trivial insights."
 ---
 
 # Memory Create
@@ -17,7 +17,7 @@ description: "Use when creating a new memory entry from a completed session, dir
   - **Semantic**: Facts (what is true, source, implication)
   - **Episodic**: Narrative (context, decision, outcome, consequence)
 - Code-specific memories MUST include file + grep pattern anchors for staleness detection
-- Always set `related` field to cross-reference other memory types
+- Set `related` to cross-reference memories discovered during the consolidation check; empty is fine for a first capture in a new area
 
 ## Workflow
 
