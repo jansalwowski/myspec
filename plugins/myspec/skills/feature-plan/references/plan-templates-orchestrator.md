@@ -8,10 +8,15 @@ Task templates already mandate atomic content: exact file paths, complete code, 
 
 ## Front-matter
 
+The canonical Plan Header fields from [`plan-templates.md`](./plan-templates.md) (title, feature, based_on_spec_version, created, last_updated), plus the orchestration keys:
+
 ```yaml
 ---
+title: "{Feature Title} -- Implementation Plan"
 feature: <feature-name>
-spec_version: <int>
+based_on_spec_version: <int>
+created: {TODAY}
+last_updated: {TODAY}
 orchestration: agent-chain
 roles:
   worker: cheap
