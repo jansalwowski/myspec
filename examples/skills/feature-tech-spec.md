@@ -54,6 +54,13 @@ last_updated: 2026-04-30
 Sections produced:
 
 - **Architecture**: "Follows the existing favorites pattern (see dashboards-favorites). New `report_favorites` table, `ReportFavoritesService`, `useReportFavorites` hook."
+- **Reuse audit** (required — the `require-reuse-audit.sh` hook blocks tech-spec writes without it):
+
+  | Candidate | Surface | Decision | Reason |
+  |-----------|---------|----------|--------|
+  | `FavoritesService<T>` | shared services | reuse | generic contract fits reports unchanged |
+  | `useDashboardFavorites` | app hooks | skip | dashboard-specific cache keys; new hook instead |
+
 - **Key Interfaces**: `ReportFavorite`, `FavoritesService<Report>` (extends the generic favorites contract).
 - **Implementation Steps** — 6 ordered tasks:
   1. Migration: `report_favorites` table.

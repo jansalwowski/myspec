@@ -54,13 +54,17 @@ Task: "CSV import to user-invitations feature." Keywords: `invitations`, `csv`, 
 
 #### 4. Check for active sessions
 
-Lists `${aiDir}/memory/sessions/active/`. One file: `2026-04-30-1027-uierror.md` with mtime 8 minutes ago. Within freshness window (< 60 minutes). Auto-created by the hook.
+Lists `${aiDir}/memory/sessions/active/`. One file: `2026-04-30-1027-uierror.md` with mtime 8 minutes ago. Well inside the live window (< 1 hour — sessions over 6 hours stale get auto-archived as `abandoned`; 1–6 hours only gets reported with a `/myspec:session-clean` suggestion). Auto-created by the hook.
 
 The skill notes:
 
 > Active session detected: `2026-04-30-1027-uierror.md` (auto-created 8 min ago). Topic still says "auto: ...". When you start the new task, I'll either refine that session's frontmatter or — if it's truly a different topic — close it via `/myspec:session-complete` first.
 
-#### 5. Reports back
+#### 5. Check worktrees and framework version
+
+`git worktree list` shows only the main checkout — worktree health clean, line omitted from the summary. `.myspec.json` `frameworkVersion` matches the plugin manifest — version line omitted too. (A stale worktree would surface a `worktree-cleanup` warning; a version gap would surface a `/myspec:update` prompt.)
+
+#### 6. Reports back
 
 > **Project context loaded**
 >

@@ -33,4 +33,4 @@ Generate entries under the `<!-- myspec:project-start -->` section:
 | AP1 | [pattern name] | [why it's harmful] | [how to detect it] |
 
 ## Output Location
-Write to `${aiDir}/memory-index.md` — append to existing project section if file exists.
+Write to `${aiDir}/memory-index.md` — append to the **project section only** (below the `<!-- myspec:framework-end -->` marker). The framework section between the markers is update-managed; modifying it violates the setup skill's rules and gets overwritten by `/myspec:update`.

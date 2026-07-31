@@ -4,7 +4,6 @@ purpose: "Feature development process and code generation policy"
 load_when: "starting new features or modifying existing code"
 updated: 2026-03-29
 see_also:
-  - ${aiDir}/conventions/documentation.md
   - ${aiDir}/features/index.yaml
 ---
 
