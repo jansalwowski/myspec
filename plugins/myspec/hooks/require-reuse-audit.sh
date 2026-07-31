@@ -104,8 +104,8 @@ fi
 REASON=$(cat <<EOF
 BLOCKED: ${FILE_PATH} is missing a valid "## Reuse audit" section.
 
-Every tech-spec must enumerate reuse candidates from this project's shared
-surfaces (see the topology file named in .myspec.json, or the project's shared
+Every tech-spec must enumerate reuse candidates from the shared surfaces of
+this project (see the topology file named in .myspec.json, or the shared
 library/utility directories) before introducing new code. Add a
 "### Reuse audit" section with a table:
 
