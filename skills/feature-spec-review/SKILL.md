@@ -5,7 +5,7 @@ description: >
   internal consistency, testability, scope, dependency hygiene. Keywords: review spec,
   critique requirements, validate spec, check spec, spec analysis, requirements review.
   Do NOT use for tech-spec review (use feature-tech-spec-review) or implementation review.
-tags: [feature-workflow, specification, validation, critical-thinking]
+tags: [feature, specification, validation, critical-thinking]
 ---
 
 # Feature Spec Review
@@ -184,6 +184,6 @@ After running the skill:
 
 ## Integration
 
-**Called by:** `/myspec:feature-spec` (after spec is created and user approves review)
-**Suggests:** `/myspec:cross-spec-validation` — validate against related specs *(user chooses)*
-**Next:** `/myspec:feature-tech-spec` — create technical design once spec is approved
+**Called by** [OPTIONAL]: `/myspec:feature-spec` (after spec is created and user approves review)
+**Suggests** [OPTIONAL]: `/myspec:cross-spec-validation` — validate against related specs
+**Next** [REQUIRED]: `/myspec:feature-tech-spec` — create technical design once spec is approved

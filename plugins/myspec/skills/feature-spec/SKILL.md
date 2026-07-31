@@ -6,7 +6,7 @@ tags: [feature, specification, planning, documentation]
 
 # Feature Spec
 
-## Instructions
+## Workflow
 
 1. **Gather Information**
    - Ask the user about the feature concept
@@ -105,5 +105,5 @@ Required sections:
 
 ## Integration
 
-**Next:** `/myspec:feature-spec-review` — validate spec before proceeding to technical design
-**Next (large features):** `/myspec:feature-decompose` — split into sub-features before feature-spec-review
+**Next** [REQUIRED — owns the draft → approved transition]: `/myspec:feature-spec-review` — validate spec before proceeding to technical design
+**Next (large features)** [OPTIONAL]: `/myspec:feature-decompose` — split into sub-features before feature-spec-review

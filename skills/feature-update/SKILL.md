@@ -5,8 +5,8 @@ description: >
   the existing spec.md and tech-spec.md in place rather than recreating them.
   Keywords: modify feature, update feature, change feature, extend feature, add to feature,
   refine feature, spec_version bump.
-  Do NOT use for new features (use /myspec:feature-spec), for first-time implementation
-  (use /myspec:feature-tech-spec), or for bug fixes that don't change requirements.
+  Do NOT use for new features (feature-spec), for first-time implementation
+  (feature-tech-spec), or for bug fixes that don't change requirements.
 tags: [feature, specification, modification, workflow]
 ---
 
@@ -23,7 +23,7 @@ Modify an existing feature's spec and technical design to reflect new or changed
 - `${aiDir}/features/{feature}/spec.md` must exist
 - `${aiDir}/features/{feature}/tech-spec.md` must exist
 
-## Instructions
+## Workflow
 
 ### Step 1: Read Current State
 

@@ -227,6 +227,6 @@ Wait for user to choose which action to pursue.
 
 ## Integration
 
-**Call before:** `/myspec:feature-plan`, `/myspec:feature-implement`, `/myspec:feature-complete` — as a health pre-flight
+**Call before** [OPTIONAL]: `/myspec:feature-plan`, `/myspec:feature-implement`, `/myspec:feature-complete` — as a health pre-flight
 **Standalone:** Direct invocation for any feature audit
-**Routes to:** `/myspec:feature-spec-sync`, `/myspec:feature-spec`, `/myspec:feature-tech-spec`, `/myspec:feature-plan`, `/myspec:feature-update`, `/myspec:feature-complete`, `/myspec:memory-lookup`
+**Routes to** [OPTIONAL — per finding]: `/myspec:feature-spec-sync`, `/myspec:feature-spec`, `/myspec:feature-tech-spec`, `/myspec:feature-plan`, `/myspec:feature-update`, `/myspec:feature-complete`, `/myspec:memory-lookup`

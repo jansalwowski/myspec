@@ -149,6 +149,6 @@ Never downgrade a severity to make a verdict look cleaner.
 
 ## Integration
 
-**Called after:** `/myspec:feature-implement` — review the built code before completing.
-**Configured by:** `/myspec:setup code-review` — writes `.claude/rules/code-review.md` and seeds the `.myspec.json` `codeReview` block.
-**Next:** `/myspec:feature-complete` — once Critical/High findings are resolved.
+**Called after** [OPTIONAL]: `/myspec:feature-implement` — review the built code before completing.
+**Configured by** [OPTIONAL]: `/myspec:setup code-review` — writes `.claude/rules/code-review.md` and seeds the `.myspec.json` `codeReview` block.
+**Next** [REQUIRED]: `/myspec:feature-complete` — once Critical/High findings are resolved.

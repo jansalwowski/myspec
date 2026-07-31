@@ -14,7 +14,9 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 ## Prerequisites
 - Implementation is complete (all planned tasks done)
 
-## Phase 1 — Docs Sync
+## Workflow
+
+### Phase 1 — Docs Sync
 
 1. **Read Current State**
    - Read `${aiDir}/features/{feature}/tech-spec.md`
@@ -85,7 +87,7 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 - [ ] `CHANGELOG.md` updated with new entry (if plan was archived)
 - [ ] Run project documentation audit command if configured
 
-## Phase 2 — Verification
+### Phase 2 — Verification
 
 1. Read `.claude/verification.json` and run each required check
 2. Run project documentation audit command if configured
@@ -96,7 +98,7 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 - **Failures are related to this feature → hard stop. Fix before proceeding.**
 - Failures appear unrelated (pre-existing or from parallel changes) → ask user to confirm before continuing
 
-## Phase 3 — Branch Integration
+### Phase 3 — Branch Integration
 
 1. **Detect worktree** — run `git worktree list | grep $(git branch --show-current)`
 
@@ -161,6 +163,14 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
    git worktree remove <worktree-path>
    ```
 
+## Verification Checklist
+
+- [ ] Phase 1 checklist fully satisfied (docs, manifest `complete`, plan archived, CHANGELOG row)
+- [ ] All required checks from `.claude/verification.json` passed — or failures confirmed unrelated by the user
+- [ ] Branch resolved per the user's Phase 3 choice (merged / PR created / kept / discarded after typed confirmation)
+- [ ] Worktree removed when options 1 or 4 were chosen and one existed
+- [ ] No branch mutation ran without the `MYSPEC_ALLOW_BRANCH_OPS=1` prefix when the guard hook is installed
+
 ## Integration
 
-**Called by:** `/myspec:feature-implement` (after implementation is complete)
+**Called by** [OPTIONAL — also runs standalone]: `/myspec:feature-implement` (after implementation is complete)

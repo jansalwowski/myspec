@@ -5,7 +5,7 @@ description: "Use when the ${aiDir} documentation tree needs maintenance — nam
 
 # Docs Sanitize
 
-## Procedure
+## Workflow
 
 ### 1. Naming Violations
 

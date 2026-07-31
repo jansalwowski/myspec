@@ -8,7 +8,7 @@ tags: [documentation, cleanup, maintenance, spec]
 
 Clean up spec.md files that violate the business-vs-technical documentation separation by moving implementation details to tech-spec.md.
 
-## Instructions
+## Workflow
 
 ### 1. Load Context
 
@@ -179,7 +179,7 @@ After cleanup:
 - [ ] No broken internal references between files
 - [ ] All code examples properly formatted in tech-spec.md
 
-## Notes
+## Rules
 
 - GraphQL schemas are **always** moved to tech-spec.md (no borderline decisions)
 - High-level data model descriptions (field names, types, relationships) can stay in spec.md if they're conceptual

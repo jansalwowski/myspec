@@ -13,7 +13,7 @@ Create test seed data files for a feature.
 - `${aiDir}/features/{feature}/spec.md` exists with data model
 - `${aiDir}/features/{feature}/scenarios.md` exists with test cases
 
-## Instructions
+## Workflow
 
 ### Step 1: Analyze Data Model
 
@@ -136,7 +136,7 @@ Use relative or fixed test dates:
 - Include zero, one, typical, and maximum values
 - Include negative where allowed
 
-## Checklist
+## Verification Checklist
 
 - [ ] All entities from data model have seed data
 - [ ] Happy path scenarios have data

@@ -1,6 +1,6 @@
 ---
 name: feature-implement
-tags: [feature-workflow, implementation, execution, parallel, worktree]
+tags: [feature, implementation, execution, parallel, worktree]
 description: "Use when executing an implementation-plan.md from ${aiDir}/features/ — dispatches subagents per task, parallelizing when the plan allows (worktree isolation). Keywords: execute plan, implement feature, run plan, start implementation. Do NOT use for creating plans (feature-plan), for debugging (root-cause-debugging), or for plans without an Execution Order table."
 ---
 
@@ -324,5 +324,5 @@ After all phases complete:
 
 ## Integration
 
-**Called by:** `/myspec:feature-plan` (after plan approval)
-**Next:** `/myspec:feature-implement-review` (conformance audit) and/or `/myspec:code-review` (quality review), then `/myspec:feature-complete` — chosen by the user in Step 5
+**Called by** [REQUIRED — an approved plan must exist]: `/myspec:feature-plan` (after plan approval)
+**Next** [OPTIONAL reviews, then REQUIRED completion]: `/myspec:feature-implement-review` (conformance audit) and/or `/myspec:code-review` (quality review), then `/myspec:feature-complete` — chosen by the user in Step 5

@@ -1,6 +1,6 @@
 ---
 name: feature-implement-review
-tags: [feature-workflow, implementation, validation, conformance, critical-thinking, review]
+tags: [feature, implementation, validation, conformance, critical-thinking, review]
 description: "Use when a feature's implementation is done or paused and needs an independent check that the built code fulfills the spec and plan. Keywords: implementation review, conformance check, traceability, scope drift, acceptance verification. Produces conformance-report.md; never edits code. Do NOT use for spec.md (feature-spec-review), tech-spec.md (feature-tech-spec-review), or doc drift (feature-spec-sync)."
 ---
 
@@ -169,5 +169,5 @@ Locate the code implementing each requirement in this order:
 
 ## Integration
 
-**Called by:** `/myspec:feature-implement` (offered as a choice after Final Verification) or run standalone after implementation.
-**Next:** `/myspec:feature-complete` once conformant; or `/myspec:feature-implement` / `/myspec:feature-spec-sync` to address routed findings, then re-run this review.
+**Called by** [OPTIONAL]: `/myspec:feature-implement` (offered as a choice after Final Verification) or run standalone after implementation.
+**Next** [REQUIRED]: `/myspec:feature-complete` once conformant; or `/myspec:feature-implement` / `/myspec:feature-spec-sync` to address routed findings, then re-run this review.

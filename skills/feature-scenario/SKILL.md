@@ -13,7 +13,7 @@ Create comprehensive test scenarios for a feature in Gherkin format.
 - `${aiDir}/features/{feature}/spec.md` exists
 - Feature requirements are clear
 
-## Instructions
+## Workflow
 
 ### Step 1: Read Feature Spec
 
@@ -81,7 +81,7 @@ For each business rule:
 User creates a guide and it works.
 ```
 
-## Checklist
+## Verification Checklist
 
 - [ ] All user stories have scenarios
 - [ ] All acceptance criteria are testable

@@ -1,6 +1,6 @@
 ---
 name: features-status-audit
-description: "Use when auditing the whole feature manifest at once against on-disk docs. Keywords: feature audit, manifest drift, index.yaml audit, orphan features, batch feature check, docs ahead of status, docs behind status, doc status audit, feature inventory. Do NOT use for single-feature deep audit (use /myspec:feature-verify), fixing drift (use /myspec:feature-spec-sync), creating new specs (use /myspec:feature-spec), or code-level verification."
+description: "Use when auditing the whole feature manifest at once against on-disk docs. Keywords: feature audit, manifest drift, index.yaml audit, orphan features, batch feature check, docs ahead of status, docs behind status, doc status audit, feature inventory. Do NOT use for single-feature deep audit (feature-verify), fixing drift (feature-spec-sync), creating new specs (feature-spec), or code-level verification."
 allowed-tools: [Bash, Read]
 ---
 

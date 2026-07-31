@@ -3,7 +3,7 @@ name: skill-verify
 description: >
   Use when auditing or reviewing an existing skill's SKILL.md for quality,
   compliance, and effectiveness. Covers frontmatter validation, anti-pattern
-  detection, and token efficiency assessment. Trigger phrases: verify skill,
+  detection, and token efficiency assessment. Keywords: verify skill,
   audit skill, check skill, validate skill, skill lint, skill review, skill
   compliance. Do NOT use for creating new skills, for
   feature spec review (use feature-spec-review), or for general code review.
@@ -204,6 +204,6 @@ Outcome checks (not a workflow echo — per `.claude/rules/skill-optimization.md
 
 ## Integration
 
-**Called by:** external skill-authoring workflows (e.g. superpowers' `writing-skills`, if installed) as a quality gate
+**Called by** [OPTIONAL]: external skill-authoring workflows (e.g. superpowers' `writing-skills`, if installed) as a quality gate
 **Standalone:** Invoke directly to audit any existing skill
 **Next:** Re-verify if issues found and fixed.

@@ -6,7 +6,7 @@ description: >
   spec conflict, supersede, breaking change, API contract, schema conflict,
   behavioral assumption. Do NOT use for single-spec review (use
   feature-spec-review) or code-level drift (use feature-spec-sync).
-tags: [feature-workflow, validation, cross-cutting, specification]
+tags: [feature, validation, cross-cutting, specification]
 ---
 
 # Cross-Spec Validation
@@ -163,8 +163,8 @@ Adapt patterns to target spec content — these are examples, not an exhaustive 
 
 ## Integration
 
-**Called after:** `/myspec:feature-spec-review` or `/myspec:feature-update`
-**Called before:** `/myspec:feature-tech-spec` or `/myspec:feature-plan`
+**Called after** [OPTIONAL — recommended by both]: `/myspec:feature-spec-review` or `/myspec:feature-update`
+**Called before** [REQUIRED ordering when run]: `/myspec:feature-tech-spec` or `/myspec:feature-plan`
 **Does NOT replace:** `/myspec:feature-spec-review` (single-spec quality) or `/myspec:feature-spec-sync` (code drift)
 
 ## Verification Checklist

@@ -1,6 +1,6 @@
 ---
 name: feature-plan
-tags: [feature-workflow, planning, implementation, parallel]
+tags: [feature, planning, implementation, parallel]
 description: >
   Use when a feature in ${aiDir}/features/ has approved spec.md and tech-spec.md and needs an
   execution-ready implementation plan with parallel task groups and milestone checkpoints.

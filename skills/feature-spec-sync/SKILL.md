@@ -16,7 +16,7 @@ Detect and fix discrepancies between feature documentation (spec.md, tech-spec.m
 - Feature must exist in `${aiDir}/features/{feature}/`
 - Feature must have `tech-spec.md`
 
-## Instructions
+## Workflow
 
 ### 1. Load Context
 
@@ -141,7 +141,7 @@ After running spec-sync:
 - [ ] No edits made without user confirmation
 - [ ] Summary report lists all changes and skips
 
-## Notes
+## Rules
 
 - Work on one feature at a time for manageable output
 - Always present findings before making changes
