@@ -14,13 +14,13 @@ Sweep abandoned session files in `${aiDir}/memory/sessions/active/`, plus orphan
 - Never touch a file with `mtime` < 1h without explicit confirmation — a live agent may not have logged yet.
 - Never touch a **tracked** file under `archive/` — pruning committed history is out of scope. Untracked files in `archive/` are in scope but require per-file confirmation.
 - Never delete a substantive orphaned archive file without explicit confirmation — content has value even if uncommitted.
-- Never act on a session whose `cwd` matches a live worktree without per-file confirmation.
+- Never act on a session whose `worktree:` (or legacy `cwd:`) marker matches a live worktree without per-file confirmation.
 
 ## Workflow
 
 ### Step 1: Inventory
 
-List `${aiDir}/memory/sessions/active/*.md` and `${aiDir}/memory/sessions/archive/*.md`. For each file capture: `session_id` (from filename and frontmatter), `mtime`, location (`active` | `archive`), tracked-by-git flag (`git ls-files --error-unmatch <path>` exits 0 if tracked), frontmatter fields (`status`, `cwd`, `auto_created`, `topic`, `feature`, `started`).
+List `${aiDir}/memory/sessions/active/*.md` and `${aiDir}/memory/sessions/archive/*.md`. For each file capture: `session_id` (from filename and frontmatter), `mtime`, location (`active` | `archive`), tracked-by-git flag (`git ls-files --error-unmatch <path>` exits 0 if tracked), frontmatter fields (`status`, `worktree`, `cwd`, `auto_created`, `topic`, `feature`, `started`).
 
 **Drop from consideration immediately**:
 - Tracked files under `archive/` (committed history — out of scope).
@@ -41,18 +41,18 @@ When in doubt between boilerplate and substantive, treat as substantive (safer s
 
 A file is **safe to act on** only if ALL hold:
 
-- `mtime` is more than 1 hour ago (`date +%s` minus file mtime > 3600)
-- `cwd:` from frontmatter is **not** present in **non-main entries** of `git worktree list --porcelain` (the main checkout is always listed but considered shared — for sessions whose `cwd` is the main checkout, use mtime alone). `cwd` missing also passes.
-- For files in `active/`: `status:` is `active` (defensive: skip anything else). For untracked files in `archive/`: `status:` is `archived` or missing.
+- `mtime` is more than 6 hours ago (`date +%s` minus file mtime > 21600) — the 1–6h band is ambiguous, below
+- `worktree:` (or legacy `cwd:`) from frontmatter does **not** match a **non-main entry** of `git worktree list --porcelain` (compare `worktree:` against entry basenames; the main checkout is always listed but considered shared — for sessions without a worktree marker, use mtime alone). Field missing also passes.
+- For files in `active/`: `status:` is `active` (defensive: skip anything else). For untracked files in `archive/`: `status:` is a terminal status (`completed` | `abandoned`) or missing — `status: active` inside `archive/` is anomalous, route to ambiguous.
 
-If `mtime` is 1–6h old OR `cwd` matches a live worktree but no commits in last 1h → **ambiguous**.
+If `mtime` is 1–6h old OR the worktree marker matches a live worktree but no commits in last 1h → **ambiguous**.
 
 ### Step 4: Decide Action
 
 | Location | Classification | Liveness | Action |
 |---|---|---|---|
 | `active/` | Empty / no value | safe | DELETE (`rm` if untracked; `git rm` if tracked) |
-| `active/` | Substantive | safe | ARCHIVE (`git mv` to `archive/{session_id}.md`, set `status: archived` in frontmatter) |
+| `active/` | Substantive | safe | ARCHIVE (`git mv` to `archive/YYYY-MM-DD-{slug}.md`, set `status: abandoned` in frontmatter) |
 | `active/` | Empty or Substantive | ambiguous | ASK per file |
 | `archive/` (untracked, orphaned) | Empty / no value | safe | ASK per file — recommend DELETE (`rm`); orphan with no value and no git history to preserve |
 | `archive/` (untracked, orphaned) | Substantive | safe | SKIP — already in archive, content has value, leave for the user to commit |
@@ -88,7 +88,7 @@ Ask: "Proceed? (yes / no / selective)"
 For ambiguous rows, ask per file: `delete / archive / skip`.
 For orphaned `archive/` rows marked ASK→DELETE, ask per file: `delete / skip`.
 
-For ARCHIVE: edit frontmatter `status: active` → `status: archived`, then `git mv` to `archive/`.
+For ARCHIVE: edit frontmatter `status: active` → `status: abandoned` (the session was swept, not completed — `/myspec:session-complete` owns `completed`), then `git mv` to `archive/YYYY-MM-DD-{slug}.md`. Slug: kebab-case of `topic`; if topic is empty or still `auto:*`, use `orphaned-{first 8 of session_id}`. Date: from `started:` if parseable, else today.
 For DELETE in `active/`: `rm` (or `git rm` if tracked).
 For DELETE in `archive/` (orphan): `rm` only — never run `git rm` here (in-scope archive files are always untracked by construction).
 
@@ -100,11 +100,11 @@ Print one-line summary on completion.
 - [ ] Filtered out tracked files in `archive/`
 - [ ] Skipped current agent's own session (matched `CLAUDE_SESSION_ID` or marked ambiguous)
 - [ ] Each file classified empty/no-value or substantive (boilerplate-only logs counted as empty)
-- [ ] Liveness gate applied (mtime > 1h, cwd not in `git worktree list`, status check)
+- [ ] Liveness gate applied (mtime > 6h safe / 1–6h ambiguous, worktree marker not in `git worktree list`, status check)
 - [ ] Audit table printed before any mutation (with `loc` and `tracked` columns)
 - [ ] User confirmed before any delete/archive
 - [ ] Orphaned archive deletes confirmed per file
-- [ ] Substantive active sessions archived with `status: archived` set in frontmatter
+- [ ] Substantive active sessions archived to `archive/YYYY-MM-DD-{slug}.md` with `status: abandoned` set in frontmatter
 - [ ] Empty active sessions removed (`rm`, or `git rm` if tracked)
 - [ ] Empty orphaned archive sessions removed (`rm` only)
 - [ ] No tracked file under `archive/` was touched

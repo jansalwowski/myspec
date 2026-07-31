@@ -2,8 +2,8 @@
 title: "Agent Memory System"
 purpose: "Prevent debugging loops and preserve knowledge across sessions"
 load_when:
-  - path_matches: "${aiDir}/sessions/**"
-  - skill_invoked: "memory-preflight|memory-create|memory-lookup|session-start|session-complete"
+  - path_matches: "${aiDir}/memory/sessions/**"
+  - skill_invoked: "memory-preflight|memory-create|memory-lookup|session-start|session-complete|session-clean"
 updated: 2026-03-29
 ---
 
@@ -24,7 +24,7 @@ These are blocking requirements — skip them and the agent loses context across
 
 | When | Action | Why |
 |------|--------|-----|
-| Session start | Invoke `/myspec:bootstrap` | Reads project config + memory indexes, lists active sessions, auto-archives orphans (>1h stale). Replaces manual `/myspec:memory-preflight` at session start. |
+| Session start | Invoke `/myspec:bootstrap` | Reads project config + memory indexes, lists active sessions, auto-archives orphans (>6h stale; 1–6h only reported). Replaces manual `/myspec:memory-preflight` at session start. |
 | Before significant work mid-session (new feature, multi-file change, debugging) | Invoke `/myspec:memory-preflight` if `/myspec:bootstrap` was not run at session start | Scans all memory types, checks staleness |
 | Before trivial work (single-file fix, typo, config change) | Read `${aiDir}/memory/index.md` (Layer 1 only) | Quick check, skip full scan |
 | First code edit in any session | Automatic — no skill | `mark-code-changed.sh` (PostToolUse) creates `${aiDir}/memory/sessions/active/{session_id}.md` from the session-log template. Per-session-id keying makes this multi-agent safe — each agent gets its own file. |
@@ -32,6 +32,16 @@ These are blocking requirements — skip them and the agent loses context across
 | Work complete | Invoke `/myspec:session-complete` | Multi-type extraction + archival of the agent's own session file (touches no sibling sessions) |
 | User approves memory | Invoke `/myspec:memory-create` | Creates typed memory (procedural/semantic/episodic) |
 | Debugging + repeated errors | Invoke `/myspec:memory-lookup` | Searches all memory types for solutions |
+
+## Session Lifecycle (canonical — all skills follow this)
+
+| Aspect | Convention |
+|--------|-----------|
+| Active file | `${aiDir}/memory/sessions/active/{session_id}.md` (one per agent; auto-created by `mark-code-changed.sh` on first code edit, or by `/myspec:session-start`) |
+| Archive file | `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md` — slug from the refined `topic`; sessions swept without a real topic use `orphaned-{first 8 of session_id}` |
+| Terminal statuses | `completed` (finished via `/myspec:session-complete`; eligible for memory extraction) or `abandoned` (swept by `/myspec:bootstrap` or `/myspec:session-clean` without completion). There is no `archived` status — archive is a location, not a status. |
+| Age policy | mtime < 1h: live, never touch. 1–6h: ambiguous — ask, or report and route to `/myspec:session-clean`. > 6h: safe to sweep. |
+| Owners | own session → `/myspec:session-complete`; other agents' dangling sessions → `/myspec:session-clean` (interactive triage) or `/myspec:bootstrap` (auto-archives only > 6h stale ones as `abandoned`) |
 
 ## Continuous Behaviors (No Skills)
 

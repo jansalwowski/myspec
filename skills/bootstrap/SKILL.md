@@ -47,7 +47,7 @@ List `${aiDir}/memory/sessions/active/*.md` (excluding `.gitkeep`).
 
 For each file, compare its mtime to the current epoch.
 
-**Auto-archive policy** (>60 minutes stale = orphaned):
+**Auto-archive policy** (>6 hours stale = orphaned; 1–6h is ambiguous — a sibling agent may still be working, so report those instead of touching them; see the Session Lifecycle table in `.claude/rules/memory-system.md`):
 
 ```bash
 NOW=$(date +%s)
@@ -56,9 +56,10 @@ for f in ${aiDir}/memory/sessions/active/*.md; do
   [[ "$f" == *.gitkeep ]] && continue
   MTIME=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f")
   AGE=$(( NOW - MTIME ))
-  if [ "$AGE" -gt 3600 ]; then
+  if [ "$AGE" -gt 21600 ]; then
     SLUG=$(basename "$f" .md | head -c 8)
     DATE=$(date '+%Y-%m-%d')
+    mkdir -p "${aiDir}/memory/sessions/archive"
     sed -i.bak 's/^status: active/status: abandoned/' "$f" && rm "$f.bak"
     mv "$f" "${aiDir}/memory/sessions/archive/${DATE}-orphaned-${SLUG}.md"
   fi
@@ -69,6 +70,7 @@ After cleanup, count remaining active sessions and report in summary:
 - `Active sessions: 0` → no active work
 - `Active sessions: N` → list each as `{session_id_first8} — {topic}`
 - If sessions were auto-archived: `Auto-archived M orphaned sessions`
+- If sessions are 1–6h stale: `M sessions possibly dangling — run /myspec:session-clean to triage`
 
 Sessions are auto-created by `mark-code-changed.sh` (PostToolUse hook) on first code edit, so manual `/myspec:session-start` is rarely needed for code-editing work.
 
@@ -121,6 +123,7 @@ Output a brief structured summary so the user can confirm the agent is properly 
 **Topology**: [{filename} loaded / not configured — use the `setup` skill with `backbone` to create one]
 **Active sessions**: [N (list of session_id prefixes + topics) / 0]
 **Auto-archived**: [M orphaned sessions / 0 (omit line if 0)]
+**Dangling**: [M sessions 1–6h stale — run /myspec:session-clean (omit line if 0)]
 **Worktree health**: [clean (N active) / WARNING — N stale/orphaned. Use the `worktree-cleanup` skill]
 **myspec version**: [omit if versions match / plugin v{plugin} ahead of project v{project} — run /myspec:update / plugin v{plugin} behind project v{project} — update your plugin / project on v{project}, plugin has v{plugin} (non-semver)]
 **Boundaries**: [any never_modify paths relevant to task, or "none relevant"]

@@ -35,8 +35,8 @@ Agents should copy templates when creating new memory system files. Do not modif
 - `${aiDir}/memory/episodic/` — Episodic memories (events, decisions)
 
 **Session files** (in `${aiDir}/memory/sessions/`):
-- `${aiDir}/memory/sessions/active.md` — Current working session
-- `${aiDir}/memory/sessions/archive/` — Archived session logs
+- `${aiDir}/memory/sessions/active/{session_id}.md` — one file per working agent session
+- `${aiDir}/memory/sessions/archive/` — archived session logs (`YYYY-MM-DD-{slug}.md`)
 
 **Global files** (in `${aiDir}/`):
 - `${aiDir}/pre-flight.md` — Global pre-work checklist
