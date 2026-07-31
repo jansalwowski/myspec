@@ -287,7 +287,7 @@ When handing off to `/myspec:feature-implement`:
 - Most parallel tasks are mechanical (isolated, clear spec) → use fast model
 - Barrier/merge tasks need integration judgment → use standard model
 
-**Milestone checkpoints:** After each milestone, `feature-implement` pauses and asks the user:
+**Milestone checkpoints:** After each milestone except the final one (its completion flows into `feature-complete` directly), `feature-implement` pauses and asks the user:
 - `continue` — proceed to next milestone in the same session
 - `stop` — commit all changes, exit (resume with `/myspec:feature-implement` later)
 - `fresh` — commit all changes, exit with instructions to spawn a fresh agent

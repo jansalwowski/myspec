@@ -1,6 +1,6 @@
 ---
 name: "feature-seed-data"
-description: "Use when creating test seed data. Generates JSON files in seed/ matching data models and scenarios. Requires scenarios.md. Do NOT use for production data."
+description: "Use when creating test seed data. Generates seed.json matching data models and scenarios. Requires scenarios.md. Do NOT use for production data."
 tags: [testing, seed, json, data]
 ---
 

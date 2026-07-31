@@ -63,7 +63,7 @@ Changes to make:
 - **Add/modify** entries in Implementation Steps for new work
 - **Update** Key Interfaces / Types for new or changed types
 - **Update** Database Changes if schema changes are needed
-- **Update** GraphQL Schema if the API surface changes
+- **Update** API Schema if the API surface changes
 - **Update** File Inventory — add new files, update actions on changed files
 - **Add** a Decisions entry (ADR format) if the change involves an architectural choice
 - **Update** `based_on_spec_version` to match the new `spec_version` from spec.md
@@ -88,16 +88,22 @@ options:
   - "Cancel"  → discard the proposed changes
 ```
 
-### Step 6: Hand Off
+### Step 6: Re-approve & Hand Off
 
-After user approval, call `AskUserQuestion`:
+Step 3 reset both docs to `status: draft`, and `/myspec:feature-plan`'s prerequisites require an approved spec — routing there without re-approval deadlocks. Resolve status first:
+
+- **Small update** (wording, clarified criteria, no new scope): ask "Changes are minor — re-approve spec.md and tech-spec.md directly?" On yes, set `status: approved` in both.
+- **Substantive update** (new requirements, changed scope or interfaces): recommend `/myspec:feature-spec-review` (and `/myspec:feature-tech-spec-review` if tech-spec changed) — they own the `draft → approved` transition.
+
+Then call `AskUserQuestion`:
 
 ```
 question: "Update applied. What's next?"
 header:   "Next step"
 options:
   - "/myspec:cross-spec-validation"  → check updated spec against related specs for contradictions or broken assumptions
-  - "/myspec:feature-plan"           → skip cross-check, go straight to implementation planning
+  - "/myspec:feature-spec-review"    → re-review the updated spec (required for substantive changes before planning)
+  - "/myspec:feature-plan"           → straight to implementation planning (requires re-approved docs)
 ```
 
 Mark `/myspec:cross-spec-validation` as `(Recommended)` — updates often break other specs.
@@ -118,7 +124,7 @@ Note: `/myspec:feature-plan` will create a new `implementation-plan.md`. The pre
 - [ ] `spec_version` incremented in spec.md frontmatter
 - [ ] `based_on_spec_version` in tech-spec.md matches new `spec_version`
 - [ ] `last_updated` updated in both files
-- [ ] `status: draft` set in both files
+- [ ] `status: draft` set in both files at Step 3; re-approval resolved in Step 6 (direct for small updates, via review skills for substantive ones)
 - [ ] Only affected sections were modified (no unrelated changes)
 - [ ] New acceptance criteria added for any new requirements
 - [ ] File Inventory in tech-spec.md updated for new/changed files

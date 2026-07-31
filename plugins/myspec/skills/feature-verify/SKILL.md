@@ -50,7 +50,7 @@ Read `${aiDir}/features/{feature}/tech-spec.md`:
 | tech-spec.md exists | Critical | Status is in-progress or complete but file missing |
 | tech-spec.md exists | Low | Status is planned or draft but file missing |
 | Frontmatter complete | High | Missing any of: title, status, based_on_spec_version, created, last_updated |
-| Spec version aligned | High | `based_on_spec_version` != spec.md `spec_version` |
+| Spec version aligned | Critical | `based_on_spec_version` != spec.md `spec_version` (same severity as feature-tech-spec-review and the report example below) |
 | Status valid | Medium | Status not in: draft, approved, deprecated |
 
 ### 4. Check Plan
@@ -129,12 +129,15 @@ If no memories found and no memory indexes exist: skip this section silently (pe
 
 Verify the right documents exist for the current manifest status:
 
+This matrix mirrors the authoritative one in `lib/features-status-audit/audit.mjs` (EXPECTATIONS) — keep them in sync:
+
 | Status | Required | Expected | Flag If |
 |--------|----------|----------|---------|
-| planned | index.yaml entry | — | spec.md exists (ahead of expected) |
-| draft | spec.md | dependencies.md | tech-spec with status=approved without review |
-| in-progress | spec.md, tech-spec.md | implementation-plan.md, dependencies.md | No tech-spec (skipped workflow step) |
+| planned | index.yaml entry | — | tech-spec.md or implementation-plan.md exists (ahead of status; spec.md alone is fine) |
+| draft | spec.md | dependencies.md | implementation-plan.md exists (ahead of status) |
+| in-progress | spec.md | tech-spec.md, dependencies.md | No tech-spec (Medium — likely skipped workflow step) |
 | complete | spec.md, tech-spec.md | CHANGELOG.md, archived plans in plans/ | Active implementation-plan.md (should be archived) |
+| deprecated | — | — | — |
 
 ### 10. Present Health Report
 

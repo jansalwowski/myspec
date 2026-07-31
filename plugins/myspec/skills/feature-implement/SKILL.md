@@ -172,7 +172,8 @@ Parse milestones first, then build a DAG within each:
 
 1. Verify Step 0's chosen branch/worktree is active (`git rev-parse --abbrev-ref HEAD` matches the chosen target). If not, bail out and re-run Step 0.
 2. Record `BASE_SHA`: `git rev-parse HEAD`
-3. Create task tracking with all tasks.
+3. Set the feature's `status: in-progress` in `${aiDir}/features/index.yaml` (owner of the `draft → in-progress` transition; `feature-complete` later flips it to `complete`).
+4. Create task tracking with all tasks.
 
 ### Step 3: Execute Milestones
 

@@ -61,18 +61,20 @@ tags: [feature-workflow, specification, validation, critical-thinking]
        - "None"           → leave spec unchanged
      ```
    - Order options so the recommended choice is first with `(Recommended)` appended.
-   - Do NOT proceed without explicit approval.
+   - **Small issues** (typos, formatting, frontmatter fixes that change no meaning): apply immediately without asking, tagged `[auto-fix]` — same split as `feature-tech-spec-review`.
+   - **Anything touching requirements, scope, or acceptance criteria**: do NOT proceed without explicit approval — spec content is the user's product intent.
 
 8. **Execute Changes**
-   - Apply approved fixes to spec.md and/or dependencies.md
+   - Apply auto-fixes and approved fixes to spec.md and/or dependencies.md
    - Increment `spec_version` in spec.md frontmatter
    - Update `last_updated` date in frontmatter (that is the field's name — do not add an `updated` field)
 
-9. **Summary & Next Step**
+9. **Approve & Next Step**
    - Show changes made (file paths, sections affected)
    - List remaining issues (if any)
-   - If remaining Critical/High issues → recommend addressing those first
-   - If spec is approved (no Critical/High remaining), call `AskUserQuestion`:
+   - If remaining Critical/High issues → recommend addressing those first; spec stays `status: draft`
+   - If no Critical/High remain, ask: "Review passed — mark spec.md `status: approved`?" On yes, set `status: approved` in spec.md frontmatter. This is the transition `feature-tech-spec` and `feature-plan` gate on — without it the pipeline stalls (see the Status State Machine in `.claude/rules/workflow.md`).
+   - Then call `AskUserQuestion`:
      ```
      question: "Spec is approved. What's next?"
      header:   "Next step"
@@ -89,7 +91,7 @@ tags: [feature-workflow, specification, validation, critical-thinking]
 |-----------|-------------------|---------------|
 | **Completeness** | `TBD`, `TODO`, `???`, `etc.`, empty sections | Missing user stories, gaps in requirements, undefined edge cases, incomplete enumerations |
 | **Consistency** | Contradictory requirements, conflicting priorities | Same concept described differently, requirements that contradict each other, misaligned acceptance criteria |
-| **Clarity** | `may`, `might`, `could`, `should` without `must` | Vague language, unmeasurable criteria, ambiguous terms, unclear priorities |
+| **Clarity** | `might`, `could`, `possibly`; `should` without `must` | Vague language, unmeasurable criteria, ambiguous terms, unclear priorities. RFC-style `may` marking an explicitly optional requirement is correct usage (feature-spec mandates it) — flag `may` only when it leaves a *required* behavior undecided |
 | **Scope** | Empty "Out of Scope", "nice to have" in requirements | Scope creep indicators, features contradicting "Out of Scope", undefined boundaries |
 | **Testability** | Acceptance criteria without `[ ]`, subjective criteria | Unmeasurable criteria, untestable requirements, no clear pass/fail conditions |
 | **Dependencies** | Feature names mentioned in spec.md | Dependencies not in dependencies.md, circular dependencies, missing features in index.yaml |
@@ -101,8 +103,9 @@ tags: [feature-workflow, specification, validation, critical-thinking]
 Run these checks against spec.md content:
 
 ```typescript
-// Vague language (Clarity)
-/\b(may|might|could|possibly|perhaps|probably)\b/gi
+// Vague language (Clarity) — `may` excluded: it is the mandated marker for
+// optional requirements; flag it only when it hedges a required behavior
+/\b(might|could|possibly|perhaps|probably)\b/gi
 
 // Incomplete enumeration (Completeness)
 /\b(etc\.|and so on|and more|among others)\b/gi

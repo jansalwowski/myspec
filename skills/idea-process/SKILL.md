@@ -93,7 +93,7 @@ Create test data that:
 
 ### Step 9: Update Feature Index
 
-Add the new feature to `${aiDir}/features/index.yaml`.
+Add the new feature to `${aiDir}/features/index.yaml` with `status: draft` (docs now exist — `planned` is only for manifest entries without docs; see the Status State Machine in `.claude/rules/workflow.md`).
 
 ### Step 10: Move to Processed
 
@@ -105,7 +105,6 @@ Add the new feature to `${aiDir}/features/index.yaml`.
 ## Verification Checklist
 
 ### Specification
-- [ ] Feature name includes status tag `[PLANNED]`
 - [ ] Overview clearly explains the problem and solution
 - [ ] User stories cover all user types
 - [ ] Data model is complete with types
@@ -122,5 +121,5 @@ Add the new feature to `${aiDir}/features/index.yaml`.
 - [ ] Includes realistic values
 
 ### Cross-References
-- [ ] Added to `${aiDir}/features/index.yaml`
+- [ ] Added to `${aiDir}/features/index.yaml` with `status: draft`
 - [ ] References to dependent features are correct

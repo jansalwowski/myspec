@@ -21,7 +21,7 @@ tags: [feature, specification, planning, documentation]
 title: "{Feature Title}"
 status: draft
 phase: 1
-priority: P{0|1|2}
+priority: P{0|1|2|3}
 spec_version: 1
 created: {TODAY}
 last_updated: {TODAY}
@@ -50,7 +50,7 @@ Required sections:
   title: "{Feature Title}"
   status: draft
   phase: 1
-  priority: P{0|1|2}
+  priority: P{0|1|2|3}
   depends-on: [{dependencies}]
 ```
 

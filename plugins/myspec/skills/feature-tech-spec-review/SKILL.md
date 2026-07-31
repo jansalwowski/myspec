@@ -18,7 +18,7 @@ tags: [feature-workflow, tech-spec, validation, critical-thinking, review]
 
 2. **Analyze Structure**
    - Verify required sections exist: Architecture, Reuse audit, Implementation Steps, Edge Cases, File Inventory
-   - Check optional sections present if relevant: Key Interfaces/Types, Database Changes, GraphQL Schema, API Endpoints, Decisions
+   - Check optional sections present if relevant: Key Interfaces/Types, Database Changes, API Schema, API Endpoints, Decisions
    - **Reuse-audit gate** (skip only if `.myspec.json` has `reuseAudit.enabled: false`). Flag and **refuse approval** (do not recommend `/myspec:feature-plan`) when the `### Reuse audit` section is:
      - missing, OR
      - an empty table (header + separator only, zero data rows), OR
@@ -71,9 +71,10 @@ tags: [feature-workflow, tech-spec, validation, critical-thinking, review]
    - Update `last_updated` date in frontmatter
    - If `based_on_spec_version` was stale but spec is unchanged: update it
 
-9. **Summary**
+9. **Approve & Summary**
    - Show changes made (file paths, sections affected)
    - List remaining issues (if any were rejected)
+   - If no Critical/High remain, ask: "Review passed — mark tech-spec.md `status: approved`?" On yes, set `status: approved` in tech-spec.md frontmatter — the transition `feature-plan` gates on (see the Status State Machine in `.claude/rules/workflow.md`). Otherwise it stays `draft`.
    - Recommend next step: re-review, `/myspec:feature-plan`, or address open issues first
 
 ## Review Dimensions Reference

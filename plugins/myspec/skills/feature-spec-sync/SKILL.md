@@ -54,9 +54,8 @@ From tech-spec.md "Implementation Steps":
 
 **D. Feature Status Validation**
 
-From index.yaml and tech-spec.md:
-- Count total implementation steps
-- Count checked steps
+Completion % is computed from **implementation-plan.md checkboxes** when a plan exists (the canonical source per `.claude/rules/workflow.md`); fall back to tech-spec.md step checkboxes only when there is no plan:
+- Count total steps, count checked steps
 - Calculate completion % = checked / total * 100
 - Compare to `status` field in index.yaml
 - Detect: MISMATCH if status doesn't match completion (e.g., status=complete but <100%, status=draft but >80%)
@@ -149,4 +148,4 @@ After running spec-sync:
 - Never auto-fix without user approval
 - Fuzzy matching helps catch file renames (guide.ts → guides.ts, singular → plural)
 - High-severity issues should be fixed first
-- Status suggestions based on completion: <30% = draft, 30-80% = in-progress, >80% = complete or needs review
+- Status suggestions based on completion: <30% = draft, ≥30% = in-progress. Never suggest `complete` from checkbox counts — that transition belongs to `/myspec:feature-complete`; at ≥80% suggest running `/myspec:feature-verify` instead
