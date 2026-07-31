@@ -66,7 +66,7 @@ tags: [feature-workflow, specification, validation, critical-thinking]
 8. **Execute Changes**
    - Apply approved fixes to spec.md and/or dependencies.md
    - Increment `spec_version` in spec.md frontmatter
-   - Update `updated` date in frontmatter
+   - Update `last_updated` date in frontmatter (that is the field's name — do not add an `updated` field)
 
 9. **Summary & Next Step**
    - Show changes made (file paths, sections affected)
@@ -201,7 +201,7 @@ After running the skill:
 - [ ] Fixes are proposed as concrete rewrites (diff format)
 - [ ] User confirmation was requested before changes
 - [ ] If changes were made: spec_version was incremented
-- [ ] If changes were made: updated date was set to today
+- [ ] If changes were made: `last_updated` was set to today
 - [ ] Summary shows files changed and remaining issues
 - [ ] Skill did NOT flag technical content (spec-cleanup's job)
 

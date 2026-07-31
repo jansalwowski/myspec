@@ -5,7 +5,7 @@ description: >
   compliance, and effectiveness. Covers frontmatter validation, anti-pattern
   detection, and token efficiency assessment. Trigger phrases: verify skill,
   audit skill, check skill, validate skill, skill lint, skill review, skill
-  compliance. Do NOT use for creating new skills (use writing-skills), for
+  compliance. Do NOT use for creating new skills, for
   feature spec review (use feature-spec-review), or for general code review.
 ---
 
@@ -119,7 +119,7 @@ description: >
     - Remaining issues (if any rejected)
     - Final word and line count
     - Recommend testing: "Test the description with 5-10 trigger queries to verify activation accuracy. Include 3 should-trigger, 3 paraphrased, and 3 should-NOT-trigger queries."
-    - Recommend next step: re-verify, test with writing-skills, or deploy
+    - Recommend next step: re-verify after fixes, or deploy
 
 ## Frontmatter Rules
 
@@ -325,6 +325,6 @@ User: /skill-verify vue-component
 
 ## Integration
 
-**Called by:** `writing-skills` (as quality gate before TDD testing phase)
+**Called by:** external skill-authoring workflows (e.g. superpowers' `writing-skills`, if installed) as a quality gate
 **Standalone:** Invoke directly to audit any existing skill
-**Next:** Re-verify if issues found and fixed. If clean, proceed to TDD testing per `writing-skills`.
+**Next:** Re-verify if issues found and fixed.

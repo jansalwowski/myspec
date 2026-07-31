@@ -131,6 +131,7 @@ For spec updates:
 - Show diff before applying
 - Increment `spec_version` in modified specs
 - Update `last_updated` date
+- For each modified related spec that has a tech-spec.md: its `based_on_spec_version` is now behind. If the tech-spec is unaffected by the change, bump `based_on_spec_version` to match; otherwise flag it in the summary and route to `/myspec:feature-spec-sync` — never leave the mismatch silent
 
 ### 8. Summary
 

@@ -107,21 +107,15 @@ If approved:
 
 **A. Create/Update tech-spec.md**
 
-If tech-spec.md doesn't exist, create it with frontmatter:
+If tech-spec.md doesn't exist, create it with the canonical frontmatter (same schema as `/myspec:feature-tech-spec`):
 
 ```yaml
 ---
-title: "{Feature Title} - Technical Specification"
+title: "{Feature Title} -- Technical Specification"
 status: draft
-phase: 2
-version: 1
-spec_version: 1
+based_on_spec_version: {spec_version from spec.md, after Step 7C's increment}
 created: {TODAY}
 last_updated: {TODAY}
-load_when: "Implementing {feature}"
-see_also:
-  - spec.md
-  - dependencies.md
 ---
 ```
 
@@ -142,7 +136,7 @@ Remove all technical content. For sections that become empty, either:
 
 **C. Update spec_version**
 
-Increment `spec_version` in spec.md frontmatter to indicate the change.
+Increment `spec_version` in spec.md frontmatter to indicate the change. Then set tech-spec.md's `based_on_spec_version` to the new value and update its `last_updated` — content was only relocated, not changed, so the tech-spec still reflects the spec. Skipping this manufactures the version-mismatch condition that feature-verify flags as Critical.
 
 ### 8. Verify Structure
 
@@ -151,7 +145,7 @@ Check that:
 - tech-spec.md contains all implementation details
 - Both files have proper frontmatter
 - `spec_version` incremented in spec.md
-- If tech-spec.md exists, it has `spec_version` matching spec.md
+- tech-spec.md's `based_on_spec_version` equals spec.md's `spec_version`
 
 ## Detection Patterns Reference
 
@@ -181,7 +175,7 @@ After cleanup:
 - [ ] spec.md contains only business content (no code blocks with language tags)
 - [ ] tech-spec.md contains all moved technical content
 - [ ] Both files have valid frontmatter
-- [ ] `spec_version` incremented in spec.md
+- [ ] `spec_version` incremented in spec.md; tech-spec.md `based_on_spec_version` matches it
 - [ ] No broken internal references between files
 - [ ] All code examples properly formatted in tech-spec.md
 
