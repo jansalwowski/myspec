@@ -1,7 +1,7 @@
 ---
 name: "idea-intake"
 description: >
-  Use when a new idea file is added to the ideas/ directory and needs to be
+  Use when a new idea file is added to the ${aiDir}/ideas/ directory and needs to be
   triaged into the priority queue. Covers idea analysis, priority assignment,
   dependency identification, and PRIORITY-LISTING.md updates. Keywords: new
   idea, idea queue, idea triage, intake, queue idea. Do NOT use for converting
@@ -15,8 +15,8 @@ Process a new idea file and add it to the priority queue.
 
 ## Prerequisites
 
-- New idea file exists in `ideas/` directory
-- Read `ideas/PRIORITY-LISTING.md` for current queue state
+- New idea file exists in `${aiDir}/ideas/` directory
+- Read `${aiDir}/ideas/PRIORITY-LISTING.md` for current queue state
 
 ## Workflow
 
@@ -69,7 +69,7 @@ If missing priority, ask user to confirm and update the file.
 
 After questions are answered:
 
-1. Open `ideas/PRIORITY-LISTING.md`
+1. Open `${aiDir}/ideas/PRIORITY-LISTING.md`
 2. Find the correct priority section
 3. If the priority section doesn't exist, create it following the existing format
 4. Check whether an existing entry covers the same idea — if so, warn user and ask whether to merge or keep separate

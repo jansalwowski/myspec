@@ -1,5 +1,11 @@
 # Ideas Priority Listing
 
+## Quick Stats
+
+| Queued | In Progress | Processed | Blocked |
+|--------|-------------|-----------|---------|
+| 0      | 0           | 0         | 0       |
+
 ## Status Legend
 - `[ ]` — Queued (not started)
 - `[~]` — In Progress (being converted to feature)
@@ -22,6 +28,11 @@
 |--------|------|------|-------------|-------|
 
 ## Low Priority
+
+| Status | Idea | File | Dependencies | Notes |
+|--------|------|------|-------------|-------|
+
+## Lowest Priority
 
 | Status | Idea | File | Dependencies | Notes |
 |--------|------|------|-------------|-------|
