@@ -49,40 +49,34 @@ Ask these **one at a time** and wait for each answer:
 
 ### Step 3: Create `.myspec.json`
 
+First resolve the plugin directory (needed here and in Steps 4–5):
+1. `$CLAUDE_PLUGIN_ROOT` if set.
+2. Else the directory containing this `SKILL.md`, walking up until a sibling `framework-files/manifest.json` is found.
+
+Read `framework-files/manifest.json` from the plugin directory. Let `{VERSION}` be its `frameworkVersion`.
+
 Write `.myspec.json` at project root:
 
 ```json
 {
-  "aiDir": "{aiDir from step 3}",
-  "frameworkVersion": "1.6.0",
+  "aiDir": "{aiDir from step 2}",
+  "frameworkVersion": "{VERSION}",
   "project": {
     "name": "{name from step 1}",
     "description": "{description from step 1}",
     "techStack": "{techStack from step 2}"
   },
   "frameworkFiles": {
-    "memory-index.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
-    "pre-flight.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
-    "memory-system.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
-    "templates/README.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
-    "templates/memory-procedural.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
-    "templates/memory-semantic.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
-    "templates/memory-episodic.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
-    "templates/index-procedural.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
-    "templates/index-semantic.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
-    "templates/index-episodic.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
-    "templates/session-log.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
-    "templates/feature-pre-flight.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
-    "templates/example-usage.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
-    "rules/workflow.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
-    "rules/memory-system.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
-    "rules/auto-memory-style.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
-    "rules/ideas.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" },
-    "rules/skill-optimization.md": { "version": "1.6.0", "lastUpdated": "{TODAY}" }
+    "{one entry per key}": { "version": "{VERSION}", "lastUpdated": "{TODAY}" }
   }
-  // "topologyFile": "backbone.yml"  ← added by the setup skill with blueprint "backbone"
 }
 ```
+
+Build `frameworkFiles` from the manifest — never hardcode the list:
+- one entry per key in the manifest's `files` block (e.g. `"memory-index.md"`, `"templates/session-log.md"`), and
+- one `"rules/{filename}"` entry per key in its `rules` block.
+
+Each entry's value is `{ "version": "{VERSION}", "lastUpdated": "{TODAY}" }`. The `setup` skill may later add a `"topologyFile"` key (blueprint `backbone`) — do not add it here.
 
 ### Step 4: Scaffold Documentation Directory
 
@@ -101,18 +95,24 @@ ${aiDir}/
     episodic/
       index.md         ← copy from framework-files/templates/index-episodic.md
     sessions/
-      .gitkeep              ← create empty file
+      active/
+        .gitkeep            ← create empty file
+      archive/
+        .gitkeep            ← create empty file
   .templates/
     session-log.md          ← copy from framework-files/templates/session-log.md
     memory-procedural.md    ← copy from framework-files/templates/memory-procedural.md
     memory-semantic.md      ← copy from framework-files/templates/memory-semantic.md
     memory-episodic.md      ← copy from framework-files/templates/memory-episodic.md
     feature-pre-flight.md   ← copy from framework-files/templates/feature-pre-flight.md
+    example-usage.md        ← copy from framework-files/templates/example-usage.md
     README.md               ← copy from framework-files/templates/README.md
   ideas/
     INTAKE-INSTRUCTIONS.md      ← copy from scaffolding/ideas/INTAKE-INSTRUCTIONS.md
     PRIORITY-LISTING.md         ← copy from scaffolding/ideas/PRIORITY-LISTING.md
     PROCESSING-INSTRUCTIONS.md  ← copy from scaffolding/ideas/PROCESSING-INSTRUCTIONS.md
+    processed/
+      .gitkeep              ← create empty file
   conventions/
     .gitkeep
   decisions/
@@ -160,7 +160,7 @@ Create `.claude/hooks/` directory. Copy these files from the plugin's `hooks/` d
 
 Make them executable: `chmod +x .claude/hooks/*.sh`
 
-Create `.claude/lib/` and copy the lib files listed in `manifest.json`'s `lib` block (currently `path-normalize.sh` and `markdown-section-check.sh`) from the plugin's `lib/` directory. Use the manifest as the source of truth — do not glob the directory (it also holds non-shipped helpers like `lib/features-status-audit/`). These are sourced by skills and hooks (e.g. `<repo_root>`/`<encoded_cwd>` placeholders; the reuse-audit table validator).
+Create `.claude/lib/` and copy the lib files listed in `manifest.json`'s `lib` block (currently `path-normalize.sh` and `markdown-section-check.sh`) from the plugin's `lib/` directory. Use the manifest as the source of truth — do not glob the directory (it also holds plugin-internal helpers like `lib/features-status-audit/` and `lib/brainstorm-server/`, which run from the plugin root and are never copied into projects). These are sourced by skills and hooks (e.g. `<repo_root>`/`<encoded_cwd>` placeholders; the reuse-audit table validator).
 
 Copy `.claude/rules/` framework rules from `framework-files/rules/`:
 - `workflow.md`
@@ -261,9 +261,11 @@ Next steps:
 ## Verification Checklist
 
 - [ ] `.myspec.json` created with project name, description, techStack, aiDir
+- [ ] `.myspec.json` `frameworkVersion` and every `frameworkFiles` version match `manifest.json`'s `frameworkVersion` (no hardcoded literals); entries cover all manifest `files` + `rules` keys
 - [ ] `${aiDir}/features/index.yaml` created
 - [ ] `${aiDir}/memory/` directory structure created with all 3 type indexes
-- [ ] `${aiDir}/ideas/` directory with instructions files
+- [ ] `${aiDir}/memory/sessions/active/` and `${aiDir}/memory/sessions/archive/` created
+- [ ] `${aiDir}/ideas/` directory with instructions files and `processed/`
 - [ ] `${aiDir}/memory-index.md` created (framework memory index)
 - [ ] `${aiDir}/pre-flight.md` created
 - [ ] `${aiDir}` binding written to `AGENTS.md` (or `CLAUDE.md`) between `myspec:paths` markers
