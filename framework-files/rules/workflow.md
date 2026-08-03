@@ -2,7 +2,7 @@
 title: "AI-First Development Workflow"
 purpose: "Feature development process and code generation policy"
 load_when: "starting new features or modifying existing code"
-updated: 2026-03-29
+updated: 2026-08-03
 see_also:
   - ${aiDir}/features/index.yaml
 ---
@@ -37,6 +37,8 @@ see_also:
 | 1. Specification | Starting new feature | `/myspec:feature-spec` |
 | 1a. Decompose | Feature too large for single tech-spec | `/myspec:feature-decompose` |
 | 1b. Review | Validate spec before tech-spec | `/myspec:feature-spec-review` |
+| 1c. Mockup (optional) | Validate the approved spec visually before tech design | `/myspec:feature-mockup` |
+| 1d. Mockup Review (optional) | Audit mockups for UX, scope, and hard-guard issues | `/myspec:feature-mockup-review` |
 | 2. Technical Design | Spec approved, ready to plan implementation | `/myspec:feature-tech-spec` |
 | 2a. Review | Validate tech-spec before implementation | `/myspec:feature-tech-spec-review` |
 | 3. Implementation Plan | Tech-spec approved, ready to create tasks | `/myspec:feature-plan` |
@@ -46,7 +48,7 @@ see_also:
 
 > **New feature pipeline:** `feature-spec` → `feature-spec-review` → `feature-tech-spec` → `feature-tech-spec-review` → `feature-plan` → `feature-implement` → `feature-complete`
 > **Modification pipeline:** `feature-update` → `feature-plan` → `feature-implement` → `feature-complete`
-> **Optional:** `/myspec:feature-decompose` (large features), `/myspec:cross-spec-validation` (after spec approval or updates — checks related specs), `/myspec:feature-scenario` (test scenarios), `/myspec:feature-seed-data` (test data)
+> **Optional:** `/myspec:feature-decompose` (large features), `/myspec:cross-spec-validation` (after spec approval or updates — checks related specs), `/myspec:feature-mockup` → `/myspec:feature-mockup-review` (visual spec validation between spec approval and tech design; configure with `/myspec:setup mockup`), `/myspec:feature-scenario` (test scenarios), `/myspec:feature-seed-data` (test data)
 
 ## Feature Documentation Structure
 

@@ -1,0 +1,43 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "incremental": true,
+    "tsBuildInfoFile": "./tsconfig.tsbuildinfo",
+    "jsx": "preserve",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "baseUrl": ".",
+    "ignoreDeprecations": "6.0",
+    "types": ["node"],
+    "paths": {
+      "@/*": ["src/*"],
+      // EDIT ME (repo layout): keep in sync with vite.config.ts / README.md
+      "@mockups/*": ["../.ai/features/*"],
+      // Mockup files sit outside this app; resolve their bare imports against
+      // this app's node_modules regardless of where the repo root is.
+      "vue": ["node_modules/vue"],
+      "lucide-vue-next": ["node_modules/lucide-vue-next"]
+      // Design-system slot — add your library's types here, e.g.:
+      // "@acme/uikit": ["../packages/uikit/src/index.ts"]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.vue",
+    // EDIT ME (repo layout): the mockups tree, so `typecheck` verifies mockup
+    // files too — this is the `verify` command the myspec mockup skills run.
+    "../.ai/features/**/mockups/*.vue"
+  ],
+  "references": [{ "path": "./tsconfig.node.json" }]
+}

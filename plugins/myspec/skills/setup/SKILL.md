@@ -1,6 +1,6 @@
 ---
 name: "setup"
-description: "Use when generating project-specific files from guided wizards. Blueprints by name: backbone, claude-md, conventions, code-review, index-md, workflow, pre-flight, anti-patterns. Keywords: setup backbone, generate project files, create topology file, configure reviewer, run blueprint. Do NOT use for first-time project init (use init)."
+description: "Use when generating project-specific files from guided wizards. Blueprints by name: backbone, claude-md, conventions, code-review, mockup, index-md, workflow, pre-flight, anti-patterns. Keywords: setup backbone, generate project files, create topology file, configure reviewer, configure mockups, run blueprint. Do NOT use for first-time project init (use init)."
 ---
 
 # Setup
@@ -17,6 +17,7 @@ Dispatches guided blueprint wizards to generate project-specific files. Each blu
 | `claude-md` | CLAUDE.md project context file | `CLAUDE.md` (project root) |
 | `conventions` | Coding standards and testing patterns | `${aiDir}/conventions/` |
 | `code-review` | Reviewer goals, standards, and run behavior | `.claude/rules/code-review.md` + `.myspec.json` |
+| `mockup` | Mockup stack, tooling commands, and hard guards for the feature-mockup skills | `${aiDir}/conventions/mockup-design.md` + `.myspec.json` |
 | `index-md` | Documentation navigation index | `${aiDir}/INDEX.md` |
 | `workflow` | Development workflow definition | `${aiDir}/workflow.md` |
 | `pre-flight` | Project-specific pre-flight checks | `${aiDir}/pre-flight.md` |
