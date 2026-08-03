@@ -18,6 +18,8 @@ The eight skills you'll use to take a feature from idea to shipped:
 | [skills/feature-discover.md](skills/feature-discover.md) | Discovery only (capture tribal knowledge) · Full feature docs (pull existing code into pipeline) · Complex feature routes to decomposition |
 | [skills/feature-spec.md](skills/feature-spec.md) | Greenfield small feature · Cross-feature dependencies · Skill recommends decomposing first |
 | [skills/feature-decompose.md](skills/feature-decompose.md) | Mixed-priority split with deferred sub-features · Skill refuses to decompose |
+| [skills/feature-mockup.md](skills/feature-mockup.md) | First mockups for an approved spec · Unconfigured project (graceful degradation) · Scope-creep flag + schema handoff |
+| [skills/feature-mockup-review.md](skills/feature-mockup-review.md) | Full review with mixed findings · Focus prompt narrows to loose ends · Unconfigured project (Group E skipped, gap handed off) |
 | [skills/feature-tech-spec.md](skills/feature-tech-spec.md) | Pattern-following design · ADR-heavy with alternatives · Discovers spec gap during design |
 | [skills/feature-plan.md](skills/feature-plan.md) | Single-milestone plan (normal mode) · Multi-milestone with parallel groups + worker context budget (orchestrator mode) · Plan refuses, recommends decompose |
 | [skills/feature-implement.md](skills/feature-implement.md) | Sequential execution with per-phase review · Parallel group with worktree dispatch (orchestrator role chain) · Resume mid-milestone after interruption |

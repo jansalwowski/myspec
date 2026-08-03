@@ -78,8 +78,8 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref main
 | `/myspec:feature-decompose` | Split large feature into sub-features |
 | `/myspec:feature-spec-review` | Validate spec for completeness and consistency |
 | `/myspec:cross-spec-validation` | Check spec against related specs for contradictions and broken contracts |
-| `/myspec:feature-mockup` | Build spec-validation UI mockups under `${aiDir}/features/{feature}/mockups/` — technology-agnostic; stack config via `/myspec:setup mockup` |
-| `/myspec:feature-mockup-review` | Audit mockups for UX issues, scope creep, loose ends, missing states, and project hard-guard violations |
+| `/myspec:feature-mockup` | Build spec-validation UI mockups under `${aiDir}/features/{feature}/mockups/` — technology-agnostic; stack config via `/myspec:setup mockup` ([examples](examples/skills/feature-mockup.md)) |
+| `/myspec:feature-mockup-review` | Audit mockups for UX issues, scope creep, loose ends, missing states, and project hard-guard violations ([examples](examples/skills/feature-mockup-review.md)) |
 | `/myspec:feature-tech-spec` | Create technical design from approved spec |
 | `/myspec:feature-tech-spec-review` | Review tech-spec for implementability and pattern conformance |
 | `/myspec:feature-plan` | Create execution-ready implementation plan from tech-spec. Step 0 picks **normal** (single-executor, default) or **orchestrator** (per-milestone Worker / SpecReview / QualityReview chain — no Planner since plan tasks are already atomic) — opt-in |
