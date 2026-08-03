@@ -50,3 +50,10 @@ Everything in `skills/`, `blueprints/`, `framework-files/`, and `templates/` is 
 - Use repo-relative paths (`src/foo.ts`) for codebase file references in examples and tables.
 - Use `<repo_root>` / `<encoded_cwd>` placeholders when an example genuinely needs to show an absolute path.
 - The `no-absolute-paths.sh` PostToolUse hook will block writes that violate this; the rule it enforces is also shipped to downstream projects as `framework-files/rules/paths.md`.
+
+## Releasing
+
+Use the repo-local `/release` skill (`.claude/skills/release/` — maintainer tooling, not shipped with the plugin); `RELEASING.md` is the authoritative reference. Two learned-the-hard-way facts (v1.19.0, 2026-08-03):
+
+- **Pushing a tag auto-drafts the GitHub release.** A subsequent `gh release create` fails with HTTP 422 "tag_name already exists". Enrich the draft with `gh release edit vX.Y.Z` instead, keeping the auto-generated PR links at the bottom.
+- **No apostrophes inside `$(cat <<EOF …)` heredocs in hook scripts.** Bash's command-substitution scanner treats the unmatched quote as an open string and the script fails to parse with a misleading error. Run `bash -n` on every hook after any message-text edit.
