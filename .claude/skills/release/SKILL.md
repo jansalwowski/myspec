@@ -28,8 +28,9 @@ Run all checks; any failure → report it and stop (fix first, never release aro
 ### Step 2: Determine the Version
 
 1. Last tag: `git describe --tags --abbrev=0`. Commits since: `git log {last_tag}..HEAD --oneline`.
-2. Suggest a bump from the RELEASING.md semver table: breaking `.myspec.json` schema change, removed/renamed skill, or migration-requiring workflow → **major**; new skills, new framework files, new manifest entries, or any change under `framework-files/` → **minor**; body-only bug fixes → **patch**.
-3. Call `AskUserQuestion` with the suggested version first, marked `(Recommended)`, plus the other two bump levels. Wait for the choice.
+2. **No-op guard:** check the shipped surfaces for changes — `git diff --stat {last_tag}..HEAD -- framework-files skills hooks hooks.json lib plugins .codex-plugin .claude-plugin scaffolding templates blueprints`. If empty, nothing consumers can receive has changed: report "nothing to release since {last_tag} — all changes are repo-meta (docs, CI, repo-local tooling)" and stop. Only continue past this with explicit user confirmation.
+3. Suggest a bump from the RELEASING.md semver table: breaking `.myspec.json` schema change, removed/renamed skill, or migration-requiring workflow → **major**; new skills, new framework files, new manifest entries, or any change under `framework-files/` → **minor**; body-only bug fixes → **patch**.
+4. Call `AskUserQuestion` with the suggested version first, marked `(Recommended)`, plus the other two bump levels. Wait for the choice.
 
 ### Step 3: Bump, Commit, Tag, Push
 
