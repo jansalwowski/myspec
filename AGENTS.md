@@ -41,6 +41,7 @@ When writing or editing skills, follow the principles enforced by the `skill-ver
 
 - **Descriptions are triggers, not summaries.** Start with "Use when…", avoid sequential workflow verbs ("analyzes X, generates Y, validates Z") — the agent will skip loading the body.
 - **Format SKILL.md for the model, not humans.** No decorative blockquotes, horizontal rules inside body, ASCII diagrams, or all-caps imperative walls without rationale. Tables and numbered procedures are good; decoration is paid for in tokens on every load.
+- **Never declare plugin-internal paths in a shipped skill's `dependencies:` block.** `skill-self-test` validates `dependencies: paths:` against the *consumer* repo's working tree; a path like `skills/feature-mockup-review/references` exists here but in no consumer project, so the self-test would false-fail as Critical everywhere the plugin is installed. (Caught during the v1.20.0 mockup-skill audits, 2026-08-03.)
 
 ## Paths in skills, blueprints, and templates
 
@@ -50,6 +51,10 @@ Everything in `skills/`, `blueprints/`, `framework-files/`, and `templates/` is 
 - Use repo-relative paths (`src/foo.ts`) for codebase file references in examples and tables.
 - Use `<repo_root>` / `<encoded_cwd>` placeholders when an example genuinely needs to show an absolute path.
 - The `no-absolute-paths.sh` PostToolUse hook will block writes that violate this; the rule it enforces is also shipped to downstream projects as `framework-files/rules/paths.md`.
+
+## Config contracts between blueprints and skills
+
+Some blueprints and skills share a config file whose **section headings are the API**. The mockup surface is the concrete case (v1.20.0): `blueprints/mockup.md` generates `${aiDir}/conventions/mockup-design.md`, and both `feature-mockup` and `feature-mockup-review` read its sections *by name* at silent recon (*Always*, *Style baseline*, *Imports*, *Data model source*, *Component library*, *Detection patterns*, *Repeated user feedback*). Renaming a heading in any one of the three files silently breaks the other two — there is no runtime error, the skill just stops finding the rules. When touching one side of such a contract, grep the other two for the heading name in the same PR. The same pattern applies to `code-review` (`.claude/rules/code-review.md` `## Standards` / `## Suppress`).
 
 ## Releasing
 
