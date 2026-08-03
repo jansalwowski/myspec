@@ -6,8 +6,10 @@ npm-debug.log*
 
 .env
 
-# Local Claude Code settings and feature worktrees
-.claude/
+# Local Claude Code settings and feature worktrees — but track repo-local
+# maintainer skills (.claude/skills/) such as /release
+.claude/*
+!.claude/skills/
 
 # Brainstorm session runtime state
 .myspec/brainstorm/

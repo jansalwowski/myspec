@@ -1,5 +1,7 @@
 # Releasing myspec
 
+> The repo-local `/release` skill (`.claude/skills/release/` — maintainer tooling, not shipped with the plugin) automates this entire process: preflight, semver suggestion, bump, tag, notes. This document stays the authoritative reference; if the skill and this file disagree, this file wins.
+
 ## Why the version is in five places
 
 myspec ships through three plugin manifests (Claude marketplace, Claude plugin, Codex plugin) and is consumed by projects that read a fourth (`framework-files/manifest.json`). Plus a local-source wrapper used by the Codex agents marketplace. All five must agree, or one of three things breaks:
@@ -36,7 +38,7 @@ It:
 4. `git add -A && git commit -m "chore: bump to vX.Y.Z"`
 5. `git tag vX.Y.Z`
 6. `git push && git push --tags`
-7. *(optional)* `gh release create vX.Y.Z --generate-notes` — drafts release notes from commits since the last tag
+7. Pushing the tag **auto-drafts the GitHub release** (repo automation) with generated PR links — a subsequent `gh release create` fails with HTTP 422. Enrich the draft instead: `gh release edit vX.Y.Z --title "..." --notes "..."`, keeping the auto-generated "What's Changed" links at the bottom. Only if no draft appears after ~30s, fall back to `gh release create vX.Y.Z --generate-notes`.
 
 ## Versioning rules (semver)
 
