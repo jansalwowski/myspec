@@ -70,6 +70,7 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref main
 | **Project Setup** | |
 | `/myspec:init` | Initialize myspec in a new project |
 | `/myspec:update` | Update framework files to latest version |
+| `/myspec:release` | Cut a new plugin version (maintainers, framework repo only): preflight, semver bump, tag, release notes |
 | `/myspec:setup <type>` | Generate project-specific files from guided wizards (backbone, claude-md, conventions, index-md, workflow, pre-flight, anti-patterns) |
 | `/myspec:bootstrap` | Load project context, memory indexes, and active session at session start |
 | **Feature Workflow** | |

@@ -109,7 +109,7 @@ Skills not yet covered by per-skill examples:
 - **Drift fixers** — `feature-spec-sync`, `feature-spec-cleanup` (covered in [flows/spec-drift-recovery.md](flows/spec-drift-recovery.md))
 - **Auxiliary** — `feature-scenario`, `feature-seed-data`
 - **Batch audits** — `features-status-audit`
-- **Project setup** — `init`, `update`, `setup`
+- **Project setup** — `init`, `update`, `setup`, `release` (maintainer-only)
 - **Memory + sessions** — `memory-preflight`, `memory-create`, `session-start`
 - **Utilities** — `skill-verify`, `worktree-cleanup`, `docs-sanitize`, `upstream-sync`
 
