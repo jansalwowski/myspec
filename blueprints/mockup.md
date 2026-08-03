@@ -22,7 +22,9 @@ Any question may be answered "skip"; sections left unanswered keep their header 
 1. "What file format should mockups use? (Detected: `{extension}` — e.g. `.vue` for a Vue repo, `.tsx` for React, `.html` when there is no frontend stack.)"
 
 2. "What is the design baseline for mockups?
-   - **Component library at default styling** (recommended when one exists) — name it, its import path, and where its export index / component list lives
+   - **Component library at default styling** (recommended when one exists) — name it, and say which kind it is:
+     - *In-repo workspace package* — give its source path and export index (e.g. `packages/uikit/src/index.ts`)
+     - *External npm dependency* — give the package name; the export surface is read from its published types (e.g. `node_modules/{package}/dist/index.d.ts`) or docs. Record the exact installed version from the lockfile — it becomes the drift pin (see Output Format).
    - **Plain semantic HTML/CSS** — a small neutral token set, no library
    - **No design system yet** — follow the `frontend-design` skill's guidance once to establish a neutral baseline, then hold it
    Also: which semantic tokens/classes should mockups use for surfaces, text, and borders? (or 'library defaults')"
@@ -67,6 +69,7 @@ Any question may be answered "skip"; sections left unanswered keep their header 
 title: "Mockup Design Conventions"
 purpose: "Persistent design rules for ${aiDir}/features/{feature}/mockups/*. Loaded by the feature-mockup and feature-mockup-review skills at silent recon. Append-only — do not delete prior rules without user approval."
 updated: {YYYY-MM-DD}
+myspec_version: {frameworkVersion from .myspec.json at generation time — lets skills and /myspec:update see how old this generated config is}
 ---
 
 # Mockup Design Conventions
@@ -93,7 +96,7 @@ updated: {YYYY-MM-DD}
 <from Q9: path(s) + one line on how mockups mirror them (inline types, exact enum values, cite the source in a comment)>
 
 ## Component library
-<from Q2: library name, import path, export index / component list location — or "(none — plain semantic HTML/CSS)">
+<from Q2: library name; kind (in-repo workspace package / external npm dependency); import path; export index / component list location — or "(none — plain semantic HTML/CSS)". End with the drift pin on its own line: `Configured against: {package}@{exact installed version}` for an external dependency, or `Configured against: in-repo (evolves with the repo)` for a workspace package — the skills compare this pin against the installed version at recon and flag staleness.>
 
 ## Cross-mockup consistency
 <from Q10: canonical reference mockups (admin / end-user), plus the rule: new mockups copy structural idioms from the reference unless the user explicitly opts out>
@@ -134,6 +137,12 @@ updated: {YYYY-MM-DD}
 ```
 
 2. If Q6 chose the default preview template: copy the matching template from the plugin's `templates/mockup-preview/` into the project (location confirmed with the user), install its dependencies, and record the resulting commands in the `mockups` block.
+
+3. If Q2 named a component library AND the preview template was installed: wire the library into the preview app following the template README's "Wiring your design system" section. For an **external npm dependency** that means adding the package to the preview app's own `package.json` and aliasing it to the app's `node_modules/{package}` in `vite.config.ts` (the same pattern the template uses for `vue` — required because mockups live outside the app and strict hoisting only guarantees the package inside the app's own `node_modules`). For an **in-repo package**, alias its source entry point. In both cases mirror the alias in `tsconfig.json` `paths`, import the library stylesheet in `src/main.ts`, and set `LIBRARY_MODULES` / `LIBRARY_EXPORT_INDEX` in `scripts/audit.ts`.
+
+## Re-running
+
+The blueprint is re-runnable — `/myspec:setup mockup` prompts before overwriting. Re-run (or hand-edit the affected sections) after a design-system major upgrade (the `Configured against:` pin will have drifted) or when a myspec release changes the mockup surface (compare the file's `myspec_version` stamp against `.myspec.json` `frameworkVersion`; `/myspec:update` prints this advisory). Re-running preserves nothing automatically — port the *Repeated user feedback* log forward manually; it is append-only project history.
 
 ## Output Location
 - `${aiDir}/conventions/mockup-design.md`

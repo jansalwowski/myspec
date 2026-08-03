@@ -92,6 +92,7 @@ Skipped with a note when `${aiDir}/conventions/mockup-design.md` is absent. Othe
 | **Detection patterns** | Run every grep/pattern the project documents under *Detection patterns* in `mockup-design.md`; each hit is a finding at the severity the pattern names (default Medium). |
 | **Style baseline** | Density, spacing scale, icon library, sample-data rules from *Style baseline* hold across all target files. |
 | **Repeated user feedback rules** | Walk the *Repeated user feedback* section rule-by-rule; flag any mockup that violates one. These are the project's hardest-won learnings — re-flagging them is the highest-leverage catch. |
+| **Config freshness** | If *Component library* pins `Configured against: {package}@{version}`, compare against the installed version (package.json / lockfile) — mismatch → Medium: config predates the installed library; recommend `/myspec:setup mockup` or a manual section re-check. Likewise if frontmatter `myspec_version` is older than `.myspec.json` `frameworkVersion`, note that newer blueprint sections may be available. |
 | **Navigation = link** | (Universal, enforced here for determinism.) URL-changing actions are real anchors with `href="#mock-path"` — no click-handler nav, no generic containers as links, no `role="link"` on a non-anchor. |
 
 ### 5. Findings table
