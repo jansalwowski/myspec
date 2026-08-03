@@ -1,5 +1,5 @@
 {
-  "frameworkVersion": "1.20.0",
+  "frameworkVersion": "1.21.0",
   "files": {
     "memory-index.md": {
       "type": "marker-merge"
