@@ -96,19 +96,55 @@ implementation lives.
 Out of the box, mockups get a neutral semantic-token baseline (`bg-surface`,
 `bg-surface-inset`, `text-text-primary`, `text-text-secondary`,
 `text-text-muted`, `border-border`) defined in `src/styles/main.css`. To swap
-in your component library:
+in your component library, first pick the case that matches where it lives:
 
-1. **vite.config.ts** — add the library alias in the design-system slot so
-   mockups can import it.
-2. **tsconfig.json** — add the matching `paths` entry for its types.
-3. **src/main.ts** — import the library's stylesheet in the design-system slot.
-4. **tailwind.config.ts** — replace the token theme with your library's preset,
+**In-repo workspace package** (e.g. `packages/uikit`):
+
+1. **vite.config.ts** — alias the library's source entry in the design-system
+   slot: `'@acme/uikit': resolve(REPO_ROOT, 'packages/uikit/src/index.ts')`.
+2. **tsconfig.json** — add the matching `paths` entry pointing at the same
+   source file.
+
+**External npm dependency** (e.g. `@vendor/ui` from the registry):
+
+1. **package.json** (this app's) — add the package to `dependencies` and
+   install. This is required, not optional: mockups live *outside* this app,
+   so their bare imports resolve from the repo root upward, and with strict /
+   isolated hoisting (pnpm's default) the package is only guaranteed to exist
+   inside this app's own `node_modules`.
+2. **vite.config.ts** — alias it into this app's copy, the same pattern the
+   template already uses for `vue` and `lucide-vue-next`:
+   `'@vendor/ui': resolve(APP_DIR, 'node_modules/@vendor/ui')`.
+3. **tsconfig.json** — add the matching `paths` entry:
+   `"@vendor/ui": ["node_modules/@vendor/ui"]`.
+
+Then, for both cases:
+
+4. **src/main.ts** — import the library's stylesheet in the design-system slot.
+5. **tailwind.config.ts** — replace the token theme with your library's preset,
    or add its source to `content` (skip entirely if the library doesn't use
    Tailwind).
-5. **scripts/audit.ts** — set `LIBRARY_MODULES` (and `LIBRARY_EXPORT_INDEX` if
-   available) so shipped components aren't flagged as promotion candidates.
-6. Record the library in the *Allowed imports* and *Component library* sections
-   of `{aiDir}/conventions/mockup-design.md`.
+6. **scripts/audit.ts** — set `LIBRARY_MODULES` (and `LIBRARY_EXPORT_INDEX` if
+   available — for an external package that's its published types, e.g.
+   `node_modules/@vendor/ui/dist/index.d.ts`) so shipped components aren't
+   flagged as promotion candidates.
+7. Record the library in the *Allowed imports* and *Component library* sections
+   of `{aiDir}/conventions/mockup-design.md`, including the
+   `Configured against: {package}@{version}` drift pin for external packages.
+
+### Catching library upgrades
+
+Two layers catch a design-system version bump that changes the component
+surface:
+
+- **Mechanical** — `npm run typecheck` includes every mockup file (the mockups
+  tree is in `tsconfig.json` include), so removed or re-typed components fail
+  the `verify` command on the first run after the upgrade.
+- **Config** — the `Configured against:` pin in `mockup-design.md` records the
+  version the mockup conventions were written for; the myspec mockup skills
+  compare it against the installed version at recon and flag staleness so the
+  *Allowed imports* / *Detection patterns* sections get re-checked instead of
+  silently drifting.
 
 ## Boundaries
 

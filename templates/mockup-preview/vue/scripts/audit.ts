@@ -89,7 +89,17 @@ function readLibraryExports(): Set<string> {
   if (LIBRARY_EXPORT_INDEX === null) {
     return names
   }
-  const src = readFileSync(LIBRARY_EXPORT_INDEX, 'utf-8')
+  let src: string
+  try {
+    src = readFileSync(LIBRARY_EXPORT_INDEX, 'utf-8')
+  } catch {
+    process.stderr.write(
+      `[audit] LIBRARY_EXPORT_INDEX not readable: ${LIBRARY_EXPORT_INDEX}\n` +
+      `[audit] Did a library upgrade move its layout? Update the constant in scripts/audit.ts.\n` +
+      `[audit] Continuing with zero library exports — shipped components may be misreported as promotion candidates.\n`,
+    )
+    return names
+  }
   // `export { default as Foo }` and `export { Foo, type Bar }`
   const exportBlock = /export\s*\{([^}]+)\}/g
   let m: RegExpExecArray | null
