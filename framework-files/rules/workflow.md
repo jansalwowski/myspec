@@ -83,7 +83,7 @@ Two status vocabularies exist; do not mix them.
 | `in-progress → complete` | `/myspec:feature-complete` — only when the implementation plan's checkboxes are all `[x]` or remaining tasks are explicitly deferred |
 | `→ deprecated` | manual |
 
-Completion percentage is always computed from **implementation-plan.md checkboxes** — never from tech-spec checkboxes or code inspection. Per-status doc expectations are codified in `/myspec:features-status-audit` (lib/features-status-audit/audit.mjs); treat that matrix as authoritative.
+Completion percentage is computed from **implementation-plan.md checkboxes** whenever a plan exists; tech-spec step checkboxes are only a fallback when no plan has been created (per `/myspec:feature-spec-sync`), and code inspection is never the source. Per-status doc expectations are codified in `/myspec:features-status-audit` (lib/features-status-audit/audit.mjs); treat that matrix as authoritative.
 
 ## Sub-Feature Convention
 

@@ -10,8 +10,11 @@
 # Note: `git checkout -- <file>` is also blocked. Use `git restore <file>` instead.
 #
 # Escape hatch: a command prefixed with MYSPEC_ALLOW_BRANCH_OPS=1 is approved.
-# This marks a deliberate, user-confirmed flow (e.g. feature-complete's branch
-# integration) as opposed to a casual branch mutation by a parallel agent.
+# Intended for deliberate integration flows (feature-complete's branch merge
+# documents it) — not for casual branch mutations by parallel agents. The
+# block reason deliberately does NOT mention the prefix: a hook cannot verify
+# user confirmation, so advertising the bypass would let any blocked agent
+# wave itself through. Only flows whose skill documents the prefix know it.
 #
 # Output contract: {"decision": "block", "reason": "..."} or {"decision": "approve"}
 
@@ -96,7 +99,7 @@ BLOCKED_PATTERNS=(
 for PATTERN in "${BLOCKED_PATTERNS[@]}"; do
   if echo "$COMMAND" | grep -qE "$PATTERN"; then
     BLOCKED_CMD=$(echo "$COMMAND" | head -c 200)
-    REASON="BLOCKED: Branch-mutating git commands are not allowed on the main checkout. Use isolation: \"worktree\" in your Agent tool call instead. If you need to restore a file, use \`git restore <file>\` not \`git checkout\`. For a user-confirmed integration flow (e.g. feature-complete branch merge), prefix the command with MYSPEC_ALLOW_BRANCH_OPS=1. Blocked: ${BLOCKED_CMD}"
+    REASON="BLOCKED: Branch-mutating git commands are not allowed on the main checkout. Use isolation: \"worktree\" in your Agent tool call instead. If you need to restore a file, use \`git restore <file>\` not \`git checkout\`. Blocked: ${BLOCKED_CMD}"
     echo "{\"decision\": \"block\", \"reason\": $(printf '%s' "$REASON" | jq -Rs .)}"
     exit 0
   fi

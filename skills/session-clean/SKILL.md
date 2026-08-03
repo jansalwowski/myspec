@@ -43,7 +43,7 @@ A file is **safe to act on** only if ALL hold:
 
 - `mtime` is more than 6 hours ago (`date +%s` minus file mtime > 21600) — the 1–6h band is ambiguous, below
 - `worktree:` (or legacy `cwd:`) from frontmatter does **not** match a **non-main entry** of `git worktree list --porcelain` (compare `worktree:` against entry basenames; the main checkout is always listed but considered shared — for sessions without a worktree marker, use mtime alone). Field missing also passes.
-- For files in `active/`: `status:` is `active` (defensive: skip anything else). For untracked files in `archive/`: `status:` is a terminal status (`completed` | `abandoned`) or missing — `status: active` inside `archive/` is anomalous, route to ambiguous.
+- For files in `active/`: `status:` is `active` (defensive: skip anything else). For untracked files in `archive/`: `status:` is a terminal status (`completed` | `abandoned`) or missing — treat legacy `status: archived` (written by pre-unification sweeps) as `abandoned`; `status: active` inside `archive/` is anomalous, route to ambiguous.
 
 If `mtime` is 1–6h old OR the worktree marker matches a live worktree but no commits in last 1h → **ambiguous**.
 

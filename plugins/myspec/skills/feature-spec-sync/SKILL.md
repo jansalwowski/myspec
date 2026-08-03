@@ -148,4 +148,4 @@ After running spec-sync:
 - Never auto-fix without user approval
 - Fuzzy matching helps catch file renames (guide.ts → guides.ts, singular → plural)
 - High-severity issues should be fixed first
-- Status suggestions based on completion: <30% = draft, ≥30% = in-progress. Never suggest `complete` from checkbox counts — that transition belongs to `/myspec:feature-complete`; at ≥80% suggest running `/myspec:feature-verify` instead
+- Status suggestions must respect transition ownership (see the Status State Machine in `.claude/rules/workflow.md`): `in-progress` is set by `/myspec:feature-implement` at execution start, so any completion % is normal for it — suggest `draft` only when no implementation plan exists yet. Never suggest `complete` from checkbox counts — that transition belongs to `/myspec:feature-complete`; at ≥80% suggest running `/myspec:feature-verify` instead

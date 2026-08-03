@@ -62,8 +62,8 @@ Write `.myspec.json` at project root:
   "aiDir": "{aiDir from step 2}",
   "frameworkVersion": "{VERSION}",
   "project": {
-    "name": "{name from step 1}",
-    "description": "{description from step 1}",
+    "name": "{name from step 2}",
+    "description": "{description from step 2}",
     "techStack": "{techStack from step 2}"
   },
   "frameworkFiles": {
@@ -142,7 +142,7 @@ Append (or replace, if a marker section already exists) the following block to t
 <!-- BEGIN myspec:paths -->
 ## myspec paths
 
-Skill instructions reference `${aiDir}/`. Resolve to **`{aiDir from step 3}/`** (configured in `.myspec.json`).
+Skill instructions reference `${aiDir}/`. Resolve to **`{aiDir from step 2}/`** (configured in `.myspec.json`).
 <!-- END myspec:paths -->
 ```
 

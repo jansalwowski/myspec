@@ -128,7 +128,7 @@ If no memories found and no memory indexes exist: skip this section silently (pe
 
 Verify the right documents exist for the current manifest status:
 
-This matrix mirrors the authoritative one in `lib/features-status-audit/audit.mjs` (EXPECTATIONS) — keep them in sync:
+The Required/Expected columns mirror the authoritative matrix in `lib/features-status-audit/audit.mjs` (EXPECTATIONS) — keep those in sync. The `complete` row's CHANGELOG/archived-plan expectations and active-plan flag are deliberate deep-audit additions: audit.mjs treats them as informational post-signals only.
 
 | Status | Required | Expected | Flag If |
 |--------|----------|----------|---------|
