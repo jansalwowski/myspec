@@ -1,11 +1,11 @@
 ---
 name: "release"
-description: "Use when cutting a new version of the myspec plugin itself — semver bump, tag, push, release notes. Keywords: release, publish version, cut a release, bump version, tag version, ship release. Do NOT use in consuming projects (use update to pull framework changes) or for merging PRs."
+description: "Use when cutting a new version of the myspec plugin — semver bump, tag, push, release notes. Repo-local maintainer skill (not shipped with the plugin). Keywords: release, publish version, cut a release, bump version, tag version, ship release. Do NOT use for merging PRs."
 ---
 
 # Release
 
-Cut a myspec release from `main`. Automates the process in [RELEASING.md](../../RELEASING.md) — the five version files must stay in lockstep, and the tag-push automation (not `gh release create`) produces the release.
+Cut a myspec release from `main`. Repo-local maintainer skill — lives in `.claude/skills/`, deliberately not shipped in the plugin (useless in consumer projects). Automates the process in `RELEASING.md` — the five version files must stay in lockstep, and the tag-push automation (not `gh release create`) produces the release.
 
 **Announce at start:** "Preparing a myspec release."
 

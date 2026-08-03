@@ -1,6 +1,6 @@
 # Releasing myspec
 
-> The `/myspec:release` skill automates this entire process (preflight, semver suggestion, bump, tag, notes). This document stays the authoritative reference; if the skill and this file disagree, this file wins.
+> The repo-local `/release` skill (`.claude/skills/release/` — maintainer tooling, not shipped with the plugin) automates this entire process: preflight, semver suggestion, bump, tag, notes. This document stays the authoritative reference; if the skill and this file disagree, this file wins.
 
 ## Why the version is in five places
 
