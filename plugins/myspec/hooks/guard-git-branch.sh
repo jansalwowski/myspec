@@ -9,6 +9,13 @@
 #
 # Note: `git checkout -- <file>` is also blocked. Use `git restore <file>` instead.
 #
+# Escape hatch: a command prefixed with MYSPEC_ALLOW_BRANCH_OPS=1 is approved.
+# Intended for deliberate integration flows (feature-complete's branch merge
+# documents it) — not for casual branch mutations by parallel agents. The
+# block reason deliberately does NOT mention the prefix: a hook cannot verify
+# user confirmation, so advertising the bypass would let any blocked agent
+# wave itself through. Only flows whose skill documents the prefix know it.
+#
 # Output contract: {"decision": "block", "reason": "..."} or {"decision": "approve"}
 
 set -euo pipefail
@@ -70,6 +77,12 @@ fi
 
 # If .git is a FILE, we are inside a worktree — allow everything
 if [ -f "$REPO_ROOT/.git" ]; then
+  echo '{"decision": "approve"}'
+  exit 0
+fi
+
+# Explicit opt-out for user-confirmed integration flows (see header)
+if echo "$COMMAND" | grep -qE '(^|[[:space:]])MYSPEC_ALLOW_BRANCH_OPS=1[[:space:]]'; then
   echo '{"decision": "approve"}'
   exit 0
 fi

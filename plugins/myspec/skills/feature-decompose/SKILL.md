@@ -37,7 +37,7 @@ Present proposed structure to user:
 
 ### Sub-Feature 1: {name}
 - **Status**: {complete|in-progress|draft}
-- **Priority**: {P1|P2|P3}
+- **Priority**: {P0|P1|P2|P3}
 - **Description**: [1-2 sentences]
 - **Content from parent**:
   - User stories: US1, US2
@@ -50,7 +50,7 @@ Present proposed structure to user:
 ### Parent Feature Changes
 - Remove: [sections moved to sub-features]
 - Add: Sub-Features table
-- Update: Status to in-progress
+- Update: manifest entry gains `subfeatures: true` (spec.md `status:` unchanged)
 ```
 
 **WAIT for user confirmation or modifications before proceeding.**
@@ -107,7 +107,7 @@ Dependencies for each sub-feature are tracked separately.
 See individual sub-feature tech-specs for implementation details.
 ```
 
-Update status in spec.md frontmatter to `in-progress` if was `draft`.
+Do not change spec.md's `status:` — `in-progress` is a manifest-only status; spec frontmatter allows `draft | approved | deprecated`. Decomposition progress lives in the sub-feature manifest (next step).
 
 ### 5. Create Feature-Level index.yaml
 
@@ -151,41 +151,7 @@ Run verification checks from `.claude/verification.json`. Fix any issues before 
 
 ### 8. Present Summary
 
-Show user:
-
-```markdown
-## Decomposition Complete
-
-### Created Sub-Features
-
-1. **{sub-feature-1}** ({status})
-   - Files: spec.md, dependencies.md[, tech-spec.md]
-   - Priority: {P1|P2|P3}
-
-2. **{sub-feature-2}** ({status})
-   - Files: spec.md, dependencies.md[, tech-spec.md]
-   - Priority: {P1|P2|P3}
-
-### Updated Files
-
-- ✅ {feature}/spec.md - Added sub-features table, removed moved content
-- ✅ {feature}/dependencies.md - Added sub-features section
-- ✅ {feature}/tech-spec.md - Added sub-feature mapping
-- ✅ ${aiDir}/features/index.yaml - Added sub-features array
-
-### Verification
-
-- ✅ All sub-features have required files
-- ✅ No duplicate content
-- ✅ All links work
-- ✅ Verification checks pass
-
-### Next Steps
-
-1. Review sub-feature specs for accuracy
-2. Adjust priorities if needed
-3. Begin implementation with highest priority sub-feature
-```
+Show a "Decomposition Complete" summary with four sections — Created Sub-Features (name, status, files, priority per sub-feature), Updated Files (parent spec/dependencies/tech-spec + manifest), Verification (checks that passed), Next Steps. Full template: [templates.md](references/templates.md) "Decomposition Summary".
 
 ## Quick Reference
 
@@ -257,5 +223,5 @@ After decomposition:
 - [ ] All links between files work
 - [ ] Verification checks from `.claude/verification.json` pass — no errors
 - [ ] Scenarios split appropriately (if scenarios.md existed)
-- [ ] Parent status updated to in-progress (if was draft)
+- [ ] Parent manifest entry has `subfeatures: true`; spec.md `status:` left unchanged
 - [ ] Sub-feature dependencies properly set in feature-level index.yaml

@@ -2,6 +2,22 @@
 
 Canonical normal-mode (single-executor) template. For orchestrator mode (per-milestone Worker / SpecReview / QualityReview chain — no Planner), see [`plan-templates-orchestrator.md`](./plan-templates-orchestrator.md).
 
+## Plan Header
+
+Every implementation-plan.md starts with this frontmatter. Downstream consumers depend on it: `feature-complete` kebab-cases `title` for the archive filename, and `feature-verify` compares `last_updated` against tech-spec.md to detect stale plans.
+
+```yaml
+---
+title: "{Feature Title} -- Implementation Plan"
+feature: {feature-dir-name}
+based_on_spec_version: {spec_version from spec.md}
+created: {TODAY}
+last_updated: {TODAY}
+---
+```
+
+Update `last_updated` whenever the plan is edited (including checkbox updates by `feature-implement`).
+
 ## Task Status
 
 All task steps use checkbox syntax. Plans are generated with `[ ]` (todo). `feature-implement` updates them during execution:

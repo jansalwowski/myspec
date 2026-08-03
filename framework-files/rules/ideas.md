@@ -7,14 +7,14 @@ updated: 2026-03-29
 
 # Ideas Management
 
-The `ideas/` directory contains raw feature ideas before they become formal specifications.
+The `${aiDir}/ideas/` directory contains raw feature ideas before they become formal specifications.
 
 ## Workflow
 
-1. **New idea** → Follow `ideas/INTAKE-INSTRUCTIONS.md` to analyze and queue
-2. **Prioritize** → Check `ideas/PRIORITY-LISTING.md` for priorities and dependencies
-3. **Process** → Follow `ideas/PROCESSING-INSTRUCTIONS.md` to create feature docs
-4. **Complete** → Move idea to `ideas/processed/`, update `PRIORITY-LISTING.md`
+1. **New idea** → Follow `${aiDir}/ideas/INTAKE-INSTRUCTIONS.md` to analyze and queue
+2. **Prioritize** → Check `${aiDir}/ideas/PRIORITY-LISTING.md` for priorities and dependencies
+3. **Process** → Follow `${aiDir}/ideas/PROCESSING-INSTRUCTIONS.md` to create feature docs
+4. **Complete** → Move idea to `${aiDir}/ideas/processed/`, update `PRIORITY-LISTING.md`
 
 ## Key Files
 

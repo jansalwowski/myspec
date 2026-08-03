@@ -6,20 +6,20 @@ tags: [ideas, feature, specification, processing]
 
 # Idea Process
 
-Converts an approved idea from `ideas/` into `${aiDir}/features/` documentation (spec.md, dependencies.md, scenarios.md, seed.json).
+Converts an approved idea from `${aiDir}/ideas/` into `${aiDir}/features/` documentation (spec.md, dependencies.md, scenarios.md, seed.json).
 
 ## Prerequisites
 
 Read these documents before starting:
 
 1. `${aiDir}/features/README.md` - Feature documentation structure
-2. `ideas/PRIORITY-LISTING.md` - Current status and dependencies
+2. `${aiDir}/ideas/PRIORITY-LISTING.md` - Current status and dependencies
 
 ## Workflow
 
 ### Step 1: Select Idea from Listing
 
-1. Open `ideas/PRIORITY-LISTING.md`
+1. Open `${aiDir}/ideas/PRIORITY-LISTING.md`
 2. Find the highest priority idea with status `[ ]` (not started)
 3. If no `[ ]` ideas exist: inform the user — no ideas are ready for processing
 4. Verify dependencies are satisfied (all dependencies should be `[x]` or existing features)
@@ -93,19 +93,18 @@ Create test data that:
 
 ### Step 9: Update Feature Index
 
-Add the new feature to `${aiDir}/features/index.yaml`.
+Add the new feature to `${aiDir}/features/index.yaml` with `status: draft` (docs now exist — `planned` is only for manifest entries without docs; see the Status State Machine in `.claude/rules/workflow.md`).
 
 ### Step 10: Move to Processed
 
-1. Move the original idea file to `ideas/processed/`
-2. Update `ideas/PRIORITY-LISTING.md`:
+1. Move the original idea file to `${aiDir}/ideas/processed/`
+2. Update `${aiDir}/ideas/PRIORITY-LISTING.md`:
    - Change status from `[~]` to `[x]`
    - Update Quick Stats section
 
 ## Verification Checklist
 
 ### Specification
-- [ ] Feature name includes status tag `[PLANNED]`
 - [ ] Overview clearly explains the problem and solution
 - [ ] User stories cover all user types
 - [ ] Data model is complete with types
@@ -122,5 +121,5 @@ Add the new feature to `${aiDir}/features/index.yaml`.
 - [ ] Includes realistic values
 
 ### Cross-References
-- [ ] Added to `${aiDir}/features/index.yaml`
+- [ ] Added to `${aiDir}/features/index.yaml` with `status: draft`
 - [ ] References to dependent features are correct

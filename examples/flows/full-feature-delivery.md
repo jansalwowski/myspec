@@ -171,6 +171,7 @@ The user resolves by adding a "saved templates" requirement to `report-templates
 The agent reads the approved spec, examines existing patterns (the notification-system migrations, the cron job runner used elsewhere), and drafts `tech-spec.md`:
 
 - **Architecture**: a `ScheduleRunner` job invoked by the existing cron infra; a `ScheduleRepository` for CRUD; a `ScheduleSettings` panel in the UI.
+- **Reuse audit** (required section — the `require-reuse-audit.sh` hook blocks the write without it): reuse the cron runner and the notification-system mailer; skip the dashboards export helper (streams CSV only, schedules need PDF too).
 - **Key types**: `Schedule`, `ScheduleCadence`, `ExportRun`.
 - **Database changes**: new `schedules` table, new `export_runs` table.
 - **API endpoints**: `POST /api/schedules`, `GET /api/schedules`, `DELETE /api/schedules/:id`, `GET /api/schedules/:id/runs`.

@@ -1,6 +1,6 @@
 ---
 name: "setup"
-description: "Use when generating project-specific files from guided wizards. Invokes blueprints by name: backbone (topology file), claude-md (CLAUDE.md), conventions (coding standards), code-review (reviewer rules), index-md (documentation index), workflow (dev workflow), pre-flight (pre-flight checklist), anti-patterns (project anti-patterns). Keywords: setup backbone, setup claude-md, setup conventions, setup code-review, configure reviewer, generate project files, create topology file, run blueprint. Do NOT use for first-time project init (use /myspec:init)."
+description: "Use when generating project-specific files from guided wizards. Blueprints by name: backbone, claude-md, conventions, code-review, index-md, workflow, pre-flight, anti-patterns. Keywords: setup backbone, generate project files, create topology file, configure reviewer, run blueprint. Do NOT use for first-time project init (use init)."
 ---
 
 # Setup

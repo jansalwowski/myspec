@@ -1,13 +1,13 @@
 ---
-title: Memory System — Global Index
-purpose: Layer 1 always-loaded memory. Critical entries across all types.
+title: Anti-Pattern Index — Always Loaded
+purpose: Always-loaded framework + project anti-patterns. Distinct from ${aiDir}/memory/index.md, the Layer 1 index of typed memories.
 updated: 2026-03-24
 ---
 
-# Memory Index (Layer 1 — Always Loaded)
+# Anti-Pattern Index (Always Loaded)
 
 > **Budget**: ~200 tokens. Only the most critical entries belong here.
-> **Agent**: This file is always in context. For full indexes, run `/myspec:memory-preflight`.
+> **Agent**: This file is always in context. The Layer 1 *memory* index is `${aiDir}/memory/index.md`; for full memory indexes, run `/myspec:memory-preflight`.
 
 <!-- myspec:framework-start -->
 

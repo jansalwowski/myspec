@@ -1,11 +1,11 @@
 ---
 name: feature-plan
-tags: [feature-workflow, planning, implementation, parallel]
+tags: [feature, planning, implementation, parallel]
 description: >
   Use when a feature in ${aiDir}/features/ has approved spec.md and tech-spec.md and needs an
   execution-ready implementation plan with parallel task groups and milestone checkpoints.
-  Do NOT use for features without an approved tech-spec, projects outside ${aiDir}/features/
-  (use writing-plans instead), or plans already in progress.
+  Do NOT use for features without an approved tech-spec, for plans outside the
+  ${aiDir}/features/ workflow, or for plans already in progress.
 ---
 
 # Feature Plan
@@ -287,7 +287,7 @@ When handing off to `/myspec:feature-implement`:
 - Most parallel tasks are mechanical (isolated, clear spec) → use fast model
 - Barrier/merge tasks need integration judgment → use standard model
 
-**Milestone checkpoints:** After each milestone, `feature-implement` pauses and asks the user:
+**Milestone checkpoints:** After each milestone except the final one (its completion flows into `feature-complete` directly), `feature-implement` pauses and asks the user:
 - `continue` — proceed to next milestone in the same session
 - `stop` — commit all changes, exit (resume with `/myspec:feature-implement` later)
 - `fresh` — commit all changes, exit with instructions to spawn a fresh agent

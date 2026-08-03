@@ -105,7 +105,7 @@ After every executed action:
 2. Verify: `grep -c '^- \[' MEMORY.md` + (count of files with `status: superseded`) equals `ls memory/ | grep -vE '^(MEMORY\.md|audit-)' | wc -l`. Audit reports are archived in the same directory and must be excluded from the entry-file count. Superseded files stay on disk as audit trail and are counted but not indexed.
 3. Optional: archive the triage report to `~/.claude-personal/projects/<encoded_cwd>/memory/audit-{YYYY-MM-DD}.md`. The report **body** must reference paths via `<repo_root>` and `<encoded_cwd>` placeholders — never paste the resolved absolute form (the report may be shared or committed by the user).
 
-## Hard guards
+## Rules
 
 - **Never auto-promote.** Destination + exact insertion text shown before each promotion.
 - **Never auto-rewrite (COMPRESS).** Proposed rewrite shown verbatim before each compression. The agent must conform to `.claude/rules/auto-memory-style.md` — no creative reinterpretation, only mechanical removal of cut-list items.
@@ -131,7 +131,7 @@ After every executed action:
 
 If the destination is ambiguous, leave as KEEP and flag in the report.
 
-## Verification checklist
+## Verification Checklist
 
 ```bash
 # After execution:

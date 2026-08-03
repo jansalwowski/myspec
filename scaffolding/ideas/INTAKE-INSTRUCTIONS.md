@@ -2,7 +2,7 @@
 
 > Guide for analyzing new ideas and adding them to the priority queue.
 
-**Use this when**: A new idea file is added to `ideas/` directory.
+**Use this when**: A new idea file is added to `${aiDir}/ideas/` directory.
 
 ---
 
@@ -35,7 +35,7 @@ If priority is not specified or unclear:
 
 > Does this idea depend on any existing features or ideas?
 > - Existing features: [check `${aiDir}/features/index.yaml` for current features]
-> - Pending ideas: [check `ideas/PRIORITY-LISTING.md` for queued ideas]
+> - Pending ideas: [check `${aiDir}/ideas/PRIORITY-LISTING.md` for queued ideas]
 
 #### Scope Questions
 
@@ -67,7 +67,7 @@ If missing priority, ask user to confirm and update the file.
 
 After questions are answered:
 
-1. Open `ideas/PRIORITY-LISTING.md`
+1. Open `${aiDir}/ideas/PRIORITY-LISTING.md`
 2. Find the correct priority section
 3. Add a new row to the table:
 

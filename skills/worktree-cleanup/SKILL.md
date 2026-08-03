@@ -9,7 +9,7 @@ Audit and clean up git worktrees and orphaned agent branches.
 
 **Announce at start:** "Running worktree cleanup audit."
 
-## Procedure
+## Workflow
 
 ### Step 1: Inventory Worktrees
 
@@ -74,3 +74,10 @@ Final always: `git worktree prune` to clean dangling references.
 - **Never** remove a dirty worktree without explicit confirmation — show uncommitted changes first (`git -C <path> diff --stat`)
 - **Never** force-delete an unmerged branch without explicit confirmation
 - **Always** present the full report before executing any action
+
+## Verification Checklist
+
+- [ ] Audit report shown before any mutation; user confirmed the actions
+- [ ] Every dirty-worktree removal and unmerged-branch delete had its own explicit confirmation
+- [ ] `git worktree list` shows none of the removed worktrees; deleted branches absent from `git branch`
+- [ ] `git worktree prune` run last; no dangling references remain

@@ -1,6 +1,7 @@
 ---
 name: "memory-lookup"
 description: "Use when debugging, encountering errors, or researching past decisions. Searches across all memory types (procedural, semantic, episodic) in ${aiDir}/memory/. Do NOT use for first-time implementation with no prior context, research without a specific problem, or features with no existing memories."
+allowed-tools: [Read, Grep, Glob]
 ---
 
 # Memory Lookup

@@ -1,9 +1,13 @@
 ---
+session_id: ""      # harness session id (filename stem); fill if known
 topic: ""
 feature: ""
 mode: ""            # debugging | discovery | implementation
 started: YYYY-MM-DD HH:MM
-status: active
+status: active      # active → completed (session-complete) | abandoned (swept)
+auto_created: false
+worktree: ""        # worktree dir basename if session runs in one; empty on main checkout
+cwd: <repo_root>
 ---
 
 # Session: {topic}

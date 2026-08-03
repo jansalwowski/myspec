@@ -88,14 +88,8 @@ PID_FILE="${STATE_DIR}/server.pid"
 LOG_FILE="${STATE_DIR}/server.log"
 
 # Create fresh session directory with content and state peers
+# (SESSION_DIR is unique per run, so no prior PID file can exist here)
 mkdir -p "${SESSION_DIR}/content" "$STATE_DIR"
-
-# Kill any existing server
-if [[ -f "$PID_FILE" ]]; then
-  old_pid=$(cat "$PID_FILE")
-  kill "$old_pid" 2>/dev/null
-  rm -f "$PID_FILE"
-fi
 
 cd "$SCRIPT_DIR"
 

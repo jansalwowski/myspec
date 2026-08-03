@@ -105,8 +105,8 @@ ${aiDir}/memory/
    - Procedural: ${aiDir}/memory/procedural/index.md (debugging, implementation)
    - Semantic: ${aiDir}/memory/semantic/index.md (architecture, structure)
    - Episodic: ${aiDir}/memory/episodic/index.md (history, context)
-3. Check for existing active session (resume or archive?)
-4. Create new session at ${aiDir}/memory/sessions/active.md
+3. Check for existing active sessions (resume own, leave siblings alone)
+4. Session file at ${aiDir}/memory/sessions/active/{session_id}.md (auto-created on first code edit)
 ```
 
 **Tiered approach:**

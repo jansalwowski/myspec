@@ -27,9 +27,13 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) — `<type>(<sc
 - Single-skill changes: use the skill name as the scope (e.g. `fix(feature-plan): ...`).
 - Body explains the *why* — the *what* should be visible from the diff.
 
-## Skill changes touch two trees
+## Mirrored trees: changes touch both
 
-The repo keeps two parallel skill trees: `skills/` (top-level) and `plugins/myspec/skills/` (plugin tree). They must stay in sync — when you edit a SKILL.md in one, mirror to the other in the same commit. The recent `chore(plugin): reconcile skill drift` commit exists because this slipped.
+The repo keeps parallel trees under `plugins/myspec/` (the Codex local-source plugin root): `skills/`, `hooks/`, `hooks.json`, `lib/`, and `.codex-plugin/` are byte-for-byte mirrors of the top-level trees. When you edit any of them, mirror the change in the same commit — CI (`.github/workflows/sync-check.yml`) diffs all five surfaces. The `chore(plugin): reconcile skill drift` commit and the once-missing `lib/features-status-audit/` mirror both exist because this slipped.
+
+## Examples track skills
+
+`examples/` is human documentation of skill behavior and drifts silently (the Reuse-audit section shipped in v1.14.0 and reached the examples only in the 2026-07 audit). When a PR changes a skill's workflow, outputs, or gates, update the matching `examples/skills/*.md` / `examples/flows/*.md` in the same PR or state in the PR body that examples were checked and unaffected.
 
 ## Skill quality
 

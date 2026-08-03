@@ -104,14 +104,15 @@ fi
 REASON=$(cat <<EOF
 BLOCKED: ${FILE_PATH} is missing a valid "## Reuse audit" section.
 
-Every tech-spec must enumerate reuse candidates from the shared surfaces in
-this project (packages/*, app lib/, app composables/) before introducing new
-code. Add a "### Reuse audit" section with a table:
+Every tech-spec must enumerate reuse candidates from the shared surfaces of
+this project (see the topology file named in .myspec.json, or the shared
+library/utility directories) before introducing new code. Add a
+"### Reuse audit" section with a table:
 
 | Candidate | Surface | Decision | Reason |
 |-----------|---------|----------|--------|
-| BaseDialog | packages/uikit | reuse | matches modal need in REQ-12 |
-| useFormState | apps/web/src/composables | skip | needs multi-step state |
+| {existing component} | {shared surface} | reuse | matches need in REQ-12 |
+| {existing helper} | {shared surface} | skip | needs multi-step state |
 
 Decision must be "reuse" or "skip"; every "skip" row needs a Reason.
 

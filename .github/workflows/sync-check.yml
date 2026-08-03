@@ -8,28 +8,41 @@ on:
 
 jobs:
   sync-check:
-    name: skills/ ↔ plugins/myspec/skills/ must match
+    name: mirrored trees must match plugins/myspec/
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Diff feature-plan
-        run: diff -r skills/feature-plan plugins/myspec/skills/feature-plan
-
-      - name: Diff feature-implement
-        run: diff -r skills/feature-implement plugins/myspec/skills/feature-implement
-
-      - name: All other top-level skills mirrored
+      - name: Skills mirrored (both directions)
         run: |
+          status=0
           for d in skills/*/; do
             name=$(basename "$d")
-            mirror="plugins/myspec/skills/$name"
-            if [ ! -d "$mirror" ]; then
+            if [ ! -d "plugins/myspec/skills/$name" ]; then
               echo "::error::Skill $name exists under skills/ but not under plugins/myspec/skills/"
-              exit 1
+              status=1
             fi
-            diff -r "$d" "$mirror" || {
-              echo "::error::Skill $name drifted between skills/ and plugins/myspec/skills/"
-              exit 1
-            }
           done
+          for d in plugins/myspec/skills/*/; do
+            name=$(basename "$d")
+            if [ ! -d "skills/$name" ]; then
+              echo "::error::Skill $name exists only under plugins/myspec/skills/"
+              status=1
+            fi
+          done
+          diff -r skills plugins/myspec/skills || {
+            echo "::error::skills/ drifted from plugins/myspec/skills/"
+            status=1
+          }
+          exit $status
+
+      - name: Hooks mirrored
+        run: |
+          diff -r hooks plugins/myspec/hooks
+          diff hooks.json plugins/myspec/hooks.json
+
+      - name: Lib mirrored
+        run: diff -r lib plugins/myspec/lib
+
+      - name: Codex plugin manifest mirrored
+        run: diff -r .codex-plugin plugins/myspec/.codex-plugin

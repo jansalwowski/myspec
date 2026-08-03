@@ -1,7 +1,7 @@
 ---
 name: feature-implement
-tags: [feature-workflow, implementation, execution, parallel, worktree]
-description: "Use when executing an implementation-plan.md from ${aiDir}/features/. Uses subagents per task — parallelizes when plan allows (worktree isolation). Handles [parallel:groupName] tags, Execution Order tables, barrier sections, dual-stream fork/join. Keywords: execute plan, implement feature, run plan, start implementation. Do NOT use for creating plans (use feature-plan), for debugging (use dispatching-parallel-agents), or for plans without Execution Order table."
+tags: [feature, implementation, execution, parallel, worktree]
+description: "Use when executing an implementation-plan.md from ${aiDir}/features/ — dispatches subagents per task, parallelizing when the plan allows (worktree isolation). Keywords: execute plan, implement feature, run plan, start implementation. Do NOT use for creating plans (feature-plan), for debugging (root-cause-debugging), or for plans without an Execution Order table."
 ---
 
 # Feature Implement
@@ -172,7 +172,8 @@ Parse milestones first, then build a DAG within each:
 
 1. Verify Step 0's chosen branch/worktree is active (`git rev-parse --abbrev-ref HEAD` matches the chosen target). If not, bail out and re-run Step 0.
 2. Record `BASE_SHA`: `git rev-parse HEAD`
-3. Create task tracking with all tasks.
+3. Set the feature's `status: in-progress` in `${aiDir}/features/index.yaml` (owner of the `draft → in-progress` transition; `feature-complete` later flips it to `complete`).
+4. Create task tracking with all tasks.
 
 ### Step 3: Execute Milestones
 
@@ -323,5 +324,5 @@ After all phases complete:
 
 ## Integration
 
-**Called by:** `/myspec:feature-plan` (after plan approval)
-**Next:** `/myspec:feature-implement-review` (conformance audit) and/or `/myspec:code-review` (quality review), then `/myspec:feature-complete` — chosen by the user in Step 5
+**Called by** [REQUIRED — an approved plan must exist]: `/myspec:feature-plan` (after plan approval)
+**Next** [OPTIONAL reviews, then REQUIRED completion]: `/myspec:feature-implement-review` (conformance audit) and/or `/myspec:code-review` (quality review), then `/myspec:feature-complete` — chosen by the user in Step 5

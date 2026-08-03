@@ -38,7 +38,7 @@ From `manifest.json`, collect all files. Each file has a `type`:
 - **`overwrite`** — replace the destination file entirely with the plugin's version
 - **`marker-merge`** — replace only the content between `<!-- myspec:framework-start -->` and `<!-- myspec:framework-end -->` markers, preserving everything outside the markers
 
-For `files` entries: destination is `{aiDir}/{filename}`.
+For `files` entries: destination is `{aiDir}/{filename}` — **except** `templates/{name}` entries, which install to `{aiDir}/.templates/{name}` (the dot-directory `init` creates; skills read templates from there — never create `{aiDir}/templates/`).
 For `rules` entries: source is `framework-files/rules/{filename}`, destination is the `dest` path (e.g., `.claude/rules/workflow.md`).
 For `hooks` entries: source is `hooks/{filename}`, destination is the `dest` path (e.g., `.claude/hooks/guard-git-branch.sh`).
 For `lib` entries: source is `lib/{filename}`, destination is the `dest` path (e.g., `.claude/lib/path-normalize.sh`).
@@ -159,6 +159,7 @@ After running the skill:
 
 - [ ] `.myspec.json` `frameworkVersion` read and compared to `manifest.json`; stopped early if already current
 - [ ] Every `manifest.json` entry processed with its declared strategy (`overwrite` / `marker-merge`)
+- [ ] `templates/*` entries written to `{aiDir}/.templates/` (no `{aiDir}/templates/` created)
 - [ ] `marker-merge` files: content outside `<!-- myspec:framework-start/end -->` markers left untouched
 - [ ] `hooks` and `lib` entries processed only when `.claude/hooks/` exists (else both skipped with the note)
 - [ ] Each updated hook had `chmod +x` applied; lib helpers left non-executable (sourced, not run)

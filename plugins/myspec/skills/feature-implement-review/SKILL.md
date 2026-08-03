@@ -1,7 +1,7 @@
 ---
 name: feature-implement-review
-tags: [feature-workflow, implementation, validation, conformance, critical-thinking, review]
-description: "Use when a feature's implementation is done (or paused) and needs an independent check that the built code fulfills the spec and plan. Keywords: implementation review, conformance check, built what was planned, verify implementation against spec, traceability, scope drift, acceptance verification, post-implementation audit. Produces conformance-report.md and routes findings — never edits code directly. Do NOT use to review spec.md (use feature-spec-review), tech-spec.md (use feature-tech-spec-review), or to fix documentation drift (use feature-spec-sync)."
+tags: [feature, implementation, validation, conformance, critical-thinking, review]
+description: "Use when a feature's implementation is done or paused and needs an independent check that the built code fulfills the spec and plan. Keywords: implementation review, conformance check, traceability, scope drift, acceptance verification. Produces conformance-report.md; never edits code. Do NOT use for spec.md (feature-spec-review), tech-spec.md (feature-tech-spec-review), or doc drift (feature-spec-sync)."
 ---
 
 # Feature Implement Review
@@ -141,13 +141,10 @@ Locate the code implementing each requirement in this order:
 
 ### Findings Table
 
+**REQUIRED:** Follow [../\_shared/review-output.md](../_shared/review-output.md) for the table format and tagging rules (this skill uses `Check` for the `Dimension` column). Example row:
+
 ```markdown
-| Severity | Check | Issue | File | Line(s) | Finding |
-|----------|-------|-------|------|---------|---------|
 | Critical | Forward trace | AC unmet | src/auth.ts | 88 | Accepts tokens whose exp is in the past; AC-1 requires rejection |
-| High | Reverse trace | Scope drift | src/cache.ts | 1-60 | New caching layer not in any plan item or tech-spec step |
-| Medium | Test trace | No proof | src/auth.ts | 120 | Rate limiting (AC-4) has no test |
-| Low | Behavioral | Not verifiable | scenarios.md | — | Scenario 3 needs a live SMTP server; could not run |
 ```
 
 ## Severity Classification
@@ -172,5 +169,5 @@ Locate the code implementing each requirement in this order:
 
 ## Integration
 
-**Called by:** `/myspec:feature-implement` (offered as a choice after Final Verification) or run standalone after implementation.
-**Next:** `/myspec:feature-complete` once conformant; or `/myspec:feature-implement` / `/myspec:feature-spec-sync` to address routed findings, then re-run this review.
+**Called by** [OPTIONAL]: `/myspec:feature-implement` (offered as a choice after Final Verification) or run standalone after implementation.
+**Next** [REQUIRED]: `/myspec:feature-complete` once conformant; or `/myspec:feature-implement` / `/myspec:feature-spec-sync` to address routed findings, then re-run this review.

@@ -1,6 +1,6 @@
 # Idea Processing Instructions
 
-> Guide for converting ideas from `ideas/` into structured feature documentation in `${aiDir}/features/`.
+> Guide for converting ideas from `${aiDir}/ideas/` into structured feature documentation in `${aiDir}/features/`.
 
 ---
 
@@ -10,7 +10,7 @@ Before processing any idea, read these documents:
 
 1. `${aiDir}/features/index.yaml` - Feature manifest and status
 2. `${aiDir}/INDEX.md` - Documentation map
-3. `ideas/PRIORITY-LISTING.md` - Current status and dependencies
+3. `${aiDir}/ideas/PRIORITY-LISTING.md` - Current status and dependencies
 
 ---
 
@@ -18,7 +18,7 @@ Before processing any idea, read these documents:
 
 ### Step 1: Select Idea from Listing
 
-1. Open `ideas/PRIORITY-LISTING.md`
+1. Open `${aiDir}/ideas/PRIORITY-LISTING.md`
 2. Find the highest priority idea with status `[ ]` (not started)
 3. Verify dependencies are satisfied (all dependencies should be `[x]` or existing features)
 4. Mark the idea as `[~]` (in progress)
@@ -81,8 +81,8 @@ Add the new feature to `${aiDir}/features/index.yaml`.
 
 ### Step 8: Move to Processed
 
-1. Move the original idea file to `ideas/processed/`
-2. Update `ideas/PRIORITY-LISTING.md`:
+1. Move the original idea file to `${aiDir}/ideas/processed/`
+2. Update `${aiDir}/ideas/PRIORITY-LISTING.md`:
    - Change status from `[~]` to `[x]`
 
 ---

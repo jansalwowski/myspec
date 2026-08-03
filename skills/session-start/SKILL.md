@@ -1,6 +1,6 @@
 ---
 name: "session-start"
-description: "Use when starting a NON-CODE session (debugging without edits, discovery, doc-only work) where mark-code-changed.sh won't auto-create the log. For code-editing work, the hook auto-creates ${aiDir}/memory/sessions/active/{session_id}.md on first edit — invoking this skill is optional and rarely needed. Keywords: begin session, new session, start tracking, debugging session, discovery session. Do NOT use for code-editing work (auto-handled), quick fixes (<3 actions), or one-shot questions."
+description: "Use when starting a NON-CODE session (debugging without edits, discovery, doc-only work) — code-editing sessions get their log auto-created by the mark-code-changed.sh hook on first edit. Keywords: begin session, new session, start tracking, debugging session. Do NOT use for code-editing work (auto-handled), quick fixes, or one-shot questions."
 ---
 
 # Session Start

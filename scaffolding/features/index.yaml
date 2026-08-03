@@ -1,6 +1,6 @@
 # Feature Manifest — single source of truth for feature status
 # Managed by /myspec:feature-spec, /myspec:feature-complete
-# Status: planned | draft | in-progress | complete
+# Status: planned | draft | in-progress | complete | deprecated
 # Priority: P0 (critical) | P1 (high) | P2 (medium) | P3 (low)
 
 features: []

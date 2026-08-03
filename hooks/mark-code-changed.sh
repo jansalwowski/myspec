@@ -102,6 +102,14 @@ TOPIC_SEED=$(basename "$(dirname "$FILE_PATH")" 2>/dev/null || echo "auto")
 STARTED=$(date '+%Y-%m-%d %H:%M')
 SHORT_ID="${SESSION_ID:0:8}"
 
+# Worktree marker: .git as a FILE means we're in a worktree. The basename is
+# portable (no absolute path) and lets session-clean's liveness gate match the
+# session against `git worktree list`. Main checkout: empty (gate uses mtime).
+WORKTREE=""
+if [ -f "$REPO_ROOT/.git" ]; then
+  WORKTREE=$(basename "$REPO_ROOT")
+fi
+
 cat > "$ACTIVE_FILE" <<EOF
 ---
 session_id: $SESSION_ID
@@ -111,6 +119,7 @@ mode: implementation
 started: $STARTED
 status: active
 auto_created: true
+worktree: "$WORKTREE"
 cwd: <repo_root>
 ---
 

@@ -6,14 +6,22 @@
 
 set -euo pipefail
 
-# Prevent infinite loop if the host sets a re-entry flag.
+# Read stdin JSON (Stop hook receives session context)
+INPUT=$(cat)
+
+# Prevent infinite loop on re-entry. The harness signals this via
+# stop_hook_active in the stdin JSON (the continuation after a prior block);
+# env vars kept as a fallback for hosts that set them instead.
+if command -v jq >/dev/null 2>&1; then
+  if [ "$(printf '%s' "$INPUT" | jq -r '.stop_hook_active // false' 2>/dev/null)" = "true" ]; then
+    echo '{"decision": "approve"}'
+    exit 0
+  fi
+fi
 if [ "${CLAUDE_STOP_HOOK_ACTIVE:-}" = "1" ] || [ "${MYSPEC_STOP_HOOK_ACTIVE:-}" = "1" ]; then
   echo '{"decision": "approve"}'
   exit 0
 fi
-
-# Read stdin JSON (Stop hook receives session context)
-INPUT=$(cat)
 
 resolve_repo_root() {
   local candidate resolved
@@ -121,13 +129,19 @@ for i in $(seq 0 $((CHECKS_COUNT - 1))); do
     FAILED_CHECKS+=("$NAME")
     # Truncate output to avoid giant JSON
     TRUNCATED=$(echo "$OUTPUT" | tail -50 | head -c 2000)
-    FAILED_OUTPUT+=("[$NAME] $COMMAND failed:\n$TRUNCATED")
+    FAILED_OUTPUT+=("[$NAME] $COMMAND failed:"$'\n'"$TRUNCATED")
   fi
 done
 
 if [ ${#FAILED_CHECKS[@]} -gt 0 ]; then
-  NAMES=$(IFS=", "; echo "${FAILED_CHECKS[*]}")
-  DETAILS=$(IFS="\n---\n"; echo "${FAILED_OUTPUT[*]}")
+  NAMES=$(printf '%s, ' "${FAILED_CHECKS[@]}"); NAMES=${NAMES%, }
+  # Join with real newline-delimited separators (multi-char IFS joins only
+  # use the first character, so the old IFS="\n---\n" emitted literal '\')
+  DETAILS=""
+  for ENTRY in "${FAILED_OUTPUT[@]}"; do
+    DETAILS+="${ENTRY}"$'\n---\n'
+  done
+  DETAILS=${DETAILS%$'\n---\n'}
   # Escape for JSON
   REASON=$(printf "Verification failed (%s). Fix errors before completing.\n\n%s" "$NAMES" "$DETAILS" | jq -Rs .)
   echo "{\"decision\": \"block\", \"reason\": $REASON}"

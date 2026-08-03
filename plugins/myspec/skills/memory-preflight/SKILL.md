@@ -60,10 +60,11 @@ For any loaded memory with anchors:
 
 ### 7. Check for Active Session
 
-Check if `${aiDir}/memory/sessions/active.md` exists.
+List `${aiDir}/memory/sessions/active/*.md` (excluding `.gitkeep`).
 
-→ If exists and status=active: Resume, archive (if >24h old), or ask user.
-→ If not exists: proceed.
+→ If your own session exists (matching `session_id`): resume it.
+→ If other sessions are >1h stale: note them and suggest `/myspec:session-clean` — do not archive them yourself.
+→ If none exist: proceed (one is auto-created on first code edit).
 
 ### 8. Ready to Start Work
 

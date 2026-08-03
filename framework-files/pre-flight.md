@@ -17,9 +17,10 @@ Run these checks before starting work on any feature or task.
 
 - [ ] Read `${aiDir}/memory/index.md` (Layer 1 global index) for critical patterns to avoid
   → **Verify**: Can name 1 anti-pattern relevant to current task
-- [ ] Check for active `${aiDir}/memory/sessions/active.md`:
-  - If exists and related → Ask user: resume or archive?
-  - If exists and unrelated → Archive to `${aiDir}/memory/sessions/`
+- [ ] Check `${aiDir}/memory/sessions/active/*.md` for existing sessions:
+  - If one is related to this work → Ask user: resume it or complete it first?
+  - If unrelated sessions are dangling (>1h stale) → run `/myspec:session-clean`
+  - Never touch another agent's fresh session (multi-agent workflows keep several active files)
   → **Verify**: No conflicting active session
 - [ ] Read feature-specific `${aiDir}/features/{feature}/pre-flight.md` (if exists)
   → **Verify**: Completed feature-specific checks
@@ -41,7 +42,7 @@ Run these checks before starting work on any feature or task.
 
 ## During Work
 
-- [ ] Create `${aiDir}/memory/sessions/active.md` via `/myspec:session-start`
+- [ ] Ensure a session file exists at `${aiDir}/memory/sessions/active/{session_id}.md` (auto-created on first code edit; for non-code sessions use `/myspec:session-start`)
 - [ ] Log actions in session table (per `.claude/rules/memory-system.md`)
 - [ ] Scan `${aiDir}/memory/` indexes when encountering errors
 
@@ -51,10 +52,10 @@ Run these checks before starting work on any feature or task.
 
 ## Completing Work
 
-- [ ] Update `${aiDir}/memory/sessions/active.md` status to `completed`
+- [ ] Set your session file's status to `completed` (own file in `${aiDir}/memory/sessions/active/`)
 - [ ] Fill `Outcome` section in session log
 - [ ] Ask user: "Should we create a memory from this session?"
-- [ ] Archive session log to `${aiDir}/memory/sessions/YYYY-MM-DD-{slug}.md`
+- [ ] Archive session log to `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md` (all of this is what `/myspec:session-complete` does)
 
 <!-- myspec:framework-end -->
 

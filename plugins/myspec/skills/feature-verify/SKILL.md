@@ -1,13 +1,12 @@
 ---
 name: feature-verify
 description: >
-  Use when auditing a feature's overall health, before starting work on a feature,
-  or when unsure if documentation matches reality. Covers spec, tech-spec, plan,
+  Use when auditing a feature's overall health — before starting work, or when
+  unsure documentation matches reality. Covers spec, tech-spec, plan,
   implementation, sub-features, memories, and manifest sync.
-  Keywords: feature health, feature audit, feature check, verify feature, feature status,
-  feature sync, feature drift, check feature, health check, pre-flight.
-  Do NOT use for fixing drift (use feature-spec-sync), completing features
-  (use feature-complete), or creating new specs (use feature-spec).
+  Keywords: feature health, feature audit, verify feature, feature drift, health check.
+  Do NOT use for fixing drift (feature-spec-sync), completing features
+  (feature-complete), or creating new specs (feature-spec).
 allowed-tools: [Read, Grep, Glob]
 ---
 
@@ -50,7 +49,7 @@ Read `${aiDir}/features/{feature}/tech-spec.md`:
 | tech-spec.md exists | Critical | Status is in-progress or complete but file missing |
 | tech-spec.md exists | Low | Status is planned or draft but file missing |
 | Frontmatter complete | High | Missing any of: title, status, based_on_spec_version, created, last_updated |
-| Spec version aligned | High | `based_on_spec_version` != spec.md `spec_version` |
+| Spec version aligned | Critical | `based_on_spec_version` != spec.md `spec_version` (same severity as feature-tech-spec-review and the report example below) |
 | Status valid | Medium | Status not in: draft, approved, deprecated |
 
 ### 4. Check Plan
@@ -129,12 +128,15 @@ If no memories found and no memory indexes exist: skip this section silently (pe
 
 Verify the right documents exist for the current manifest status:
 
+The Required/Expected columns mirror the authoritative matrix in `lib/features-status-audit/audit.mjs` (EXPECTATIONS) — keep those in sync. The `complete` row's CHANGELOG/archived-plan expectations and active-plan flag are deliberate deep-audit additions: audit.mjs treats them as informational post-signals only.
+
 | Status | Required | Expected | Flag If |
 |--------|----------|----------|---------|
-| planned | index.yaml entry | — | spec.md exists (ahead of expected) |
-| draft | spec.md | dependencies.md | tech-spec with status=approved without review |
-| in-progress | spec.md, tech-spec.md | implementation-plan.md, dependencies.md | No tech-spec (skipped workflow step) |
+| planned | index.yaml entry | — | tech-spec.md or implementation-plan.md exists (ahead of status; spec.md alone is fine) |
+| draft | spec.md | dependencies.md | implementation-plan.md exists (ahead of status) |
+| in-progress | spec.md | tech-spec.md, dependencies.md | No tech-spec (Medium — likely skipped workflow step) |
 | complete | spec.md, tech-spec.md | CHANGELOG.md, archived plans in plans/ | Active implementation-plan.md (should be archived) |
+| deprecated | — | — | — |
 
 ### 10. Present Health Report
 
@@ -225,6 +227,6 @@ Wait for user to choose which action to pursue.
 
 ## Integration
 
-**Call before:** `/myspec:feature-plan`, `/myspec:feature-implement`, `/myspec:feature-complete` — as a health pre-flight
+**Call before** [OPTIONAL]: `/myspec:feature-plan`, `/myspec:feature-implement`, `/myspec:feature-complete` — as a health pre-flight
 **Standalone:** Direct invocation for any feature audit
-**Routes to:** `/myspec:feature-spec-sync`, `/myspec:feature-spec`, `/myspec:feature-tech-spec`, `/myspec:feature-plan`, `/myspec:feature-update`, `/myspec:feature-complete`, `/myspec:memory-lookup`
+**Routes to** [OPTIONAL — per finding]: `/myspec:feature-spec-sync`, `/myspec:feature-spec`, `/myspec:feature-tech-spec`, `/myspec:feature-plan`, `/myspec:feature-update`, `/myspec:feature-complete`, `/myspec:memory-lookup`

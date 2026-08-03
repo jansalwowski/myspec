@@ -14,9 +14,9 @@ Full templates for creating sub-feature files during feature decomposition.
 ```yaml
 ---
 title: "{Parent} -- {SubFeature Title}"
-status: draft | in-progress | complete
+status: draft | approved | deprecated
 phase: 1 | 2 | 3
-priority: P1 | P2 | P3
+priority: P0 | P1 | P2 | P3
 spec_version: 1
 created: YYYY-MM-DD
 last_updated: YYYY-MM-DD
@@ -94,7 +94,7 @@ feature: {parent}/{sub-feature}
 ```yaml
 ---
 title: "{Parent} {SubFeature} -- Technical Specification"
-status: draft | in-progress | complete
+status: draft | approved | deprecated
 based_on_spec_version: 1
 created: YYYY-MM-DD
 last_updated: YYYY-MM-DD
@@ -179,12 +179,7 @@ This feature is split into modular sub-features:
 See individual sub-feature specs for details.
 ```
 
-Remove sections moved to sub-features. Keep only cross-cutting concerns.
-
-Update frontmatter:
-```yaml
-status: in-progress  # if was draft
-```
+Remove sections moved to sub-features. Keep only cross-cutting concerns. Do not change the parent spec.md's `status:` — `in-progress` is a manifest-only status (see SKILL.md Step 4).
 
 ### Parent dependencies.md Updates
 
@@ -267,3 +262,41 @@ sub-features:
 
 **Update main index.yaml:**
 After creating feature-level index.yaml, add `subfeatures: true` to parent feature entry in main `${aiDir}/features/index.yaml`.
+
+## Decomposition Summary
+
+Shown to the user by SKILL.md Step 8:
+
+```markdown
+## Decomposition Complete
+
+### Created Sub-Features
+
+1. **{sub-feature-1}** ({status})
+   - Files: spec.md, dependencies.md[, tech-spec.md]
+   - Priority: {P0|P1|P2|P3}
+
+2. **{sub-feature-2}** ({status})
+   - Files: spec.md, dependencies.md[, tech-spec.md]
+   - Priority: {P0|P1|P2|P3}
+
+### Updated Files
+
+- ✅ {feature}/spec.md - Added sub-features table, removed moved content
+- ✅ {feature}/dependencies.md - Added sub-features section
+- ✅ {feature}/tech-spec.md - Added sub-feature mapping
+- ✅ ${aiDir}/features/index.yaml - Added sub-features array
+
+### Verification
+
+- ✅ All sub-features have required files
+- ✅ No duplicate content
+- ✅ All links work
+- ✅ Verification checks pass
+
+### Next Steps
+
+1. Review sub-feature specs for accuracy
+2. Adjust priorities if needed
+3. Begin implementation with highest priority sub-feature
+```

@@ -1,11 +1,11 @@
 ---
 name: "docs-sanitize"
-description: "Use when the ai-docs tree needs maintenance — naming-convention violations, stale session files, or references to renamed/moved files. Keywords: cleanup, naming conventions, session archiving, documentation maintenance, sanitize docs. Do NOT use for code formatting or linting."
+description: "Use when the ${aiDir} documentation tree needs maintenance — naming-convention violations, misplaced session files, or references to renamed/moved files. Keywords: cleanup, naming conventions, session archiving, documentation maintenance, sanitize docs. Do NOT use for code formatting or linting."
 ---
 
 # Docs Sanitize
 
-## Procedure
+## Workflow
 
 ### 1. Naming Violations
 
@@ -18,14 +18,12 @@ find "${aiDir}/" -name "*.md" -type f | grep -E "[A-Z].*\.md$" | grep -v -E "(RE
 
 **Fix**: Rename to kebab-case using `git mv`, update internal references.
 
-### 2. Stale Sessions
+### 2. Misplaced Session Files
 
-Find sessions that need archiving:
+Session lifecycle (staleness triage, archiving of dangling sessions) belongs to `/myspec:session-clean` — do not re-implement it here. This step only fixes files in the wrong **place**:
 
-- Files named `session-log.md` with `status: completed` in frontmatter
-- Files named `session-log.md` older than 7 days with `status: active`
-
-**Fix**: Move to `${aiDir}/sessions/YYYY-MM-DD-{slug}.md` format using `git mv`.
+- Files under `${aiDir}/memory/sessions/active/` whose `status:` is already terminal (`completed` | `abandoned`) — they were finished but never moved. **Fix**: `git mv` to `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md`.
+- Legacy-location session files (`${aiDir}/sessions/*.md`, or any file named `session-log.md` / `active.md` under `${aiDir}`) from pre-directory-model versions. **Fix**: `git mv` into `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md`, setting a terminal `status:` if missing (`completed` if the log has an Outcome, else `abandoned`).
 
 ### 3. Broken References
 
@@ -49,7 +47,7 @@ Output summary in this format:
 - old/path.md → new/path.md
 
 ### Archived (N)
-- ${aiDir}/feature/session-log.md → ${aiDir}/sessions/YYYY-MM-DD-slug.md
+- ${aiDir}/memory/sessions/active/{id}.md → ${aiDir}/memory/sessions/archive/YYYY-MM-DD-slug.md
 
 ### References Updated (N)
 - file:line - description of change
@@ -65,7 +63,7 @@ Output summary in this format:
 - ${aiDir}/features/maps/NOTES.md → ${aiDir}/features/maps/notes.md
 
 ### Archived (1)
-- ${aiDir}/session-log.md → ${aiDir}/sessions/2026-03-18-streetview-fix.md
+- ${aiDir}/session-log.md → ${aiDir}/memory/sessions/archive/2026-03-18-streetview-fix.md
 
 ### References Updated (2)
 - ${aiDir}/INDEX.md:45 - updated link to memory-system.md
@@ -79,4 +77,4 @@ After running:
 - [ ] Run project documentation sanitize command if configured
 - [ ] Check git status - all renames should use `git mv`
 - [ ] Verify no broken links in documentation
-- [ ] All `session-log.md` files are either active (recent) or archived
+- [ ] No terminal-status files left under `active/`; no session files outside `${aiDir}/memory/sessions/`

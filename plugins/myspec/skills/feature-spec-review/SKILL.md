@@ -5,7 +5,7 @@ description: >
   internal consistency, testability, scope, dependency hygiene. Keywords: review spec,
   critique requirements, validate spec, check spec, spec analysis, requirements review.
   Do NOT use for tech-spec review (use feature-tech-spec-review) or implementation review.
-tags: [feature-workflow, specification, validation, critical-thinking]
+tags: [feature, specification, validation, critical-thinking]
 ---
 
 # Feature Spec Review
@@ -61,18 +61,20 @@ tags: [feature-workflow, specification, validation, critical-thinking]
        - "None"           → leave spec unchanged
      ```
    - Order options so the recommended choice is first with `(Recommended)` appended.
-   - Do NOT proceed without explicit approval.
+   - **Small issues** (typos, formatting, frontmatter fixes that change no meaning): apply immediately without asking, tagged `[auto-fix]` — same split as `feature-tech-spec-review`.
+   - **Anything touching requirements, scope, or acceptance criteria**: do NOT proceed without explicit approval — spec content is the user's product intent.
 
 8. **Execute Changes**
-   - Apply approved fixes to spec.md and/or dependencies.md
+   - Apply auto-fixes and approved fixes to spec.md and/or dependencies.md
    - Increment `spec_version` in spec.md frontmatter
-   - Update `updated` date in frontmatter
+   - Update `last_updated` date in frontmatter (that is the field's name — do not add an `updated` field)
 
-9. **Summary & Next Step**
+9. **Approve & Next Step**
    - Show changes made (file paths, sections affected)
    - List remaining issues (if any)
-   - If remaining Critical/High issues → recommend addressing those first
-   - If spec is approved (no Critical/High remaining), call `AskUserQuestion`:
+   - If remaining Critical/High issues → recommend addressing those first; spec stays `status: draft`
+   - If no Critical/High remain, ask: "Review passed — mark spec.md `status: approved`?" On yes, set `status: approved` in spec.md frontmatter. This is the transition `feature-tech-spec` and `feature-plan` gate on — without it the pipeline stalls (see the Status State Machine in `.claude/rules/workflow.md`).
+   - Then call `AskUserQuestion`:
      ```
      question: "Spec is approved. What's next?"
      header:   "Next step"
@@ -89,7 +91,7 @@ tags: [feature-workflow, specification, validation, critical-thinking]
 |-----------|-------------------|---------------|
 | **Completeness** | `TBD`, `TODO`, `???`, `etc.`, empty sections | Missing user stories, gaps in requirements, undefined edge cases, incomplete enumerations |
 | **Consistency** | Contradictory requirements, conflicting priorities | Same concept described differently, requirements that contradict each other, misaligned acceptance criteria |
-| **Clarity** | `may`, `might`, `could`, `should` without `must` | Vague language, unmeasurable criteria, ambiguous terms, unclear priorities |
+| **Clarity** | `might`, `could`, `possibly`; `should` without `must` | Vague language, unmeasurable criteria, ambiguous terms, unclear priorities. RFC-style `may` marking an explicitly optional requirement is correct usage (feature-spec mandates it) — flag `may` only when it leaves a *required* behavior undecided |
 | **Scope** | Empty "Out of Scope", "nice to have" in requirements | Scope creep indicators, features contradicting "Out of Scope", undefined boundaries |
 | **Testability** | Acceptance criteria without `[ ]`, subjective criteria | Unmeasurable criteria, untestable requirements, no clear pass/fail conditions |
 | **Dependencies** | Feature names mentioned in spec.md | Dependencies not in dependencies.md, circular dependencies, missing features in index.yaml |
@@ -101,8 +103,9 @@ tags: [feature-workflow, specification, validation, critical-thinking]
 Run these checks against spec.md content:
 
 ```typescript
-// Vague language (Clarity)
-/\b(may|might|could|possibly|perhaps|probably)\b/gi
+// Vague language (Clarity) — `may` excluded: it is the mandated marker for
+// optional requirements; flag it only when it hedges a required behavior
+/\b(might|could|possibly|perhaps|probably)\b/gi
 
 // Incomplete enumeration (Completeness)
 /\b(etc\.|and so on|and more|among others)\b/gi
@@ -128,36 +131,10 @@ Run these checks against spec.md content:
 
 ## Output Format
 
-### Findings Table
+**REQUIRED:** Follow [../\_shared/review-output.md](../_shared/review-output.md) for the findings table, fix-proposal shape, and tagging rules. Example row for this skill:
 
 ```markdown
-| Severity | Dimension | Issue | File | Line(s) | Finding |
-|----------|-----------|-------|------|---------|---------|
 | Critical | Consistency | Contradictory requirements | spec.md | 45-47, 89 | REQ-003 requires admin approval, but AC-007 allows auto-approval |
-| High | Dependencies | Undeclared dependency | spec.md | 67 | Mentions "notification system" but not in dependencies.md |
-| Medium | Clarity | Vague language | spec.md | 123 | "User may receive email" - unclear when this happens |
-| Low | Completeness | Generic statement | spec.md | 200 | "Out of Scope: Future features" - too vague |
-```
-
-### Fix Proposals
-
-```markdown
-## Fix 1: Resolve contradictory requirements (Critical)
-
-**File**: spec.md:45-47,89
-
-**Issue**: REQ-003 requires admin approval, but AC-007 allows auto-approval.
-
-**Current**:
-- REQ-003: All submissions must be approved by an admin
-- AC-007: System auto-approves submissions from verified users
-
-**Proposed**:
-- REQ-003: All submissions must be approved by an admin, except for verified users (see REQ-012)
-+ REQ-012: Verified users (account age > 30 days AND reputation > 100) have submissions auto-approved
-- AC-007: System auto-approves submissions from verified users as defined in REQ-012
-
-**Rationale**: Clarifies the exception case and creates a traceable requirement for verified users.
 ```
 
 ## Severity Classification
@@ -201,28 +178,12 @@ After running the skill:
 - [ ] Fixes are proposed as concrete rewrites (diff format)
 - [ ] User confirmation was requested before changes
 - [ ] If changes were made: spec_version was incremented
-- [ ] If changes were made: updated date was set to today
+- [ ] If changes were made: `last_updated` was set to today
 - [ ] Summary shows files changed and remaining issues
 - [ ] Skill did NOT flag technical content (spec-cleanup's job)
 
-## Example Usage
-
-```
-User: /spec-review guide-versioning
-```
-
-**Expected behavior**:
-1. Load ${aiDir}/features/guide-versioning/spec.md, dependencies.md, and index.yaml
-2. Check all 8 dimensions against spec.md
-3. Validate dependencies.md ↔ spec.md ↔ index.yaml alignment
-4. Present findings table with severity, dimension, file, line numbers
-5. Propose concrete fixes for each issue
-6. Wait for user to approve fixes
-7. Apply approved fixes and increment spec_version
-8. Show summary of changes made
-
 ## Integration
 
-**Called by:** `/myspec:feature-spec` (after spec is created and user approves review)
-**Suggests:** `/myspec:cross-spec-validation` — validate against related specs *(user chooses)*
-**Next:** `/myspec:feature-tech-spec` — create technical design once spec is approved
+**Called by** [OPTIONAL]: `/myspec:feature-spec` (after spec is created and user approves review)
+**Suggests** [OPTIONAL]: `/myspec:cross-spec-validation` — validate against related specs
+**Next** [REQUIRED]: `/myspec:feature-tech-spec` — create technical design once spec is approved

@@ -1,7 +1,7 @@
 ---
 name: feature-tech-spec-review
-description: "Use when reviewing tech-spec.md for implementability, spec alignment, and pattern conformance. Keywords: review tech-spec, validate technical design, check implementation plan, critique tech-spec, tech-spec analysis, technical review. Checks spec alignment, feasibility, completeness, pattern conformance, step granularity, dependency ordering, testability, task extractability, YAGNI, and scope. Do NOT use for spec.md review (use feature-spec-review), implementation review, or code review."
-tags: [feature-workflow, tech-spec, validation, critical-thinking, review]
+description: "Use when reviewing tech-spec.md for implementability, spec alignment, and pattern conformance before planning. Keywords: review tech-spec, validate technical design, critique tech-spec, technical review. Do NOT use for spec.md review (feature-spec-review), implementation review (feature-implement-review), or code review (code-review)."
+tags: [feature, tech-spec, validation, critical-thinking, review]
 ---
 
 # Feature Tech-Spec Review
@@ -18,7 +18,7 @@ tags: [feature-workflow, tech-spec, validation, critical-thinking, review]
 
 2. **Analyze Structure**
    - Verify required sections exist: Architecture, Reuse audit, Implementation Steps, Edge Cases, File Inventory
-   - Check optional sections present if relevant: Key Interfaces/Types, Database Changes, GraphQL Schema, API Endpoints, Decisions
+   - Check optional sections present if relevant: Key Interfaces/Types, Database Changes, API Schema, API Endpoints, Decisions
    - **Reuse-audit gate** (skip only if `.myspec.json` has `reuseAudit.enabled: false`). Flag and **refuse approval** (do not recommend `/myspec:feature-plan`) when the `### Reuse audit` section is:
      - missing, OR
      - an empty table (header + separator only, zero data rows), OR
@@ -71,9 +71,10 @@ tags: [feature-workflow, tech-spec, validation, critical-thinking, review]
    - Update `last_updated` date in frontmatter
    - If `based_on_spec_version` was stale but spec is unchanged: update it
 
-9. **Summary**
+9. **Approve & Summary**
    - Show changes made (file paths, sections affected)
    - List remaining issues (if any were rejected)
+   - If no Critical/High remain, ask: "Review passed — mark tech-spec.md `status: approved`?" On yes, set `status: approved` in tech-spec.md frontmatter — the transition `feature-plan` gates on (see the Status State Machine in `.claude/rules/workflow.md`). Otherwise it stays `draft`.
    - Recommend next step: re-review, `/myspec:feature-plan`, or address open issues first
 
 ## Review Dimensions Reference
@@ -170,39 +171,13 @@ When flagging:
 
 ## Output Format
 
-### Findings Table
+**REQUIRED:** Follow [../\_shared/review-output.md](../_shared/review-output.md) for the findings table, fix-proposal shape, and tagging rules. Example row for this skill:
 
 ```markdown
-| Severity | Dimension | Issue | File | Line(s) | Finding |
-|----------|-----------|-------|------|---------|---------|
 | Critical | Spec Alignment | Version mismatch | tech-spec.md | 4 | `based_on_spec_version: 1` but spec.md has `spec_version: 3` |
-| High | Pattern Conformance | Missing audit fields | tech-spec.md | 67-72 | Model lacks required audit fields per project database conventions |
-| Medium | Step Granularity | Step too coarse | tech-spec.md | 45 | "Step 3: Build entire frontend" — split into component tasks |
-| Low | Completeness | Missing edge case | tech-spec.md | — | No edge case for empty search results |
 ```
 
-### Fix Proposals
-
-```markdown
-## Fix 1: Add missing audit fields (High) [auto-fix]
-
-**File**: tech-spec.md:67-72
-**Issue**: Model missing required audit fields per project database conventions.
-
-- model SearchQuery {
--   id    String @id @default(cuid())
--   query String
-- }
-+ model SearchQuery {
-+   id        String   @id @default(cuid())
-+   query     String
-+   createdAt DateTime @default(now())
-+   createdBy String
-+   updatedAt DateTime @updatedAt
-+ }
-
-**Rationale**: All models require audit fields per project database conventions.
-```
+The `[requires confirmation]` case that recurs here is a decompose proposal:
 
 ```markdown
 ## Fix 2: Split into sub-features (High) [requires confirmation]
@@ -264,25 +239,7 @@ After running the skill:
 - [ ] `last_updated` set to today after changes
 - [ ] Summary shows files changed and remaining issues
 
-## Example Usage
-
-```
-User: /tech-spec-review tags
-```
-
-**Expected behavior**:
-1. Load ${aiDir}/features/tags/tech-spec.md, spec.md, dependencies.md, and index.yaml
-2. Load backend.md, frontend.md, database.md for pattern reference
-3. Check all 10 dimensions against tech-spec.md
-4. Cross-validate spec alignment (requirements → steps, ACs → file inventory)
-5. Validate pattern conformance against codebase conventions
-6. Present findings table with severity, dimension, file, line numbers
-7. Auto-apply small fixes; propose big fixes with rationale
-8. Wait for user to confirm big fixes
-9. Apply confirmed fixes, update `last_updated`
-10. Show summary and recommend next step
-
 ## Integration
 
-**Called by:** `/myspec:feature-tech-spec` (after tech-spec is created and user wants review)
-**Next:** `/myspec:feature-plan` — create execution-ready implementation plan once tech-spec passes review
+**Called by** [OPTIONAL]: `/myspec:feature-tech-spec` (after tech-spec is created and user wants review)
+**Next** [REQUIRED]: `/myspec:feature-plan` — create execution-ready implementation plan once tech-spec passes review

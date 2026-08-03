@@ -16,7 +16,7 @@ Detect and fix discrepancies between feature documentation (spec.md, tech-spec.m
 - Feature must exist in `${aiDir}/features/{feature}/`
 - Feature must have `tech-spec.md`
 
-## Instructions
+## Workflow
 
 ### 1. Load Context
 
@@ -54,9 +54,8 @@ From tech-spec.md "Implementation Steps":
 
 **D. Feature Status Validation**
 
-From index.yaml and tech-spec.md:
-- Count total implementation steps
-- Count checked steps
+Completion % is computed from **implementation-plan.md checkboxes** when a plan exists (the canonical source per `.claude/rules/workflow.md`); fall back to tech-spec.md step checkboxes only when there is no plan:
+- Count total steps, count checked steps
 - Calculate completion % = checked / total * 100
 - Compare to `status` field in index.yaml
 - Detect: MISMATCH if status doesn't match completion (e.g., status=complete but <100%, status=draft but >80%)
@@ -142,11 +141,11 @@ After running spec-sync:
 - [ ] No edits made without user confirmation
 - [ ] Summary report lists all changes and skips
 
-## Notes
+## Rules
 
 - Work on one feature at a time for manageable output
 - Always present findings before making changes
 - Never auto-fix without user approval
 - Fuzzy matching helps catch file renames (guide.ts → guides.ts, singular → plural)
 - High-severity issues should be fixed first
-- Status suggestions based on completion: <30% = draft, 30-80% = in-progress, >80% = complete or needs review
+- Status suggestions must respect transition ownership (see the Status State Machine in `.claude/rules/workflow.md`): `in-progress` is set by `/myspec:feature-implement` at execution start, so any completion % is normal for it — suggest `draft` only when no implementation plan exists yet. Never suggest `complete` from checkbox counts — that transition belongs to `/myspec:feature-complete`; at ≥80% suggest running `/myspec:feature-verify` instead

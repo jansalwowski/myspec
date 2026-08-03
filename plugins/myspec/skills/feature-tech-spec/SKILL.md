@@ -9,7 +9,7 @@ tags: [technical, specification, architecture, implementation]
 ## Prerequisites
 - `${aiDir}/features/{feature}/spec.md` must exist with `status: approved`
 
-## Instructions
+## Workflow
 
 1. **Read the Product Spec**
    - Read `${aiDir}/features/{feature}/spec.md`

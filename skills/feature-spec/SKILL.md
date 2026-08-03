@@ -6,7 +6,7 @@ tags: [feature, specification, planning, documentation]
 
 # Feature Spec
 
-## Instructions
+## Workflow
 
 1. **Gather Information**
    - Ask the user about the feature concept
@@ -21,7 +21,7 @@ tags: [feature, specification, planning, documentation]
 title: "{Feature Title}"
 status: draft
 phase: 1
-priority: P{0|1|2}
+priority: P{0|1|2|3}
 spec_version: 1
 created: {TODAY}
 last_updated: {TODAY}
@@ -50,7 +50,7 @@ Required sections:
   title: "{Feature Title}"
   status: draft
   phase: 1
-  priority: P{0|1|2}
+  priority: P{0|1|2|3}
   depends-on: [{dependencies}]
 ```
 
@@ -105,5 +105,5 @@ Required sections:
 
 ## Integration
 
-**Next:** `/myspec:feature-spec-review` — validate spec before proceeding to technical design
-**Next (large features):** `/myspec:feature-decompose` — split into sub-features before feature-spec-review
+**Next** [REQUIRED — owns the draft → approved transition]: `/myspec:feature-spec-review` — validate spec before proceeding to technical design
+**Next (large features)** [OPTIONAL]: `/myspec:feature-decompose` — split into sub-features before feature-spec-review
