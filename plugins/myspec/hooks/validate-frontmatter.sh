@@ -108,14 +108,17 @@ if [ ! -f "$FILE_PATH" ]; then
   exit 0
 fi
 
-CONTENT=$(cat "$FILE_PATH")
 ISSUES=()
 
-# Check frontmatter block exists
-if ! echo "$CONTENT" | grep -qE "^---"; then
+# Check frontmatter block exists. Read the file directly — echoing the content
+# into grep -q/awk SIGPIPEs the echo once the file exceeds the 64 KiB pipe
+# buffer, and under pipefail that reads as "no frontmatter" (issue #33).
+if ! grep -qE "^---" "$FILE_PATH"; then
   ISSUES+=("missing frontmatter block entirely")
 else
-  FRONTMATTER=$(echo "$CONTENT" | awk '/^---/{p++; if(p==2) exit} p' | grep -v "^---")
+  # || true: an empty frontmatter block leaves grep -v with no output (exit 1),
+  # which under set -e would kill the hook before it can report the real issue
+  FRONTMATTER=$(awk '/^---/{p++; if(p==2) exit} p' "$FILE_PATH" | grep -v "^---" || true)
 
   # Check an identity field (matches every framework template:
   # docs use title, skills use name, sessions use topic, memories use id,
@@ -138,7 +141,7 @@ if [ ${#ISSUES[@]} -gt 0 ]; then
   - ${ISSUE}"
   done
   REASON="${REASON}
-Fix the frontmatter before continuing (templates: \${aiDir}/.templates/)."
+Fix the frontmatter before continuing (templates: ${AI_DIR}/.templates/)."
   # Emit a block decision — the harness surfaces the reason back to the agent;
   # plain stdout with exit 0 would be transcript-only and never seen.
   printf '{"decision":"block","reason":%s}\n' "$(printf '%s' "$REASON" | jq -Rs .)"
