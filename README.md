@@ -113,6 +113,7 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref main
 | `/myspec:skill-verify` | Verify a skill file follows optimization guidelines |
 | `/myspec:worktree-cleanup` | Clean up git worktrees after feature branches |
 | `/myspec:docs-sanitize` | Clean up documentation naming and structure |
+| `/myspec:ai-setup-audit` | Six-surface audit of every agent-facing surface (CLAUDE.md + rules, skills/agents, `${aiDir}` docs, memory tree, hooks + harness config, feature manifest); approval-gated fixes as grouped PRs |
 | `/myspec:upstream-sync` | Check tracked upstream repos (e.g. obra/superpowers) for changes worth porting into local skills |
 
 ## Configuration
