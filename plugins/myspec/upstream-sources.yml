@@ -12,8 +12,8 @@ sources:
   - name: superpowers
     repo: obra/superpowers
     branch: main
-    last_checked_sha: "9f04f063"
-    last_checked_date: "2026-05-12"
+    last_checked_sha: "b36e0829"
+    last_checked_date: "2026-08-21"
     mappings:
       - upstream: skills/brainstorming
         local: plugins/myspec/skills/brainstorm
@@ -24,3 +24,7 @@ sources:
           - "Frontmatter description stays exploratory; upstream uses 'You MUST use this before any creative work' trigger language."
           - "Visual-companion server ported from upstream scripts/ to lib/brainstorm-server/ (invoked via ${CLAUDE_PLUGIN_ROOT}/lib/...). Mirrored into plugins/myspec/lib/brainstorm-server/ so it resolves under the Codex plugin root too (where ${CLAUDE_PLUGIN_ROOT} → plugins/myspec/)."
           - "Server session dir + frame branding rebranded .superpowers/ → .myspec/ and 'Superpowers Brainstorming' → 'myspec Brainstorming'."
+          - "Three-path router (spike/bounded/architectural), reworked HARD-GATE, Red Flags table, per-path checklists, dot graph (v6.3.0) not adopted — machinery for scaling a mandatory spec pipeline we do not have; only the one-way depth ratchet was folded into Before-diving-in."
+          - "spec-document-reviewer-prompt.md deleted locally — unreferenced dead file in both trees (upstream flow switched to inline self-review; ours always was)."
+          - "visual-companion.md platform-launch matrix trimmed to Claude Code + Codex + Windows + generic fallback; Gemini/Copilot CLI sections not mirrored."
+          - "Prime Radiant branding, telemetry env vars, remote logo, and version readout stripped from server.cjs; the BRANDING slot renders a static myspec link. Upstream start-server.sh kill-any-existing-server block stays removed (dead code — SESSION_DIR is unique per run)."
