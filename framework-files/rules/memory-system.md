@@ -31,6 +31,8 @@ These are blocking requirements — skip them and the agent loses context across
 | Starting a non-code session (debugging without edits, discovery, doc-only work) | Invoke `/myspec:session-start` | Manual creation; auto-creation only fires on code edits |
 | Work complete | Invoke `/myspec:session-complete` | Multi-type extraction + archival of the agent's own session file (touches no sibling sessions) |
 | User approves memory | Invoke `/myspec:memory-create` | Creates typed memory (procedural/semantic/episodic) |
+| Allocating a memory ID | `.claude/lib/memory-claim-id.sh <procedural\|semantic\|episodic>` | Locks the main checkout, scans every worktree, returns the next free ID. Never read the index and pick a number — parallel sessions pick the same one and the tables auto-merge silently |
+| After adding or removing a memory file | `node .claude/lib/memory-index.mjs` | The index tables are generated from the files; `--check` fails when they drift. A conflict on `index.md` is resolved by keeping either side and re-running |
 | Debugging + repeated errors | Invoke `/myspec:memory-lookup` | Searches all memory types for solutions |
 
 ## Session Lifecycle (canonical — all skills follow this)
