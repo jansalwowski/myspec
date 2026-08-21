@@ -120,6 +120,7 @@ Strengths
 | High | Resource & Lifecycle | Job not idempotent | src/jobs/export-worker.ts | 58-74 | Retry re-appends to an existing file instead of truncating — a retried job produces a doubled CSV |
 | High | Error Handling | Swallowed failure | src/jobs/export-worker.ts | 81 | `catch {}` around the upload marks the job `complete` even when upload throws — user downloads an empty file |
 | Medium | Test Adequacy | Retry path untested | src/jobs/export-worker.ts | 58 | No test exercises a re-run; the idempotency bug above would have been caught |
+| Medium | Test Adequacy | Change-detector test | src/api/export-request.test.ts | 27 | Asserts `repo.insert` received exactly the object the handler builds — the expectation restates the implementation, so it fails on every refactor and never on a wrong field; assert hand-derived literals |
 
 Project rules checked: api body validation ✓ (export-request.ts:19 validates),
 not-found handling ✓ (repo throws NotFoundError), job idempotency ✗ → High above.
@@ -132,18 +133,19 @@ Proposed fixes ready (autoFix: off — nothing applied):
   Apply which? [All / Critical+High / Individually / None]
 ```
 
-The author picks **Critical+High**; the skill presents three diffs (prefix-escape risky cells in `csv.ts`, truncate-on-start in the worker, surface the upload error and leave the job `failed`), applies them on confirmation, and leaves the Medium test gap for the author to fill.
+The author picks **Critical+High**; the skill presents three diffs (prefix-escape risky cells in `csv.ts`, truncate-on-start in the worker, surface the upload error and leave the job `failed`), applies them on confirmation, and leaves the Medium test findings for the author to address.
 
 ### Result
 
-Three fixes applied after confirmation. The Medium finding is left as a noted follow-up. A second `code-review` run comes back `Approve`.
+Three fixes applied after confirmation. The Medium findings are left as noted follow-ups. A second `code-review` run comes back `Approve`.
 
 ### Why this example matters
 
 - **Severity drives the verdict, not the other way around.** One Critical forces `Approve with fixes` and names what blocks merge. The skill never downgrades a finding to make the verdict read cleaner.
 - **The data-flow read is what catches the cross-file bugs.** The doubled-CSV and the empty-file-marked-complete bugs only surface once you trace request → worker → upload across files — reviewing the worker hunk in isolation misses both.
 - **`autoFix: off` keeps the author in control.** Behavior-changing fixes (truncate-on-retry, fail-on-upload-error) are *proposed* as diffs and applied only on an explicit choice — a wrong "fix" to working code is worse than a flagged finding.
-- **The Medium survives the cut, the Lows don't.** At `standard` verbosity the missing retry test is reported (it directly relates to a High bug) while pure polish stays silent.
+- **The Mediums survive the cut, the Lows don't.** At `standard` verbosity the missing retry test (it directly relates to a High bug) and the change-detector test are reported, while pure polish stays silent.
+- **Test Adequacy asks "would this fail if the behavior broke?"** The change-detector finding flags a test that *exists* but can't fail on a real bug — apparent coverage the mutation probe exposes as decoration.
 
 ---
 
