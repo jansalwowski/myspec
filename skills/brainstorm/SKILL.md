@@ -35,7 +35,7 @@ The failure modes behind these (anchoring, sycophancy, premature convergence, th
 
 ## Before diving in
 
-**Should we even brainstorm?** Don't skip examination just because a topic looks simple — "obvious" ideas hide assumptions worth surfacing, and a brainstorm can be short. But brainstorming is a tool, not a ritual: if the answer is genuinely known, the task is purely mechanical, or it's time-critical, say so and skip the ceremony. Match depth to the task.
+**Should we even brainstorm?** Don't skip examination just because a topic looks simple — "obvious" ideas hide assumptions worth surfacing, and a brainstorm can be short. But brainstorming is a tool, not a ritual: if the answer is genuinely known, the task is purely mechanical, or it's time-critical, say so and skip the ceremony. Match depth to the task — and depth ratchets one way: when hidden complexity surfaces mid-conversation, stop, say so, and step up. Never quietly downgrade.
 
 **Scope check.** If the topic spans multiple independent areas (e.g., "build a platform with chat, file storage, billing, and analytics"), flag it immediately — don't refine details of something that needs decomposing first. Help the user name the independent pieces, how they relate, and what order to tackle them; then brainstorm the first piece through the normal flow.
 
@@ -45,14 +45,14 @@ Do **not** open with an interview. Read what the user brought, **name the mode y
 
 > "Reading this as *generate-from-scratch* — I'll go wide first, no filtering yet. (Say so if you'd rather pressure-test an idea or decide between options.)"
 
-Infer the mode from how the user frames the request. Ask only when it's genuinely ambiguous.
+Infer the mode from how the user frames the request. Ask only when it's genuinely ambiguous — sparingly, one question at a time, multiple-choice where possible (`AskUserQuestion`).
 
 | Mode | Triggered by | What you do | Guard against |
 |---|---|---|---|
 | **Frame** | "not sure what the real problem is", vague or broad | Explore, then sharpen, the *problem*: "How might we…" reframes, ladder up ("why does this matter?") and down ("what specifically?"), decompose. **Don't solve yet.** | jumping to solutions before the problem is clear |
 | **Generate** | "ideas for…", blank page, "what could we…", "name / tagline for…" | Adaptive open — *brought a seed*: expand theirs first; *blank page*: lead with a wide, hedged set. Then push past the obvious: "what if…", "what else?", analogy, other personas, constraints. | the obvious five / everything sounding the same |
 | **Solve** | "X is broken / slow / failing", "we keep hitting…" | **Find the root cause first** — ask "why?" down to it — *then* generate fixes: reverse-brainstorm, first-principles, drop the binding constraint. | fixing the symptom instead of the cause |
-| **Sharpen** | "poke holes in this", "talk me out of it", "which of these?", "help me decide" | Adviser stance: lead with the strongest objection, devil's-advocate by severity, pre-mortem, audit the load-bearing assumptions. To choose: surface criteria first → trade-offs → steel-man each option. | sycophancy; and when deciding, don't generate *more* options |
+| **Sharpen** | "poke holes in this", "talk me out of it", "which of these?", "help me decide" | Adviser stance: lead with the strongest objection, devil's-advocate by severity, pre-mortem, audit the load-bearing assumptions; YAGNI ruthlessly — challenge scope creep. To choose: surface criteria first → trade-offs → steel-man each option, recommendation first. | sycophancy; and when deciding, don't generate *more* options |
 
 The technique menu for each mode — and when to reach for one — lives in `skills/brainstorm/techniques.md`. Load it when a mode's default isn't moving or the conversation stalls. Don't force techniques; reach for one when you need it.
 
@@ -94,14 +94,6 @@ Fix issues inline. Do not loop with a subagent — a single pass is enough.
 **If C:** Done. Do not write anything.
 
 **Do NOT ask this question at the beginning.** The brainstorm itself is the value. Output is secondary.
-
-## Key Principles
-
-- **Don't interview — produce.** Lead with ideas and provocations; ask sparingly, one question at a time, multiple-choice where possible (`AskUserQuestion`).
-- **Name the mode, allow the pivot** — the user should always know which mode they're in and be able to switch.
-- **YAGNI ruthlessly** — challenge scope creep when sharpening.
-- **Always offer alternatives** — propose 2-3 approaches with honest trade-offs, recommendation first, before settling.
-- **Confirm before moving on**, and remember **the conversation is the product** — artifacts are optional.
 
 ## Visual Companion
 
