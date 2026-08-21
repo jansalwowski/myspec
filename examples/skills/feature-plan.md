@@ -67,8 +67,17 @@ Zero parallelism opportunities — every step is on the critical path. One miles
 title: "Favorite Reports — Implementation Plan"
 status: draft
 based_on_tech_spec_version: 1
+spec: ai/features/favorite-reports/spec.md
+tech_spec: ai/features/favorite-reports/tech-spec.md
 created: 2026-04-30
 ---
+
+## Global Constraints
+
+> Every task's requirements implicitly include this section.
+
+- `tech-spec.md` §Constraints: "No new runtime dependencies; favorites persist in Postgres, not localStorage"
+- `spec.md` NFR-1: "Toggling a favorite reflects in the UI within 200 ms (optimistic update)"
 
 ## Execution Order
 
@@ -84,7 +93,7 @@ created: 2026-04-30
 
 (Single-milestone, so the `### Milestone N:` heading is omitted and the Execution Order table stands alone.)
 
-Each task carries a **Spec contract** block — verbatim quotes, not paraphrase — plus a **Touch only** line whenever the Files block has a `Modify:` entry:
+Each task carries a **Spec contract** block — verbatim quotes, not paraphrase — an **Interfaces** block (Consumes/Produces, exact signatures), plus a **Touch only** line whenever the Files block has a `Modify:` entry:
 
 ```markdown
 ### Task 2: ReportFavoritesService
@@ -96,6 +105,10 @@ Each task carries a **Spec contract** block — verbatim quotes, not paraphrase 
 **Files:**
 - Create: `src/features/reports/favorites/service.ts`
 - Test: `src/features/reports/favorites/__tests__/service.test.ts`
+
+**Interfaces:**
+- Consumes: `report_favorites (user_id, report_id, created_at)` table — from Task 1
+- Produces: `ReportFavoritesService.add(userId: string, reportId: string): Promise<void>`, `.remove(...)` same shape, `.list(userId: string): Promise<ReportFavorite[]>`, `.isFavorite(userId: string, reportId: string): Promise<boolean>` — Tasks 3 and 6 rely on these
 
 **Depends on:** Task 1
 
@@ -155,6 +168,7 @@ Plan is ready. Commit before /feature-implement to avoid dangling files.
 
 - **Normal mode is the default, and it's the right call here.** Six small sequential tasks gain nothing from a role chain — orchestrator's autonomy would only add surface for cascading errors. The Step 0 disclaimer exists so the user picks deliberately.
 - **The Spec contract block is non-negotiable even in normal mode.** Every task quotes the spec/tech-spec sentence that constrains it. If a task has no such passage, that's the signal the task shouldn't exist.
+- **Global Constraints and Interfaces are the anti-drift rails.** Project-wide exacts live once in the header section (every task implicitly includes them); exact signatures live in each task's Interfaces block. Task 4's hook calls `list(userId)` because Task 2's Produces line says so — an implementer who sees only their task text never guesses a name.
 - **Touch only lands wherever a task modifies an existing file.** Without it, a reviewer flags adjacent pre-existing code as a regression. Task 6 touches the list query, so it scopes the diff explicitly.
 - **Single-milestone, all-sequential is fine.** Don't split into milestones to look "complex." The milestone checkpoint at the end gives the user an exit point.
 - **The commit decision is part of the skill.** Leaving the plan uncommitted is the failure mode Step 7 exists to prevent — there's no "leave uncommitted" option offered.
@@ -201,6 +215,8 @@ The skill reads `references/plan-templates-orchestrator.md`. Front-matter now ca
 ---
 feature: scheduled-reports
 spec_version: 2
+spec: ai/features/scheduled-reports/spec.md
+tech_spec: ai/features/scheduled-reports/tech-spec.md
 orchestration: agent-chain
 roles:
   worker: cheap
@@ -261,6 +277,10 @@ Every step inside a task block is annotated with its owning chain role — the W
 - Test: `src/features/schedules/__tests__/repository.test.ts`
 
 <!-- budget: est 14k tokens, 2 files, 0 LoC modify, 320 LoC create -->
+
+**Interfaces:**
+- Consumes: `schedules` table — from Task 1 migration
+- Produces: `ScheduleRepository.create(input: ScheduleInput): Promise<Schedule>`, `.get(id: string)`, `.listForUser(userId: string)`, `.delete(id: string)` — Tasks 5 and 6 rely on these
 
 **Depends on:** Task 1 (barrier)
 **Parallel with:** Task 3

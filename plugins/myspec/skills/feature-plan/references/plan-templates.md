@@ -11,12 +11,32 @@ Every implementation-plan.md starts with this frontmatter. Downstream consumers 
 title: "{Feature Title} -- Implementation Plan"
 feature: {feature-dir-name}
 based_on_spec_version: {spec_version from spec.md}
+spec: ${aiDir}/features/{feature}/spec.md
+tech_spec: ${aiDir}/features/{feature}/tech-spec.md
 created: {TODAY}
 last_updated: {TODAY}
 ---
 ```
 
+`spec` / `tech_spec` are explicit pointers, not decoration: the plan argues from those two documents, so they travel with it — anyone executing or reviewing the plan reads both alongside it.
+
 Update `last_updated` whenever the plan is edited (including checkbox updates by `feature-implement`).
+
+## Global Constraints
+
+Directly after the header, before the Execution Order table:
+
+```markdown
+## Global Constraints
+
+> Every task's requirements implicitly include this section.
+
+- `tech-spec.md` §Constraints: "Node >= 20.11; no new runtime dependencies"
+- `spec.md` NFR-2: "List endpoints return at most 50 items per page"
+- `tech-spec.md` §Naming: "All schedule tables are prefixed `sched_`"
+```
+
+Project-wide exact values — version floors, size/perf limits, naming rules, invariants — one line each, copied **verbatim** from spec.md / tech-spec.md with a source reference. Per-task text must never re-derive or paraphrase these values; that is how they drift. Task-scoped behavior stays in each task's Spec contract block.
 
 ## Task Status
 
@@ -64,6 +84,11 @@ Notes:
 
 **Touch only (required when Files contains Modify):** the specific lines/sections this task adds or changes. Do NOT scan, audit, or modify pre-existing content even if you notice issues — pre-existing tech debt is out of scope. Reviewers will reject diffs that touch unrelated lines.
 
+**Interfaces:**
+- Consumes: `createSchedule(input: ScheduleInput): Promise<Schedule>` — from Task N-1
+- Produces: `listSchedules(userId: string): Promise<Schedule[]>` — Task N+2 relies on this
+- (Exact signatures — names, parameter and return types — from the tech-spec. A task's implementer sees only their own task text; this block is how they learn the names and types neighboring tasks use. `Consumes: nothing` / `Produces: nothing` is valid.)
+
 **Depends on:** Task N-1
 
 - [ ] **Step 1: Write the failing test**
@@ -96,6 +121,10 @@ Notes:
 - Test: `exact/path/to/file.test.ts`
 
 **Touch only (required when Files contains Modify):** the specific lines/sections this task adds or changes. Pre-existing tech debt is out of scope.
+
+**Interfaces:**
+- Consumes: `<exact signature>` — from Task M (barrier)
+- Produces: `<exact signature>` — Task P relies on this
 
 **Depends on:** Task M (barrier)
 **Parallel with:** Tasks N+1, N+2, N+3
