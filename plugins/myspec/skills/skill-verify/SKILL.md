@@ -44,7 +44,7 @@ description: >
    - A skill that declares a dependency it does not actually have is broken (it will emit non-compiling or non-functional output). These are always Critical, never auto-fixed — the fix is either to add the dependency or delete/repair the skill, which requires human judgment.
    - Skills without a `dependencies:` block skip this step entirely.
 
-5. **Detect Anti-Patterns** (check all 14 from Anti-Patterns Reference; read [references/detection-patterns.md](references/detection-patterns.md) for the scan regexes before starting)
+5. **Detect Anti-Patterns** (check all 16 from Anti-Patterns Reference; read [references/detection-patterns.md](references/detection-patterns.md) for the scan regexes before starting)
    - Scan description for workflow verbs in sequence
    - Scan description for vague/generic language without specific keywords
    - Scan body for README-style documentary language
@@ -56,9 +56,11 @@ description: >
      - Also check: does the workflow contain any conditional branching (`if`, `when`, `unless`)? Flag if all steps are unconditional sequences
    - Scan for `@` force-loading references
      - If skill references other skills by name, suggest REQUIRED/OPTIONAL markers per cross-reference pattern
-   - Scan body for decorative formatting (Anti-Pattern #12): `> Note:` blockquotes, hard-wrapped paragraphs, 3-deep bullet ladders, horizontal rules `---` inside body, emoji-prefixed headers, ASCII boxes
+   - Scan body for decorative formatting (Anti-Pattern #12): `> Note:` blockquotes, hard-wrapped paragraphs, 3-deep bullet ladders, horizontal rules `---` inside body, emoji-prefixed headers, ASCII boxes. Also post-invocation persuasion: "Bottom Line"/"Remember"/"Key Principles" recap sections, benefits recaps, social proof — the reader already invoked the skill
    - Scan for all-caps imperative walls (Anti-Pattern #13): high density of MUST/ALWAYS/NEVER without accompanying rationale
    - Scan for explanations the model already knows (Anti-Pattern #14): inline tutorials for well-known libraries, language primers, definitions of common terms — apply the test "does the model need this?"
+   - Classify each normative guidance block by the failure it evidently targets and check its form against the Guidance Form Rules table (Anti-Pattern #15): prohibition lists aimed at output shape, soft "prefer/consider" wording on rules meant to hold under pressure, prose reminders where a template slot belongs, unconditional rules patched with exemptions
+   - Scan rule statements for nuance clauses ("unless it matters", "except when necessary") and exemption clauses ("this limit doesn't apply to...") (Anti-Pattern #16) — workflow branching on observable predicates is fine; hedges appended to rules are not
 
 6. **Validate Structure** (check against Structure Rules table)
    - Has Workflow section with numbered procedural steps
@@ -73,6 +75,9 @@ description: >
    - Flag if body exceeds 5,000 tokens or 500 lines (Anthropic spec recommendation for Phase 2 loading)
    - Check for redundant content that could use cross-references instead
    - Check for verbose examples that could be compressed
+   - For each post-invocation persuasion section flagged in step 5 (Anti-Pattern #12): propose deleting it or folding its points into their points of use — sections that persuade a reader who already invoked the skill are dead weight
+   - Guard prose (paragraphs pre-arguing against anticipated excuses) compresses into an Excuse | Reality rationalization table, not into deletion — propose the table conversion
+   - Tag any cut of discipline-critical guard content `[requires confirmation]` and recommend re-testing after the cut: in tested cases, cutting a discipline skill's recap regressed test-first compliance from 8/10 to 5/10 runs, and the working replacement was rationalization-table rows, not the restored prose
    - **Progressive disclosure check**: If body >300 lines, check whether reference material (tables, examples, templates) could move to `references/` subdirectory for on-demand loading
    - Flag inlined content that is consulted only in specific steps — candidate for `references/` extraction
    - If skill is analysis/review-only (no write operations), suggest `allowed-tools` restriction (e.g., `[Read, Grep, Glob]`)
@@ -119,6 +124,7 @@ description: >
     - Remaining issues (if any rejected)
     - Final word and line count
     - Recommend testing: "Test the description with 5-10 trigger queries to verify activation accuracy. Include 3 should-trigger, 3 paraphrased, and 3 should-NOT-trigger queries."
+    - If any applied fix rewrote behavior-shaping guidance (form change, guard-content cut), recommend a wording micro-test before the skill ships: run a no-guidance control first — if the control does not exhibit the failure, the guidance is dead weight; recommend deleting it instead of rewording. 5+ fresh-context reps per variant (single samples lie); read every flagged match manually (template echoes masquerade as hits); treat variance as a metric — when guidance lands, reps converge on the same shape
     - Recommend next step: re-verify after fixes, or deploy
 
 ## Frontmatter Rules
@@ -154,9 +160,31 @@ The tier table lives in `.claude/rules/skill-optimization.md` (co-loaded with th
 | 9 | **Force-loading references** | Uses `@skill-name` or `@path/to/file` syntax. Cross-references to other skills missing REQUIRED/OPTIONAL markers | High |
 | 10 | **No progressive disclosure** | Body >300 lines with inlined reference material that could move to `references/` for on-demand loading | High |
 | 11 | **Missing `allowed-tools` for read-only skills** | Skill performs analysis/review only but does not restrict tool access | Low |
-| 12 | **Decorative formatting (humans-not-models)** | `> Note:` blockquotes, hard-wrapped prose, 3-deep bullet ladders, horizontal rules inside body, emoji-prefixed headers, ASCII boxes. Body lands in the model's context, not on a screen — decoration is paid for in tokens on every load | High |
+| 12 | **Decoration and post-invocation persuasion (humans-not-models)** | `> Note:` blockquotes, hard-wrapped prose, 3-deep bullet ladders, horizontal rules inside body, emoji-prefixed headers, ASCII boxes. Also "Bottom Line"/"Remember"/"Key Principles" recaps, benefits recaps, social proof — sections that persuade a reader who already invoked the skill. Body lands in the model's context, not on a screen — decoration and persuasion are paid for in tokens on every load | High |
 | 13 | **All-caps imperative walls** | High density of MUST/ALWAYS/NEVER without explaining *why*. Anthropic's `skill-creator` flags this as a yellow flag: explain rationale instead of stacking imperatives | Medium |
 | 14 | **Explanations the model already knows** | Inline tutorials for well-known libraries/languages, definitions of common terms. Apply the test: "Does the model need this? Can I assume it knows? Does this paragraph justify its token cost?" | Medium |
+| 15 | **Guidance form mismatched to failure** | Form doesn't match the failure the guidance targets (see Guidance Form Rules): prohibition list aimed at output shape, soft "prefer/consider" on a rule meant to hold under pressure, prose reminders instead of a REQUIRED template slot, unconditional rule patched with exemptions | High |
+| 16 | **Nuance and exemption clauses** | "Don't X unless it matters" / "except when necessary" appended to a rule; "this limit doesn't apply to..." carve-outs. See Guidance Form Rules for why neither works | High |
+
+## Guidance Form Rules
+
+Normative guidance has a form — prohibition, recipe, template slot, conditional — and each form fixes exactly one failure type; the form that bulletproofs one failure type measurably backfires on another. Classify what failure each guidance block evidently targets, then check the form against this table (mismatch = Anti-Pattern #15):
+
+| Baseline failure the guidance targets | Right form | Wrong form — flag it |
+|---|---|---|
+| Skips/violates a rule under pressure (knows better, does it anyway) | Prohibition + rationalization table + red flags | Soft guidance ("prefer...", "consider...") |
+| Complies, but output has the wrong shape (bloated prompt, buried verdict, restated spec) | Positive recipe or contract: state what the output IS — its parts, in order | Prohibition list ("don't restate", "never narrate") |
+| Omits a required element from something they already produce | Structural: REQUIRED field or slot in the template they fill in | Prose reminders near the template |
+| Behavior should depend on a condition | Conditional keyed to an observable predicate ("if the brief exists, reference it") | Unconditional rule + exemption clauses |
+
+Prohibitions backfire on shaping problems because under a competing incentive agents negotiate with "don't X": in head-to-head wording tests, the prohibition arm produced clearly more of the unwanted content than the recipe arm, and trended worse than even the no-guidance control. A recipe leaves nothing to negotiate — the output matches the stated shape or it doesn't. Proposed fix for a shape-targeting prohibition list: rewrite as a recipe stating the output's parts, in order, tagged `[requires confirmation]`.
+
+Two wording rules apply to whichever form the skill uses (violation = Anti-Pattern #16):
+
+- **No nuance clauses.** "Don't X unless it matters" reopens the negotiation — appending a single nuance clause to a winning recipe degraded it from consistent to noisy. Fix: express the real exception as its own conditional on an observable predicate.
+- **Exemption clauses don't scope.** "This limit doesn't apply to code blocks" still suppresses code blocks. Fix: restructure so the rule can't reach the exempt part.
+
+Distinguish from legitimate conditionals: a workflow branch keyed to an observable predicate ("if the frontmatter has a `dependencies:` block...") is the right form, not a nuance clause. The flag is for hedges whose predicate is a judgment call ("matters", "necessary", "makes sense") appended to a rule or limit.
 
 ## Structure Rules
 
@@ -195,7 +223,9 @@ Per-type body targets are in the Token Efficiency table of `.claude/rules/skill-
 Outcome checks (not a workflow echo — per `.claude/rules/skill-optimization.md`):
 
 - [ ] Every frontmatter finding cites the violated constraint (field, tier, or format rule)
-- [ ] All 14 anti-patterns and the three structure rules were scanned — none skipped silently; regexes taken from `references/detection-patterns.md`
+- [ ] All 16 anti-patterns and the three structure rules were scanned — none skipped silently; regexes taken from `references/detection-patterns.md`
+- [ ] Every normative guidance block was classified against the Guidance Form Rules table; each form-mismatch finding names the failure type and the right form
+- [ ] No cut of discipline-critical guard content proposed without a `[requires confirmation]` tag and a re-test recommendation
 - [ ] If a `dependencies:` block exists: every package located in a package.json and every path confirmed on disk, or a Critical finding raised
 - [ ] Findings table is grouped by severity and every row has a line number (or `—` for absent-section findings)
 - [ ] Every proposed fix is a concrete diff tagged `[auto-fix]` or `[requires confirmation]`; no `[requires confirmation]` fix applied without explicit approval
