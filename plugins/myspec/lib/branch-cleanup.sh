@@ -288,6 +288,11 @@ for br in "${CANDIDATES[@]}"; do
       printf 'REMOVED  worktree %s\n' "$WT"
     else
       printf 'SKIP     %-50s worktree removal refused (%s)\n' "$br" "$WT"
+      # Name what the refusal protects: any file listed below exists nowhere
+      # else. Resolution is the operator's call (commit / move out / delete);
+      # never --force or rm -rf from here. Git's own refusal text is not
+      # echoed because it advertises the force flag this script refuses.
+      git -C "$WT" status --porcelain -uall 2>/dev/null | sed 's/^/         /'
       FAILED=1
       continue
     fi

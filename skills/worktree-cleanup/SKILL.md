@@ -47,6 +47,8 @@ Every branch is named explicitly; there is no bulk mode. Each is re-verified at 
 
 Report exactly what the script printed. A `SKIP` line means the branch was held back on re-verification — surface it, do not retry it.
 
+When the hold is dirty files — `worktree has uncommitted or untracked files`, or a refused removal — those files exist nowhere but that worktree. If the user still wants the branch gone, run `git -C <worktree> status --porcelain -uall`, name the specific files, and offer: commit them to the branch, move them into the main checkout, or delete them (unrecoverable). Carry out the choice, then re-run the audit. Never resolve the hold yourself with `--force` or `rm -rf`.
+
 ## What the script proves
 
 Either proof is sufficient; both are checked.
@@ -70,7 +72,7 @@ Any one of these keeps the branch, before proofs are considered:
 
 ## Constraints
 
-- **Never** pass `--force` to `git worktree remove`, and never edit the script to do so. Git's refusal to drop a dirty tree is the last backstop.
+- **Never** pass `--force` to `git worktree remove`, never `rm -rf` a worktree to get past a refusal, and never edit the script to do so. Git's refusal to drop a dirty tree is the last backstop — a refusal means files exist only there, and "just finishing the cleanup" with force destroys them permanently.
 - **Never** delete a branch the script marked KEEP because it "looks merged". If a classification is wrong, fix `classify()` and add a case to `lib/tests/branch-cleanup.test.sh`.
 - A stash is repo-global and survives worktree removal — it is not a reason to keep a worktree.
 

@@ -102,6 +102,8 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 
 1. **Detect worktree** — run `git worktree list | grep $(git branch --show-current)`
 
+   If a worktree exists, record its **absolute path and the branch name now**, before any `cd` or checkout. Option 1 and 4 switch to the base branch, so re-deriving the path afterwards (e.g. from `git branch --show-current`) resolves against the wrong tree — detection silently stops matching and step 4 no-ops, leaving the worktree behind.
+
 2. **Present options:**
    ```
    Implementation complete. What would you like to do?
@@ -159,16 +161,28 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
    ```
 
 4. **Worktree cleanup** (only for options 1 & 4, and only if worktree was detected):
+
+   Run from outside the worktree, using the path recorded in step 1 — never a re-derived one:
+
    ```bash
-   git worktree remove <worktree-path>
+   git worktree remove <recorded-worktree-path>
    ```
+
+   **If removal is refused** (`contains modified or untracked files`): those files exist nowhere else. Never escalate to `--force` or `rm -rf` on your own. Show the user what is at stake:
+
+   ```bash
+   git -C <recorded-worktree-path> status --porcelain -uall
+   ```
+
+   Name the listed files and offer: commit them to the branch, move them into the main checkout, or delete them (unrecoverable). Carry out the choice, then remove the worktree.
 
 ## Verification Checklist
 
 - [ ] Phase 1 checklist fully satisfied (docs, manifest `complete`, plan archived, CHANGELOG row)
 - [ ] All required checks from `.claude/verification.json` passed — or failures confirmed unrelated by the user
 - [ ] Branch resolved per the user's Phase 3 choice (merged / PR created / kept / discarded after typed confirmation)
-- [ ] Worktree removed when options 1 or 4 were chosen and one existed
+- [ ] Worktree removed when options 1 or 4 were chosen and one existed — via the path recorded before any checkout
+- [ ] No `git worktree remove --force` and no `rm -rf`: a refused removal was surfaced with its file list and resolved by user choice
 - [ ] No branch mutation ran without the `MYSPEC_ALLOW_BRANCH_OPS=1` prefix when the guard hook is installed
 
 ## Integration
