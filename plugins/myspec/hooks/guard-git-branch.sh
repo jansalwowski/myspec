@@ -9,12 +9,24 @@
 #
 # Note: `git checkout -- <file>` is also blocked. Use `git restore <file>` instead.
 #
+# MATCHING: the blocklist is applied at COMMAND POSITION only, over input whose
+# quoted spans and heredoc bodies have been blanked (lib/command-scan.sh). A
+# plain substring match fires on the verb wherever it appears — inside a commit
+# message, a PR body, or doc prose — and blocks a command that mutates nothing.
+# Those false positives were this hook's dominant failure mode.
+# Fixture: hooks/tests/guard-git-branch.test.sh
+#
 # Escape hatch: a command prefixed with MYSPEC_ALLOW_BRANCH_OPS=1 is approved.
 # Intended for deliberate integration flows (feature-complete's branch merge
 # documents it) — not for casual branch mutations by parallel agents. The
 # block reason deliberately does NOT mention the prefix: a hook cannot verify
 # user confirmation, so advertising the bypass would let any blocked agent
 # wave itself through. Only flows whose skill documents the prefix know it.
+#
+# Sanctioned cleanup needs no bypass: lib/branch-cleanup.sh makes its git calls
+# in a child process, which this hook never sees. The capability stays bound to
+# that audited script — which proves containment and requires confirmation —
+# rather than to a copyable string.
 #
 # Output contract: {"decision": "block", "reason": "..."} or {"decision": "approve"}
 
@@ -87,22 +99,46 @@ if echo "$COMMAND" | grep -qE '(^|[[:space:]])MYSPEC_ALLOW_BRANCH_OPS=1[[:space:
   exit 0
 fi
 
-# We are on the main checkout — enforce the block list
-BLOCKED_PATTERNS=(
-  'git[[:space:]]+checkout([[:space:]]|$)'
-  'git[[:space:]]+switch([[:space:]]|$)'
-  'git[[:space:]]+merge([[:space:]]|$)'
-  'git[[:space:]]+rebase([[:space:]]|$)'
-  'git[[:space:]]+branch[[:space:]]+(-[mMdDcC]|--move|--delete|--copy|--set-upstream)'
-)
-
-for PATTERN in "${BLOCKED_PATTERNS[@]}"; do
-  if echo "$COMMAND" | grep -qE "$PATTERN"; then
-    BLOCKED_CMD=$(echo "$COMMAND" | head -c 200)
-    REASON="BLOCKED: Branch-mutating git commands are not allowed on the main checkout. Use isolation: \"worktree\" in your Agent tool call instead. If you need to restore a file, use \`git restore <file>\` not \`git checkout\`. Blocked: ${BLOCKED_CMD}"
-    echo "{\"decision\": \"block\", \"reason\": $(printf '%s' "$REASON" | jq -Rs .)}"
-    exit 0
+# Locate the shared scanner. The hook + lib ship as a pair:
+#   myspec repo:      hooks/guard-git-branch.sh + lib/command-scan.sh
+#   adopting project: .claude/hooks/...         + .claude/lib/...
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+LIB=""
+for cand in \
+  "$SCRIPT_DIR/../lib/command-scan.sh" \
+  "$REPO_ROOT/.claude/lib/command-scan.sh" \
+  "$REPO_ROOT/lib/command-scan.sh"; do
+  if [ -f "$cand" ]; then
+    LIB="$cand"
+    break
   fi
 done
+
+# Scanner missing — fail open rather than block on infra error, matching how
+# this hook already treats a missing jq or an unresolvable repo root.
+if [ -z "$LIB" ]; then
+  echo '{"decision": "approve"}'
+  exit 0
+fi
+
+# shellcheck source=/dev/null
+. "$LIB"
+
+# Blocked verbs, matched against the first word of a command segment.
+BLOCKED_PATTERNS=(
+  '^git[[:space:]]+checkout([[:space:]]|$)'
+  '^git[[:space:]]+switch([[:space:]]|$)'
+  '^git[[:space:]]+merge([[:space:]]|$)'
+  '^git[[:space:]]+rebase([[:space:]]|$)'
+  '^git[[:space:]]+branch[[:space:]]+(-[mMdDcC]|--move|--delete|--copy|--set-upstream)'
+)
+
+BLOCKED_CMD=$(find_matching_segment "$COMMAND" "${BLOCKED_PATTERNS[@]}")
+
+if [ -n "$BLOCKED_CMD" ]; then
+  REASON="BLOCKED: Branch-mutating git commands are not allowed on the main checkout. Use isolation: \"worktree\" in your Agent tool call instead. If you need to restore a file, use \`git restore <file>\` not \`git checkout\`. Blocked: $(printf '%s' "$BLOCKED_CMD" | head -c 200)"
+  echo "{\"decision\": \"block\", \"reason\": $(printf '%s' "$REASON" | jq -Rs .)}"
+  exit 0
+fi
 
 echo '{"decision": "approve"}'

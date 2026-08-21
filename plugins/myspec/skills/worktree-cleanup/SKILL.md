@@ -1,83 +1,84 @@
 ---
 name: worktree-cleanup
-description: "Use when cleaning up stale git worktrees and orphaned branches. Keywords: worktree cleanup, prune worktrees, stale branches, orphaned worktrees, git cleanup. Do NOT use for branch creation or feature branching."
+description: "Use when cleaning up stale git worktrees and orphaned branches. Keywords: worktree cleanup, prune worktrees, stale branches, orphaned worktrees, git cleanup, merged branches left behind, squash-merged branch won't delete. Do NOT use for branch creation or feature branching."
 ---
 
 # Worktree Cleanup
 
-Audit and clean up git worktrees and orphaned agent branches.
+Audit and clean up git worktrees and the branches behind them.
 
 **Announce at start:** "Running worktree cleanup audit."
 
+## Why this delegates to a script
+
+`git branch -d` refuses to delete a branch it considers unmerged, and a squash merge never makes a branch an ancestor of the base — so under a squash-merge workflow every merged branch looks unmerged and `-d` refuses. Reaching for `-D` to get past that discards git's only safety net.
+
+`lib/branch-cleanup.sh` earns the right to use `-D` by proving containment itself, and refuses when it cannot. Do not hand-roll the classification; a "looks merged" judgement is exactly what destroys work.
+
+It also keeps the capability off the bypass path: its git calls happen in a child process, so `guard-git-branch.sh` never sees them and no `MYSPEC_ALLOW_BRANCH_OPS=1` prefix is needed.
+
 ## Workflow
 
-### Step 1: Inventory Worktrees
-
-Run `git worktree list --porcelain` and parse output. Skip the main checkout (first entry). For each additional worktree extract: path, HEAD SHA, branch name.
-
-### Step 2: Classify Each Worktree
-
-For each non-main worktree, determine its status:
-
-- **orphaned**: Worktree path does not exist on disk (`[ ! -d <path> ]`)
-- **dirty**: Has uncommitted changes (`git -C <path> status --porcelain` returns output)
-- **merged**: HEAD is ancestor of main (`git merge-base --is-ancestor <sha> main` exits 0)
-- **stale**: Last commit older than 3 days (`git -C <path> log -1 --format=%ct` vs current epoch)
-- **active**: None of the above
-
-Priority order: orphaned → dirty → merged → stale → active
-
-### Step 3: Find Orphaned Branches
+### Step 1: Audit
 
 ```bash
-git branch --list 'worktree-agent-*'
+.claude/lib/branch-cleanup.sh            # lib/branch-cleanup.sh in the myspec repo
 ```
 
-Cross-reference against active worktrees from Step 1. Any `worktree-agent-*` branch with no corresponding worktree path is orphaned.
+Read-only. It fetches with `--prune` first (merged PRs leave stale `origin/<branch>` refs behind), classifies every local branch, and prints one line per branch with either the proof of containment or the reason it is held back.
 
-### Step 4: Present Report
+Add `--base <ref>` when the base is not `origin/HEAD`, `--no-fetch` when offline, `--json` to post-process.
 
-Output a table before taking any action:
+### Step 2: Present the report
 
-```
-## Worktree Audit
+Show the script's output as-is, then summarise: how many are provably contained, how many are held and why. Do not re-classify anything yourself, and do not describe a KEEP as "probably safe".
 
-| # | Path | Branch | Status | Last Commit | Action |
-|---|------|--------|--------|-------------|--------|
-| 1 | .claude/worktrees/agent-abc | worktree-agent-abc | merged+stale | 5d ago | PRUNE |
-| 2 | .claude/worktrees/feat-x | feat/x | dirty | 1h ago | KEEP |
-| 3 | (missing) | worktree-agent-def | orphaned | — | PRUNE BRANCH |
+### Step 3: Confirm
 
-Orphaned branches (no worktree): worktree-agent-ghi, worktree-agent-jkl
+Ask: "Remove the branches marked DELETE? (yes / no / selective)". Never skip this — the audit is read-only precisely so a human sees it first.
 
-Summary: N worktrees to prune, N branches to delete
+### Step 4: Apply
+
+```bash
+.claude/lib/branch-cleanup.sh --apply --branch <name> [--branch <name>]...
 ```
 
-### Step 5: Confirm and Execute
+Every branch is named explicitly; there is no bulk mode. Each is re-verified at apply time, so a stale audit cannot authorise a deletion. The script removes the worktree first (never `--force`), then deletes the branch, then runs `git worktree prune`.
 
-Ask: "Proceed with recommended cleanup? (yes / no / selective)"
+Report exactly what the script printed. A `SKIP` line means the branch was held back on re-verification — surface it, do not retry it.
 
-- **yes**: Execute all recommended actions
-- **no**: Exit without changes
-- **selective**: User picks which items to clean
+## What the script proves
 
-For each worktree to prune:
-1. `git worktree remove <path>` — if fails, try `git worktree remove --force <path>` only with explicit user confirmation for dirty worktrees
-2. `git branch -d <branch>` — if not fully merged, show warning and require explicit confirmation before using `-D`
+Either proof is sufficient; both are checked.
 
-For orphaned branches: `git branch -d <branch>` (or `-D` with explicit confirmation if unmerged)
+| Proof | Test | Covers |
+|-------|------|--------|
+| A | Every path the branch touched is byte-identical in the base | Squash merges; works offline |
+| B | A merged PR exists **and** the local tip equals its `headRefOid` | Branches whose files the base has since changed |
 
-Final always: `git worktree prune` to clean dangling references.
+Proof B without the tip check would delete a branch that was merged and then had new commits added. Proof A alone goes stale as soon as a later PR touches the same files. Neither is redundant.
+
+## Hard vetoes
+
+Any one of these keeps the branch, before proofs are considered:
+
+- it is the current branch, or the base branch
+- its worktree has uncommitted or untracked files
+- its worktree was touched in the last hour (possibly a live session)
+- it was never pushed and has no merged PR
+- it has commits ahead of its remote-tracking ref
 
 ## Constraints
 
-- **Never** remove a dirty worktree without explicit confirmation — show uncommitted changes first (`git -C <path> diff --stat`)
-- **Never** force-delete an unmerged branch without explicit confirmation
-- **Always** present the full report before executing any action
+- **Never** pass `--force` to `git worktree remove`, and never edit the script to do so. Git's refusal to drop a dirty tree is the last backstop.
+- **Never** delete a branch the script marked KEEP because it "looks merged". If a classification is wrong, fix `classify()` and add a case to `lib/tests/branch-cleanup.test.sh`.
+- A stash is repo-global and survives worktree removal — it is not a reason to keep a worktree.
 
 ## Verification Checklist
 
-- [ ] Audit report shown before any mutation; user confirmed the actions
-- [ ] Every dirty-worktree removal and unmerged-branch delete had its own explicit confirmation
-- [ ] `git worktree list` shows none of the removed worktrees; deleted branches absent from `git branch`
-- [ ] `git worktree prune` run last; no dangling references remain
+- [ ] Audit output shown to the user before any mutation; user confirmed
+- [ ] Every removal went through `--apply --branch`, one flag per branch
+- [ ] `git worktree list` no longer shows the removed worktrees
+- [ ] `git branch` no longer lists the deleted branches
+- [ ] Any `SKIP` or `FAILED` line reported to the user rather than retried
+- [ ] `bash lib/tests/branch-cleanup.test.sh` passes if `classify()` was touched

@@ -29,11 +29,15 @@ Based on caller input or session analysis:
 - **Semantic**: A fact about the codebase, API, dependency, or environment
 - **Episodic**: A significant event, decision, or outcome worth recording
 
-### 2. Find Next ID
+### 2. Claim an ID
 
-Read `${aiDir}/memory/{type}/index.md`:
-- Find highest existing ID number
-- Increment by 1 (e.g., P008 -> P009, S001, E001)
+```bash
+.claude/lib/memory-claim-id.sh <procedural|semantic|episodic>
+```
+
+Prints the claimed ID (e.g. `P053`). It locks the main checkout, scans it and every linked worktree, and records the claim before the file exists.
+
+Do **not** read the index and take the next free number. Two sessions doing that pick the same ID, and because their rows land on different lines the tables auto-merge with no conflict — the duplicate surfaces later, by hand.
 
 ### 3. Consolidation Check (ADD / UPDATE / NO-OP)
 
@@ -77,14 +81,17 @@ Use the type-appropriate template from `${aiDir}/.templates/memory-{type}.md`:
 
 ### 5. Update Type-Specific Index
 
-Add a row to `${aiDir}/memory/{type}/index.md`:
+Set `hook:` in the new memory's frontmatter — a one-line keyword/topic summary — then regenerate:
 
-**Procedural row**: `| {id} | {keywords} | {capability} | {exclusions} |`
-**Semantic row**: `| {id} | {topic} | {one-line fact} | {verified date} | {anchor file or "---"} |`
-**Episodic row**: `| {id} | {date} | {event summary} | {feature} | {outcome} |`
+```bash
+node .claude/lib/memory-index.mjs        # or `yarn memory:index` where wired up
+```
 
-**CRITICAL**: Index shows keywords/topics/summaries ONLY, never solutions or procedures.
-Set `updated` date in index frontmatter.
+The index tables are generated from the memory files, so the row is derived from `hook:` rather than hand-written. Where the generator is not installed, add the row by hand in the table's existing column shape.
+
+**CRITICAL**: the hook shows keywords/topics/summaries ONLY, never solutions or procedures. It is what an agent scans; the file body is what it loads on a match.
+
+A merge conflict in `index.md` is not a merge to reason about — keep either side and re-run the generator.
 
 ### 6. Present to User for Refinement
 
@@ -108,7 +115,8 @@ If the memory is critical enough to always be in context:
 - [ ] Consolidation check performed (existing entries reviewed; ADD / UPDATE / NO-OP decision recorded)
 - [ ] If UPDATE / NO-OP: no new file created, reserved ID released
 - [ ] If ADD: memory file uses correct template from `${aiDir}/.templates/memory-{type}.md`
-- [ ] ID incremented correctly from highest existing in type index
+- [ ] ID came from `memory-claim-id.sh`, not from reading the index
+- [ ] `hook:` set in frontmatter; index regenerated and `--check` clean
 - [ ] Index row contains keywords/topics only — no solutions leaked
 - [ ] `anchors` field set for code-specific memories
 - [ ] `related` field cross-references other memory types
