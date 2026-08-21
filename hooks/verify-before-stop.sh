@@ -96,6 +96,18 @@ if [ -z "$SESSION_ID" ] || [ ! -f "$MARKER_FILE" ]; then
   exit 0
 fi
 
+# A symlinked node_modules makes every check below run against ANOTHER
+# checkout dependency tree, so the gate reports a green that describes the
+# wrong tree. That silent false pass is worse than no gate at all, so block.
+# The marker is deliberately left in place (the EXIT trap is registered below)
+# so the block persists until a real install exists.
+# Deliberate link: export MYSPEC_ALLOW_LINKED_MODULES=1 before launching.
+if [ -L "$REPO_ROOT/node_modules" ] && [ "${MYSPEC_ALLOW_LINKED_MODULES:-}" != "1" ]; then
+  REASON=$(printf 'node_modules in %s is a symlink, so lint, type-check and test results here describe a different checkout dependency tree. Run a real install in this worktree before reporting any result as verified.' "$REPO_ROOT" | jq -Rs .)
+  echo "{\"decision\": \"block\", \"reason\": $REASON}"
+  exit 0
+fi
+
 # Clean up marker after verification runs (success or failure)
 trap 'rm -f "$MARKER_FILE"' EXIT
 
