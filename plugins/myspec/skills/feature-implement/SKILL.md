@@ -38,6 +38,29 @@ Plans use three checkbox states:
 
 **Scope:** Task-level checkboxes (`### Task N:` steps). Barrier sub-steps use `[ ]`/`[x]` only (no `[~]`).
 
+## Execution Log (plan section)
+
+Durable decisions live in the plan file, next to the checkboxes — the plan is the state that survives a crashed session, and `feature-complete` archives it. Maintain a `## Execution Log` section at the end of implementation-plan.md (create it on the first entry). Three entry shapes:
+
+- `Ruling: <what you decided> — <why> — <what it costs if wrong>`
+- `Deferred minor (Phase N): <one-line finding> (file:line)`
+- `Parked (Phase N): <finding> — Ruling: <why the code stands>`
+
+The holistic reviewer (Step 5) reads this section to triage deferred minors, and the completion report surfaces every ruling. An entry that exists only in session context is a decision made in secret.
+
+## Rulings, Not Stalls
+
+A running plan does not wait on the user for every wrinkle. Non-catastrophic conflicts — a plan ambiguity, two tasks that disagree on a detail, a review finding that contradicts the plan's text — are yours to decide: the spec is the binding authority, the plan is its argument, and your judgment settles what neither answers. Record every decision in the Execution Log as `Ruling: <what> — <why> — <what it costs if wrong>` and keep going. A wrong ruling costs rework the user can see and undo; a session parked on a question costs their whole day.
+
+**Hard stops — these go to the user, never a ruling:**
+
+- An irreversible or destructive operation (data loss, dropped tables, force-push)
+- A security-sensitive change (auth, secrets, permissions)
+- A plan ↔ spec contradiction the code cannot bridge (orchestrator mode: `ESCALATE`)
+- Scope explosion — the fix requires work no plan task covers
+
+At Step 5, list every ruling in the completion report under **"Rulings I made"**, in the order made, each with its cost-if-wrong. The list is exhaustive: if the Execution Log holds a ruling, the report holds it.
+
 ## Workflow
 
 ### Step 0: Confirm Implementation Flow (BLOCKING)
@@ -179,6 +202,8 @@ Parse milestones first, then build a DAG within each:
 
 Walk milestones in order. For each milestone, walk its DAG topologically. For each phase:
 
+**Before the phase's first dispatch:** record `PHASE_BASE=$(git rev-parse HEAD)`. The phase review package (Step 4b) diffs `PHASE_BASE..HEAD`. Never substitute `HEAD~1` — it silently drops all but the last commit of a multi-commit phase.
+
 **Sequential tasks** — dispatch one subagent at a time:
 
 ```
@@ -208,17 +233,44 @@ After all tasks in a phase complete:
 - On conflict: attempt resolution (auto-generated files like lockfiles, codegen output → take union). Escalate to user if truly stuck.
 - Run barrier verification commands from the plan (typecheck, tests).
 
-**b) Dispatch phase reviewer** (`./phase-reviewer-prompt.md`):
+**b) Build the review package, then dispatch the phase reviewer** (`./phase-reviewer-prompt.md`):
+
+Write the phase diff to one file and hand the reviewer the path. A pasted diff parks itself permanently in the most expensive context, and a reviewer without one rebuilds it by hand — the single biggest reviewer cost:
+
+```bash
+PKG=$(mktemp "${TMPDIR:-/tmp}/phase-review.XXXXXX")
+{ git log --oneline "$PHASE_BASE"..HEAD; echo; git diff --stat "$PHASE_BASE"..HEAD; echo; git diff -U10 "$PHASE_BASE"..HEAD; } > "$PKG"
+```
+
+- Use the `PHASE_BASE` recorded before the phase's first dispatch — never `HEAD~1`. Never dispatch a phase reviewer without a diff file.
+- Never pre-judge findings for the reviewer — never instruct it to ignore or not flag a specific issue. If the prompt you are writing contains "do not flag", "don't treat X as a defect", or "at most Minor" — stop: you are pre-judging, usually to spare yourself a fix loop. Let the reviewer raise it and rule on it in triage.
 - Covers ALL tasks in the phase: spec compliance, code quality, test coverage, integration, docs.
-- Returns: `APPROVED` or `ISSUES_FOUND` with specifics.
+- Returns: `APPROVED` or `ISSUES_FOUND` with per-finding severity (Critical / Important / Minor).
 
-**c) Fix loop:**
-- If `ISSUES_FOUND` → dispatch fix agent with specific issues → re-dispatch phase reviewer.
-- Repeat until `APPROVED`.
+**c) Triage findings** (before any fix dispatch):
 
-**d) Mark phase complete:** all task checkboxes in the phase are now `[x]`, unlock downstream phases within the milestone.
+- **Minor** findings never enter the fix loop: append each to the plan's Execution Log as `Deferred minor (Phase N): …` — the holistic review triages them. A roll-up nobody reads is a silent discard; the Execution Log is read at Step 5 by contract.
+- A finding labeled **plan-mandated** — or any finding that conflicts with what the plan's text requires — is yours to rule on: weigh it with the spec as the binding authority, record the ruling in the Execution Log, then either send it into the loop or park it. Do not dismiss a finding because the plan mandates it, and do not dispatch a fix that contradicts the plan without a recorded ruling.
+- **Critical / Important** findings enter the fix loop.
 
-**e) Inter-phase progress note** (within a milestone, no pause — proceed immediately):
+**d) Fix loop** — a round is one fix dispatch plus one scoped re-review. Five rounds maximum per phase:
+
+- **Rounds 1–3 — resume the implementer that owns the finding.** Its context is intact: it knows the task, the code, and its own choices. Send the open findings verbatim, scoped to its task. If the harness cannot resume a completed subagent, dispatch a fresh implementer carrying the task text plus the findings.
+- **Rounds 4–5 — fresh implementer, one tier up.** A loop that survives three resumes usually means the implementer cannot see its own problem — fresh eyes and a capability bump in one move. Frame the dispatch: "A prior implementer attempted this fix N times; you own it now."
+- **Every round ends with a scoped re-review** (`./re-review-prompt.md`), never a full phase re-review. Record `FIX_BASE` (the HEAD the previous review saw), build a fix-diff package over `FIX_BASE..HEAD` the same way as 4b, and dispatch with the open findings list. The re-reviewer verdicts each finding ADDRESSED / NOT ADDRESSED against the fix diff only. New Critical/Important breakage in the fix diff joins the open findings; out-of-scope observations go to the Execution Log as deferred minors — they never extend the loop.
+- Never fix findings yourself in the controller session — your context stays clean for coordination, and controller fixes skip review.
+
+**The breaker.** When round 5's re-review still leaves findings open, stop dispatching and adjudicate each open finding yourself — you hold the plan and cross-phase context the reviewer lacks:
+
+- Reviewer wrong, or the point is contestable → `Parked (Phase N): <finding> — Ruling: <why the code stands>`
+- Real, but nothing downstream builds on it → park the same way, with a ruling that says it is real and deferred
+- Real and load-bearing (a later phase builds on it, or it reveals a plan defect) → rule on the smallest change that unblocks the dependent work, record the ruling, and carry it into the next phase's dispatch
+
+Adjudicate only at the cap — adjudicating earlier to end a loop is pre-judging with a different name. Hard stops (see Rulings, Not Stalls) still go to the user.
+
+**e) Mark phase complete:** all task checkboxes in the phase are now `[x]` (parked findings do not block — their rulings are recorded), unlock downstream phases within the milestone.
+
+**f) Inter-phase progress note** (within a milestone, no pause — proceed immediately):
 
 ```
 ✓ Phase N complete: [phase name]
@@ -258,8 +310,9 @@ After all phases in a milestone complete (skip this step only for the final mile
 ### Step 5: Completion
 
 1. Run Final Verification section from the plan.
-2. Dispatch holistic reviewer (`./holistic-reviewer-prompt.md`) for full diff `BASE_SHA..HEAD`. This is the quick in-flight gate; the deeper independent conformance audit lives in `/myspec:feature-implement-review`.
-3. **Ask the user what to do next** via `AskUserQuestion` — do not auto-hand-off:
+2. Build the full-feature review package (same commands as Step 4b, over `BASE_SHA..HEAD`) and dispatch the holistic reviewer (`./holistic-reviewer-prompt.md`) with the package path plus the plan's Execution Log entries (deferred minors and parked findings) so it can triage which must be fixed before merge. This is the quick in-flight gate; the deeper independent conformance audit lives in `/myspec:feature-implement-review`.
+3. Print the completion report. It contains, in order: the milestone summary; the holistic verdict; **"Rulings I made"** — every `Ruling:` line from the Execution Log, in the order made, each with its cost-if-wrong ("none" if the log holds no rulings); and the deferred-minors triage outcome. This report is the only place the decisions taken on the user's behalf reach them.
+4. **Ask the user what to do next** via `AskUserQuestion` — do not auto-hand-off:
 
 ```
 question: "Implementation complete. What next?"
@@ -293,6 +346,10 @@ Skill text uses **tier names** (`cheap` / `mid` / `premium`). Controller (main t
 
 Orchestrator-mode plans override defaults via the `roles:` front-matter block.
 
+**Name the tier on every dispatch.** An omitted model inherits the session's model — often the most expensive tier — which silently defeats this table. An upstream production run put all 26 of its reviewers on the top tier exactly this way.
+
+**Turn count beats token price.** Cost scales with how many turns a subagent takes, and the cheapest models routinely take 2-3x the turns on multi-step work — costing more overall. `mid` is the floor for reviewers and for implementers working from prose descriptions. Reserve `cheap` for pure transcription — the task text contains the complete code to write — and single-file mechanical fixes. Fix-loop rounds 4-5 use a tier above the implementer that got stuck.
+
 ## Error Handling
 
 | Situation | Action |
@@ -303,6 +360,8 @@ Orchestrator-mode plans override defaults via the `roles:` front-matter block.
 | Merge conflict at barrier | Attempt resolution; escalate if stuck |
 | Verification fails at barrier | Identify offending task, dispatch fix agent |
 | 3+ attempts same task | Escalate: "I've made N attempts. What I tried: [list]." |
+| Review finding conflicts with plan text | Rule on it (spec is binding), record in Execution Log, then fix or park |
+| Round 5 re-review leaves findings open | Breaker: adjudicate each finding — park with ruling or carry forward. Never a round 6 |
 
 ## Constraints
 
@@ -311,6 +370,9 @@ Orchestrator-mode plans override defaults via the `roles:` front-matter block.
 - Make subagent read the plan file — provide full task text inline so the subagent has no parsing to do
 - Skip barrier verification commands — they're how the phase fails fast on broken merges
 - Proceed past 3 failed attempts without escalating — the issue won't fix itself on attempt 4
+- Tell a reviewer what not to flag — a suppressed finding never reaches the user; adjudicate it in triage instead
+- Diff a review with `HEAD~1` — use the recorded `PHASE_BASE` / `FIX_BASE` / `BASE_SHA`
+- Fix review findings in the controller session — resume or dispatch an implementer; controller fixes skip review
 
 ## Verification Checklist
 
@@ -319,6 +381,8 @@ After all phases complete:
 - [ ] All plan task checkboxes marked `[x]` in implementation-plan.md (no `[~]` or `[ ]` remaining)
 - [ ] All barrier verification commands passed (typecheck, tests)
 - [ ] Holistic reviewer returned `APPROVED`
+- [ ] Execution Log deferred minors triaged by the holistic review (fixed or explicitly accepted)
+- [ ] Every `Ruling:` line from the Execution Log surfaced under "Rulings I made" in the completion report
 - [ ] No uncommitted changes from implementation
 - [ ] Read `.claude/verification.json` and run each required check — all pass
 
