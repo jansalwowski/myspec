@@ -93,6 +93,20 @@ if [ -f "$REPO_ROOT/.git" ]; then
   exit 0
 fi
 
+# A command that explicitly names a linked worktree is worktree work, whatever
+# the cwd. `cd <worktree> && git checkout x` is the sanctioned path this hook's
+# own message points at, so blocking it makes the guard contradict its advice.
+# (`git -C <worktree> branch -d x` slipped through only by accident: `-C` sits
+# where the verb is matched.)
+while IFS= read -r candidate_wt; do
+  if [ -n "$candidate_wt" ] && [ "$candidate_wt" != "$REPO_ROOT" ]; then
+    if printf '%s' "$COMMAND" | grep -qF "$candidate_wt"; then
+      echo '{"decision": "approve"}'
+      exit 0
+    fi
+  fi
+done < <(git -C "$REPO_ROOT" worktree list --porcelain 2>/dev/null | awk '/^worktree /{print $2}')
+
 # Explicit opt-out for user-confirmed integration flows (see header)
 if echo "$COMMAND" | grep -qE '(^|[[:space:]])MYSPEC_ALLOW_BRANCH_OPS=1[[:space:]]'; then
   echo '{"decision": "approve"}'
