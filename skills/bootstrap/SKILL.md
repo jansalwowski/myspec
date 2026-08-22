@@ -9,12 +9,19 @@ description: "Use when starting any work session and the agent needs project ori
 
 ### 1. Read Project Config
 
-Read `.myspec.json` (if it exists) to get:
-- `project.name` and `project.techStack`
-- `aiDir` (the configured AI documentation directory, default: `ai/`)
-- `frameworkVersion` (used in step 6 for version comparison; absent in older configs)
+Extract only the fields needed — do NOT `cat` the whole file. `.myspec.json` carries a
+`frameworkFiles` block listing a per-file version for every framework file, which is
+irrelevant here and dominates the file:
 
-Check `.myspec.json` for a `topologyFile` key. If set, read that file.
+```bash
+jq '{aiDir, topologyFile, frameworkVersion, name: .project.name, techStack: .project.techStack}' .myspec.json
+```
+
+No `jq`? Use `python3 -c "import json;d=json.load(open('.myspec.json'));print({k:d.get(k) for k in ('aiDir','topologyFile','frameworkVersion')}, d.get('project'))"`.
+
+Fields used: `project.name` / `project.techStack` (summary), `aiDir` (doc directory,
+default `ai/`), `frameworkVersion` (step 6), `topologyFile`. If `topologyFile` is set,
+read that file.
 
 If `topologyFile` is not set, check for common topology files at project root: `backbone.yml`, `topology.yml`, `project.yml`. If found, read it and note: suggest the user add `"topologyFile": "{filename}"` to `.myspec.json`.
 
@@ -51,9 +58,10 @@ For each file, compare its mtime to the current epoch.
 
 ```bash
 NOW=$(date +%s)
-for f in ${aiDir}/memory/sessions/active/*.md; do
-  [ -f "$f" ] || continue
-  [[ "$f" == *.gitkeep ]] && continue
+# Use find, not a bare glob: an unmatched `*.md` glob is a hard error under zsh
+# ("no matches found") and aborts the sweep before the loop body ever runs.
+find "${aiDir}/memory/sessions/active" -maxdepth 1 -type f -name '*.md' -print0 2>/dev/null |
+while IFS= read -r -d '' f; do
   MTIME=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f")
   AGE=$(( NOW - MTIME ))
   if [ "$AGE" -gt 21600 ]; then
