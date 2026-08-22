@@ -76,6 +76,20 @@ if [[ "$FILE_PATH" != /* ]]; then
   FILE_PATH="$REPO_ROOT/$FILE_PATH"
 fi
 
+# Re-root on the FILE, not the cwd. A linked worktree lives inside the repo, so
+# a doc written there arrives as <main>/.claude/worktrees/<slug>/<aiDir>/... and
+# the aiDir prefix test below never matches — validation silently skipped every
+# file written in a worktree, which for doc-heavy projects is most of them.
+# Matches how mark-code-changed.sh and require-reuse-audit.sh already resolve.
+FILE_DIR="$(dirname "$FILE_PATH")"
+while [ -n "$FILE_DIR" ] && [ "$FILE_DIR" != "/" ] && [ ! -d "$FILE_DIR" ]; do
+  FILE_DIR="$(dirname "$FILE_DIR")"
+done
+
+if FILE_ROOT="$(git -C "$FILE_DIR" rev-parse --show-toplevel 2>/dev/null)"; then
+  REPO_ROOT="$FILE_ROOT"
+fi
+
 # Only check .md files
 if [[ "$FILE_PATH" != *.md ]]; then
   exit 0

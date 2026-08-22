@@ -26,6 +26,16 @@ if [ -f "$REPO/.git" ]; then
   exit 1
 fi
 
+# A real linked worktree, so the worktree-targeting cases exercise the actual
+# `git worktree list` lookup rather than a string the hook cannot verify.
+LINKED_WT=""
+while IFS= read -r wt; do
+  if [ -n "$wt" ] && [ "$wt" != "$REPO" ]; then
+    LINKED_WT="$wt"
+    break
+  fi
+done < <(git -C "$REPO" worktree list --porcelain 2>/dev/null | awk '/^worktree /{print $2}')
+
 PASS=0
 FAIL=0
 
@@ -81,6 +91,14 @@ check allow "worktree add"             'git worktree add -b feat/x /tmp/wt origi
 check allow "merge-base query"         'git merge-base --is-ancestor abc develop'
 check allow "cherry query"             'git cherry develop feat/x'
 check allow "sanctioned cleanup"       '.claude/lib/branch-cleanup.sh --branch feat/x'
+
+# --- commands that target a linked worktree are worktree work ---------------
+# Set up by the caller below; skipped when no linked worktree exists.
+if [ -n "${LINKED_WT:-}" ]; then
+  check allow "cd into a worktree, then switch" "cd $LINKED_WT && git checkout develop"
+  check allow "git -C a worktree, delete"       "git -C $LINKED_WT branch -d feat/x"
+  check block "same verb, no worktree named"    'git checkout develop'
+fi
 
 # --- escape hatch -----------------------------------------------------------
 check allow "documented bypass"        'MYSPEC_ALLOW_BRANCH_OPS=1 git branch -d feat/x'

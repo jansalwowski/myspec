@@ -12,6 +12,14 @@
 #   sanitize_command <<< "$cmd"        # blanks quoted spans + heredoc bodies
 #   strip_command_prefix "$segment"    # drops then/do/else, FOO=bar, sudo
 #   find_matching_segment "$cmd" pattern...   # echoes offending segment, if any
+#
+# KNOWN LIMIT: nested command substitution is not parsed. In `--body "$(printf
+# '%s' "cd x && yarn build")"`, the scanner closes the outer double-quoted span
+# at the inner quote, so the inner prose is analysed as command text and can
+# false-positive. Pass long prose via a file (`--body-file`, `-F -`) rather
+# than inline. Parsing this properly needs recursive descent into $( ), which
+# also has to keep `$(git branch -D x)` blocking — not worth the machinery for
+# a guardrail whose workaround is one flag.
 
 # Blank out every span whose contents can never be a command: single-quoted
 # spans, double-quoted spans, escaped characters, and heredoc bodies. Each
