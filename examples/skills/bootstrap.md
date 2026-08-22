@@ -44,9 +44,9 @@ Reads `${aiDir}/memory/index.md`:
 
 All three pinned rules will apply throughout the session.
 
-#### 3. Scan full memory indexes for task keywords
+#### 3. Scan Layer 2 indexes — a task was given
 
-Task: "CSV import to user-invitations feature." Keywords: `invitations`, `csv`, `import`, `bulk`, `email`.
+The invocation carried a task, so the Layer 2 scan runs. Task: "CSV import to user-invitations feature." Keywords: `invitations`, `csv`, `import`, `bulk`, `email`.
 
 - **Procedural index**: `P017` (already loaded — pinned). `P022` *Admin-only routes use requireAdmin middleware* — `Use When: admin route, permission, role` — possibly relevant if the bulk-import endpoint is admin-only. Loaded.
 - **Semantic index**: `S008` *Stripe webhook signing secret per-environment* — no match. Skipped.
@@ -194,3 +194,59 @@ User just ran `/myspec:init` an hour ago, set up the basic scaffolding, and now 
 - **Empty is OK.** The skill doesn't pretend a fresh project has hidden memories — it confirms the absence honestly.
 - **Recommendations come with the empty state.** A new user benefits from the "what to do next" — the skill earns its keep even when it has no memory to surface.
 - **Topology file gap is named.** Without `backbone.yml` (or equivalent), bootstrap is missing a layer of project context. The skill flags this and routes to `/myspec:setup backbone`.
+
+## Session start with no task — Layer 2 deferred
+
+The common case: a session opens with `/myspec:bootstrap` and nothing else. There is no task
+to match memory against yet.
+
+### Setup
+
+```
+/myspec:bootstrap
+```
+
+A mature project: 58 procedural, 83 semantic, 8 episodic entries. Layer 1 (`index.md`) still
+holds only its template comments — nothing was ever promoted into it.
+
+### Skill flow
+
+#### 2. Layer 1 loads
+
+`${aiDir}/memory/index.md` read as always. No entries — only the template's section comments.
+
+#### 3. Layer 2 counted, not read
+
+No task, so no keywords, so a scan could only ever report "none". The three index tables are
+counted instead of read:
+
+```
+procedural: 58
+semantic: 83
+episodic: 8
+```
+
+#### 4–6. Reports back
+
+> **Project context loaded**
+>
+> Sporticos Frontend — Nuxt 3 SSR. Working areas: `server/api/`, `pages/`, `config/cache.js`.
+>
+> **Memory**: Layer 1 empty | Layer 2 available: 58 procedural, 83 semantic, 8 episodic — not
+> scanned, no task yet. I'll run `/myspec:memory-preflight` once you tell me what we're working on.
+>
+> **Layer 1 is empty** while Layer 2 holds 149 entries — the always-loaded layer is returning
+> nothing for its slot. Worth promoting the handful you'd want in front of every session.
+>
+> **No active sessions.**
+>
+> Ready — what are we working on?
+
+### Why this example matters
+
+- **A scan with no keywords is not a cheap scan.** It reads the largest tables in the skill to
+  conclude "none". Those tables grow about a row per session, so the waste compounds.
+- **Deferral is not skipping.** The scan still happens — at `/myspec:memory-preflight`, once
+  there is something to match against. The Layer 1/Layer 2 split exists precisely for this.
+- **The empty Layer 1 gets named.** Otherwise the project keeps paying for a layer that
+  returns nothing, and nobody notices.
