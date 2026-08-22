@@ -1,10 +1,9 @@
 ---
 title: "Skill Self-Test Reference"
 purpose: "The optional dependencies: frontmatter field and how to sweep skills for dependency drift"
-load_when:
-  - path_matches: ".claude/skills/**"
-  - skill_invoked: "skill-verify"
-updated: 2026-05-16
+paths:
+  - .claude/skills/**
+updated: 2026-08-22
 ---
 
 # Skill Self-Test
