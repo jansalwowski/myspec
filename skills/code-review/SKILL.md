@@ -67,9 +67,17 @@ Universal — no language or framework assumptions. Specifics come from project 
 | **Input & Trust** | External input validated before use? Injection-class risks (query, command, path, template)? Secrets not hardcoded or logged |
 | **Resource & Lifecycle** | Acquired resources released (handles, connections, locks, listeners)? No leak on the error path? Concurrency/ordering hazards |
 | **Maintainability** | Reasonable complexity, no needless duplication, names reveal intent, no dead code. Linter-owned style is out of scope |
-| **Test Adequacy** | New/changed logic covered? Tests assert behavior (not just "it ran")? Edge and failure cases exercised |
+| **Test Adequacy** | New/changed logic covered? Would each test fail if the behavior broke? Tests name the break and exercise the real thing (probes below). Edge and failure cases exercised |
 | **Consistency** | Matches patterns in `## Standards`, `${aiDir}/conventions/`, and `.claude/rules/`. Doesn't reinvent an existing project utility |
 | **YAGNI / Scope** | No speculative abstraction, premature optimization, or scope beyond the change's intent |
+
+**Test Adequacy probes** — a passing test counts as coverage only if a realistic break would fail it:
+
+- **Names the break** — the test's name and failure output say what broke and why it matters.
+- **Exercises the real thing** — the code path production runs, not a copy or a mock of the unit under test. An assertion on the mock passes when the mock is present and fails when it is absent; it proves nothing about the component.
+- **String-presence trap** — asserting that a script, prompt, config, or template contains some text proves only that the source is the source; it counterfeits falsifiability. The observable is behavior, never text — the test should run the artifact and assert outputs, side effects, or exit codes.
+- **Change-detector trap** — a test that restates the implementation (snapshot of internals, mock asserted to receive exactly what the code passes it) fails on every refactor and never on a real bug.
+- **The mutation probe** — ask: *would this test fail if the behavior broke?* Mentally mutate the code under test (wrong constant, inverted branch, dropped side effect, empty return); a test that survives every mutation is decoration — rate the logic it claims to cover as untested.
 
 ## Configuration
 
