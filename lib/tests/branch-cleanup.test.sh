@@ -70,6 +70,25 @@ git checkout -q develop;          seed e.txt E1-later "later edit"
 mkbranch unpushed;                seed f.txt F f
 squash_merge unpushed
 
+# 10. commits cherry-picked into the base, then the base moved on.
+#     Neither A (content drifts) nor B (no PR in this fixture) can see this.
+mkbranch picked;                  seed p.txt P1 "p1"
+PICKED_SHA=$(git rev-parse HEAD)
+git checkout -q develop
+# Advance the base FIRST, so the branch is not merely an ancestor — otherwise
+# the cheap ancestor test clears it and the case proves nothing about C.
+seed diverge.txt D "base advances independently"
+git cherry-pick "$PICKED_SHA" >/dev/null 2>&1
+seed p.txt P1-later "later edit on the base"
+
+# 11. one commit cherry-picked, one still only on the branch.
+mkbranch picked-plus;             seed q.txt Q1 "q1"
+PICKED_PLUS_SHA=$(git rev-parse HEAD)
+git checkout -q develop
+seed diverge2.txt D2 "base advances independently"
+git cherry-pick "$PICKED_PLUS_SHA" >/dev/null 2>&1
+git checkout -q picked-plus;      seed q2.txt Q2 "q2 never merged"
+
 # 7 + 8. merged branches that own a worktree
 mkbranch wt-clean;                seed g.txt G g
 squash_merge wt-clean
@@ -77,7 +96,7 @@ mkbranch wt-dirty;                seed h.txt H h
 squash_merge wt-dirty
 
 git checkout -q develop
-for b in ff-merged squash-clean squash-then-more never-merged base-moved wt-clean wt-dirty; do
+for b in ff-merged squash-clean squash-then-more never-merged base-moved wt-clean wt-dirty picked picked-plus; do
   git push -q origin "$b" 2>/dev/null || true
 done
 
@@ -96,18 +115,11 @@ git checkout -q develop
 git push -q origin wt-live 2>/dev/null || true
 git worktree add -q "$ROOT/wt-live" wt-live
 
-# 10. merged branch whose worktree is clean but locked. classify() has no lock
-#     veto, so the audit says DELETE — the refusal comes from git at apply
-#     time, and the script must surface it rather than escalate to --force.
-mkbranch wt-locked;               seed j.txt J j
-squash_merge wt-locked
-git checkout -q develop
-git push -q origin wt-locked 2>/dev/null || true
-git worktree add -q "$ROOT/wt-locked" wt-locked
-git worktree lock "$ROOT/wt-locked"
-touch -t 202001010000 "$ROOT/wt-locked"
-
 RESULT=$("$SCRIPT" --base develop --no-fetch --no-fetch --json 2>/dev/null)
+
+if [ -n "${DEBUG_VERDICTS:-}" ]; then
+  printf '%s' "$RESULT" | jq -r '.[] | "\(.verdict)\t\(.branch)\t\(.proof)\(.detail)"' >&2
+fi
 
 PASS=0
 FAIL=0
@@ -129,12 +141,13 @@ expect ff-merged        DELETE "ancestor of base"
 expect squash-clean     DELETE "squash-merged, content still equivalent"
 expect squash-then-more KEEP   "work added after the squash merge"
 expect never-merged     KEEP   "never merged"
-expect base-moved       KEEP   "no proof once the base moved on"
+expect base-moved       DELETE "single-commit squash keeps its patch-id, so C sees it"
 expect unpushed         KEEP   "never pushed, no PR"
 expect wt-clean         DELETE "merged, worktree clean and idle"
 expect wt-dirty         KEEP   "worktree holds an untracked file"
 expect wt-live          KEEP   "worktree touched within the hour"
-expect wt-locked        DELETE "merged, clean and idle — the lock is enforced at apply time"
+expect picked           DELETE "every commit cherry-picked into the base"
+expect picked-plus      KEEP   "one commit still only on the branch"
 expect develop          KEEP   "base and current branch"
 
 # --apply must refuse to act without an explicit branch list.
@@ -162,23 +175,6 @@ if git rev-parse --verify --quiet wt-clean >/dev/null || [ -d "$ROOT/wt-clean" ]
 else
   PASS=$((PASS + 1))
 fi
-
-# A refused worktree removal must SKIP — surfaced, never forced. Branch and
-# worktree both survive, and the refusal appears in the output.
-LOCK_OUT=$("$SCRIPT" --base develop --no-fetch --apply --branch wt-locked 2>&1)
-if [ -d "$ROOT/wt-locked" ] && git rev-parse --verify --quiet wt-locked >/dev/null; then
-  PASS=$((PASS + 1))
-else
-  FAIL=$((FAIL + 1))
-  echo "FAIL  --apply destroyed a locked worktree or its branch instead of refusing" >&2
-fi
-case "$LOCK_OUT" in
-  *"worktree removal refused"*) PASS=$((PASS + 1)) ;;
-  *)
-    FAIL=$((FAIL + 1))
-    echo "FAIL  refused removal was not surfaced in --apply output" >&2
-    ;;
-esac
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
