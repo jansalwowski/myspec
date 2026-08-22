@@ -53,7 +53,7 @@ For each file in the manifest:
 1. Read the source file from `framework-files/{filename}` (or `framework-files/rules/{filename}` for rules, `hooks/{filename}` for hooks, `lib/{filename}` for lib)
 2. Replace `${aiDir}` placeholders with the configured `aiDir` value
 3. Write to destination, replacing the existing file entirely
-4. For hooks: run `chmod +x {dest}` after writing (lib helpers are sourced, not executed — no chmod needed)
+4. For hooks and lib: run `chmod +x {dest}` after writing. Some helpers are sourced and some are invoked directly (`branch-cleanup.sh`, `memory-claim-id.sh`) — setting the bit on all of them is harmless for the sourced ones and required for the rest.
 
 **`marker-merge` strategy:**
 1. Read the source file from `framework-files/{filename}`
@@ -173,7 +173,7 @@ After running the skill:
 - [ ] `templates/*` entries written to `{aiDir}/.templates/` (no `{aiDir}/templates/` created)
 - [ ] `marker-merge` files: content outside `<!-- myspec:framework-start/end -->` markers left untouched
 - [ ] `hooks` and `lib` entries processed only when `.claude/hooks/` exists (else both skipped with the note)
-- [ ] Each updated hook had `chmod +x` applied; lib helpers left non-executable (sourced, not run)
+- [ ] Each updated hook and lib helper had `chmod +x` applied
 - [ ] `${aiDir}` binding refreshed between `myspec:paths` markers; content outside markers unchanged
 - [ ] `.myspec.json` `frameworkVersion` bumped and `frameworkFiles[*].lastUpdated` set; project fields (`name`, `description`, `techStack`, `aiDir`) untouched
 - [ ] Hook-wiring check run: hooks absent from `.claude/settings.json` reported; `settings.json` NOT modified

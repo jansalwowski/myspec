@@ -160,7 +160,7 @@ Create `.claude/hooks/` directory. Copy these files from the plugin's `hooks/` d
 
 Make them executable: `chmod +x .claude/hooks/*.sh`
 
-Create `.claude/lib/` and copy the lib files listed in `manifest.json`'s `lib` block (currently `path-normalize.sh` and `markdown-section-check.sh`) from the plugin's `lib/` directory. Use the manifest as the source of truth — do not glob the directory (it also holds plugin-internal helpers like `lib/features-status-audit/` and `lib/brainstorm-server/`, which run from the plugin root and are never copied into projects). These are sourced by skills and hooks (e.g. `<repo_root>`/`<encoded_cwd>` placeholders; the reuse-audit table validator).
+Create `.claude/lib/` and copy the lib files listed in `manifest.json`'s `lib` block from the plugin's `lib/` directory, then `chmod +x .claude/lib/*.sh` (some are sourced, some are invoked directly). Use the manifest as the source of truth — do not glob the directory (it also holds plugin-internal helpers like `lib/features-status-audit/` and `lib/brainstorm-server/`, which run from the plugin root and are never copied into projects). These back skills and hooks (e.g. `<repo_root>`/`<encoded_cwd>` placeholders; the reuse-audit table validator; the branch-guard command scanner; sanctioned branch cleanup; memory ID allocation).
 
 Copy `.claude/rules/` framework rules from `framework-files/rules/`:
 - `workflow.md`
@@ -234,7 +234,7 @@ Hooks:   {enabled / skipped}
 Created:
   .myspec.json
   ${aiDir}/ (features, memory, ideas, templates)
-  {if hooks: .claude/hooks/ (6 hooks), .claude/lib/ (2 helpers), .claude/rules/ (7 rules)}
+  {if hooks: .claude/hooks/ (6 hooks), .claude/lib/ (N helpers, per manifest), .claude/rules/ (7 rules)}
   {if hooks: .claude/settings.json, .claude/verification.json}
   {if base agents installed: list each ~/.{harness}/agents/{file} that was installed or updated, grouped by harness}
 
@@ -270,7 +270,7 @@ Next steps:
 - [ ] `${aiDir}/pre-flight.md` created
 - [ ] `${aiDir}` binding written to `AGENTS.md` (or `CLAUDE.md`) between `myspec:paths` markers
 - [ ] If hooks enabled: `.claude/hooks/` has 6 scripts, all executable
-- [ ] If hooks enabled: `.claude/lib/` has `path-normalize.sh` and `markdown-section-check.sh`
+- [ ] If hooks enabled: `.claude/lib/` has every helper in `manifest.json`'s `lib` block, all executable
 - [ ] If hooks enabled: `.claude/rules/` has 7 framework rules
 - [ ] If hooks enabled: `.claude/settings.json` and `.claude/verification.json` created
 - [ ] If base agents installed: for each harness with an existing `~/.{harness}/` dir, both `worker-base` and `reviewer-base` exist at `~/.{harness}/agents/` and match the plugin source (or user explicitly opted to keep a divergent local version)
