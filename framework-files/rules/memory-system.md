@@ -24,8 +24,8 @@ These are blocking requirements — skip them and the agent loses context across
 
 | When | Action | Why |
 |------|--------|-----|
-| Session start | Invoke `/myspec:bootstrap` | Reads project config + memory indexes, lists active sessions, auto-archives orphans (>6h stale; 1–6h only reported). Replaces manual `/myspec:memory-preflight` at session start. |
-| Before significant work mid-session (new feature, multi-file change, debugging) | Invoke `/myspec:memory-preflight` if `/myspec:bootstrap` was not run at session start | Scans all memory types, checks staleness |
+| Session start | Invoke `/myspec:bootstrap` | Reads project config + the Layer 1 memory index, lists active sessions, auto-archives orphans (>6h stale; 1–6h only reported). Scans the Layer 2 indexes only when given a task. |
+| Before significant work mid-session (new feature, multi-file change, debugging) | Invoke `/myspec:memory-preflight` unless `/myspec:bootstrap` already scanned Layer 2 for this task | Scans all memory types, checks staleness |
 | Before trivial work (single-file fix, typo, config change) | Read `${aiDir}/memory/index.md` (Layer 1 only) | Quick check, skip full scan |
 | First code edit in any session | Automatic — no skill | `mark-code-changed.sh` (PostToolUse) creates `${aiDir}/memory/sessions/active/{session_id}.md` from the session-log template. Per-session-id keying makes this multi-agent safe — each agent gets its own file. |
 | Starting a non-code session (debugging without edits, discovery, doc-only work) | Invoke `/myspec:session-start` | Manual creation; auto-creation only fires on code edits |

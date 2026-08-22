@@ -40,13 +40,31 @@ Scan for:
 - Must-Know Facts relevant to current task
 - Recent Significant Events
 
-### 3. Scan Full Memory Indexes
+### 3. Scan Layer 2 Indexes — only with a task in hand
 
-Read `${aiDir}/memory/procedural/index.md`, `${aiDir}/memory/semantic/index.md`, `${aiDir}/memory/episodic/index.md`.
-
-For each: check "Use When" / "Topic" columns for keyword matches against the current task.
+**With a task** (`/myspec:bootstrap <task>`, or the user has already stated one): read
+`${aiDir}/memory/procedural/index.md`, `${aiDir}/memory/semantic/index.md`,
+`${aiDir}/memory/episodic/index.md`. Check "Use When" / "Topic" columns for keyword
+matches against that task.
 
 → If match found: read the full memory file before proceeding.
+
+**Without a task** (plain session-start orientation): do NOT read them. A keyword scan
+with no keywords cannot match, and these three tables are the largest read in this skill —
+they grow about a row per session, so the cost climbs for the life of the project. Count
+the rows instead:
+
+```bash
+for t in procedural semantic episodic; do
+  printf '%s: %s\n' "$t" "$(grep -c '^| \[' "${aiDir}/memory/$t/index.md" 2>/dev/null || echo 0)"
+done
+```
+
+Report the counts and route the real scan to `/myspec:memory-preflight`, which runs once
+the task is known. Layer 1 (step 2) loads either way — that is what it is budgeted for.
+
+If Layer 1 holds no entries while Layer 2 has rows, say so: the layering is costing a file
+read and returning nothing. Suggest promoting the handful of genuinely critical entries.
 
 ### 4. Check for Active Sessions
 
@@ -126,8 +144,8 @@ Output a brief structured summary so the user can confirm the agent is properly 
 **Stack**: {tech stack from .myspec.json, or "not configured"}
 **Relevant area(s)**: [which apps/modules based on task context]
 **Key paths**: [2-3 most relevant paths from project structure]
-**Memory loaded**: [count] procedural | [count] semantic | [count] episodic entries checked
-**Matches**: [list any memory entries that matched current task, or "none"]
+**Memory**: Layer 1 [N entries] | Layer 2 [P procedural, S semantic, E episodic rows] — [scanned against "{task}" / not scanned, no task yet: run /myspec:memory-preflight when the task is known]
+**Matches**: [entries that matched the task / "none" / omit this line entirely when no task was given]
 **Topology**: [{filename} loaded / not configured — use the `setup` skill with `backbone` to create one]
 **Active sessions**: [N (list of session_id prefixes + topics) / 0]
 **Auto-archived**: [M orphaned sessions / 0 (omit line if 0)]
@@ -137,13 +155,13 @@ Output a brief structured summary so the user can confirm the agent is properly 
 **Boundaries**: [any never_modify paths relevant to task, or "none relevant"]
 ```
 
-**Note**: Bootstrap satisfies the `memory-preflight` prerequisite for `session-start`. Sessions for code-editing work are auto-created by the `mark-code-changed.sh` hook on first code edit — no skill invocation needed. Manual `session-start` is only useful for non-code sessions (pure debugging, discovery, doc-only work). Bootstrap itself does NOT create a session; it only orients the project context and archives orphaned sessions.
+**Note**: Bootstrap satisfies the `memory-preflight` prerequisite for `session-start` **only when it was given a task** — a no-task bootstrap defers the Layer 2 scan, so `/myspec:memory-preflight` is still required before significant work. Sessions for code-editing work are auto-created by the `mark-code-changed.sh` hook on first code edit — no skill invocation needed. Manual `session-start` is only useful for non-code sessions (pure debugging, discovery, doc-only work). Bootstrap itself does NOT create a session; it only orients the project context and archives orphaned sessions.
 
 ## Verification Checklist
 
 - [ ] `.myspec.json` was checked (or its absence noted)
 - [ ] Topology file was loaded if configured or found at root
-- [ ] All three memory indexes (procedural, semantic, episodic) were scanned
+- [ ] Layer 1 index was read; Layer 2 indexes were scanned if a task was given, counted and deferred if not
 - [ ] `${aiDir}/memory/sessions/active/` was listed and orphans (>60min) auto-archived
 - [ ] Worktree health was checked (or omitted if no worktrees)
 - [ ] Framework version was compared (or omitted silently if unreadable)
