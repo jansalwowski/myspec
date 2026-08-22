@@ -117,6 +117,10 @@
     "memory-claim-id.sh": {
       "type": "overwrite",
       "dest": ".claude/lib/memory-claim-id.sh"
+    },
+    "memory-index.mjs": {
+      "type": "overwrite",
+      "dest": ".claude/lib/memory-index.mjs"
     }
   }
 }
