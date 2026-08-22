@@ -1,10 +1,9 @@
 ---
 title: "Skill Optimization Reference"
 purpose: "Quick reference for creating effective agent skills"
-load_when:
-  - path_matches: ".claude/skills/**"
-  - skill_invoked: "skill-verify"
-updated: 2026-03-29
+paths:
+  - .claude/skills/**
+updated: 2026-08-22
 ---
 
 # Skill Optimization Reference
