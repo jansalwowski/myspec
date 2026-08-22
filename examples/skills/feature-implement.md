@@ -75,6 +75,8 @@ After all 6 tasks' Workers have reported `OK`, the phase hits its barrier and th
    - `pnpm test` green, `pnpm typecheck` green, lint clean ✓
    - Verdict: `PASS`.
 
+Had the review returned findings instead, they would be triaged, never silently dropped: **Minor** findings park in the plan's `## Execution Log` (`Deferred minor (Phase 1): …`) for the holistic reviewer to triage — they never enter a fix loop. **Critical/Important** findings enter a capped loop: rounds 1–3 resume the same implementer with the findings verbatim (its context is intact), rounds 4–5 dispatch fresh on a higher tier, and every round ends with a *scoped* re-review that verdicts each finding ADDRESSED / NOT ADDRESSED against the fix diff only — never a full phase re-review. If round 5 still leaves findings open, the Controller adjudicates each one — parked with a recorded `Ruling:` or carried into the next phase — never a round 6. And the Controller never pre-judges: a dispatch prompt containing "do not flag X" is the bug, not the finding.
+
 #### Controller commits
 
 Only now — after both reviewers `PASS` — the **Controller** commits. It stages exactly the file lists the Workers reported (`git add -- <paths>`, never `git add -A`) and uses each task block's `**Commit:**` message verbatim. It then flips all six checkboxes `[~]` → `[x]`.
@@ -93,8 +95,8 @@ This is the only milestone, so the skill goes directly to Step 5 (no Milestone C
 #### Step 5 — Completion + review choice
 
 1. Runs the plan's Final Verification section.
-2. Dispatches the holistic reviewer (premium tier) over the full `BASE_SHA..HEAD` diff — the quick in-flight gate. Returns `APPROVED`.
-3. Asks via `AskUserQuestion` — it does **not** auto-hand-off:
+2. Writes the full-feature review package to one temp file (`git log --oneline` + `git diff --stat` + `git diff -U10` over `BASE_SHA..HEAD`) and dispatches the holistic reviewer with the package path plus the plan's Execution Log entries to triage. The tier (premium) is named explicitly on the dispatch — an omitted model would silently inherit the session's model. Returns `APPROVED`, no MUST FIX triage items.
+3. Prints the completion report — milestone summary, holistic verdict, **Rulings I made: none**, deferred-minors triage — then asks via `AskUserQuestion` — it does **not** auto-hand-off:
 
 > **Implementation complete. What next?**
 >
@@ -118,6 +120,7 @@ User picks **feature-implement-review**. The skill invokes `/myspec:feature-impl
 - **Step 0 is blocking and always asked.** Even on a clean `main` with an obvious recommendation, the skill confirms *where* to work. Silent assumption is the bug Step 0 exists to prevent; worktrees live at `.claude/worktrees/feat-{name}`, never `/tmp`.
 - **Workers are write-only.** They produce files and tests and nothing else — no shell, no test runs, no commits. This keeps their context lean and makes their output a clean, reviewable artifact. The QualityReviewer is the *sole* place tests/lint run.
 - **Review is per-phase, at the barrier.** All six tasks' Workers finish, then one SpecReviewer + one QualityReviewer cover the whole phase's diff at once. The two passes are complementary: spec conformance first (static), code quality + verification second.
+- **Findings are triaged, never suppressed.** The Controller may not tell a reviewer what not to flag. Minor findings park in the plan's `## Execution Log`, plan-conflicting findings get a recorded `Ruling: <what> — <why> — <what it costs if wrong>`, and every ruling resurfaces under "Rulings I made" in the Step 5 completion report.
 - **The Controller is the only committer.** It stages exactly the reported file lists and copies the plan's commit messages verbatim, so the history reads cleanly and nothing outside the declared scope sneaks in.
 
 ---
@@ -199,7 +202,7 @@ User: `continue`. **Milestone 2's** `parallel:ui` phase dispatches three Workers
 
 #### Step 5 — Completion (identical in both modes)
 
-Orchestrator mode does **not** skip Step 5. The skill runs Final Verification, dispatches the holistic reviewer over `BASE_SHA..HEAD` (this covers the whole feature; the per-milestone SpecReview/QualityReview were per-milestone-diff — no overlap), then offers the same 4-option choice (feature-implement-review / code-review / feature-complete / Stop here). No `briefs/` directory is created — Workers received task text inline.
+Orchestrator mode does **not** skip Step 5. The skill runs Final Verification, builds the full-feature review package (one temp file: commit list + stat + `git diff -U10` over `BASE_SHA..HEAD`), and dispatches the holistic reviewer with the package path and the plan's Execution Log entries (this covers the whole feature; the per-milestone SpecReview/QualityReview were per-milestone-diff — no overlap). The completion report surfaces every `Ruling:` line from the Execution Log under **Rulings I made** — in `orchestrator-auto`, non-catastrophic plan conflicts were ruled on and logged instead of pausing the run, so this list is where those decisions reach the user. Then it offers the same 4-option choice (feature-implement-review / code-review / feature-complete / Stop here). No `briefs/` directory is created — Workers received task text inline.
 
 ### Result
 

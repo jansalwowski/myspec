@@ -36,6 +36,8 @@ Self-check before every controller action: *Am I about to Edit/Write a file in f
 
 Render the envelope file VERBATIM and substitute only its declared slots. Do NOT add Job / Brief / Current state / Verification / Commit / Report Format wrapper sections. Do NOT include working directory, branch name, session metadata. Do NOT re-inline ROBOT MODE rules or output contracts — those live in the agent definition files (`~/.claude/agents/`, `~/.cursor/agents/`, `~/.codex/agents/`).
 
+**Never pre-judge findings in an envelope.** Never instruct a reviewer to ignore or not flag a specific issue. If the slot content you are composing contains "do not flag", "don't treat X as a defect", or "at most Minor" — stop: you are pre-judging, usually to spare yourself a retry loop. If you expect a finding to be a false positive, let the reviewer raise it, then rule on it (`SKILL.md` § "Rulings, Not Stalls") with the ruling recorded in the plan's Execution Log. A suppressed finding never reaches the user.
+
 Verdict / result block violations (prose around bullets, "Verdict:" prefix, summary paragraphs, missing tags) are agent-prompt bugs, plan-task bugs, or tier bugs. Tighten the envelope, tighten the plan, or escalate tier. Do not loosen the controller parser.
 
 ## Per-milestone chain
@@ -146,6 +148,7 @@ Chain-level SpecReview + QualityReview are per-milestone. Holistic is end-of-fea
 - Verification failure always pauses.
 - 4th retry of any kind always pauses.
 - `ESCALATE` always pauses immediately, regardless of mode.
+- Non-catastrophic plan conflicts do not pause `orchestrator-auto`: rule per `SKILL.md` § "Rulings, Not Stalls", append the ruling to the plan's Execution Log, continue. The hard stops listed there (and `ESCALATE`) always pause; Step 5 surfaces every ruling under "Rulings I made".
 
 ## Known limitation: subagent worktrees
 

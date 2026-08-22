@@ -5,7 +5,7 @@ Use this template when dispatching an implementer subagent.
 ```
 Task tool (general-purpose):
   description: "Implement Task N: [task name]"
-  model: "<tier: cheap for 1-2 file mechanical / mid for multi-file integration; controller maps to concrete model, e.g. Haiku-tier or Sonnet-tier>"
+  model: "<tier — REQUIRED: cheap for 1-2 file mechanical / mid for multi-file integration; controller maps to concrete model, e.g. Haiku-tier or Sonnet-tier. An omitted model inherits the session's model, often the most expensive tier>"
   isolation: "worktree"  # ONLY for parallel group tasks. Omit for sequential tasks.
   prompt: |
     You are implementing Task N: [task name]
@@ -49,6 +49,17 @@ Task tool (general-purpose):
 
     **While you work:** If you encounter something unexpected or unclear, **ask questions**.
     It is always OK to pause and clarify. Do not guess or make assumptions.
+
+    ## You Do Not Dispatch Subagents
+
+    Do all of this task's work yourself. Never spawn a subagent to implement
+    part of the task, and above all never spawn a reviewer to check your
+    work. Self-review (below) means reading your own diff. Review is the
+    controller's job: after you report, it dispatches a reviewer against the
+    phase diff. A reviewer you spawn duplicates that review at full cost, and
+    its approval counts for nothing. If you catch yourself thinking "an
+    independent review would strengthen my report" — that review is already
+    scheduled. Report instead.
 
     ## Code Organization
 
@@ -96,6 +107,15 @@ Task tool (general-purpose):
     - Did I not reference sibling parallel tasks' files?
 
     Fix any issues found during self-review before reporting.
+
+    ## After Review Findings
+
+    If the phase review finds issues in your task, you will be resumed with
+    the findings. Fix exactly what the findings name — do not expand scope
+    while fixing — then re-run the tests covering the amended code, commit,
+    and report: what you changed, the covering tests, the command run, and
+    the output. A scoped re-review verifies your fix against the findings;
+    your report is its test evidence.
 
     ## Report Format
 
