@@ -8,13 +8,15 @@ Task templates already mandate atomic content: exact file paths, complete code, 
 
 ## Front-matter
 
-The canonical Plan Header fields from [`plan-templates.md`](./plan-templates.md) (title, feature, based_on_spec_version, created, last_updated), plus the orchestration keys:
+The canonical Plan Header fields from [`plan-templates.md`](./plan-templates.md) (title, feature, based_on_spec_version, spec, tech_spec, created, last_updated), plus the orchestration keys:
 
 ```yaml
 ---
 title: "{Feature Title} -- Implementation Plan"
 feature: <feature-name>
 based_on_spec_version: <int>
+spec: ${aiDir}/features/{feature}/spec.md
+tech_spec: ${aiDir}/features/{feature}/tech-spec.md
 created: {TODAY}
 last_updated: {TODAY}
 orchestration: agent-chain
@@ -103,7 +105,7 @@ Phase numbers stay globally unique. Cross-milestone deps use `Milestone N` in `D
 
 ## Task Details
 
-Same Files / Depends on / Spec contract / Touch only shape as normal mode — see `plan-templates.md`. Orchestrator-specific addition: **step ownership annotation**.
+Same Files / Interfaces / Depends on / Spec contract / Touch only shape as normal mode — see `plan-templates.md`. The Global Constraints section applies unchanged too. Both matter more here: the Worker sees only its stripped task text plus what the dispatcher appends. Orchestrator-specific addition: **step ownership annotation**.
 
 Each step inside a task block is owned by exactly one chain role. Worker has no shell → cannot run tests, lint, or git. Plan must reflect that:
 
