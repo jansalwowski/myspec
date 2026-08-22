@@ -96,6 +96,17 @@ git checkout -q develop
 git push -q origin wt-live 2>/dev/null || true
 git worktree add -q "$ROOT/wt-live" wt-live
 
+# 10. merged branch whose worktree is clean but locked. classify() has no lock
+#     veto, so the audit says DELETE — the refusal comes from git at apply
+#     time, and the script must surface it rather than escalate to --force.
+mkbranch wt-locked;               seed j.txt J j
+squash_merge wt-locked
+git checkout -q develop
+git push -q origin wt-locked 2>/dev/null || true
+git worktree add -q "$ROOT/wt-locked" wt-locked
+git worktree lock "$ROOT/wt-locked"
+touch -t 202001010000 "$ROOT/wt-locked"
+
 RESULT=$("$SCRIPT" --base develop --no-fetch --no-fetch --json 2>/dev/null)
 
 PASS=0
@@ -123,6 +134,7 @@ expect unpushed         KEEP   "never pushed, no PR"
 expect wt-clean         DELETE "merged, worktree clean and idle"
 expect wt-dirty         KEEP   "worktree holds an untracked file"
 expect wt-live          KEEP   "worktree touched within the hour"
+expect wt-locked        DELETE "merged, clean and idle — the lock is enforced at apply time"
 expect develop          KEEP   "base and current branch"
 
 # --apply must refuse to act without an explicit branch list.
@@ -150,6 +162,23 @@ if git rev-parse --verify --quiet wt-clean >/dev/null || [ -d "$ROOT/wt-clean" ]
 else
   PASS=$((PASS + 1))
 fi
+
+# A refused worktree removal must SKIP — surfaced, never forced. Branch and
+# worktree both survive, and the refusal appears in the output.
+LOCK_OUT=$("$SCRIPT" --base develop --no-fetch --apply --branch wt-locked 2>&1)
+if [ -d "$ROOT/wt-locked" ] && git rev-parse --verify --quiet wt-locked >/dev/null; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  echo "FAIL  --apply destroyed a locked worktree or its branch instead of refusing" >&2
+fi
+case "$LOCK_OUT" in
+  *"worktree removal refused"*) PASS=$((PASS + 1)) ;;
+  *)
+    FAIL=$((FAIL + 1))
+    echo "FAIL  refused removal was not surfaced in --apply output" >&2
+    ;;
+esac
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
