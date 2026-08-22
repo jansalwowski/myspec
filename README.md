@@ -137,6 +137,20 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref main
 
 `init` fills the version values from `framework-files/manifest.json` at run time.
 
+A project that deliberately customizes a framework-owned file pins it, so `update` skips it instead of reverting the local edits:
+
+```json
+"frameworkFiles": {
+  "rules/auto-memory-style.md": {
+    "version": "1.25.1",
+    "lastUpdated": "2026-08-22",
+    "pinned": "locally compressed to halve always-loaded context"
+  }
+}
+```
+
+The key is the manifest key, not the destination path. Pinning is the project's decision — `update` reports pinned files and never adds or clears a pin itself.
+
 `frameworkVersion` is kept in lockstep across `framework-files/manifest.json`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` (with matching git `ref`), `.codex-plugin/plugin.json`, and `plugins/myspec/.codex-plugin/plugin.json`. Use `./scripts/bump-version.sh X.Y.Z` to update all five in one shot; see [RELEASING.md](RELEASING.md) for the full release workflow.
 
 ## Auto-setup for team repos
