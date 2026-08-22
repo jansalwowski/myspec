@@ -43,6 +43,12 @@ For `rules` entries: source is `framework-files/rules/{filename}`, destination i
 For `hooks` entries: source is `hooks/{filename}`, destination is the `dest` path (e.g., `.claude/hooks/guard-git-branch.sh`).
 For `lib` entries: source is `lib/{filename}`, destination is the `dest` path (e.g., `.claude/lib/path-normalize.sh`).
 
+**Pinned files — skip, never overwrite.** A project may carry a locally-customized copy of a framework file. `.myspec.json` records that as `frameworkFiles["<manifest key>"].pinned`, whose value is a short reason string. Before applying any entry, look up its key (`rules/workflow.md`, `hooks/guard-git-branch.sh`, `lib/branch-cleanup.sh`, `templates/session-log.md`, …) and skip it if `pinned` is set. Collect these for the summary; do not bump their `version`/`lastUpdated`.
+
+Without this, a sync silently reverts local edits: the file carries no marker distinguishing "customized" from "stale", so `overwrite` treats deliberate local content as drift. That has happened — a sync reverted four rules whose upstream copies had not changed at all, costing ~690 tokens of always-loaded context until it was noticed.
+
+Pinning is the project's call, not the skill's. Never add or remove a pin on the project's behalf; report pinned files and let the user decide whether the local reason still holds.
+
 For `hooks` and `lib`: only process if `.claude/hooks/` directory exists (hooks and their helper lib travel together). If it doesn't exist, skip all hooks AND lib entries and note: "Hooks directory not found — skipping Claude hook + lib updates. Run the `init` skill with Claude hooks enabled to set them up."
 
 ### Step 3: Apply Updates
@@ -133,6 +139,9 @@ Updated files:
 Preserved (project-customized sections):
   {list marker-merge files where project content was kept}
 
+Pinned (skipped — locally customized):
+  {list each pinned file with its reason, or "none"}
+
 Hooks: {updated N scripts / skipped — hooks directory not found}
 Lib:   {updated N helpers / skipped — hooks directory not found}
 Hook wiring: {all N hooks already wired in settings.json / M hook(s) need manual settings.json entries — see above}
@@ -156,6 +165,7 @@ Do NOT modify the file — this is advisory only.
 
 ## Rules
 
+- Never overwrite a file whose `frameworkFiles[...].pinned` is set, and never add or clear a pin yourself
 - Never overwrite content outside `<!-- myspec:framework-start/end -->` markers for `marker-merge` files
 - Never modify files not listed in `manifest.json`
 - Never update `.myspec.json` project fields (`name`, `description`, `techStack`, `aiDir`)
@@ -170,6 +180,7 @@ After running the skill:
 
 - [ ] `.myspec.json` `frameworkVersion` read and compared to `manifest.json`; stopped early if already current
 - [ ] Every `manifest.json` entry processed with its declared strategy (`overwrite` / `marker-merge`)
+- [ ] Entries pinned in `.myspec.json` skipped, their versions left untouched, and listed in the summary
 - [ ] `templates/*` entries written to `{aiDir}/.templates/` (no `{aiDir}/templates/` created)
 - [ ] `marker-merge` files: content outside `<!-- myspec:framework-start/end -->` markers left untouched
 - [ ] `hooks` and `lib` entries processed only when `.claude/hooks/` exists (else both skipped with the note)
