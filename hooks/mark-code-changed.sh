@@ -65,7 +65,7 @@ fi
 
 # Only mark for code files (not docs, config, etc.)
 # Common extensions across multiple stacks — add more as needed
-if [[ ! "$FILE_PATH" =~ \.(ts|tsx|vue|js|jsx|mts|cts|py|rb|go|java|php|rs|cs|swift|kt)$ ]]; then
+if [[ ! "$FILE_PATH" =~ \.(ts|tsx|vue|js|jsx|mjs|cjs|mts|cts|py|rb|go|java|php|rs|cs|swift|kt|sh|bash)$ ]]; then
   exit 0
 fi
 
