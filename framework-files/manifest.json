@@ -105,6 +105,18 @@
     "markdown-section-check.sh": {
       "type": "overwrite",
       "dest": ".claude/lib/markdown-section-check.sh"
+    },
+    "command-scan.sh": {
+      "type": "overwrite",
+      "dest": ".claude/lib/command-scan.sh"
+    },
+    "branch-cleanup.sh": {
+      "type": "overwrite",
+      "dest": ".claude/lib/branch-cleanup.sh"
+    },
+    "memory-claim-id.sh": {
+      "type": "overwrite",
+      "dest": ".claude/lib/memory-claim-id.sh"
     }
   }
 }
