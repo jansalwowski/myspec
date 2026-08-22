@@ -21,9 +21,13 @@
 #     PR's headRefOid. The tip check is load-bearing: without it, a branch that
 #     was merged and then had new commits pushed reads as "merged" and its
 #     unmerged work is destroyed.
+#   C (local): every commit has a patch-equivalent upstream (`git cherry`).
+#     Covers commits cherry-picked into the base, which A and B both miss.
 # A alone is incomplete: once later PRs touch the same files, the base moves on
 # and content equivalence stops holding for a branch that really did merge.
-# B alone is unsafe. Both together classify correctly and fail toward KEEP.
+# B alone is unsafe. C does not survive a squash merge (patch-ids change), so it
+# supplements rather than replaces. Together they classify correctly and fail
+# toward KEEP.
 #
 # HARD VETOES — any one keeps the branch, before proofs are considered
 #   - it is the current branch, or the base branch
@@ -127,6 +131,30 @@ content_equivalent() {
   git diff --quiet "$br" "$BASE" -- "${paths[@]}" 2>/dev/null
 }
 
+# Proof C: every commit on the branch already has a patch-equivalent upstream.
+# Covers the case A and B both miss — commits cherry-picked into the base. A
+# compares file content, which stops matching as soon as the base moves on; B
+# compares the tip against the merged PR head, which differs the moment a
+# commit is picked elsewhere. Neither can tell "behind" from "unmerged", and
+# both fail toward KEEP, so such a branch is held forever.
+#
+# Not a replacement for A or B: a squash merge rewrites patch-ids, so
+# `git cherry` reports `+` for every commit of a squash-merged branch.
+#
+# Patch-ids cover the diff and its file paths, so a `-` means this same change
+# to this same file is already upstream — contained in substance even if it
+# arrived by another route.
+patches_upstream() {
+  local br="$1" out
+
+  out=$(git cherry "$BASE" "$br" 2>/dev/null) || return 1
+
+  # No commits relative to the base proves nothing.
+  [ -n "$out" ] || return 1
+
+  ! printf '%s\n' "$out" | grep -q '^+'
+}
+
 # Sets VERDICT, PROOF, DETAIL for one branch.
 classify() {
   local br="$1"
@@ -194,6 +222,12 @@ classify() {
   if content_equivalent "$br"; then
     VERDICT=DELETE
     PROOF="content-equivalent to $BASE"
+    return
+  fi
+
+  if patches_upstream "$br"; then
+    VERDICT=DELETE
+    PROOF="every commit patch-equivalent to $BASE"
     return
   fi
 
@@ -288,11 +322,6 @@ for br in "${CANDIDATES[@]}"; do
       printf 'REMOVED  worktree %s\n' "$WT"
     else
       printf 'SKIP     %-50s worktree removal refused (%s)\n' "$br" "$WT"
-      # Name what the refusal protects: any file listed below exists nowhere
-      # else. Resolution is the operator's call (commit / move out / delete);
-      # never --force or rm -rf from here. Git's own refusal text is not
-      # echoed because it advertises the force flag this script refuses.
-      git -C "$WT" status --porcelain -uall 2>/dev/null | sed 's/^/         /'
       FAILED=1
       continue
     fi
