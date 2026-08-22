@@ -111,6 +111,23 @@ fi
 # Clean up marker after verification runs (success or failure)
 trap 'rm -f "$MARKER_FILE"' EXIT
 
+# 120s cap per check. Stock macOS has neither `timeout` nor `gtimeout` (the
+# latter needs coreutils), and the previous prefix-string form degraded to no
+# cap at all on exactly that machine — the gate then hangs on a stuck check
+# instead of failing it, which reads as a frozen agent. perl is in the macOS
+# base system; alarm(2) survives exec, so SIGALRM terminates the bash -c child
+# at the deadline (exit 142). A function, not a command prefix: the perl form
+# cannot survive the word-splitting an unquoted $TIMEOUT_CMD relies on.
+run_with_cap() {
+  if command -v gtimeout &>/dev/null; then
+    gtimeout 120 bash -c "$1"
+  elif command -v timeout &>/dev/null; then
+    timeout 120 bash -c "$1"
+  else
+    perl -e 'alarm 120; exec @ARGV' bash -c "$1"
+  fi
+}
+
 # Run each required check
 FAILED_CHECKS=()
 FAILED_OUTPUT=()
@@ -126,16 +143,7 @@ for i in $(seq 0 $((CHECKS_COUNT - 1))); do
   NAME=$(jq -r ".checks[$i].name" "$CONFIG_FILE")
   COMMAND=$(jq -r ".checks[$i].command" "$CONFIG_FILE")
 
-  # Run the command with a timeout (120s max per check)
-  # macOS lacks `timeout`; use `gtimeout` (brew install coreutils) if available, else run without timeout
-  if command -v gtimeout &>/dev/null; then
-    TIMEOUT_CMD="gtimeout 120"
-  elif command -v timeout &>/dev/null; then
-    TIMEOUT_CMD="timeout 120"
-  else
-    TIMEOUT_CMD=""
-  fi
-  OUTPUT=$(cd "$REPO_ROOT" && MYSPEC_STOP_HOOK_ACTIVE=1 $TIMEOUT_CMD bash -c "$COMMAND" 2>&1) && EXIT_CODE=0 || EXIT_CODE=$?
+  OUTPUT=$(cd "$REPO_ROOT" && MYSPEC_STOP_HOOK_ACTIVE=1 run_with_cap "$COMMAND" 2>&1) && EXIT_CODE=0 || EXIT_CODE=$?
 
   if [ "$EXIT_CODE" -ne 0 ]; then
     FAILED_CHECKS+=("$NAME")

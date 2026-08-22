@@ -6,6 +6,13 @@
 # Also auto-creates ${aiDir}/memory/sessions/active/{session_id}.md on first
 # code edit so memory tracking works automatically for single- and
 # multi-agent sessions without manual /myspec:session-start.
+#
+# The session store is pinned to the PRIMARY worktree of the repository the
+# EDITED FILE belongs to. Resolving from the hook payload's cwd instead lets a
+# log land inside a linked worktree — where the bootstrap staleness sweep never
+# sees it and `git worktree remove` destroys it, since session files are
+# gitignored — or, for a session editing across repositories, in a repo that has
+# nothing to do with the work.
 
 set -euo pipefail
 
@@ -16,9 +23,67 @@ fi
 
 INPUT=$(cat)
 
-resolve_repo_root() {
-  local candidate resolved
+# Nearest existing directory at or above the edited file. PostToolUse runs after
+# the write, so the parent normally exists; walking up keeps resolution working
+# when it does not.
+anchor_dir_for_file() {
+  local dir
+  dir="$(dirname "$1")"
 
+  while [ -n "$dir" ] && [ "$dir" != "/" ] && [ "$dir" != "." ] && [ ! -d "$dir" ]; do
+    dir="$(dirname "$dir")"
+  done
+
+  if [ -d "$dir" ]; then
+    printf '%s\n' "$dir"
+    return 0
+  fi
+
+  return 1
+}
+
+# Pin a git toplevel to the primary worktree. A linked worktree is its own
+# toplevel, so `--show-toplevel` inside .claude/worktrees/<slug> returns the
+# worktree; the parent of the common git dir is the main checkout. The two
+# already agree in the primary worktree, so this is a no-op there.
+main_worktree_root() {
+  local path="$1"
+  local common_git_dir
+
+  common_git_dir=$(git -C "$path" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
+
+  # Submodules and bare repos have a common dir that is not named `.git`; for
+  # those the plain toplevel is already the correct root.
+  if [ "$(basename "$common_git_dir")" = ".git" ]; then
+    dirname "$common_git_dir"
+    return 0
+  fi
+
+  git -C "$path" rev-parse --show-toplevel 2>/dev/null
+}
+
+# Repository root before main-worktree normalisation, most authoritative source
+# first.
+resolve_repo_root_raw() {
+  local file_path="$1"
+  local anchor candidate resolved
+
+  # 1. The repository the edited file belongs to. Anchoring here rather than on
+  #    the payload cwd keeps a session that edits another repository from
+  #    filing its log in this one.
+  case "$file_path" in
+    /*)
+      if anchor=$(anchor_dir_for_file "$file_path"); then
+        if resolved=$(git -C "$anchor" rev-parse --show-toplevel 2>/dev/null); then
+          printf '%s\n' "$resolved"
+          return 0
+        fi
+      fi
+      ;;
+  esac
+
+  # 2. Whatever cwd the payload carries — reached only when the edited file sits
+  #    outside any repository (or its path is relative).
   while IFS= read -r candidate; do
     [ -n "$candidate" ] || continue
     if resolved=$(git -C "$candidate" rev-parse --show-toplevel 2>/dev/null); then
@@ -56,6 +121,9 @@ EOF
   return 1
 }
 
+# (raw root and pinned root are resolved separately at the call site — the
+# worktree marker needs the raw root, the session store needs the pinned one)
+
 FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
 
@@ -74,17 +142,32 @@ touch "/tmp/.myspec-code-changed-${SESSION_ID}"
 # Auto-create per-session active log on first code edit.
 # Multi-agent safe: each agent has a distinct session_id from the harness,
 # so concurrent agents write to separate files and never race.
-if ! REPO_ROOT="$(resolve_repo_root)"; then
+# RAW_ROOT is the repository root as seen from the edited file (a linked
+# worktree resolves to itself); REPO_ROOT is pinned to the primary checkout,
+# where the session store lives.
+if ! RAW_ROOT="$(resolve_repo_root_raw "$FILE_PATH")"; then
   exit 0
 fi
 
-# Read aiDir from .myspec.json (default: "ai")
+if ! REPO_ROOT="$(main_worktree_root "$RAW_ROOT")"; then
+  REPO_ROOT="$RAW_ROOT"
+fi
+
+# Read aiDir from .myspec.json (default: "ai"); strip a trailing slash so a
+# configured ".ai/" cannot derive dead patterns like ".ai//*" downstream
 AI_DIR="ai"
 if [ -f "$REPO_ROOT/.myspec.json" ]; then
   CONFIGURED=$(jq -r '.aiDir // empty' "$REPO_ROOT/.myspec.json" 2>/dev/null)
   if [ -n "$CONFIGURED" ]; then
-    AI_DIR="$CONFIGURED"
+    AI_DIR="${CONFIGURED%/}"
   fi
+fi
+
+# File logs only in a myspec-managed project. Now that the root follows the
+# edited file, an edit in an unrelated repository would otherwise grow a stray
+# sessions tree there.
+if [ ! -f "$REPO_ROOT/.myspec.json" ] && [ ! -d "$REPO_ROOT/$AI_DIR/memory/sessions" ]; then
+  exit 0
 fi
 
 ACTIVE_DIR="$REPO_ROOT/$AI_DIR/memory/sessions/active"
@@ -102,12 +185,13 @@ TOPIC_SEED=$(basename "$(dirname "$FILE_PATH")" 2>/dev/null || echo "auto")
 STARTED=$(date '+%Y-%m-%d %H:%M')
 SHORT_ID="${SESSION_ID:0:8}"
 
-# Worktree marker: .git as a FILE means we're in a worktree. The basename is
-# portable (no absolute path) and lets session-clean's liveness gate match the
-# session against `git worktree list`. Main checkout: empty (gate uses mtime).
+# Worktree marker: the edit resolved to a linked worktree when the raw root
+# differs from the pinned primary checkout. The basename is portable (no
+# absolute path) and lets session-clean's liveness gate match the session
+# against `git worktree list`. Main checkout: empty (gate uses mtime).
 WORKTREE=""
-if [ -f "$REPO_ROOT/.git" ]; then
-  WORKTREE=$(basename "$REPO_ROOT")
+if [ "$RAW_ROOT" != "$REPO_ROOT" ]; then
+  WORKTREE=$(basename "$RAW_ROOT")
 fi
 
 cat > "$ACTIVE_FILE" <<EOF

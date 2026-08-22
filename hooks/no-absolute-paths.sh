@@ -44,7 +44,9 @@ case "$REL_PATH" in
   lib/path-normalize.sh|\
   plugins/myspec/lib/path-normalize.sh|\
   hooks/no-absolute-paths.sh|\
-  plugins/myspec/hooks/no-absolute-paths.sh)
+  plugins/myspec/hooks/no-absolute-paths.sh|\
+  .claude/hooks/no-absolute-paths.sh|\
+  .claude/lib/path-normalize.sh)
     exit 0
     ;;
 esac

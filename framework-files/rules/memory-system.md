@@ -45,6 +45,18 @@ These are blocking requirements — skip them and the agent loses context across
 | Age policy | mtime < 1h: live, never touch. 1–6h: ambiguous — ask, or report and route to `/myspec:session-clean`. > 6h: safe to sweep. |
 | Owners | own session → `/myspec:session-complete`; other agents' dangling sessions → `/myspec:session-clean` (interactive triage) or `/myspec:bootstrap` (auto-archives only > 6h stale ones as `abandoned`) |
 
+### Where session logs live
+
+Session logs always live in the **primary checkout of the repository the edited file belongs to** — one queue per repo, whatever cwd the harness hands the hook.
+
+| Edit happened in | Log lands in |
+|------------------|--------------|
+| The primary checkout | That checkout's `${aiDir}/memory/sessions/active/` |
+| A linked worktree (`.claude/worktrees/<slug>/`) | The **main** checkout's `active/`, not the worktree's |
+| Another repository (cross-repo session) | **That** repo's main checkout, if it is a myspec project; otherwise no log |
+
+Why: a log inside a worktree is invisible to the staleness sweep and to `/myspec:session-complete`, and `git worktree remove` silently destroys it (gitignored, unrecoverable). The `Context` line still records the real edited path, worktree segment included.
+
 ## Continuous Behaviors (No Skills)
 
 These behaviors happen continuously during work and cannot be invoked as skills.
