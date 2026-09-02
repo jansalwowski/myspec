@@ -44,19 +44,21 @@ Scan for:
 
 **With a task** (`/myspec:bootstrap <task>`, or the user has already stated one): read
 `${aiDir}/memory/procedural/index.md`, `${aiDir}/memory/semantic/index.md`,
-`${aiDir}/memory/episodic/index.md`. Check "Use When" / "Topic" columns for keyword
-matches against that task.
+`${aiDir}/memory/episodic/index.md`. Match the Hook column against keywords from that
+task (the index shape is `| ID | Hook | Anchor |`, episodic `Date`).
 
 → If match found: read the full memory file before proceeding.
 
 **Without a task** (plain session-start orientation): do NOT read them. A keyword scan
 with no keywords cannot match, and these three tables are the largest read in this skill —
 they grow about a row per session, so the cost climbs for the life of the project. Count
-the rows instead:
+the rows instead. Rows are `| [P001](…) |` in generated indexes and `| P001 |` in legacy
+ones, either case; `grep -c` prints `0` itself on no match, so no `|| echo 0` fallback:
 
 ```bash
 for t in procedural semantic episodic; do
-  printf '%s: %s\n' "$t" "$(grep -c '^| \[' "${aiDir}/memory/$t/index.md" 2>/dev/null || echo 0)"
+  c=$(grep -ciE '^\| *\[?[pse][0-9]+' "${aiDir}/memory/$t/index.md" 2>/dev/null) || true
+  printf '%s: %s\n' "$t" "${c:-0}"
 done
 ```
 
@@ -65,6 +67,22 @@ the task is known. Layer 1 (step 2) loads either way — that is what it is budg
 
 If Layer 1 holds no entries while Layer 2 has rows, say so: the layering is costing a file
 read and returning nothing. Suggest promoting the handful of genuinely critical entries.
+
+### 3b. Memory Health
+
+If `.claude/lib/memory-doctor.mjs` exists and `node` is available:
+
+```bash
+node .claude/lib/memory-doctor.mjs --quiet
+```
+
+It prints `ERROR` lines and a summary (`memory doctor: clean` or `N error(s), M warning(s)`)
+in about a second. Report the summary in step 7; do not fix anything here. Errors mean the
+tooling cannot read the project as it is — legacy index headers, memories without `hook:`,
+duplicate IDs across branches — and `/myspec:memory-create` will refuse to allocate an ID
+until they are fixed. `/myspec:update` migrates the first two; the rest are per-file. If the
+script is missing, the project predates it: report `memory health: not checked — run
+/myspec:update`.
 
 ### 4. Check for Active Sessions
 
@@ -146,6 +164,7 @@ Output a brief structured summary so the user can confirm the agent is properly 
 **Key paths**: [2-3 most relevant paths from project structure]
 **Memory**: Layer 1 [N entries] | Layer 2 [P procedural, S semantic, E episodic rows] — [scanned against "{task}" / not scanned, no task yet: run /myspec:memory-preflight when the task is known]
 **Matches**: [entries that matched the task / "none" / omit this line entirely when no task was given]
+**Memory health**: [clean / N errors, M warnings — run `node .claude/lib/memory-doctor.mjs` for details / not checked — run /myspec:update]
 **Topology**: [{filename} loaded / not configured — use the `setup` skill with `backbone` to create one]
 **Active sessions**: [N (list of session_id prefixes + topics) / 0]
 **Auto-archived**: [M orphaned sessions / 0 (omit line if 0)]
@@ -162,7 +181,8 @@ Output a brief structured summary so the user can confirm the agent is properly 
 - [ ] `.myspec.json` was checked (or its absence noted)
 - [ ] Topology file was loaded if configured or found at root
 - [ ] Layer 1 index was read; Layer 2 indexes were scanned if a task was given, counted and deferred if not
-- [ ] `${aiDir}/memory/sessions/active/` was listed and orphans (>60min) auto-archived
+- [ ] Memory doctor run (or its absence reported); summary line in the output, nothing fixed
+- [ ] `${aiDir}/memory/sessions/active/` was listed and orphans (> 6h) auto-archived; 1–6h only reported
 - [ ] Worktree health was checked (or omitted if no worktrees)
 - [ ] Framework version was compared (or omitted silently if unreadable)
 - [ ] Orientation summary was printed with all required fields populated

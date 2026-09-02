@@ -70,6 +70,24 @@ if ! REPO_ROOT="$(resolve_repo_root)"; then
   exit 0
 fi
 
+# Memory conformance. The index tables are generated and the ID allocator
+# refuses on drift, so drift a session leaves behind (an unregenerated index, a
+# memory without hook:, a duplicate ID) should surface here, in the session that
+# caused it, not in the next session's claim. Gated on uncommitted changes under
+# the memory tree: pre-existing drift the agent never touched is bootstrap's to
+# report, not a reason to block a stop.
+DOCTOR="$REPO_ROOT/.claude/lib/memory-doctor.mjs"
+if [ -f "$DOCTOR" ] && [ -f "$REPO_ROOT/.myspec.json" ] && command -v node >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+  MEMORY_AI_DIR=$(jq -r '.aiDir // ".ai"' "$REPO_ROOT/.myspec.json" 2>/dev/null | sed 's#/*$##')
+  if [ -n "$MEMORY_AI_DIR" ] && git -C "$REPO_ROOT" status --porcelain -- "$MEMORY_AI_DIR/memory" 2>/dev/null | grep -q .; then
+    if ! DOCTOR_OUT=$(cd "$REPO_ROOT" && node "$DOCTOR" --quiet 2>&1); then
+      REASON=$(printf 'Memory conformance check failed for changes under %s/memory. Fix these before stopping (node .claude/lib/memory-index.mjs regenerates the tables; the doctor names the rest):\n\n%s' "$MEMORY_AI_DIR" "$(printf '%s' "$DOCTOR_OUT" | tail -30)" | jq -Rs .)
+      echo "{\"decision\": \"block\", \"reason\": $REASON}"
+      exit 0
+    fi
+  fi
+fi
+
 CONFIG_FILE="$REPO_ROOT/.claude/verification.json"
 
 # If no config file, skip (graceful degradation)

@@ -69,6 +69,7 @@ yeah, repository-layer tests that explicitly want to bypass the service should s
 ```markdown
 ---
 id: P016
+hook: "test, factory, user, tenant_id — create test users through the auth-service factory"
 type: procedural
 polarity: positive
 triggers: [test, factory, user, tenant_id, prisma, auth-service]
@@ -105,10 +106,10 @@ Grep tests for `prisma.user.create` — outside of repository-layer
 tests, there should be no hits.
 ```
 
-**Proposed index row:**
+**Generated index row** (from `hook:`):
 
 ```
-| P016 | test, factory, user, tenant_id | 2026-04-30 |
+| [P016](P016-test-user-factory.md) | test, factory, user, tenant_id — create test users through the auth-service factory | tests/factories/user.ts |
 ```
 
 > Save this one? **yes** to write, **edit** with changes, or **skip**.
@@ -121,8 +122,9 @@ yes
 
 ### Result
 
+- Claimed `P016` via `.claude/lib/memory-claim-id.sh procedural`.
 - Wrote `${aiDir}/memory/procedural/P016-test-user-factory.md`.
-- Appended row to `${aiDir}/memory/procedural/index.md`.
+- Regenerated `${aiDir}/memory/procedural/index.md` (`--check` clean).
 - No Layer 1 promotion — the rule is local to the test layer.
 - Final tally: **Saved 1 memory: P016. Skipped 0.**
 
@@ -223,6 +225,7 @@ The skill renders each draft and waits for **yes / edit / skip** before moving o
 ```markdown
 ---
 id: P017
+hook: "webhook, signature, stripe — verify signatures in middleware, before body parsing"
 type: procedural
 polarity: positive
 triggers: [webhook, signature, middleware, stripe, verification]
@@ -361,10 +364,11 @@ A one-line summary lands in `${aiDir}/memory/index.md` under **Rules**.
 
 ### Result
 
+- Claimed `P017`, `S008`, `E010` via `.claude/lib/memory-claim-id.sh` (one call per type, each after its consolidation check).
 - Wrote `${aiDir}/memory/procedural/P017-webhook-signature-in-middleware.md`.
 - Wrote `${aiDir}/memory/semantic/S008-stripe-webhook-secret-per-env.md`.
 - Wrote `${aiDir}/memory/episodic/E010-webhook-body-retention-90d.md`.
-- All three index files updated, `updated: 2026-04-30` bumped.
+- All three indexes regenerated (`node .claude/lib/memory-index.mjs`, `--check` clean), `updated: 2026-04-30` bumped.
 - P017 promoted to Layer 1.
 - Final tally: **Saved 3 memories: P017, S008, E010. Skipped 0.**
 

@@ -49,7 +49,7 @@ ${aiDir}/memory/
 - Manual `/myspec:session-start` only needed for non-code sessions (debugging without edits, discovery, doc-only)
 - Logs each significant action with result and attempt count
 - Triggers escalation when patterns repeat
-- Archived to `${aiDir}/memory/sessions/archive/` by `/myspec:session-complete`; orphans (>1h stale) auto-archived by `/myspec:bootstrap`
+- Archived to `${aiDir}/memory/sessions/archive/` by `/myspec:session-complete`; orphans (> 6h stale) auto-archived by `/myspec:bootstrap`, 1–6h ones only reported
 
 ### 2. Procedural Memory — Patterns and Anti-Patterns
 
@@ -152,6 +152,17 @@ On repeated failure → Check escalation triggers
 | During work | `/myspec:memory-lookup` | Search across all memory types |
 | End session | `/myspec:session-complete` | Archive + multi-type extraction prompt |
 | Create memory | `/myspec:memory-create` | Create typed memory in correct directory |
+
+### Tooling (`.claude/lib/`)
+
+| Script | Purpose |
+|--------|---------|
+| `memory-claim-id.sh <type>` | Allocates the next ID: conformance check, lock on the main checkout, scan of every worktree and every branch, registry in `.claude/state/`. Exit 3 = refused on conformance errors |
+| `memory-index.mjs [--check\|--backfill\|--dry-run]` | Regenerates the three index tables from the files (`| ID | Hook | Anchor |`); migrates legacy hand-written tables with `--backfill`; refuses while a memory lacks `hook:` |
+| `memory-doctor.mjs [--quiet\|--json]` | Reports what disagrees with the tooling: filename case, missing `hook:`, legacy headers, duplicate IDs across branches, malformed anchors, an unignored `.claude/state/` |
+| `memory-files.mjs` | Shared parser the two scripts above import — the single definition of "a memory file" (case-insensitive, slug-optional, every anchor form) |
+
+Filenames are `{ID}-{slug}.md` with an uppercase prefix. The tooling reads lowercase and slugless names too, but the doctor flags them.
 
 ## Implementation Status
 

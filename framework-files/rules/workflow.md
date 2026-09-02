@@ -1,8 +1,7 @@
 ---
 title: "AI-First Development Workflow"
 purpose: "Feature development process and code generation policy"
-load_when: "starting new features or modifying existing code"
-updated: 2026-08-03
+updated: 2026-09-02
 see_also:
   - ${aiDir}/features/index.yaml
 ---

@@ -13,7 +13,7 @@ Feature-specific checks to run before working on {feature-name}.
 - [ ] Read global `${aiDir}/pre-flight.md` first
   → **Verify**: Layer 1 index reviewed
 - [ ] Check `${aiDir}/memory/procedural/index.md` for relevant patterns
-  → **Verify**: Scanned "Use When" column for keyword matches
+  → **Verify**: Scanned the Hook column for keyword matches
 - [ ] Verify `${aiDir}/memory/sessions/active/*.md` state (resume own, sweep dangling via /myspec:session-clean)
   → **Verify**: No conflicting active sessions
 

@@ -102,6 +102,32 @@ For each harness in `[claude, cursor, codex]`:
 
 Do not write anywhere outside `~/.{harness}/agents/`. Never install as project-scope (`.claude/agents/`, `.cursor/agents/`, `.codex/agents/` in the repo root).
 
+### Step 3.6: Migrate memory indexes and check memory health
+
+Only when lib entries were processed and `{aiDir}/memory/` exists. Since v1.23.0 the index tables are generated from the memory files, and the generator refuses to run on a memory without `hook:`. Projects that predate it carry hand-written tables in the legacy column shape (`Use When` / `Topic` / `Event`); on those, a plain regeneration would drop every row. This step migrates them. Never skip it — `memory-claim-id.sh` refuses to allocate IDs until the doctor passes.
+
+1. Dry run, and show the output to the user:
+   ```bash
+   node .claude/lib/memory-index.mjs --backfill --dry-run
+   ```
+   Per index it lists the header migration, how many `hook:` lines would be written and from where, and row deltas. `from heading (review)` means a memory had neither `hook:` nor an index row, so its H1 becomes the hook — list those for the user to review afterwards.
+2. Apply:
+   ```bash
+   node .claude/lib/memory-index.mjs --backfill
+   ```
+3. Verify — must print `memory indexes are up to date`:
+   ```bash
+   node .claude/lib/memory-index.mjs --check
+   ```
+4. Health:
+   ```bash
+   node .claude/lib/memory-doctor.mjs
+   ```
+   Report its summary line in Step 6. Remaining errors (duplicate IDs across branches, malformed anchors) are project content: list them, do not fix them silently.
+5. Ensure `.gitignore` contains a `.claude/state/` line — the ID registry is per-checkout state and must never be committed. Append it if missing (create `.gitignore` if absent).
+
+If `node` is unavailable, print: "Memory index migration skipped — node not found. Run `node .claude/lib/memory-index.mjs --backfill` when it is available; ID allocation is blocked until then."
+
 ### Step 4: Refresh `${aiDir}` binding in project context
 
 Skills written in v1.10.0+ reference `${aiDir}/...` as a placeholder. Ensure the project's always-loaded context defines it. Determine target file:
@@ -145,6 +171,8 @@ Pinned (skipped — locally customized):
 Hooks: {updated N scripts / skipped — hooks directory not found}
 Lib:   {updated N helpers / skipped — hooks directory not found}
 Hook wiring: {all N hooks already wired in settings.json / M hook(s) need manual settings.json entries — see above}
+Memory: {migrated N legacy index(es), backfilled M hook: lines (K from heading — review) / indexes already generated / skipped — no memory tree}
+        doctor: {clean / N error(s), M warning(s) — see above}
 
 Base subagents (user scope, ~/.{harness}/agents/):
   {per harness: list each file as installed / up-to-date / synced / kept-local / skipped (~/.{harness}/ not present)}
@@ -185,6 +213,7 @@ After running the skill:
 - [ ] `marker-merge` files: content outside `<!-- myspec:framework-start/end -->` markers left untouched
 - [ ] `hooks` and `lib` entries processed only when `.claude/hooks/` exists (else both skipped with the note)
 - [ ] Each updated hook and lib helper had `chmod +x` applied
+- [ ] Memory migration run when a memory tree exists: `--backfill --dry-run` shown, `--backfill` applied, `--check` clean, doctor summary reported, `.claude/state/` gitignored
 - [ ] `${aiDir}` binding refreshed between `myspec:paths` markers; content outside markers unchanged
 - [ ] `.myspec.json` `frameworkVersion` bumped and `frameworkFiles[*].lastUpdated` set; project fields (`name`, `description`, `techStack`, `aiDir`) untouched
 - [ ] Hook-wiring check run: hooks absent from `.claude/settings.json` reported; `settings.json` NOT modified

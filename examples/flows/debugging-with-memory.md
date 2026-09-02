@@ -27,8 +27,8 @@ A staging deploy is failing every Monday morning at 09:00 UTC. The deploy script
 
 The skill classifies the search target as procedural-leaning ("symptom-driven"), scans:
 
-- **procedural index** — looks at the *Use When* column for "503", "healthcheck", "staging", "monday", "deploy". One match: **P011** — *"After staging deploys, run smoke tests with retry."* Loaded — but the *Not For* says "this is for build-pipeline failures, not application 5xx." Doesn't apply.
-- **semantic index** — *Topic* matches on "deploy", "staging". One match: **S004** — *"Staging Postgres has a separate connection pool from production sized at 5 connections."* Loaded — interesting, possibly relevant.
+- **procedural index** — looks at the *Hook* column for "503", "healthcheck", "staging", "monday", "deploy". One match: **P011** — *"After staging deploys, run smoke tests with retry."* Loaded — but the file's `not_for:` says "this is for build-pipeline failures, not application 5xx." Doesn't apply.
+- **semantic index** — *Hook* matches on "deploy", "staging". One match: **S004** — *"Staging Postgres has a separate connection pool from production sized at 5 connections."* Loaded — interesting, possibly relevant.
 - **episodic index** — recent events tagged with "staging" or "monday". Nothing under 30 days.
 
 The agent reports:

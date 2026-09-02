@@ -35,11 +35,11 @@ Error message + symptom → procedural search.
 Reads `${aiDir}/memory/procedural/index.md`:
 
 ```
-| ID   | Use When                                  | Not For        | Validations | Last Validated |
-|------|-------------------------------------------|----------------|-------------|----------------|
-| P003 | env files missing on fresh clone, ENOENT  | CI environments| 7           | 2026-04-12     |
-| P019 | background jobs starving connection pool  | short jobs     | 1           | 2026-04-30     |
-| ...  |                                           |                |             |                |
+| ID | Hook | Anchor |
+|----|------|--------|
+| [P003](P003-env-files-fresh-clone.md) | env files missing on fresh clone, ENOENT | .env.example |
+| [P019](P019-background-job-connection-pool.md) | background jobs starving connection pool, cron, postgres | src/jobs/pool.ts |
+| ... | | |
 ```
 
 P003 matches strongly — same symptom, validation count of 7 (proven pattern). Skips semantic and episodic since the symptom is squarely procedural.
@@ -125,7 +125,7 @@ The user is starting work on a new background job and wants to know if there's p
 #### 2. Scan all indexes
 
 **Procedural**:
-- `P019` — *Long-running background jobs need a dedicated DB connection pool*. `Use When: background-job, cron, connection-pool, postgres, starvation`. Direct match. Validation count: 1.
+- `P019` — *Long-running background jobs need a dedicated DB connection pool*. `Hook: background jobs starving connection pool, cron, postgres`. Direct match. The file's `validation_count` is 1.
 - `P015` — *Don't wrap long-running jobs in a single transaction*. Adjacent — about transactions, not pools. Possibly relevant.
 
 **Semantic**:
@@ -192,7 +192,7 @@ Domain-driven search → all three indexes.
 
 #### 2. Scan all indexes
 
-Procedural index: no entries with "graphql" or "websocket" or "subscription" in `Use When`.
+Procedural index: no entries with "graphql" or "websocket" or "subscription" in the Hook column.
 
 Semantic index: nothing with "graphql" topic, nothing with "websocket".
 

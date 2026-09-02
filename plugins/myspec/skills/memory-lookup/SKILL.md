@@ -11,18 +11,20 @@ allowed-tools: [Read, Grep, Glob]
 ### 1. Classify Search Target
 
 Classify the search target:
-- Error messages or symptoms → search procedural (Use When column)
-- Facts about a system/API → search semantic (Topic column)
-- Past decisions or events → search episodic (Event column)
+- Error messages or symptoms → search procedural
+- Facts about a system/API → search semantic
+- Past decisions or events → search episodic
 - Unsure → search all three
+
+Every index has the same shape, `| ID | Hook | Anchor |` (episodic: `Date`). The Hook is the one-line keyword summary you match against; everything else — the Not-For scope, triggers, the procedure — is in the memory file. An index with other column names is a legacy one that `/myspec:update` migrates.
 
 ### 2. Scan Procedural Index
 
 If search context excludes procedural (e.g., pure fact lookup), skip to step 3.
 
 Read `${aiDir}/memory/procedural/index.md`:
-- Match "Use When" column against: error message keywords, component/API names, symptoms
-- Check "Not For" column to confirm applicability
+- Match the Hook column against: error message keywords, component/API names, symptoms
+- On a match, read the file and check its `not_for:` before applying
 - Memories with `validation_count >= 3` are proven patterns — prioritize these
 
 ### 3. Scan Semantic Index
@@ -30,8 +32,8 @@ Read `${aiDir}/memory/procedural/index.md`:
 If search context excludes semantic (e.g., pure debugging), skip to step 4.
 
 Read `${aiDir}/memory/semantic/index.md`:
-- Match "Topic" column against current domain
-- Check for ⚠️ stale flags — verify anchor before trusting
+- Match the Hook column against the current domain
+- The Anchor column names the file that proves the fact — verify it exists before trusting a fact whose anchor is missing
 
 ### 4. Scan Episodic Index
 
