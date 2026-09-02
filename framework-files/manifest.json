@@ -129,6 +129,10 @@
     "memory-doctor.mjs": {
       "type": "overwrite",
       "dest": ".claude/lib/memory-doctor.mjs"
+    },
+    "setup-doctor.mjs": {
+      "type": "overwrite",
+      "dest": ".claude/lib/setup-doctor.mjs"
     }
   }
 }

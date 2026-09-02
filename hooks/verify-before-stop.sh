@@ -88,6 +88,25 @@ if [ -f "$DOCTOR" ] && [ -f "$REPO_ROOT/.myspec.json" ] && command -v node >/dev
   fi
 fi
 
+# Setup conformance. Only the wiring and schema groups: a hook that is
+# registered but missing, not executable, or fails bash -n is silently inert,
+# and an unparseable .myspec.json or verification.json degrades this very gate
+# to approve — all of them are damage the session just did and can undo now.
+# Framework drift is deliberately excluded: its usual cause is a pending
+# /myspec:update, and blocking on that would halt every commit made between a
+# plugin release and the next update run. Gated on uncommitted changes to the
+# harness config, for the same reason the memory check above is gated.
+SETUP_DOCTOR="$REPO_ROOT/.claude/lib/setup-doctor.mjs"
+if [ -f "$SETUP_DOCTOR" ] && [ -f "$REPO_ROOT/.myspec.json" ] && command -v node >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+  if git -C "$REPO_ROOT" status --porcelain -- .claude .myspec.json 2>/dev/null | grep -q .; then
+    if ! SETUP_OUT=$(cd "$REPO_ROOT" && node "$SETUP_DOCTOR" --quiet wiring schema 2>&1); then
+      REASON=$(printf 'Setup conformance check failed for changes under .claude/ or .myspec.json. Each of these makes a hook or a gate silently stop working, so fix them before stopping:\n\n%s' "$(printf '%s' "$SETUP_OUT" | tail -30)" | jq -Rs .)
+      echo "{\"decision\": \"block\", \"reason\": $REASON}"
+      exit 0
+    fi
+  fi
+fi
+
 CONFIG_FILE="$REPO_ROOT/.claude/verification.json"
 
 # If no config file, skip (graceful degradation)

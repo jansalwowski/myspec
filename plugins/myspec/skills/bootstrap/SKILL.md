@@ -84,6 +84,31 @@ until they are fixed. `/myspec:update` migrates the first two; the rest are per-
 script is missing, the project predates it: report `memory health: not checked — run
 /myspec:update`.
 
+### 3c. Setup Health
+
+If `.claude/lib/setup-doctor.mjs` exists and `node` is available:
+
+```bash
+node .claude/lib/setup-doctor.mjs --quiet
+```
+
+The deterministic install check, about a second. It covers framework files whose content
+no longer matches the plugin copy (not just the version scalar step 6 compares), hooks
+registered but missing or not executable, hook scripts on disk that no settings file
+wires, `bash -n` failures under `.claude/hooks/` and `.claude/lib/`, and schema breaks in
+`.myspec.json`, `.claude/verification.json`, and `${aiDir}/features/index.yaml`. Every
+finding carries a literal `run:` command or a one-line `fix:`.
+
+Report the summary in step 7 and fix nothing here. An `ERROR` means part of the harness is
+inert — a hook that never fires, a gate that approves without running anything — which is
+invisible from the outside; that is the reason for the check. Drop `--quiet` when the count
+is non-zero and the user wants the detail; add `--json` when another skill consumes it.
+
+`$CLAUDE_PLUGIN_ROOT` unset means the framework-drift checks have no reference copy: the
+run says so in a `NOTE` and the rest still applies. Pass `--plugin-root <dir>` (resolved
+the way step 6 does) to include them. If the script itself is missing, the project predates
+it: report `setup health: not checked — run /myspec:update`.
+
 ### 4. Check for Active Sessions
 
 List `${aiDir}/memory/sessions/active/*.md` (excluding `.gitkeep`).
@@ -165,6 +190,7 @@ Output a brief structured summary so the user can confirm the agent is properly 
 **Memory**: Layer 1 [N entries] | Layer 2 [P procedural, S semantic, E episodic rows] — [scanned against "{task}" / not scanned, no task yet: run /myspec:memory-preflight when the task is known]
 **Matches**: [entries that matched the task / "none" / omit this line entirely when no task was given]
 **Memory health**: [clean / N errors, M warnings — run `node .claude/lib/memory-doctor.mjs` for details / not checked — run /myspec:update]
+**Setup health**: [clean / N errors, M warnings — run `node .claude/lib/setup-doctor.mjs` for details / not checked — run /myspec:update]
 **Topology**: [{filename} loaded / not configured — use the `setup` skill with `backbone` to create one]
 **Active sessions**: [N (list of session_id prefixes + topics) / 0]
 **Auto-archived**: [M orphaned sessions / 0 (omit line if 0)]
@@ -182,6 +208,7 @@ Output a brief structured summary so the user can confirm the agent is properly 
 - [ ] Topology file was loaded if configured or found at root
 - [ ] Layer 1 index was read; Layer 2 indexes were scanned if a task was given, counted and deferred if not
 - [ ] Memory doctor run (or its absence reported); summary line in the output, nothing fixed
+- [ ] Setup doctor run (or its absence reported); summary line in the output, nothing fixed
 - [ ] `${aiDir}/memory/sessions/active/` was listed and orphans (> 6h) auto-archived; 1–6h only reported
 - [ ] Worktree health was checked (or omitted if no worktrees)
 - [ ] Framework version was compared (or omitted silently if unreadable)

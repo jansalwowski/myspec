@@ -70,20 +70,15 @@ For each file in the manifest:
 
 If a destination file doesn't exist for `marker-merge`, create it from the source (treat as overwrite for missing files).
 
-**Hook-wiring check (only if hooks were processed):** copying a hook file does nothing until it is registered in `.claude/settings.json`. After writing hooks, compare the project's `.claude/settings.json` against `templates/settings-hooks.json` (the canonical event→matcher→command shape):
+**Hook-wiring check (only if hooks were processed):** copying a hook file does nothing until it is registered in `.claude/settings.json`, and a registered hook without `+x` never runs either. Both are mechanical, so run them rather than reading for them:
 
-- For each `command` in the template, check whether that exact `command` string appears anywhere under the project's `settings.json` `hooks` key.
-- Collect every template command that is absent (typically a hook added in this version — e.g. a fresh `require-reuse-audit.sh`).
-- If any are missing, print — do NOT edit `settings.json` (it is user-owned and not in `manifest.json`):
+```bash
+node .claude/lib/setup-doctor.mjs --plugin-root "${CLAUDE_PLUGIN_ROOT}" wiring
+```
 
-  ```
-  ⚠ Hooks copied but not wired. Add these to .claude/settings.json under the
-    shown event/matcher (deep-merge: append to existing `hooks` arrays, do not
-    replace), then they take effect:
-    {for each missing: event → matcher → "command": "<path>"}
-  ```
+It compares the project's `settings.json` against `templates/settings-hooks.json` per event→command pair, and adds executability, existence, and `bash -n`. Report every finding with the `run:` / `fix:` line it carries and do NOT edit `settings.json` — it is user-owned and not in `manifest.json`. For each `wiring-incomplete` finding, cite `templates/settings-hooks.json` as the reference for the exact structure (deep-merge: append to existing `hooks` arrays, do not replace). If `.claude/settings.json` has no `hooks` key at all, instruct the user to copy the whole `hooks` block from the template.
 
-  Cite `templates/settings-hooks.json` as the reference for the exact structure. If `.claude/settings.json` has no `hooks` key at all, instruct the user to copy the whole `hooks` block from the template.
+If the doctor is not on disk yet (the project predates it, and this run is what installs it), do the comparison by hand this once: for each `command` in the template, check whether that exact string appears anywhere under the project's `settings.json` `hooks` key, and report the absent ones.
 
 ### Step 3.5: Sync Base Subagents (user scope)
 
@@ -127,6 +122,25 @@ Only when lib entries were processed and `{aiDir}/memory/` exists. Since v1.23.0
 5. Ensure `.gitignore` contains a `.claude/state/` line — the ID registry is per-checkout state and must never be committed. Append it if missing (create `.gitignore` if absent).
 
 If `node` is unavailable, print: "Memory index migration skipped — node not found. Run `node .claude/lib/memory-index.mjs --backfill` when it is available; ID allocation is blocked until then."
+
+### Step 3.7: Verify the install
+
+Everything above wrote files; this reads them back. Run the full doctor from the project root:
+
+```bash
+node .claude/lib/setup-doctor.mjs --plugin-root "${CLAUDE_PLUGIN_ROOT}"
+```
+
+Step 5 is about to stamp `frameworkVersion` to the new version, so run this **before** it — while the versions still differ, content drift is reported as a warning ("update pending"). After the stamp the same drift is an error, which is the point: a `framework-drift` or `framework-missing` error on the next run means this update half-applied.
+
+Read the result as a checklist of this run:
+
+- `framework-missing` / `framework-drift` → a manifest entry did not get written. Re-apply that entry, do not stamp over it.
+- `marker-missing` → a `marker-merge` file lost its `<!-- myspec:framework-start -->` / `<!-- myspec:framework-end -->` markers; restore them from the plugin copy before the next update silently skips the file forever.
+- `shipped-drift` / `shipped-missing` on `.claude/hooks/*` or `.claude/lib/*` → a hook or helper is stale or absent; these are `overwrite` entries, so re-copy.
+- Anything in the `schema` group → fix before finishing; an unparseable `.myspec.json` or `verification.json` silently disables the surfaces that read it.
+
+Report the summary line in Step 6. `framework-unlisted` warnings are expected on a project that predates `frameworkFiles` tracking — Step 5 clears them by writing the missing entries.
 
 ### Step 4: Refresh `${aiDir}` binding in project context
 
@@ -173,6 +187,7 @@ Lib:   {updated N helpers / skipped — hooks directory not found}
 Hook wiring: {all N hooks already wired in settings.json / M hook(s) need manual settings.json entries — see above}
 Memory: {migrated N legacy index(es), backfilled M hook: lines (K from heading — review) / indexes already generated / skipped — no memory tree}
         doctor: {clean / N error(s), M warning(s) — see above}
+Setup:  {clean / N error(s), M warning(s) — see above / skipped — node not found}
 
 Base subagents (user scope, ~/.{harness}/agents/):
   {per harness: list each file as installed / up-to-date / synced / kept-local / skipped (~/.{harness}/ not present)}
@@ -216,7 +231,8 @@ After running the skill:
 - [ ] Memory migration run when a memory tree exists: `--backfill --dry-run` shown, `--backfill` applied, `--check` clean, doctor summary reported, `.claude/state/` gitignored
 - [ ] `${aiDir}` binding refreshed between `myspec:paths` markers; content outside markers unchanged
 - [ ] `.myspec.json` `frameworkVersion` bumped and `frameworkFiles[*].lastUpdated` set; project fields (`name`, `description`, `techStack`, `aiDir`) untouched
-- [ ] Hook-wiring check run: hooks absent from `.claude/settings.json` reported; `settings.json` NOT modified
+- [ ] Hook-wiring check run via `setup-doctor.mjs wiring` (or by hand when the doctor was not yet installed): findings reported; `settings.json` NOT modified
+- [ ] Full `setup-doctor.mjs` run in Step 3.7, before the Step 5 version stamp; every `install`- and `schema`-group error resolved or reported
 - [ ] No file outside `manifest.json` was modified
 - [ ] Summary printed with `Updated files`, `Preserved`, `Hooks`, `Lib`, and `Hook wiring` lines
 - [ ] Generated-config advisory printed when a `mockups` block exists (`mockup-design.md` read, never modified)
