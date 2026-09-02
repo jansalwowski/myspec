@@ -138,7 +138,8 @@ Read the result as a checklist of this run:
 - `framework-missing` / `framework-drift` → a manifest entry did not get written. Re-apply that entry, do not stamp over it.
 - `marker-missing` → a `marker-merge` file lost its `<!-- myspec:framework-start -->` / `<!-- myspec:framework-end -->` markers; restore them from the plugin copy before the next update silently skips the file forever.
 - `shipped-drift` / `shipped-missing` on `.claude/hooks/*` or `.claude/lib/*` → a hook or helper is stale or absent; these are `overwrite` entries, so re-copy.
-- Anything in the `schema` group → fix before finishing; an unparseable `.myspec.json` or `verification.json` silently disables the surfaces that read it.
+- `marker-header-drift` → the file's title or frontmatter above the marker differs from the plugin copy. `marker-merge` cannot reach it, so no re-run fixes this; apply the plugin header by hand or record that the local wording is deliberate.
+- Anything in the `schema` or `features` group → fix before finishing; an unparseable `.myspec.json` or `verification.json` silently disables the surfaces that read it, and an entry the features parser cannot read is invisible to every status audit.
 
 Report the summary line in Step 6. `framework-unlisted` warnings are expected on a project that predates `frameworkFiles` tracking — Step 5 clears them by writing the missing entries.
 
@@ -232,7 +233,7 @@ After running the skill:
 - [ ] `${aiDir}` binding refreshed between `myspec:paths` markers; content outside markers unchanged
 - [ ] `.myspec.json` `frameworkVersion` bumped and `frameworkFiles[*].lastUpdated` set; project fields (`name`, `description`, `techStack`, `aiDir`) untouched
 - [ ] Hook-wiring check run via `setup-doctor.mjs wiring` (or by hand when the doctor was not yet installed): findings reported; `settings.json` NOT modified
-- [ ] Full `setup-doctor.mjs` run in Step 3.7, before the Step 5 version stamp; every `install`- and `schema`-group error resolved or reported
+- [ ] Full `setup-doctor.mjs` run in Step 3.7, before the Step 5 version stamp; every `install`-, `schema`- and `features`-group error resolved or reported
 - [ ] No file outside `manifest.json` was modified
 - [ ] Summary printed with `Updated files`, `Preserved`, `Hooks`, `Lib`, and `Hook wiring` lines
 - [ ] Generated-config advisory printed when a `mockups` block exists (`mockup-design.md` read, never modified)

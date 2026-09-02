@@ -95,9 +95,10 @@ node .claude/lib/setup-doctor.mjs --quiet
 The deterministic install check, about a second. It covers framework files whose content
 no longer matches the plugin copy (not just the version scalar step 6 compares), hooks
 registered but missing or not executable, hook scripts on disk that no settings file
-wires, `bash -n` failures under `.claude/hooks/` and `.claude/lib/`, and schema breaks in
-`.myspec.json`, `.claude/verification.json`, and `${aiDir}/features/index.yaml`. Every
-finding carries a literal `run:` command or a one-line `fix:`.
+wires, `bash -n` failures under `.claude/hooks/` and `.claude/lib/`, schema breaks in
+`.myspec.json` and `.claude/verification.json`, and entries in `${aiDir}/features/index.yaml`
+that the manifest parser cannot read. Every finding carries a literal `run:` command or a
+one-line `fix:`.
 
 Report the summary in step 7 and fix nothing here. An `ERROR` means part of the harness is
 inert — a hook that never fires, a gate that approves without running anything — which is

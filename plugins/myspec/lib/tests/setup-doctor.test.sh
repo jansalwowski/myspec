@@ -65,7 +65,10 @@ const {join,dirname}=require("path");
 const plugin=process.argv[1], root=process.argv[2], aiDir="ai";
 const m=JSON.parse(readFileSync(join(plugin,"framework-files","manifest.json"),"utf8"));
 const V=m.frameworkVersion, ff={};
-const put=(src,dest)=>{mkdirSync(join(root,dirname(dest)),{recursive:true});copyFileSync(src,join(root,dest));return dest;};
+// init and update replace ${aiDir} in what they copy. Copying verbatim here
+// would compare plugin bytes against plugin bytes and could never catch a
+// drift check that forgot the substitution — which is exactly what it missed.
+const put=(src,dest)=>{mkdirSync(join(root,dirname(dest)),{recursive:true});writeFileSync(join(root,dest),readFileSync(src,"utf8").split("${aiDir}").join(aiDir));return dest;};
 for(const k of Object.keys(m.files)){
   const dest = k.startsWith("templates/") ? aiDir+"/.templates/"+k.slice(10) : aiDir+"/"+k;
   put(join(plugin,"framework-files",k),dest); ff[k]={version:V,lastUpdated:"2026-09-02"};
@@ -100,6 +103,8 @@ run_doctor
 expect_exit 0 "clean install exits 0"
 expect_no_line '^ERROR' "clean install reports no errors"
 expect_no_line 'framework-drift' "clean install reports no drift"
+expect_no_line 'marker-header-drift' "an unmodified marker-merge header is not drift"
+expect_no_line 'shipped-drift' "clean install reports no hook or lib drift"
 expect_no_line 'dead-path-ref' "framework-owned rules are not scanned for dead refs"
 expect_no_line 'over-budget' "framework-owned rules are not warned about as over budget"
 expect_line 'framework files over their always-loaded budget' "plugin-owned budget overruns are reported as a note"
@@ -116,6 +121,7 @@ expect_no_line '^ERROR' "the blocking groups report no errors on a clean install
 printf '\n# hand edit\n' >> "$REPO/.claude/rules/paths.md"
 rm "$REPO/ai/.templates/session-log.md"
 perl -0pi -e 's/<!-- myspec:framework-start -->//' "$REPO/ai/pre-flight.md"
+perl -0pi -e 's/^# .*$/# Renamed Locally/m' "$REPO/ai/memory-index.md"
 printf '\n# hand edit\n' >> "$REPO/.claude/hooks/no-absolute-paths.sh"
 set_json .myspec.json 'delete d.frameworkFiles["rules/ideas.md"]'
 chmod -x "$REPO/.claude/hooks/guard-git-branch.sh"
@@ -149,6 +155,8 @@ expect_line 'WARN +wiring-incomplete: .claude/settings.json' "a hook the templat
 expect_line 'ERROR aidir-trailing-slash' "a trailing slash on aiDir is an error"
 expect_line 'ERROR verification-unparseable' "unparseable verification.json is an error"
 expect_line 'ERROR features-index-unreadable: ai/features/index.yaml:2' "a mis-indented manifest entry is an error, with its line"
+expect_line 'WARN +marker-header-drift: ai/memory-index.md' "a changed marker-merge header is a warning update cannot fix"
+expect_no_line 'ERROR marker-header-drift' "the header finding never blocks, because update cannot repair it"
 expect_line 'WARN +over-budget: CLAUDE.md' "an oversized project CLAUDE.md is a warning"
 expect_line 'WARN +dead-path-ref: CLAUDE.md' "a dead path reference in a project file is a warning"
 expect_line 'WARN +dead-skill-ref: CLAUDE.md' "a reference to a skill the plugin does not ship is a warning"
@@ -161,6 +169,17 @@ expect_line '^ERROR' "--quiet keeps errors"
 run_doctor wiring
 expect_line 'ERROR hook-syntax' "a group selector runs its own checks"
 expect_no_line 'framework-drift' "a group selector excludes other groups"
+
+# The stop hook runs exactly these two groups. A features-manifest error must
+# not reach them: the gate fires on uncommitted .claude/ changes, and blocking
+# a stop over a file the session never touched is a false block.
+run_doctor --quiet wiring schema
+expect_no_line 'features-index-unreadable' "the blocking groups exclude the features manifest"
+expect_line 'ERROR hook-syntax' "the blocking groups still carry wiring errors"
+
+run_doctor features
+expect_line 'ERROR features-index-unreadable' "the features group carries the manifest check"
+expect_no_line 'hook-syntax' "the features group excludes wiring"
 
 run_doctor hook-not-executable
 expect_line 'ERROR hook-not-executable' "a check selector runs that check"

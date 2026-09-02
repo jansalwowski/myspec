@@ -48,7 +48,9 @@ due for a pass; reach for tier 1 when the user named a surface or tier 0 pointed
 
    Each record is `{ id, group, path, detail, remediation: { commands, text } }`. Group them by
    `group` and carry them forward: `install` and `wiring` records go into surface E's brief,
-   `schema` into E and F, `budget` and `refs` into A. The brief says *these are established
+   `schema` into E, `features` into F, `budget` and `refs` into A. A `marker-header-drift`
+   record is worth naming to the user directly: `update` structurally cannot repair it, so it
+   survives every sync until someone applies the plugin header by hand. The brief says *these are established
    facts, verified by command — do not re-check them, and do not report a finding that
    contradicts one*. A `NOTE` about an unresolved plugin root means the `install` group did not
    run; say so in Phase 3 rather than filling the gap by hand.

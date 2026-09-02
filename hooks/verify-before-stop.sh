@@ -94,8 +94,11 @@ fi
 # to approve — all of them are damage the session just did and can undo now.
 # Framework drift is deliberately excluded: its usual cause is a pending
 # /myspec:update, and blocking on that would halt every commit made between a
-# plugin release and the next update run. Gated on uncommitted changes to the
-# harness config, for the same reason the memory check above is gated.
+# plugin release and the next update run. The features group is excluded too —
+# it reads a file under the aiDir, outside the trigger below, so including it
+# would block a stop over something this session never touched. Gated on
+# uncommitted changes to the harness config, for the same reason the memory
+# check above is gated.
 SETUP_DOCTOR="$REPO_ROOT/.claude/lib/setup-doctor.mjs"
 if [ -f "$SETUP_DOCTOR" ] && [ -f "$REPO_ROOT/.myspec.json" ] && command -v node >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
   if git -C "$REPO_ROOT" status --porcelain -- .claude .myspec.json 2>/dev/null | grep -q .; then
