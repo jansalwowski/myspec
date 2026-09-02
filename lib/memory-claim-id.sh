@@ -88,7 +88,15 @@ if [ -f "$MAIN_ROOT/.myspec.json" ]; then
   AI_DIR=$(sed -n 's/.*"aiDir"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$MAIN_ROOT/.myspec.json" | tail -1)
   AI_DIR=$(printf '%s' "$AI_DIR" | sed 's#^\./##; s#/*$##')
 fi
-[ -n "$AI_DIR" ] || AI_DIR=".ai"
+# No configured value: read the tree that is actually on disk instead of
+# guessing. The guess was ".ai" in memory-files.mjs, memory-claim-id.sh and
+# verify-before-stop.sh, and "ai" in validate-frontmatter.sh and
+# mark-code-changed.sh, so a keyless project had its session logs written to
+# one tree while its memories were read from the other. ".ai" wins when both
+# or neither exist; memory-doctor names the both case as second-ai-tree.
+if [ -z "$AI_DIR" ]; then
+  if [ -d "$MAIN_ROOT/.ai" ] || [ ! -d "$MAIN_ROOT/ai" ]; then AI_DIR=".ai"; else AI_DIR="ai"; fi
+fi
 
 # Repo-relative path of this type's memory dir; doubles as the ls-tree pathspec.
 MEM_REL="$AI_DIR/memory/$TYPE"

@@ -37,7 +37,7 @@ due for a pass; reach for tier 1 when the user named a surface or tier 0 pointed
 
 ### Phase 0 — Load configuration
 
-1. Read `.myspec.json` for `aiDir` (default `.ai`); use it everywhere `${aiDir}` appears below.
+1. Read `.myspec.json` for `aiDir` — when the key is absent the tooling uses whichever of `.ai/` or `ai/` exists on disk, and `.ai` when both or neither do. Use it everywhere `${aiDir}` appears below.
 2. Read the project extension if present — `.claude/rules/doctor.md`, falling back to `.claude/rules/ai-setup-audit.md` (its name before this skill was renamed; still read, so an existing extension keeps working). Take its `## Project anchors`, `## Read-only`, and `## Extra checks` sections. When only the old name is present, say so once and suggest renaming it. Neither present → note "no project extension; auditing framework surfaces only."
 3. Detect the default branch: `git symbolic-ref --short refs/remotes/origin/HEAD`, falling back to `main`/`master`.
 4. Run the deterministic checks and keep the result — it is the ground truth every later phase quotes:

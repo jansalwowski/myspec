@@ -19,9 +19,9 @@ jq '{aiDir, topologyFile, frameworkVersion, name: .project.name, techStack: .pro
 
 No `jq`? Use `python3 -c "import json;d=json.load(open('.myspec.json'));print({k:d.get(k) for k in ('aiDir','topologyFile','frameworkVersion')}, d.get('project'))"`.
 
-Fields used: `project.name` / `project.techStack` (summary), `aiDir` (doc directory,
-default `ai/`), `frameworkVersion` (step 6), `topologyFile`. If `topologyFile` is set,
-read that file.
+Fields used: `project.name` / `project.techStack` (summary), `aiDir` (doc directory —
+when the key is absent the tooling uses whichever of `.ai/` or `ai/` exists on disk, and `.ai` when both or neither do), `frameworkVersion` (step 6), `topologyFile`. If
+`topologyFile` is set, read that file.
 
 If `topologyFile` is not set, check for common topology files at project root: `backbone.yml`, `topology.yml`, `project.yml`. If found, read it and note: suggest the user add `"topologyFile": "{filename}"` to `.myspec.json`.
 
