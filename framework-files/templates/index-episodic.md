@@ -5,7 +5,7 @@ updated: YYYY-MM-DD
 
 # Episodic Memory Index
 
-> **Agent**: Check recent episodes (< 30 days) for context. Episodes marked `persistent` remain indefinitely. Others consolidate into semantic facts after 30 days.
+> **Agent**: Scan "Hook" for events related to the current feature. Recent episodes (< 30 days) carry the most context; older ones may have been consolidated into semantic facts.
 
-| ID | Date | Event | Feature | Outcome |
-|----|------|-------|---------|---------|
+| ID | Hook | Date |
+|----|------|------|

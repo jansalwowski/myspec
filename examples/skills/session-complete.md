@@ -88,7 +88,7 @@ User: `all`.
 
 User: *"Yes — regular session cookies stay Lax, this rule is specifically for OAuth state cookies that need to survive provider round-trips."*
 
-Skill drafts `P020-oauth-state-cookie-samesite.md` with explicit `not_for: [regular session cookies, cookies not used in OAuth flow]`.
+Skill claims `P020` via `.claude/lib/memory-claim-id.sh procedural` and drafts `P020-oauth-state-cookie-samesite.md` with explicit `not_for: [regular session cookies, cookies not used in OAuth flow]`.
 
 **Memory 2 (semantic)**:
 
@@ -96,7 +96,7 @@ Skill drafts `P020-oauth-state-cookie-samesite.md` with explicit `not_for: [regu
 
 User: *"`src/auth/cookies.ts` — the `OAUTH_STATE_COOKIE_OPTIONS` constant."*
 
-Skill drafts `S009-samesite-lax-cross-site-behavior.md` with anchor.
+Skill claims `S009` (`memory-claim-id.sh semantic`) and drafts `S009-samesite-lax-cross-site-behavior.md` with anchor.
 
 Both drafts include `source_session: 2026-04-30-1400-oauthcallback`.
 

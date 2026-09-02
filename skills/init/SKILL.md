@@ -160,7 +160,9 @@ Create `.claude/hooks/` directory. Copy these files from the plugin's `hooks/` d
 
 Make them executable: `chmod +x .claude/hooks/*.sh`
 
-Create `.claude/lib/` and copy the lib files listed in `manifest.json`'s `lib` block from the plugin's `lib/` directory, then `chmod +x .claude/lib/*.sh` (some are sourced, some are invoked directly). Use the manifest as the source of truth — do not glob the directory (it also holds plugin-internal helpers like `lib/features-status-audit/` and `lib/brainstorm-server/`, which run from the plugin root and are never copied into projects). These back skills and hooks (e.g. `<repo_root>`/`<encoded_cwd>` placeholders; the reuse-audit table validator; the branch-guard command scanner; sanctioned branch cleanup; memory ID allocation).
+Create `.claude/lib/` and copy the lib files listed in `manifest.json`'s `lib` block from the plugin's `lib/` directory, then `chmod +x .claude/lib/*.sh` (some are sourced, some are invoked directly). Use the manifest as the source of truth — do not glob the directory (it also holds plugin-internal helpers like `lib/features-status-audit/` and `lib/brainstorm-server/`, which run from the plugin root and are never copied into projects). These back skills and hooks (e.g. `<repo_root>`/`<encoded_cwd>` placeholders; the reuse-audit table validator; the branch-guard command scanner; sanctioned branch cleanup; memory ID allocation, index generation, and the memory conformance check).
+
+Append `.claude/state/` to `.gitignore` (create the file if absent). `memory-claim-id.sh` keeps its per-checkout ID registry there; committing it would make one clone's claims another clone's stale floor.
 
 Copy `.claude/rules/` framework rules from `framework-files/rules/`:
 - `workflow.md`

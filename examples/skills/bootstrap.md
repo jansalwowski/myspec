@@ -48,7 +48,7 @@ All three pinned rules will apply throughout the session.
 
 The invocation carried a task, so the Layer 2 scan runs. Task: "CSV import to user-invitations feature." Keywords: `invitations`, `csv`, `import`, `bulk`, `email`.
 
-- **Procedural index**: `P017` (already loaded — pinned). `P022` *Admin-only routes use requireAdmin middleware* — `Use When: admin route, permission, role` — possibly relevant if the bulk-import endpoint is admin-only. Loaded.
+- **Procedural index**: `P017` (already loaded — pinned). `P022` *Admin-only routes use requireAdmin middleware* — `Hook: admin route, permission, role` — possibly relevant if the bulk-import endpoint is admin-only. Loaded.
 - **Semantic index**: `S008` *Stripe webhook signing secret per-environment* — no match. Skipped.
 - **Episodic index**: nothing about invitations specifically.
 

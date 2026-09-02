@@ -19,7 +19,7 @@ Run these checks before starting work on any feature or task.
   → **Verify**: Can name 1 anti-pattern relevant to current task
 - [ ] Check `${aiDir}/memory/sessions/active/*.md` for existing sessions:
   - If one is related to this work → Ask user: resume it or complete it first?
-  - If unrelated sessions are dangling (>1h stale) → run `/myspec:session-clean`
+  - If unrelated sessions are dangling (> 6h stale) → run `/myspec:session-clean`; 1–6h is ambiguous, report only
   - Never touch another agent's fresh session (multi-agent workflows keep several active files)
   → **Verify**: No conflicting active session
 - [ ] Read feature-specific `${aiDir}/features/{feature}/pre-flight.md` (if exists)
@@ -33,25 +33,42 @@ Run these checks before starting work on any feature or task.
   - [ ] `${aiDir}/memory/procedural/index.md` — how-to patterns and workflows
   - [ ] `${aiDir}/memory/semantic/index.md` — facts, concepts, anti-patterns
   - [ ] `${aiDir}/memory/episodic/index.md` — past session outcomes and lessons
-  → **Verify**: Scanned "Use When" column for keyword matches to current task
+  → **Verify**: Scanned the Hook column for keyword matches to current task
 - [ ] Run anchor checks on loaded memories — if anchored file/pattern missing, flag as stale
 
 ## Before Risky Changes
 
-→ See `.claude/rules/memory-system.md` "Before Risky Changes" (always in context).
+Warn the user and offer to commit current state before any of these — they are easy to lose track of and hard to bisect later:
+- Refactor working code
+- Change component lifecycle/mounting
+- Modify state management
+- Touch integration points
+
+Template: "This change touches [X]. Recommend committing current state first."
 
 ## During Work
 
 - [ ] Ensure a session file exists at `${aiDir}/memory/sessions/active/{session_id}.md` (auto-created on first code edit; for non-code sessions use `/myspec:session-start`)
-- [ ] Log actions in session table (per `.claude/rules/memory-system.md`)
+- [ ] After each significant action, append a row to the session log table: `| # | Action | File(s) | Result | Attempt | Type | Note |` — Attempt increments on a repeated approach, Result is ✅ / ❌ / 💡, Type is P / S / E
 - [ ] Scan `${aiDir}/memory/` indexes when encountering errors
 
 ## Escalation Triggers
 
-→ See `.claude/rules/memory-system.md` "Escalation Protocol" (always in context). The triggers and message template are defined there as the single source of truth.
+Pause and ask the user when any of these occur — past 2–3 attempts on the same surface, more iteration usually masks a misdiagnosis rather than converging on a fix:
+
+| Trigger | Detection |
+|---------|-----------|
+| Repetition | Same file edited 3+ times without success |
+| Same error | Same error appears after 2+ different fixes |
+| Reversion | About to try a previously-failed approach |
+| Complexity spiral | Adding workarounds without understanding root cause |
+| User redirect | User has corrected approach 2+ times |
+
+Template: "I've made {N} attempts without success. What I've tried: [list]. Should we review the session log, check for patterns, or take a different approach?"
 
 ## Completing Work
 
+- [ ] Verify before claiming: run the check, read the output, then record the result — "should work" is not a result (`/myspec:session-complete` carries the claim/evidence table)
 - [ ] Set your session file's status to `completed` (own file in `${aiDir}/memory/sessions/active/`)
 - [ ] Fill `Outcome` section in session log
 - [ ] Ask user: "Should we create a memory from this session?"

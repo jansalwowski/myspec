@@ -29,28 +29,37 @@ Based on caller input or session analysis:
 - **Semantic**: A fact about the codebase, API, dependency, or environment
 - **Episodic**: A significant event, decision, or outcome worth recording
 
-### 2. Claim an ID
+### 2. Consolidation Check (ADD / UPDATE / NO-OP)
+
+**Before claiming an ID or drafting a file, check whether the insight already exists.** This prevents append-style growth where related rules accumulate as separate entries that later sanitize has to merge.
+
+1. Read `${aiDir}/memory/{type}/index.md` — scan the Hook column for overlap with the planned memory
+2. For each candidate row, read the linked memory file body
+3. Decide:
+   - **NO-OP** — an existing memory already covers this. Tell the user "Already covered by `{id}` — open it?" and **stop without creating**.
+   - **UPDATE** — an existing memory is close but missing this nuance. Propose a verbatim diff (new lines to append/insert into the existing file). **Do not create a new file**; bump the existing memory's `validated`/`verified` date instead. No ID is claimed.
+   - **ADD** — truly novel. Proceed to Step 3.
+
+Bias toward UPDATE when the rule overlaps; only ADD when the trigger scenario, anchor, or polarity meaningfully differs.
+
+### 3. Claim an ID (ADD only)
 
 ```bash
 .claude/lib/memory-claim-id.sh <procedural|semantic|episodic>
 ```
 
-Prints the claimed ID (e.g. `P053`). It locks the main checkout, scans it and every linked worktree, and records the claim before the file exists.
+Prints the claimed ID (e.g. `P053`) and nothing else. It runs the memory conformance check first, locks the main checkout, scans every worktree and every branch (local and remote), and records the claim before the file exists.
 
-Do **not** read the index and take the next free number. Two sessions doing that pick the same ID, and because their rows land on different lines the tables auto-merge with no conflict — the duplicate surfaces later, by hand.
+**Fail closed.** Never read the index and take the next free number: two sessions doing that pick the same ID, and because their rows land on different lines the tables auto-merge with no conflict. Every collision on record came from exactly that fallback, in a project where the script was absent or could not read the files.
 
-### 3. Consolidation Check (ADD / UPDATE / NO-OP)
+| Result | Meaning | Do |
+|--------|---------|----|
+| Prints `P053` | Claimed | Use that ID |
+| `No such file` — script missing | Project predates the allocator | Stop. Tell the user to run `/myspec:update`, then retry |
+| Exit 3 with `ERROR …` lines | Conformance errors: duplicate IDs, legacy index headers, memories without `hook:`, malformed anchors | Stop. Show the errors. `/myspec:update` migrates legacy indexes; the rest are per-file fixes |
+| Exit 1 — could not acquire the lock | Another session held it for > 10 s | Retry once; if it persists, report it |
 
-**Before drafting a new file, check whether the insight already exists.** This prevents append-style growth where related rules accumulate as separate entries that later sanitize has to merge.
-
-1. Read `${aiDir}/memory/{type}/index.md` — scan keyword/topic/triggers columns for overlap with the planned memory
-2. For each candidate row, read the linked memory file body
-3. Decide:
-   - **NO-OP** — an existing memory already covers this. Tell the user "Already covered by `{id}` — open it?" and **stop without creating**. Release the reserved ID.
-   - **UPDATE** — an existing memory is close but missing this nuance. Propose a verbatim diff (new lines to append/insert into the existing file). **Do not create a new file** — release the reserved ID and bump the existing memory's `validated`/`verified` date instead.
-   - **ADD** — truly novel. Proceed to Step 3 with the reserved ID.
-
-Bias toward UPDATE when the rule overlaps; only ADD when the trigger scenario, anchor, or polarity meaningfully differs.
+In the stop cases, do not hand-pick an ID and do not create the file. If the user later abandons the draft, the claimed number stays unused — a gap in the sequence is harmless and there is nothing to release.
 
 ### 4. Draft Memory File
 
@@ -81,13 +90,14 @@ Use the type-appropriate template from `${aiDir}/.templates/memory-{type}.md`:
 
 ### 5. Update Type-Specific Index
 
-Set `hook:` in the new memory's frontmatter — a one-line keyword/topic summary — then regenerate:
+Set `hook:` in the new memory's frontmatter — a one-line keyword/topic summary — then regenerate and verify:
 
 ```bash
-node .claude/lib/memory-index.mjs        # or `yarn memory:index` where wired up
+node .claude/lib/memory-index.mjs          # or `yarn memory:index` where wired up
+node .claude/lib/memory-index.mjs --check  # must print: memory indexes are up to date
 ```
 
-The index tables are generated from the memory files, so the row is derived from `hook:` rather than hand-written. Where the generator is not installed, add the row by hand in the table's existing column shape.
+The index tables are generated from the memory files, so the row is derived from `hook:` rather than hand-written. The generator refuses to run while any memory lacks `hook:` — that is the check working, not a reason to edit the table by hand. If the generator is missing, the project predates it: run `/myspec:update`.
 
 **CRITICAL**: the hook shows keywords/topics/summaries ONLY, never solutions or procedures. It is what an agent scans; the file body is what it loads on a match.
 
@@ -112,10 +122,10 @@ If the memory is critical enough to always be in context:
 ## Verification Checklist
 
 - [ ] Memory type correctly identified (procedural/semantic/episodic)
-- [ ] Consolidation check performed (existing entries reviewed; ADD / UPDATE / NO-OP decision recorded)
-- [ ] If UPDATE / NO-OP: no new file created, reserved ID released
+- [ ] Consolidation check performed before any ID was claimed (ADD / UPDATE / NO-OP decision recorded)
+- [ ] If UPDATE / NO-OP: no new file created, no ID claimed
 - [ ] If ADD: memory file uses correct template from `${aiDir}/.templates/memory-{type}.md`
-- [ ] ID came from `memory-claim-id.sh`, not from reading the index
+- [ ] ID came from `memory-claim-id.sh`; a missing script or an exit-3 refusal stopped the write instead of being worked around
 - [ ] `hook:` set in frontmatter; index regenerated and `--check` clean
 - [ ] Index row contains keywords/topics only — no solutions leaked
 - [ ] `anchors` field set for code-specific memories

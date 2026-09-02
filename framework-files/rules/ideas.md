@@ -1,8 +1,7 @@
 ---
 title: "Ideas Management"
 purpose: "Ideas pipeline from raw ideas to feature documentation"
-load_when: "adding ideas, checking priority queue, converting ideas to features"
-updated: 2026-03-29
+updated: 2026-09-02
 ---
 
 # Ideas Management

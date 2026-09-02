@@ -18,18 +18,17 @@ Read `${aiDir}/memory/index.md` (always-loaded global index).
 
 Read `${aiDir}/memory/procedural/index.md`.
 
-Scan "Use When" column for keyword matches against current task.
-Check "Not For" column to confirm applicability.
+Scan the Hook column for keyword matches against the current task. The index shape is `| ID | Hook | Anchor |` everywhere (episodic: `Date`); an index with other column names is a legacy one that `/myspec:update` migrates.
 
-→ If match: read full memory file at `${aiDir}/memory/procedural/{id}-{slug}.md`
+→ If match: read the full memory file (the link in the ID cell) and check its `not_for:` before applying
 → Focus on "Procedure (Do This)" section.
 
 ### 3. Scan Semantic Index
 
 Read `${aiDir}/memory/semantic/index.md`.
 
-Match "Topic" column against current task domain/feature.
-Check "Anchor" column for ⚠️ stale flags.
+Match the Hook column against the current task domain/feature.
+The Anchor column names the file that proves the fact.
 
 → If match: read full memory file at `${aiDir}/memory/semantic/{id}-{slug}.md`
 → If ⚠️ stale: verify anchor before relying on the fact.
@@ -46,7 +45,7 @@ Check for recent episodes (< 30 days) related to current feature.
 
 For each episodic entry where `persistent: false` and date is > 30 days old:
 
-1. Check if the episode has already produced procedural or semantic memories (check `related` field or Outcome column for P/S references)
+1. Check if the episode has already produced procedural or semantic memories (check its `related` field for P/S references)
 2. If not yet consolidated: Flag to user: "Episode {id} ({title}) is > 30 days old. Consolidate into semantic fact, mark persistent, or archive?"
 3. If already consolidated: The episode can be removed from the index (the knowledge lives in the related procedural/semantic memories)
 
@@ -63,7 +62,7 @@ For any loaded memory with anchors:
 List `${aiDir}/memory/sessions/active/*.md` (excluding `.gitkeep`).
 
 → If your own session exists (matching `session_id`): resume it.
-→ If other sessions are >1h stale: note them and suggest `/myspec:session-clean` — do not archive them yourself.
+→ If other sessions are > 6h stale: note them and suggest `/myspec:session-clean` — do not archive them yourself. 1–6h is ambiguous (a sibling agent may still be working): report only.
 → If none exist: proceed (one is auto-created on first code edit).
 
 ### 8. Ready to Start Work

@@ -1,8 +1,7 @@
 ---
 title: "Path Conventions"
 purpose: "How to reference files in committed artifacts so they stay portable across machines and users"
-load_when: "writing any path into a spec, plan, doc, memory note, session log, or comment"
-updated: 2026-05-13
+updated: 2026-09-02
 ---
 
 # Path Conventions

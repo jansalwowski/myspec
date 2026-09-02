@@ -5,7 +5,7 @@ updated: YYYY-MM-DD
 
 # Procedural Memory Index
 
-> **Agent**: Scan "Use When" for keyword matches. Check "Not For" before applying. Load full memory file on match.
+> **Agent**: Scan "Hook" for keyword matches against the task or error. Load the full memory file on a match — it carries the Not-For scope and the procedure.
 
-| ID | Use When | Handles | Not For |
-|----|----------|---------|---------|
+| ID | Hook | Anchor |
+|----|------|--------|

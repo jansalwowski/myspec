@@ -70,6 +70,22 @@ After each significant action, append a row to the log table:
   This guides multi-type extraction at session-complete.
 - **Note**: Optional context, especially for repeated attempts
 
+## Where the Log Lives
+
+Session logs live in the **main checkout of the repository the edited file belongs to** — one queue per repo, whatever cwd the harness hands the hook.
+
+| Edit happened in | Log lands in |
+|------------------|--------------|
+| The primary checkout | That checkout's `${aiDir}/memory/sessions/active/` |
+| A linked worktree (`.claude/worktrees/<slug>/`) | The **main** checkout's `active/`, not the worktree's |
+| Another repository (cross-repo session) | **That** repo's main checkout, if it is a myspec project; otherwise no log |
+
+A log inside a worktree is invisible to the staleness sweep and to `/myspec:session-complete`, and `git worktree remove` destroys it (gitignored, unrecoverable). The `Context` line still records the real edited path, worktree segment included.
+
+## Escalation and Risky Changes
+
+Past 2–3 attempts on the same surface, more iteration usually masks a misdiagnosis. The triggers, the pause message, and the commit-first advice for risky changes are in `${aiDir}/pre-flight.md` ("Escalation Triggers", "Before Risky Changes"); the log's Attempt column is what makes them detectable.
+
 ## Example Log Entries
 
 ```markdown

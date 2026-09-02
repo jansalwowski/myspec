@@ -5,7 +5,7 @@ updated: YYYY-MM-DD
 
 # Semantic Memory Index
 
-> **Agent**: Match "Topic" against current task domain. Check "Anchor" column — if marked warning, verify before relying on this fact.
+> **Agent**: Scan "Hook" for topic matches. "Anchor" is the file that proves the fact — verify it before relying on a fact whose anchor is missing.
 
-| ID | Topic | Fact | Verified | Anchor |
-|----|-------|------|----------|--------|
+| ID | Hook | Anchor |
+|----|------|--------|

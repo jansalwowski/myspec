@@ -29,6 +29,16 @@ Set `TARGET_FILE` to the chosen file path. Do NOT touch sibling active files.
 
 ### 2. Update Session Log
 
+**Evidence before claims.** `completed` means verified, not finished typing. The Stop hook (`verify-before-stop.sh`) runs the project's configured checks mechanically; this table covers what it cannot:
+
+| Claim | Requires | Not sufficient |
+|-------|----------|----------------|
+| Bug fixed | The original symptom reproduced, then passes | Code changed, assumed fixed |
+| Requirements met | Line-by-line spec checklist verified | Tests passing |
+| Subagent task completed | `git diff` shows the expected change | The agent reported "success" |
+
+Never write "should work" or "probably passes" into the Outcome. Run the command, read the output, then record the result.
+
 Edit `TARGET_FILE`:
 
 1. Set `status: completed` in frontmatter

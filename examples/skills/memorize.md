@@ -39,6 +39,7 @@ The skill has enough to draft directly — no clarifying questions needed.
 ```markdown
 ---
 id: P014
+hook: "prisma, schema, db:generate — regenerate the client after schema edits"
 type: procedural
 polarity: positive
 triggers: [prisma, schema, db:generate, pnpm]
@@ -68,10 +69,10 @@ old shape, so type errors only appear in test runs or production.
 updates.
 ```
 
-**Proposed index row** (`memory/procedural/index.md`):
+**Generated index row** (`node .claude/lib/memory-index.mjs` derives it from `hook:`):
 
 ```
-| P014 | prisma, schema, db:generate | 2026-04-30 |
+| [P014](P014-regenerate-prisma-client.md) | prisma, schema, db:generate — regenerate the client after schema edits | prisma/schema.prisma |
 ```
 
 > Save this? Reply **yes** to write it, or tell me what to change.
@@ -84,8 +85,9 @@ yes
 
 ### Result
 
+- Claimed `P014` via `.claude/lib/memory-claim-id.sh procedural` (after the consolidation check found no overlap).
 - Wrote `${aiDir}/memory/procedural/P014-regenerate-prisma-client.md`.
-- Appended row to `${aiDir}/memory/procedural/index.md` and bumped `updated: 2026-04-30`.
+- Regenerated `${aiDir}/memory/procedural/index.md` (`--check` clean, `updated:` bumped to 2026-04-30).
 - No Layer 1 promotion offered — the rule is useful but not session-critical.
 
 ### Why this example matters
@@ -403,9 +405,9 @@ Step 3 of `memory-create` runs an ADD / UPDATE / NO-OP check before drafting. Wh
 The procedural index already contains:
 
 ```
-| ID    | Triggers                          | Capability                          | Not For       |
-|-------|-----------------------------------|-------------------------------------|---------------|
-| P012  | prisma, schema, pnpm db:generate  | Regenerate Prisma client after edit | data backfill |
+| ID | Hook | Anchor |
+|----|------|--------|
+| [P012](P012-prisma-regenerate.md) | prisma, schema, pnpm db:generate — regenerate Prisma client after edit | prisma/schema.prisma |
 ```
 
 `P012` body says: "After editing `prisma/schema.prisma`, run `pnpm db:generate` before continuing."
@@ -445,8 +447,8 @@ User: `yes`. Skill:
 
 - Appends the new paragraph to `P012`'s body
 - Bumps `validated` date in `P012`'s frontmatter to today
-- Updates the `Triggers` cell in the index to add `pnpm typecheck`
-- **Does not** allocate `P013` — the reserved ID is released
+- Extends `hook:` with `pnpm typecheck` and regenerates the index
+- **Does not** claim `P013` — the consolidation check runs before any ID is claimed, so an UPDATE allocates nothing
 
 ### Final state
 
@@ -456,6 +458,6 @@ User: `yes`. Skill:
 ### Why this example matters
 
 - **The check runs *before* drafting** — saves the user from a near-duplicate that sanitize would later have to merge.
-- **UPDATE preserves the original ID and triggers index row** — references from other memories (`related: ["P012"]`) keep working.
+- **UPDATE preserves the original ID and its index row** — references from other memories (`related: ["P012"]`) keep working.
 - **NO-OP is also a valid outcome.** If the existing memory already says exactly what the user is proposing, the skill refuses to write and tells the user "Already covered by `P012` — open it?"
 - **Bias toward UPDATE.** Only ADD when the trigger scenario, anchor, or polarity meaningfully differs (e.g. an anti-pattern that contradicts the existing rule — that's a CONFLICT for `/memory-sanitize` to surface, not a new memory).

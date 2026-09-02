@@ -27,15 +27,15 @@ Scan ${aiDir}/memory/episodic/index.md — no match
 
 **From procedural/index.md:**
 ```markdown
-| ID | Use When | Handles | Not For |
-|----|----------|---------|---------|
-| P009 | cache, stale data, settings change | Cache invalidation, state reset | initial load, cold start |
+| ID | Hook | Anchor |
+|----|------|--------|
+| [P009](P009-cache-invalidation.md) | cache, stale data, settings change — invalidate on settings change, not on initial load | src/stores/settings.ts |
 ```
 
 **Keywords match task!** Agent:
-1. Sees "cache" and "stale data" in "Use When" column
-2. Checks "Not For" - confirms not initial load (it's an update)
-3. Reads `${aiDir}/memory/procedural/P009-cache-invalidation.md`
+1. Sees "cache" and "stale data" in the Hook column
+2. Reads `${aiDir}/memory/procedural/P009-cache-invalidation.md`
+3. Checks its `not_for:` — confirms not initial load (it's an update)
 
 ### 2. Applying Memory
 
@@ -205,11 +205,9 @@ After applying procedure:
 - [ ] No stale data appears after page navigation
 ```
 
-**Updates `${aiDir}/memory/procedural/index.md`:**
+**Sets `hook:` in the memory's frontmatter and regenerates `${aiDir}/memory/procedural/index.md`** (`node .claude/lib/memory-index.mjs`), which adds the row:
 ```markdown
-| ID | Use When | Handles | Not For |
-|----|----------|---------|---------|
-| P009 | cache, stale data, settings change | Cache invalidation, state reset | initial load, cold start |
+| [P009](P009-cache-invalidation.md) | cache, stale data, settings change — invalidate on settings change, not on initial load | src/stores/settings.ts |
 ```
 
 ### 7. Memory Creation — Semantic
@@ -333,13 +331,12 @@ Session logs flow through:
 ### 11. Future Usage
 
 Next time agent sees "stale data after changes":
-1. Scans `${aiDir}/memory/procedural/index.md` "Use When" column
-2. Scans `${aiDir}/memory/semantic/index.md` "Topic" column
+1. Scans `${aiDir}/memory/procedural/index.md` Hook column
+2. Scans `${aiDir}/memory/semantic/index.md` Hook column
 3. Scans `${aiDir}/memory/episodic/index.md` for recent related events
 4. Finds keyword match in procedural: "cache", "stale data"
-5. Checks "Not For" column: confirms not initial load
-6. Reads full memory P009
-7. Follows **Procedure** section (ignores "What Fails")
+5. Reads full memory P009; its `not_for:` confirms not initial load
+6. Follows **Procedure** section (ignores "What Fails")
 8. Verifies outcome per checklist
 9. Updates `validated` date and increments `validation_count` to 2
 10. **No debugging loop!**
