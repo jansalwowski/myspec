@@ -1,22 +1,24 @@
 ---
-name: ai-setup-audit
-description: "Use when auditing, health-checking, or optimizing the project's AI setup — CLAUDE.md, .claude/rules, skills, agents, hooks, ${aiDir} docs, memory tree, feature manifest. Takes an optional surface (A–F or its name) to check just one. Keywords: healthcheck, health check, is my setup broken, doctor, audit ai setup, optimize ai workflows, context bloat, token budget, rules drift, stale skills, broken hooks. Do NOT use for application code (code-review), one skill (skill-verify), one feature (feature-verify), manifest-only checks (features-status-audit), or memory grooming (memory-sanitize, memory-optimize)."
+name: doctor
+description: "Use when checking whether the project's myspec and agent setup is healthy, or auditing and optimizing it — CLAUDE.md, .claude/rules, skills, agents, hooks, ${aiDir} docs, memory tree, feature manifest. Takes an optional surface (A–F or its name) to check just one. Keywords: healthcheck, health check, is my setup broken, doctor, audit ai setup, optimize ai workflows, context bloat, token budget, rules drift, stale skills, broken hooks. Do NOT use for application code (code-review), one skill (skill-verify), one feature (feature-verify), manifest-only checks (features-status-audit), or memory grooming (memory-sanitize, memory-optimize)."
 tags: [audit, maintenance, hooks, context-budget, drift]
 ---
 
-# AI Setup Audit
+# Doctor
 
-Periodic audit-and-fix pass over every surface that shapes agent behavior in the project. Finds invalid rules, stale anchors, contradictions, dead config, and token bloat; then, with user approval, applies fixes as grouped PRs.
+Health check over every surface that shapes agent behavior in the project. Finds broken wiring, forked framework files, invalid rules, stale anchors, contradictions, dead config, and token bloat; then, with user approval, applies fixes as grouped PRs.
 
-Runs without configuration. An optional per-repo extension file `.claude/rules/ai-setup-audit.md` (format below) adds project-specific anchors, read-only files, and extra checks.
+Scope is the *setup*: the framework install and the context, rules, skills, hooks, and indexes an agent reads. It is not a check of the project's own code, features, or specs — the `Do NOT use for` routes in the description own those.
+
+Runs without configuration. An optional per-repo extension file `.claude/rules/doctor.md` (format below) adds project-specific anchors, read-only files, and extra checks.
 
 ## Three tiers — pick the cheapest one that answers the question
 
 | Tier | Invocation | Cost | Answers |
 |---|---|---|---|
 | 0 | `node .claude/lib/setup-doctor.mjs` | ~1s, no model | Is anything mechanically broken or drifted? |
-| 1 | `/myspec:ai-setup-audit <surface>` | one subagent | Is surface X coherent? |
-| 2 | `/myspec:ai-setup-audit` | six subagents + PRs | Full pass over everything |
+| 1 | `/myspec:doctor <surface>` | one subagent | Is surface X coherent? |
+| 2 | `/myspec:doctor` | six subagents + PRs | Full pass over everything |
 
 Tier 0 is not an optional preliminary — it is where every mechanical fact comes from, and
 tiers 1 and 2 both start by running it (Phase 0). Reach for tier 2 when the whole setup is
@@ -36,7 +38,7 @@ due for a pass; reach for tier 1 when the user named a surface or tier 0 pointed
 ### Phase 0 — Load configuration
 
 1. Read `.myspec.json` for `aiDir` (default `.ai`); use it everywhere `${aiDir}` appears below.
-2. Read `.claude/rules/ai-setup-audit.md` if present — its `## Project anchors`, `## Read-only`, and `## Extra checks` sections. Absent → note "no project extension; auditing framework surfaces only."
+2. Read the project extension if present — `.claude/rules/doctor.md`, falling back to `.claude/rules/ai-setup-audit.md` (its name before this skill was renamed; still read, so an existing extension keeps working). Take its `## Project anchors`, `## Read-only`, and `## Extra checks` sections. When only the old name is present, say so once and suggest renaming it. Neither present → note "no project extension; auditing framework surfaces only."
 3. Detect the default branch: `git symbolic-ref --short refs/remotes/origin/HEAD`, falling back to `main`/`master`.
 4. Run the deterministic checks and keep the result — it is the ground truth every later phase quotes:
 
@@ -143,7 +145,7 @@ mechanical can see them.
 
 ## Project extension format
 
-`.claude/rules/ai-setup-audit.md`, hand-authored, all sections optional. Section headings are the contract — keep the exact names:
+`.claude/rules/doctor.md` (or the legacy `.claude/rules/ai-setup-audit.md`), hand-authored, all sections optional. Section headings are the contract — keep the exact names:
 
 ```markdown
 ## Project anchors
