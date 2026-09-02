@@ -1,6 +1,6 @@
 ---
 name: "memory-sanitize"
-description: "Use when grooming the user-level auto-memory store at ~/.claude-personal/projects/ — stale entries, bloated bodies, duplicates, contradictions, or memories that belong in CLAUDE.md/rules instead. Keywords: sanitize memory, prune memories, compress memory, memory triage, memory groom. Do NOT use for project ${aiDir}/memory/ (use memory-create), or for searching memories (use memory-lookup)."
+description: "Use when grooming the user-level auto-memory store at ~/.claude-personal/projects/ — stale entries, bloated bodies, duplicates, contradictions, or memories that belong in CLAUDE.md/rules instead. Keywords: sanitize memory, prune memories, compress memory, memory triage, memory groom. Do NOT use for project ${aiDir}/memory/ (use memory-optimize), or for searching memories (use memory-lookup)."
 ---
 
 # Memory Sanitize
@@ -113,7 +113,7 @@ After every executed action:
 - **MEMORY.md edits are atomic with file deletes.** Never leave the index out of sync.
 - **Don't DROP feedback/semantic/reference entries <7 days old.** COMPRESS is allowed at any age. Project-type entries are exempt from the floor — they decay by design.
 - **CONFLICT supersession is non-destructive.** The loser's file stays on disk with a one-line stub; only the `MEMORY.md` line is removed.
-- **Don't touch the project's `${aiDir}/memory/`.** Separate system, separate skill.
+- **Don't touch the project's `${aiDir}/memory/`.** Separate system, separate skill — `/myspec:memory-optimize`.
 
 ## Promotion routing reference
 

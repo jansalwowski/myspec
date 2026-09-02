@@ -1,6 +1,6 @@
 ---
 name: ai-setup-audit
-description: "Use when auditing, optimizing, or health-checking the project's whole AI setup — CLAUDE.md, .claude/rules, skills, agents, hooks, ${aiDir} docs, memory tree, feature manifest. Keywords: audit ai setup, optimize ai workflows, context bloat, token budget, rules drift, stale skills, broken hooks, dead config. Do NOT use for application code (code-review), one skill (skill-verify), one feature (feature-verify), manifest-only checks (features-status-audit), or auto-memory grooming (memory-sanitize)."
+description: "Use when auditing, optimizing, or health-checking the project's AI setup — CLAUDE.md, .claude/rules, skills, agents, hooks, ${aiDir} docs, memory tree, feature manifest. Keywords: audit ai setup, optimize ai workflows, context bloat, token budget, rules drift, stale skills, broken hooks. Do NOT use for application code (code-review), one skill (skill-verify), one feature (feature-verify), manifest-only checks (features-status-audit), or memory grooming (memory-sanitize, memory-optimize)."
 tags: [audit, maintenance, hooks, context-budget, drift]
 ---
 
