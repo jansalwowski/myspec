@@ -21,7 +21,7 @@ Dispatches guided blueprint wizards to generate project-specific files. Each blu
 | `index-md` | Documentation navigation index | `${aiDir}/INDEX.md` |
 | `workflow` | Development workflow definition | `${aiDir}/workflow.md` |
 | `pre-flight` | Project-specific pre-flight checks | `${aiDir}/pre-flight.md` |
-| `anti-patterns` | Project-specific anti-patterns | `${aiDir}/memory-index.md` |
+| `anti-patterns` | Project-specific anti-patterns | `${aiDir}/anti-patterns.md` |
 
 ## Workflow
 
@@ -71,7 +71,7 @@ Next: {relevant next step — e.g., "Run /myspec:bootstrap to load the topology"
 - Always read `.myspec.json` before running a blueprint (needed for `${aiDir}` substitution)
 - Replace `${aiDir}` placeholders in all generated output with the configured value
 - Respect existing files — always ask before overwriting
-- Do not modify any framework-owned files (memory-index.md framework section, pre-flight.md framework section)
+- Do not modify any framework-owned files (anti-patterns.md framework section, pre-flight.md framework section)
 
 ## Verification Checklist
 

@@ -121,7 +121,7 @@ expect_no_line '^ERROR' "the blocking groups report no errors on a clean install
 printf '\n# hand edit\n' >> "$REPO/.claude/rules/paths.md"
 rm "$REPO/ai/.templates/session-log.md"
 perl -0pi -e 's/<!-- myspec:framework-start -->//' "$REPO/ai/pre-flight.md"
-perl -0pi -e 's/^# .*$/# Renamed Locally/m' "$REPO/ai/memory-index.md"
+perl -0pi -e 's/^# .*$/# Renamed Locally/m' "$REPO/ai/anti-patterns.md"
 printf '\n# hand edit\n' >> "$REPO/.claude/hooks/no-absolute-paths.sh"
 set_json .myspec.json 'delete d.frameworkFiles["rules/ideas.md"]'
 chmod -x "$REPO/.claude/hooks/guard-git-branch.sh"
@@ -155,7 +155,7 @@ expect_line 'WARN +wiring-incomplete: .claude/settings.json' "a hook the templat
 expect_line 'ERROR aidir-trailing-slash' "a trailing slash on aiDir is an error"
 expect_line 'ERROR verification-unparseable' "unparseable verification.json is an error"
 expect_line 'ERROR features-index-unreadable: ai/features/index.yaml:2' "a mis-indented manifest entry is an error, with its line"
-expect_line 'WARN +marker-header-drift: ai/memory-index.md' "a changed marker-merge header is a warning update cannot fix"
+expect_line 'WARN +marker-header-drift: ai/anti-patterns.md' "a changed marker-merge header is a warning update cannot fix"
 expect_no_line 'ERROR marker-header-drift' "the header finding never blocks, because update cannot repair it"
 expect_line 'WARN +over-budget: CLAUDE.md' "an oversized project CLAUDE.md is a warning"
 expect_line 'WARN +dead-path-ref: CLAUDE.md' "a dead path reference in a project file is a warning"
@@ -199,6 +199,31 @@ expect_exit 0 "drift while an update is pending does not fail the run"
 expect_line 'WARN +framework-drift: .claude/rules/paths.md' "drift while an update is pending is a warning"
 expect_line 'plugin ships v' "the warning names the version skew as the reason"
 expect_no_line 'ERROR framework-drift' "drift while an update is pending is not an error"
+
+# --- pass 3b: a manifest entry the framework renamed -------------------------
+#
+# Until a project runs update it holds the old filename. Reporting the new one
+# as missing would be true, useless, and would fire on every project the day
+# the rename ships — so the doctor names the migration instead, as a warning.
+
+build_fixture
+mv "$REPO/ai/anti-patterns.md" "$REPO/ai/memory-index.md"
+set_json .myspec.json 'd.frameworkFiles["memory-index.md"] = d.frameworkFiles["anti-patterns.md"]; delete d.frameworkFiles["anti-patterns.md"]'
+
+run_doctor install
+expect_exit 0 "an unmigrated rename does not fail the run"
+expect_line 'WARN +framework-renamed: ai/memory-index.md' "the old filename is reported as a pending rename"
+expect_line 'run: /myspec:update' "the rename finding carries the migration command"
+expect_no_line 'ERROR framework-missing: ai/anti-patterns.md' "the new name is not also reported as missing"
+
+# Both names on disk is the hand-rolled workaround colliding with the
+# framework rename. Neither update nor the doctor guesses which one wins.
+cp "$REPO/ai/memory-index.md" "$REPO/ai/anti-patterns.md"
+
+run_doctor install
+expect_line 'WARN +framework-renamed: ai/memory-index.md' "both names present is reported"
+expect_line 'both exist' "the both-present finding says so"
+expect_exit 0 "both names present does not fail the run"
 
 # --- pass 4: argument handling ------------------------------------------------
 

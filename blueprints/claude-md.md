@@ -67,7 +67,7 @@ See `${aiDir}/INDEX.md` for full documentation map
 
 | Task | Read First |
 |------|------------|
-| **Any work** | `${aiDir}/memory-index.md` -> `${aiDir}/pre-flight.md` |
+| **Any work** | `${aiDir}/anti-patterns.md` -> `${aiDir}/pre-flight.md` |
 | New feature | `${aiDir}/features/index.yaml` -> `${aiDir}/workflow.md` |
 | Feature work | `${aiDir}/features/{name}/spec.md` -> `tech-spec.md` |
 {additional routing from user input}

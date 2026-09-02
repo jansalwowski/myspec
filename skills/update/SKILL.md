@@ -43,6 +43,19 @@ For `rules` entries: source is `framework-files/rules/{filename}`, destination i
 For `hooks` entries: source is `hooks/{filename}`, destination is the `dest` path (e.g., `.claude/hooks/guard-git-branch.sh`).
 For `lib` entries: source is `lib/{filename}`, destination is the `dest` path (e.g., `.claude/lib/path-normalize.sh`).
 
+**Renamed entries — migrate the destination before applying.** A `files` or `rules` entry may carry `renamedFrom: "<old key>"`. It means the framework changed a file's name, and the project on disk still holds the old one. Before applying such an entry:
+
+1. If the new destination exists → nothing to migrate; apply the entry normally.
+2. If it does not exist and the old destination does → `git mv` (or plain move) the old file to the new name **and** rename its `.myspec.json` `frameworkFiles` key in place, keeping `version`, `lastUpdated`, and any `pinned` value. Then apply the entry to the renamed file, so a `marker-merge` merges into the project's real content instead of a fresh copy. List it under `Renamed` in the Step 6 summary.
+
+   For a `marker-merge` entry, a rename is also the one moment the framework may replace the header **above** `<!-- myspec:framework-start -->` with the plugin's — frontmatter and title. Normally that region is project-owned and untouchable, which is why a title corrected upstream never reaches an existing project; but a file being re-identified under a new name carries the old name's title, and leaving it is how a project ends up with `anti-patterns.md` still calling itself a memory index. Show the old and new header and confirm before writing. Outside a rename, never touch it — report it as the doctor's `marker-header-drift` and let the user decide.
+3. If neither exists → create from source as usual.
+4. If **both** exist → do not touch either. This is a project that renamed by hand (the documented workaround before the framework carried the rename) and now has two files. Report it and stop for that entry: only the user knows which one their blueprints write to, and merging two project sections unasked can lose content.
+
+Skipping step 2 is what makes this dangerous: `overwrite`/`marker-merge` both treat a missing destination as "create from source", so the entry would land a *fresh empty-project-section* file beside the real one, and every blueprint that writes to the new name would write to the empty duplicate.
+
+Never invent a `renamedFrom`; it comes from the manifest only. A pinned renamed entry is still renamed — move the file and the key, then skip the content apply.
+
 **Pinned files — skip, never overwrite.** A project may carry a locally-customized copy of a framework file. `.myspec.json` records that as `frameworkFiles["<manifest key>"].pinned`, whose value is a short reason string. Before applying any entry, look up its key (`rules/workflow.md`, `hooks/guard-git-branch.sh`, `lib/branch-cleanup.sh`, `templates/session-log.md`, …) and skip it if `pinned` is set. Collect these for the summary; do not bump their `version`/`lastUpdated`.
 
 Without this, a sync silently reverts local edits: the file carries no marker distinguishing "customized" from "stale", so `overwrite` treats deliberate local content as drift. That has happened — a sync reverted four rules whose upstream copies had not changed at all, costing ~690 tokens of always-loaded context until it was noticed.
@@ -177,6 +190,9 @@ Update `frameworkFiles` entries — set `lastUpdated` to today's date for each f
 Updated files:
   {list each file updated, with strategy used}
 
+Renamed (framework changed the filename; project content preserved):
+  {for each renamedFrom entry migrated: "{old} → {new}"; or omit the block}
+
 Preserved (project-customized sections):
   {list marker-merge files where project content was kept}
 
@@ -224,6 +240,7 @@ After running the skill:
 
 - [ ] `.myspec.json` `frameworkVersion` read and compared to `manifest.json`; stopped early if already current
 - [ ] Every `manifest.json` entry processed with its declared strategy (`overwrite` / `marker-merge`)
+- [ ] Every entry carrying `renamedFrom` checked before applying: destination migrated and its `frameworkFiles` key renamed, or the both-exist case reported and left untouched
 - [ ] Entries pinned in `.myspec.json` skipped, their versions left untouched, and listed in the summary
 - [ ] `templates/*` entries written to `{aiDir}/.templates/` (no `{aiDir}/templates/` created)
 - [ ] `marker-merge` files: content outside `<!-- myspec:framework-start/end -->` markers left untouched
