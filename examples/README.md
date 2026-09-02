@@ -53,6 +53,7 @@ The two complementary review passes that run on built code before completion —
 | [skills/session-complete.md](skills/session-complete.md) | Multiple memories with cross-links · Nothing extractable · Multiple active sessions (multi-agent) |
 | [skills/session-clean.md](skills/session-clean.md) | Routine sweep (mixed empty + substantive) · Ambiguous siblings with live worktree · Nothing to do (clean directory) |
 | [skills/memory-sanitize.md](skills/memory-sanitize.md) | Routine triage with mixed buckets (drop/promote/merge) · Promotion with ambiguous routing · Compressing a bloated entry · Resolving a conflict between two KEEP memories · Nothing to do (clean store) |
+| [skills/memory-optimize.md](skills/memory-optimize.md) | Routine pass with mixed buckets · Never-fired memory retuned · Colliding triggers merged · Episode decay (consolidate vs. expire) · Nothing to do (healthy store) |
 
 ### When to use which memory skill
 
@@ -62,6 +63,7 @@ The two complementary review passes that run on built code before completion —
 - **`/session-clean`** — periodic sweep of the active sessions directory; deletes empty leftovers and archives substantive ones that were never closed.
 - **`/memory-lookup`** — search before you start work or debug. The first thing to run on a new bug or unfamiliar area.
 - **`/memory-sanitize`** — periodic groomer for the *user-level* auto-memory store at `~/.claude-personal/projects/{cwd}/memory/`. Triages every entry: drops stale, promotes feedback to CLAUDE.md / `.claude/rules/`, merges duplicates, **compresses bloated bodies** against the length budget in `.claude/rules/auto-memory-style.md`, and **supersedes contradictions** non-destructively (loser becomes a one-line stub on disk). Distinct from `session-clean`, which sweeps project-level session files.
+- **`/memory-optimize`** — periodic groomer for the *project* memory tree at `ai/memory/{procedural,semantic,episodic}/`. Re-anchors memories whose code moved, retunes ones nobody can find, merges colliding triggers, consolidates aged-out episodes, retires what no longer holds. Optimizes *retrieval*, never body length — the mirror image of `memory-sanitize`, which optimizes bytes in context on a different store.
 
 ### Ideas pipeline
 
