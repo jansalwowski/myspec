@@ -160,14 +160,11 @@ if [ -f "$REPO_ROOT/.myspec.json" ]; then
   AI_DIR=$(jq -r '.aiDir // empty' "$REPO_ROOT/.myspec.json" 2>/dev/null)
   AI_DIR="${AI_DIR%/}"
 fi
-# No configured value: read the tree that is actually on disk instead of
-# guessing. The guess was ".ai" in memory-files.mjs, memory-claim-id.sh and
-# verify-before-stop.sh, and "ai" here and in the sibling PostToolUse hook, so
-# a keyless project had its session logs written to one tree while its
-# memories were read from the other. ".ai" wins when both or neither exist;
-# memory-doctor names the both case as second-ai-tree.
+# No configured value: the documented default, never a guess from disk. aiDir
+# is required since 2.0; the setup doctor reports its absence and `update`
+# writes it. memory-files.mjs resolves the same way.
 if [ -z "$AI_DIR" ]; then
-  if [ -d "$REPO_ROOT/.ai" ] || [ ! -d "$REPO_ROOT/ai" ]; then AI_DIR=".ai"; else AI_DIR="ai"; fi
+  AI_DIR=".ai"
 fi
 
 # File logs only in a myspec-managed project. Now that the root follows the

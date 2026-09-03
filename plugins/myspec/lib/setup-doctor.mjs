@@ -4,8 +4,8 @@
 // assumes. Read-only: it never edits a file, so it is safe to run from a hook,
 // from bootstrap, and against someone else's checkout.
 //
-// WHY: `.myspec.json` records a per-file version for every framework file and
-// nothing ever read it back — the only mechanical check was the scalar
+// WHY: until 2.0 `.myspec.json` recorded a per-file version for every framework
+// file and nothing ever read it back — the only mechanical check was the scalar
 // `frameworkVersion`, so a hand-edited rule, a half-applied update, or a hook
 // copied but never registered all read as "current". Everything else in that
 // space (settings wiring, hook executability, schema validity of
@@ -84,9 +84,9 @@ const CLAUDE_MD_BUDGET = 800;
 const RULE_BUDGET = 1000;
 
 const GROUPS = {
-  install: ['framework-missing', 'framework-renamed', 'framework-drift', 'marker-missing', 'marker-header-drift', 'framework-unlisted', 'shipped-missing', 'shipped-drift'],
+  install: ['framework-missing', 'framework-renamed', 'framework-removed', 'framework-drift', 'marker-missing', 'doctor-rule-unrenamed', 'shipped-missing', 'shipped-drift'],
   wiring: ['settings-unparseable', 'hook-missing', 'hook-not-executable', 'hook-unregistered', 'hook-syntax', 'wiring-incomplete', 'tooling-absent'],
-  schema: ['myspec-unparseable', 'myspec-missing-key', 'aidir-trailing-slash', 'aidir-missing', 'verification-unparseable', 'verification-empty'],
+  schema: ['myspec-unparseable', 'myspec-missing-key', 'myspec-schema-stale', 'aidir-trailing-slash', 'aidir-missing', 'verification-unparseable', 'verification-empty'],
   // Separate from `schema` on purpose: the stop hook blocks on `wiring` and
   // `schema`, and it triggers on uncommitted changes under `.claude/` and
   // `.myspec.json`. The features manifest lives under ${aiDir}, so leaving it
@@ -313,7 +313,8 @@ function matchesShipped(installed, shipped) {
 }
 
 // Everything above the framework marker: frontmatter, title, and the standing
-// note. `marker-merge` cannot update it, which is the whole finding.
+// note. Framework-owned since 2.0 — `update` rewrites it on every sync — so a
+// difference here is ordinary framework drift, not a separate finding.
 function markerHeader(source) {
   const start = source.indexOf(MARKER_START);
 
@@ -379,6 +380,22 @@ if (config.value) {
 
   if (projectVersion === null) {
     error('myspec-missing-key', 'schema', '.myspec.json', '.myspec.json has no frameworkVersion — update and bootstrap cannot tell whether the install is current', {
+      commands: ['/myspec:update'],
+    });
+  }
+
+  // Pre-2.0 bookkeeping: per-file version/lastUpdated that nothing read, or no
+  // migrations list at all. Either means the 2.0.0-schema migration has not
+  // run. A warning: the project works, it is one update behind.
+  const staleEntries = Object.entries(frameworkFiles)
+    .filter(([, entry]) => entry && typeof entry === 'object' && ('version' in entry || 'lastUpdated' in entry));
+
+  if (staleEntries.length > 0) {
+    warn('myspec-schema-stale', 'schema', '.myspec.json', `.myspec.json frameworkFiles carries per-file version/lastUpdated on ${staleEntries.length} entr${staleEntries.length === 1 ? 'y' : 'ies'} — pre-2.0 bookkeeping nothing reads; since 2.0 the block holds pins only`, {
+      commands: ['/myspec:update'],
+    });
+  } else if (!Array.isArray(settings.migrations)) {
+    warn('myspec-schema-stale', 'schema', '.myspec.json', '.myspec.json has no migrations list — the 2.0 one-shot migrations have not run', {
       commands: ['/myspec:update'],
     });
   }
@@ -563,7 +580,7 @@ if (manifest.value && wants('install')) {
 
       if (previous && existsSync(join(root, previous))) {
         warn('framework-renamed', 'install', previous, `${previous} and ${dest} both exist — the framework renamed the first to the second, so one of them is a stale duplicate that no skill updates`, {
-          text: `keep whichever holds the project content, delete the other, and make sure .myspec.json frameworkFiles keys ${dest.split('/').pop()}`,
+          text: 'keep whichever holds the project content and delete the other — update offers to merge the two project sections'
         });
       }
     }
@@ -580,22 +597,26 @@ if (manifest.value && wants('install')) {
         return;
       }
 
+      // Since 2.0 the framework owns everything from line 1 through the end
+      // marker — the header (frontmatter, title, standing note) as well as the
+      // marked section — and update rewrites both. One finding names whichever
+      // parts differ; two records with the same id for one file would read as
+      // two problems.
+      const parts = [];
+
       if (shippedRegion !== null && !matchesShipped(installedRegion, shippedRegion)) {
-        driftSeverity(driftId, 'install', dest, `${dest}: framework section differs from the plugin copy (${driftWhy})`, driftFix);
+        parts.push('framework section');
       }
 
-      // --- defect 2: what marker-merge structurally cannot deliver ---------
-      // A title or frontmatter corrected upstream stays outside the markers,
-      // so `update` reports the file synced while the stale text survives
-      // forever. Always a warning, never an error: no command fixes it, and a
-      // gate that blocks on something update cannot repair is a dead end.
       const installedHeader = markerHeader(installed);
       const shippedHeader = markerHeader(shipped);
 
       if (installedHeader !== null && shippedHeader !== null && !matchesShipped(installedHeader, shippedHeader)) {
-        warn('marker-header-drift', 'install', dest, `${dest}: the header above ${MARKER_START} differs from the plugin copy — update merges only the marked region, so a correction shipped upstream can never reach this file`, {
-          text: 'apply the plugin copy header by hand, or keep the local wording deliberately',
-        });
+        parts.push(`header above ${MARKER_START}`);
+      }
+
+      if (parts.length > 0) {
+        driftSeverity(driftId, 'install', dest, `${dest}: ${parts.join(' and ')} differ${parts.length === 1 ? 's' : ''} from the plugin copy (${driftWhy})`, driftFix);
       }
 
       return;
@@ -609,14 +630,6 @@ if (manifest.value && wants('install')) {
   ['files', 'rules'].forEach((block) => {
     Object.entries(manifest.value[block] || {}).forEach(([key, entry]) => {
       compare(block, key, entry, 'framework-missing', 'framework-drift');
-
-      const tracked = trackingKey(block, key);
-
-      if (tracked && !frameworkFiles[tracked]) {
-        warn('framework-unlisted', 'install', '.myspec.json', `.myspec.json frameworkFiles has no entry for ${tracked} — its version is untracked, so update cannot tell whether it is current`, {
-          commands: ['/myspec:update'],
-        });
-      }
     });
   });
 
@@ -631,6 +644,36 @@ if (manifest.value && wants('install')) {
       });
     });
   }
+
+  // Files the framework retired (manifest `removed`, 2.0). update deletes them;
+  // until it runs the stale copy sits there beside nothing that reads it. A
+  // pinned entry is a deliberate local keep and is not reported.
+  Object.entries(manifest.value.removed || {}).forEach(([key, entry]) => {
+    const dest = entry && typeof entry.dest === 'string' ? entry.dest.replace(/\$\{aiDir\}/g, aiDir) : null;
+    const tracking = frameworkFiles[key];
+
+    if (!dest || (tracking && tracking.pinned) || !existsSync(join(root, dest))) {
+      return;
+    }
+
+    const unwire = dest.startsWith('.claude/hooks/') ? ' and unwires it from settings.json' : '';
+
+    warn('framework-removed', 'install', dest, `${dest}: retired by the framework${entry.since ? ` in v${entry.since}` : ''} — nothing reads it any more; update deletes it${unwire}`, {
+      commands: ['/myspec:update'],
+    });
+  });
+}
+
+// The doctor's per-repo extension was `.claude/rules/ai-setup-audit.md` before
+// the skill was renamed. 2.0 reads only the new name; update moves the file.
+if (existsSync(join(root, '.claude', 'rules', 'ai-setup-audit.md'))) {
+  const both = existsSync(join(root, '.claude', 'rules', 'doctor.md'));
+
+  warn('doctor-rule-unrenamed', 'install', '.claude/rules/ai-setup-audit.md', both
+    ? '.claude/rules/ai-setup-audit.md and .claude/rules/doctor.md both exist — the doctor reads only doctor.md; merge the old file into it and delete it'
+    : '.claude/rules/ai-setup-audit.md: the doctor extension was renamed to doctor.md and only the new name is read — this file is dead until update moves it', {
+    commands: ['/myspec:update'],
+  });
 }
 
 // --- wiring ------------------------------------------------------------------
@@ -727,7 +770,7 @@ if (existsSync(hooksDir)) {
 
       if (!registeredScripts.has(script)) {
         warn('hook-unregistered', 'wiring', script, `${script} exists but is registered in no settings file — copying a hook does nothing until it is wired`, {
-          text: 'add it to .claude/settings.json under the right event, using the plugin templates/settings-hooks.json as the shape',
+          text: 'a framework hook is wired by /myspec:update; a project hook goes under the right event in .claude/settings.json',
         });
       }
     });
@@ -768,7 +811,7 @@ if (pluginRoot && projectSettings.value && existsSync(hooksDir)) {
         const [event, ...rest] = pair.split(' ');
 
         warn('wiring-incomplete', 'wiring', '.claude/settings.json', `.claude/settings.json: ${rest.join(' ')} is not wired under ${event} — the plugin template registers it there`, {
-          text: 'copy the entry from the plugin templates/settings-hooks.json',
+          commands: ['/myspec:update'],
         });
       });
   }

@@ -9,9 +9,8 @@ description: "Use when starting any work session and the agent needs project ori
 
 ### 1. Read Project Config
 
-Extract only the fields needed — do NOT `cat` the whole file. `.myspec.json` carries a
-`frameworkFiles` block listing a per-file version for every framework file, which is
-irrelevant here and dominates the file:
+Extract only the fields needed — do NOT `cat` the whole file. `.myspec.json` may carry a
+`frameworkFiles` pin block and a `migrations` list, neither of which matters here:
 
 ```bash
 jq '{aiDir, topologyFile, frameworkVersion, name: .project.name, techStack: .project.techStack}' .myspec.json
@@ -20,7 +19,7 @@ jq '{aiDir, topologyFile, frameworkVersion, name: .project.name, techStack: .pro
 No `jq`? Use `python3 -c "import json;d=json.load(open('.myspec.json'));print({k:d.get(k) for k in ('aiDir','topologyFile','frameworkVersion')}, d.get('project'))"`.
 
 Fields used: `project.name` / `project.techStack` (summary), `aiDir` (doc directory —
-when the key is absent the tooling uses whichever of `.ai/` or `ai/` exists on disk, and `.ai` when both or neither do), `frameworkVersion` (step 6), `topologyFile`. If
+the key is required since 2.0; when it is absent the tooling uses `.ai` and the setup doctor reports it), `frameworkVersion` (step 6), `topologyFile`. If
 `topologyFile` is set, read that file.
 
 If `topologyFile` is not set, check for common topology files at project root: `backbone.yml`, `topology.yml`, `project.yml`. If found, read it and note: suggest the user add `"topologyFile": "{filename}"` to `.myspec.json`.

@@ -29,8 +29,8 @@ Ask these **one at a time** and wait for each answer:
    "What is the tech stack? (e.g., 'Node.js + TypeScript, PostgreSQL, REST API' or 'Python + Django, MySQL, GraphQL')"
 
 3. **AI documentation directory**
-   "Where should the AI documentation directory live? (default: `ai/`, alternatives: `.ai/`, `docs/ai/`, `spec/`)"
-   → Default to `ai/` if user presses Enter.
+   "Where should the AI documentation directory live? (default: `.ai`, alternatives: `ai`, `docs/ai`, `spec`)"
+   → Default to `.ai` if user presses Enter. Store it without a trailing slash.
 
 4. **Verification commands** (ask in one message)
    "What are your project's verification commands? Leave empty to configure later.
@@ -66,17 +66,11 @@ Write `.myspec.json` at project root:
     "description": "{description from step 2}",
     "techStack": "{techStack from step 2}"
   },
-  "frameworkFiles": {
-    "{one entry per key}": { "version": "{VERSION}", "lastUpdated": "{TODAY}" }
-  }
+  "migrations": {the manifest's `migrations` array, copied verbatim}
 }
 ```
 
-Build `frameworkFiles` from the manifest — never hardcode the list:
-- one entry per key in the manifest's `files` block (e.g. `"anti-patterns.md"`, `"templates/session-log.md"`), and
-- one `"rules/{filename}"` entry per key in its `rules` block.
-
-Each entry's value is `{ "version": "{VERSION}", "lastUpdated": "{TODAY}" }`. The `setup` skill may later add a `"topologyFile"` key (blueprint `backbone`) — do not add it here.
+A fresh install already has the shape every one-shot migration produces, so recording them all is what stops `update` from running them here. Do not write a `frameworkFiles` block: since 2.0 it holds pins only, and a project adds a pin by hand when it customizes a framework file. The `setup` skill may later add a `"topologyFile"` key (blueprint `backbone`) — do not add it here.
 
 ### Step 4: Scaffold Documentation Directory
 
@@ -249,7 +243,7 @@ Next steps:
 ## Rules
 
 - Ask one question at a time — do not batch questions
-- Default to `ai/` for aiDir if user is uncertain
+- Default to `.ai` for aiDir if user is uncertain; never store a trailing slash
 - Skip empty verification commands gracefully (write placeholder, note it needs filling)
 - Never overwrite existing `.myspec.json` without explicit confirmation
 - If `.claude/settings.json` already exists, deep-merge the `hooks` key only:
@@ -263,7 +257,7 @@ Next steps:
 ## Verification Checklist
 
 - [ ] `.myspec.json` created with project name, description, techStack, aiDir
-- [ ] `.myspec.json` `frameworkVersion` and every `frameworkFiles` version match `manifest.json`'s `frameworkVersion` (no hardcoded literals); entries cover all manifest `files` + `rules` keys
+- [ ] `.myspec.json` `frameworkVersion` matches `manifest.json`'s (no hardcoded literal), `migrations` copied from the manifest, no `frameworkFiles` block, `aiDir` without a trailing slash
 - [ ] `${aiDir}/features/index.yaml` created
 - [ ] `${aiDir}/memory/` directory structure created with all 3 type indexes
 - [ ] `${aiDir}/memory/sessions/active/` and `${aiDir}/memory/sessions/archive/` created

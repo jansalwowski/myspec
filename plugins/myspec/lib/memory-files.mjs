@@ -98,15 +98,13 @@ export function aiDirFor(root) {
     }
   }
 
-  // No configured value: read the tree that is actually on disk instead of
-  // guessing. The guess was '.ai' here, in memory-claim-id.sh and in
-  // verify-before-stop.sh, and 'ai' in validate-frontmatter.sh and
-  // mark-code-changed.sh, so a keyless project had its session logs written
-  // to one tree while its memories were read from the other. '.ai' wins when
-  // both or neither exist; memory-doctor names the both case as
-  // second-ai-tree.
+  // No configured value: the documented default, never a guess from disk.
+  // aiDir is a required key since 2.0 — the setup doctor reports its absence
+  // (myspec-missing-key) and the 2.0.0-schema migration in `update` writes it.
+  // Every shipped consumer (memory-claim-id.sh, the three hooks) resolves the
+  // same way; lib/tests/aidir-fallback.test.sh holds them to it.
   if (!value) {
-    return existsSync(join(root, '.ai')) || !existsSync(join(root, 'ai')) ? '.ai' : 'ai';
+    return '.ai';
   }
 
   // `.ai/` and `.ai` both occur in the wild; the trailing slash breaks joins.

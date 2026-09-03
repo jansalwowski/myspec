@@ -174,9 +174,11 @@ Ordered by dependency, not by pain. Change 1 is the foundation every later migra
 - **Dogfood the migration in a throwaway worktree.** The framework repo deliberately keeps no `.myspec.json` or `${aiDir}` tree (AGENTS.md is its project memory). Running `init` at 1.28 and then the 2.0 `update` inside a disposable worktree exercises every one-shot migration without changing that decision.
 - **Keep `index.yaml` notes to one line** (sporticos memory) — a sentence in `feature-spec` and `feature-complete`.
 
-## Decisions needed before work starts
+## Decisions
 
-| # | Decision | Recommendation |
+All four decided 2026-09-03: the recommendation column is the decision. Change 1 is in progress on `feat/2.0-schema`.
+
+| # | Decision | Recommendation (adopted) |
 |---|---|---|
 | D1 | Upgrade base: any 1.x, or 1.28 first? Any-1.x keeps the pre-1.23 index migration (`LEGACY_HEADINGS` in `lib/memory-files.mjs`, the header migration in `memory-index.mjs`, `legacy-index` in `memory-doctor.mjs`, the legacy-row regex in bootstrap, `update` step 3.6) and adds four new one-shots on top. | Require 1.28: 2.0's `update` refuses a lower `frameworkVersion` with "run the 1.28 update first". Consumers at 1.0.0 (three repos) and 1.6.0 pay one extra run; the legacy path is deleted. |
 | D2 | Who edits `.claude/settings.json` hooks wiring? Today `update` reports and never edits. Change 3 removes one command and adds one. | Let 2.0's `update` own the `hooks` key: deep-merge from `templates/settings-hooks.json`, remove commands listed in the manifest `removed` block, touch nothing else in the file. Otherwise the doctor's `wiring-incomplete` becomes a permanent 2.0 warning. |

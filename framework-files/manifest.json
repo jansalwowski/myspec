@@ -1,5 +1,9 @@
 {
   "frameworkVersion": "1.28.0",
+  "migrations": [
+    "2.0.0-schema",
+    "2.0.0-doctor-rule"
+  ],
   "files": {
     "anti-patterns.md": {
       "type": "marker-merge",
@@ -135,5 +139,6 @@
       "type": "overwrite",
       "dest": ".claude/lib/setup-doctor.mjs"
     }
-  }
+  },
+  "removed": {}
 }

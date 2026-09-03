@@ -129,21 +129,17 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref main
     "description": "One-line description",
     "techStack": "PHP 8.3, Laravel 11, PostgreSQL"
   },
-  "frameworkFiles": {
-    "anti-patterns.md": { "version": "<current plugin version>", "lastUpdated": "2026-05-11" }
-  }
+  "migrations": ["2.0.0-schema", "2.0.0-doctor-rule"]
 }
 ```
 
-`init` fills the version values from `framework-files/manifest.json` at run time.
+`init` copies `frameworkVersion` and `migrations` from `framework-files/manifest.json` at run time. `aiDir` is required, stored without a trailing slash, and defaults to `.ai`.
 
 A project that deliberately customizes a framework-owned file pins it, so `update` skips it instead of reverting the local edits:
 
 ```json
 "frameworkFiles": {
   "rules/auto-memory-style.md": {
-    "version": "1.25.1",
-    "lastUpdated": "2026-08-22",
     "pinned": "locally compressed to halve always-loaded context"
   }
 }
@@ -181,7 +177,9 @@ After updating the plugin (`/plugin marketplace update`), run in each project:
 /myspec:update
 ```
 
-This updates framework-owned files while preserving your project customizations.
+This updates framework-owned files while preserving your project customizations. Since 2.0 it also runs the one-shot migrations listed in the manifest (recorded in `.myspec.json` `migrations`), deletes files the framework retired, and wires its own hooks in `.claude/settings.json`.
+
+**Upgrading from 1.x:** 2.0 migrates from 1.28.0 or later. A project on an older version runs the 1.28 update first: check out the plugin at tag `v1.28.0`, start Claude with `--plugin-dir` pointing at it, run `/myspec:update`, then return to the current plugin.
 
 ## Framework rules shipped to `.claude/rules/`
 

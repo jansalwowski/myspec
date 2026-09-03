@@ -24,7 +24,7 @@ The target is **retrieval quality, not size**. Memory bodies load only when `/my
 
 ### Step 1: Inventory
 
-1. Resolve `aiDir` from `.myspec.json` (`.aiDir`; when the key is absent the tooling uses whichever of `.ai/` or `ai/` exists on disk, and `.ai` when both or neither do).
+1. Resolve `aiDir` from `.myspec.json` (`.aiDir`; the key is required since 2.0; when it is absent the tooling uses `.ai` and the setup doctor reports it).
 2. Run `node .claude/lib/memory-index.mjs --check`. Exit 1 means the tables are stale — regenerate before triage, so the audit reads files rather than a lagging table.
 3. Read `${aiDir}/memory/index.md` (Layer 1) and the three `${aiDir}/memory/{type}/index.md` tables.
 4. Read every `P*.md`, `S*.md`, `E*.md`. Capture per entry: `id`, `hook`, `feature`, `related`, plus type fields — procedural: `polarity`, `triggers`, `not_for`, `anchors`, `validation_count`, `created`, `validated`; semantic: `topic`, `anchor`, `verified`; episodic: `outcome`, `persistent`, `date`.

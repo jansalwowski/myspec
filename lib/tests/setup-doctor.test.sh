@@ -64,19 +64,19 @@ const {readFileSync,writeFileSync,mkdirSync,copyFileSync,chmodSync}=require("fs"
 const {join,dirname}=require("path");
 const plugin=process.argv[1], root=process.argv[2], aiDir="ai";
 const m=JSON.parse(readFileSync(join(plugin,"framework-files","manifest.json"),"utf8"));
-const V=m.frameworkVersion, ff={};
+const V=m.frameworkVersion;
 // init and update replace ${aiDir} in what they copy. Copying verbatim here
 // would compare plugin bytes against plugin bytes and could never catch a
 // drift check that forgot the substitution — which is exactly what it missed.
 const put=(src,dest)=>{mkdirSync(join(root,dirname(dest)),{recursive:true});writeFileSync(join(root,dest),readFileSync(src,"utf8").split("${aiDir}").join(aiDir));return dest;};
 for(const k of Object.keys(m.files)){
   const dest = k.startsWith("templates/") ? aiDir+"/.templates/"+k.slice(10) : aiDir+"/"+k;
-  put(join(plugin,"framework-files",k),dest); ff[k]={version:V,lastUpdated:"2026-09-02"};
+  put(join(plugin,"framework-files",k),dest);
 }
-for(const [k,e] of Object.entries(m.rules)){ put(join(plugin,"framework-files","rules",k),e.dest); ff["rules/"+k]={version:V,lastUpdated:"2026-09-02"}; }
+for(const [k,e] of Object.entries(m.rules)){ put(join(plugin,"framework-files","rules",k),e.dest); }
 for(const [k,e] of Object.entries(m.hooks)){ chmodSync(join(root,put(join(plugin,"hooks",k),e.dest)),0o755); }
 for(const [k,e] of Object.entries(m.lib)){ chmodSync(join(root,put(join(plugin,"lib",k),e.dest)),0o755); }
-writeFileSync(join(root,".myspec.json"),JSON.stringify({aiDir,frameworkVersion:V,project:{name:"fixture"},frameworkFiles:ff},null,2)+"\n");
+writeFileSync(join(root,".myspec.json"),JSON.stringify({aiDir,frameworkVersion:V,project:{name:"fixture"},migrations:m.migrations||[]},null,2)+"\n");
 copyFileSync(join(plugin,"templates","settings-hooks.json"),join(root,".claude","settings.json"));
 copyFileSync(join(plugin,"templates","verification.json"),join(root,".claude","verification.json"));
 mkdirSync(join(root,aiDir,"features"),{recursive:true});
@@ -103,7 +103,8 @@ run_doctor
 expect_exit 0 "clean install exits 0"
 expect_no_line '^ERROR' "clean install reports no errors"
 expect_no_line 'framework-drift' "clean install reports no drift"
-expect_no_line 'marker-header-drift' "an unmodified marker-merge header is not drift"
+expect_no_line 'myspec-schema-stale' "a 2.0-shape .myspec.json is not stale"
+expect_no_line 'framework-removed' "a manifest with an empty removed block reports nothing retired"
 expect_no_line 'shipped-drift' "clean install reports no hook or lib drift"
 expect_no_line 'dead-path-ref' "framework-owned rules are not scanned for dead refs"
 expect_no_line 'over-budget' "framework-owned rules are not warned about as over budget"
@@ -123,7 +124,8 @@ rm "$REPO/ai/.templates/session-log.md"
 perl -0pi -e 's/<!-- myspec:framework-start -->//' "$REPO/ai/pre-flight.md"
 perl -0pi -e 's/^# .*$/# Renamed Locally/m' "$REPO/ai/anti-patterns.md"
 printf '\n# hand edit\n' >> "$REPO/.claude/hooks/no-absolute-paths.sh"
-set_json .myspec.json 'delete d.frameworkFiles["rules/ideas.md"]'
+set_json .myspec.json 'd.frameworkFiles = {"rules/ideas.md": {version: "1.27.0", lastUpdated: "2026-08-01"}}'
+printf '## Project anchors\n' > "$REPO/.claude/rules/ai-setup-audit.md"
 chmod -x "$REPO/.claude/hooks/guard-git-branch.sh"
 set_json .claude/settings.json 'd.hooks.Stop[0].hooks.push({type:"command",command:".claude/hooks/ghost.sh"})'
 set_json .claude/settings.json 'd.hooks.PostToolUse[0].hooks = d.hooks.PostToolUse[0].hooks.filter(h => !/require-reuse-audit/.test(h.command))'
@@ -146,7 +148,8 @@ expect_line 'ERROR framework-drift: .claude/rules/paths.md' "a hand-edited rule 
 expect_line 'ERROR framework-missing: ai/.templates/session-log.md' "a deleted framework file is an error"
 expect_line 'ERROR marker-missing: ai/pre-flight.md' "a marker-merge file without markers is an error"
 expect_line 'ERROR shipped-drift: .claude/hooks/no-absolute-paths.sh' "a hand-edited hook is an error"
-expect_line 'WARN +framework-unlisted: .myspec.json' "an untracked framework file is a warning"
+expect_line 'WARN +myspec-schema-stale: .myspec.json' "pre-2.0 per-file bookkeeping is a warning"
+expect_line 'WARN +doctor-rule-unrenamed: .claude/rules/ai-setup-audit.md' "the pre-rename doctor extension is a warning"
 expect_line 'ERROR hook-not-executable: .claude/hooks/guard-git-branch.sh' "a registered hook without +x is an error"
 expect_line 'ERROR hook-missing: .claude/hooks/ghost.sh' "a registered hook that does not exist is an error"
 expect_line 'WARN +hook-unregistered: .claude/hooks/broken.sh' "an unwired hook script is a warning"
@@ -155,8 +158,7 @@ expect_line 'WARN +wiring-incomplete: .claude/settings.json' "a hook the templat
 expect_line 'ERROR aidir-trailing-slash' "a trailing slash on aiDir is an error"
 expect_line 'ERROR verification-unparseable' "unparseable verification.json is an error"
 expect_line 'ERROR features-index-unreadable: ai/features/index.yaml:2' "a mis-indented manifest entry is an error, with its line"
-expect_line 'WARN +marker-header-drift: ai/anti-patterns.md' "a changed marker-merge header is a warning update cannot fix"
-expect_no_line 'ERROR marker-header-drift' "the header finding never blocks, because update cannot repair it"
+expect_line 'ERROR framework-drift: ai/anti-patterns.md: header above' "a changed marker-merge header is drift, since update owns the header"
 expect_line 'WARN +over-budget: CLAUDE.md' "an oversized project CLAUDE.md is a warning"
 expect_line 'WARN +dead-path-ref: CLAUDE.md' "a dead path reference in a project file is a warning"
 expect_line 'WARN +dead-skill-ref: CLAUDE.md' "a reference to a skill the plugin does not ship is a warning"
@@ -224,6 +226,41 @@ run_doctor install
 expect_line 'WARN +framework-renamed: ai/memory-index.md' "both names present is reported"
 expect_line 'both exist' "the both-present finding says so"
 expect_exit 0 "both names present does not fail the run"
+
+# --- pass 3c: a file the framework retired ----------------------------------
+#
+# The manifest's removed block is how a deletion travels; the real manifest
+# retires nothing yet, so a fake plugin root carries one entry. Sources are
+# absent there on purpose: compare() skips a key it cannot read, so only the
+# removed check speaks.
+
+FAKE="$ROOT/plugin-removed"
+mkdir -p "$FAKE/framework-files"
+node -e '
+const fs=require("fs");
+const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+delete m.files["templates/example-usage.md"];
+m.removed={"templates/example-usage.md":{dest:"${aiDir}/.templates/example-usage.md",since:"2.0.0"}};
+fs.writeFileSync(process.argv[2],JSON.stringify(m,null,2)+"\n");
+' "$PLUGIN/framework-files/manifest.json" "$FAKE/framework-files/manifest.json"
+
+build_fixture
+OUTPUT=$(node "$SCRIPT" --root "$REPO" --plugin-root "$FAKE" install 2>&1); STATUS=$?
+expect_exit 0 "a retired file still on disk does not fail the run"
+expect_line 'WARN +framework-removed: ai/.templates/example-usage.md' "a retired file still on disk is reported"
+expect_line 'in v2.0.0' "the finding names the version that retired it"
+expect_line 'run: /myspec:update' "the finding carries the deletion command"
+
+set_json .myspec.json 'd.frameworkFiles = {"templates/example-usage.md": {pinned: "kept on purpose"}}'
+OUTPUT=$(node "$SCRIPT" --root "$REPO" --plugin-root "$FAKE" install 2>&1); STATUS=$?
+expect_no_line 'framework-removed' "a pinned retired file is a deliberate keep and is not reported"
+
+# --- pass 3d: the migrations list is the schema marker ----------------------
+
+build_fixture
+set_json .myspec.json 'delete d.migrations'
+run_doctor schema
+expect_line 'WARN +myspec-schema-stale: .myspec.json has no migrations list' "a missing migrations list means the 2.0 migrations have not run"
 
 # --- pass 4: argument handling ------------------------------------------------
 
