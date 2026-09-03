@@ -51,12 +51,12 @@ task (the index shape is `| ID | Hook | Anchor |`, episodic `Date`).
 **Without a task** (plain session-start orientation): do NOT read them. A keyword scan
 with no keywords cannot match, and these three tables are the largest read in this skill —
 they grow about a row per session, so the cost climbs for the life of the project. Count
-the rows instead. Rows are `| [P001](…) |` in generated indexes and `| P001 |` in legacy
-ones, either case; `grep -c` prints `0` itself on no match, so no `|| echo 0` fallback:
+the rows instead. Rows are `| [P001](…) |`, either case; `grep -c` prints `0` itself on no
+match, so no `|| echo 0` fallback:
 
 ```bash
 for t in procedural semantic episodic; do
-  c=$(grep -ciE '^\| *\[?[pse][0-9]+' "${aiDir}/memory/$t/index.md" 2>/dev/null) || true
+  c=$(grep -ciE '^\| *\[[pse][0-9]+' "${aiDir}/memory/$t/index.md" 2>/dev/null) || true
   printf '%s: %s\n' "$t" "${c:-0}"
 done
 ```
@@ -77,9 +77,9 @@ node .claude/lib/memory-doctor.mjs --quiet
 
 It prints `ERROR` lines and a summary (`memory doctor: clean` or `N error(s), M warning(s)`)
 in about a second. Report the summary in step 7; do not fix anything here. Errors mean the
-tooling cannot read the project as it is — legacy index headers, memories without `hook:`,
+tooling cannot read the project as it is — memories without `hook:`,
 duplicate IDs across branches — and `/myspec:memory-create` will refuse to allocate an ID
-until they are fixed. `/myspec:update` migrates the first two; the rest are per-file. If the
+until they are fixed. `memory-index.mjs --backfill` derives the first; the rest are per-file. If the
 script is missing, the project predates it: report `memory health: not checked — run
 /myspec:update`.
 

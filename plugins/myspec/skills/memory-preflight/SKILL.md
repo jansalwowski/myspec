@@ -18,7 +18,7 @@ Read `${aiDir}/memory/index.md` (always-loaded global index).
 
 Read `${aiDir}/memory/procedural/index.md`.
 
-Scan the Hook column for keyword matches against the current task. The index shape is `| ID | Hook | Anchor |` everywhere (episodic: `Date`); an index with other column names is a legacy one that `/myspec:update` migrates.
+Scan the Hook column for keyword matches against the current task. The index shape is `| ID | Hook | Anchor |` everywhere (episodic: `Date`).
 
 → If match: read the full memory file (the link in the ID cell) and check its `not_for:` before applying
 → Focus on "Procedure (Do This)" section.

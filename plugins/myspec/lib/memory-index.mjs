@@ -8,15 +8,6 @@
 // this. Unique IDs (memory-claim-id.sh) stop two entries claiming one number;
 // this stops the index itself being the merge hazard.
 //
-// WHY MIGRATE: indexes written before the generator have four- and five-column
-// headers (`Use When | Handles | Not For`, `Topic | Fact | Verified | Anchor`,
-// `Date | Event | Feature | Outcome`) over bare-ID rows. Writing three-cell
-// rows under such a header breaks the table, and a generator that only reads
-// linked rows drops every hand-written cell on its first run. A legacy index
-// is migrated instead: header and agent note become canonical, and each row's
-// hook is synthesised from the legacy cells by header name so nothing authored
-// is lost. Everything else around the table is prose and stays verbatim.
-//
 // WHY REFUSE: hook text has two durable sources — `hook:` in the memory's
 // frontmatter, or the row already in the index. The previous generator fell
 // back to the H1 when both were missing, which turned an absent hook into a
@@ -72,19 +63,12 @@ if (CHECK && args.includes('--backfill')) {
 const ANCHOR_HEADER = ['| ID | Hook | Anchor |', '|----|------|--------|'];
 const DATE_HEADER = ['| ID | Hook | Date |', '|----|------|------|'];
 
+// The prose around the table — frontmatter, title, agent note — is the
+// template's and the project's; only the table is generated.
 const CANONICAL = {
-  procedural: {
-    header: ANCHOR_HEADER,
-    note: '> **Agent**: Scan "Hook" for keyword matches against the task or error. Load the full memory file on a match — it carries the Not-For scope and the procedure.',
-  },
-  semantic: {
-    header: ANCHOR_HEADER,
-    note: '> **Agent**: Scan "Hook" for topic matches. "Anchor" is the file that proves the fact — verify it before relying on a fact whose anchor is missing.',
-  },
-  episodic: {
-    header: DATE_HEADER,
-    note: '> **Agent**: Scan "Hook" for events related to the current feature. Recent episodes (< 30 days) carry the most context; older ones may have been consolidated into semantic facts.',
-  },
+  procedural: ANCHOR_HEADER,
+  semantic: ANCHOR_HEADER,
+  episodic: DATE_HEADER,
 };
 
 // Only unescaped pipes are escaped: a `hook:` value copied from a cell already
@@ -97,42 +81,16 @@ function unescapeCell(text) {
   return text.replace(/\\\|/g, '|');
 }
 
-// A row's cell by header name, so legacy columns are read wherever they sit.
+// A row's cell by header name.
 function cell(previous, name) {
   const index = previous.header.findIndex((heading) => heading.toLowerCase() === name.toLowerCase());
 
   return index === -1 ? '' : (previous.row.cells[index] || '').trim();
 }
 
-// Hook text carried by an existing row, escaped as it sits in the cell. A
-// generated row has a Hook column; a legacy row is synthesised from the
-// columns its header names — `Use When`, `Topic — Fact`, `Event (Feature)`.
+// Hook text carried by an existing row, escaped as it sits in the cell.
 function hookFromRow(previous) {
-  if (!previous) {
-    return '';
-  }
-
-  const hook = cell(previous, 'Hook') || cell(previous, 'Use When');
-
-  if (hook) {
-    return hook;
-  }
-
-  const topic = cell(previous, 'Topic');
-  const fact = cell(previous, 'Fact');
-
-  if (topic || fact) {
-    return [topic, fact].filter(Boolean).join(' — ');
-  }
-
-  const event = cell(previous, 'Event');
-  const feature = cell(previous, 'Feature');
-
-  if (event) {
-    return feature ? `${event} (${feature})` : event;
-  }
-
-  return '';
+  return previous ? cell(previous, 'Hook') : '';
 }
 
 // Frontmatter first, the existing row second, nothing third — the caller
@@ -143,18 +101,6 @@ function resolveHook(memory, previous) {
   }
 
   return hookFromRow(previous) || null;
-}
-
-// Legacy semantic `Anchor` cells hold `—`, `⚠️`, or a backticked filename;
-// only something that names a file is worth carrying into the new column.
-function pathLike(text) {
-  const bare = text.replace(/^`(.*)`$/, '$1').trim();
-
-  if (!/[./]/.test(bare) || /\s/.test(bare) || /^[-—–.]+$/.test(bare)) {
-    return '';
-  }
-
-  return bare;
 }
 
 // Third column. Anchor: an author's cell wins, `---` included — leaving it
@@ -168,21 +114,13 @@ function resolveThird(memory, previous, type) {
       || '---';
   }
 
-  if (previous && !previous.legacy && cell(previous, 'Anchor')) {
+  if (previous && cell(previous, 'Anchor')) {
     return cell(previous, 'Anchor');
   }
 
   const first = memory.anchors.anchors[0];
 
-  if (first) {
-    return escapeCell(first.file);
-  }
-
-  if (previous && previous.legacy) {
-    return pathLike(cell(previous, 'Anchor')) || '---';
-  }
-
-  return '---';
+  return first ? escapeCell(first.file) : '---';
 }
 
 // Link text is the canonical ID; the target is the filename as it is on disk,
@@ -197,7 +135,7 @@ function previousRows(table) {
 
   table.rows.forEach((row) => {
     if (row.id && !rows.has(row.id)) {
-      rows.set(row.id, { row, header: table.header, legacy: table.legacy });
+      rows.set(row.id, { row, header: table.header });
     }
   });
 
@@ -245,32 +183,8 @@ function withHook(memory, value) {
   return `---\n${lines.join('\n')}${source.slice(4 + frontmatter.length)}`;
 }
 
-// The note directly above the table (blank lines between allowed) describes
-// the legacy columns; it is swapped for the canonical one during migration. A
-// multi-line blockquote is replaced whole.
-function replaceAgentNote(before, note) {
-  let end = before.length;
-
-  while (end > 0 && before[end - 1].trim() === '') {
-    end -= 1;
-  }
-
-  let start = end;
-
-  while (start > 0 && /^>/.test(before[start - 1])) {
-    start -= 1;
-  }
-
-  if (start === end || !/^>\s*\*\*Agent\*\*:/.test(before[start])) {
-    return before;
-  }
-
-  return [...before.slice(0, start), note, ...before.slice(end)];
-}
-
-// The prose on either side of the table. Only a legacy migration touches it,
-// and only the agent note.
-function proseAround(source, table, type) {
+// The prose on either side of the table, verbatim.
+function proseAround(source, table) {
   if (table.start === -1) {
     const trimmed = source.replace(/\s*$/, '');
 
@@ -278,13 +192,8 @@ function proseAround(source, table, type) {
   }
 
   const lines = source.split('\n');
-  let before = lines.slice(0, table.start);
 
-  if (table.legacy) {
-    before = replaceAgentNote(before, CANONICAL[type.dir].note);
-  }
-
-  return { before: `${before.join('\n')}\n`, after: lines.slice(table.end).join('\n') };
+  return { before: `${lines.slice(0, table.start).join('\n')}\n`, after: lines.slice(table.end).join('\n') };
 }
 
 function withUpdatedDate(before) {
@@ -386,19 +295,6 @@ TYPES.forEach((type) => {
     }
   });
 
-  // A legacy index migrates only under --backfill. Migrating the header first
-  // would leave the synthesised hooks living in the table alone — the one
-  // place the next regeneration overwrites — while every file still lacks
-  // `hook:`, so the doctor reports the whole index as hookless and the ID
-  // allocator refuses. The files change first, then the table.
-  if (table.legacy && !BACKFILL && problems.length === 0) {
-    const hookless = live.filter((memory) => !memory.hook).length;
-
-    if (hookless > 0) {
-      problems.push(`legacy index: ${hookless} memory file(s) lack hook: — run --backfill to write them before migrating the header`);
-    }
-  }
-
   notes.forEach((note) => process.stdout.write(`${label}: ${note}\n`));
 
   if (problems.length > 0) {
@@ -410,8 +306,8 @@ TYPES.forEach((type) => {
   }
 
   const rendered = new Map(live.map((memory) => [memory.id, renderRow(memory, previous.get(memory.id), type)]));
-  const { before, after } = proseAround(source, table, type);
-  const tableLines = [...CANONICAL[type.dir].header, ...rendered.values()];
+  const { before, after } = proseAround(source, table);
+  const tableLines = [...CANONICAL[type.dir], ...rendered.values()];
   const next = `${before}${tableLines.join('\n')}\n${after}`.replace(/\n+$/, '\n');
 
   if (next === source) {
@@ -424,7 +320,7 @@ TYPES.forEach((type) => {
 
   stale += 1;
 
-  const detail = [table.legacy ? 'would migrate header (legacy → canonical)' : '', rowDiff(previous, rendered)].filter(Boolean);
+  const detail = [rowDiff(previous, rendered)];
 
   if (CHECK) {
     process.stderr.write(`stale: ${label} — ${detail.join('; ')}\n`);

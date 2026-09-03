@@ -158,8 +158,8 @@ On repeated failure → Check escalation triggers
 | Script | Purpose |
 |--------|---------|
 | `memory-claim-id.sh <type>` | Allocates the next ID: conformance check, lock on the main checkout, scan of every worktree and every branch, registry in `.claude/state/`. Exit 3 = refused on conformance errors |
-| `memory-index.mjs [--check\|--backfill\|--dry-run]` | Regenerates the three index tables from the files (`| ID | Hook | Anchor |`); migrates legacy hand-written tables with `--backfill`; refuses while a memory lacks `hook:` |
-| `memory-doctor.mjs [--quiet\|--json]` | Reports what disagrees with the tooling: filename case, missing `hook:`, legacy headers, duplicate IDs across branches, malformed anchors, an unignored `.claude/state/` |
+| `memory-index.mjs [--check\|--backfill\|--dry-run]` | Regenerates the three index tables from the files (`| ID | Hook | Anchor |`); refuses while a memory lacks `hook:` (`--backfill` derives it from the row or heading) |
+| `memory-doctor.mjs [--quiet\|--json]` | Reports what disagrees with the tooling: filename case, missing `hook:`, duplicate IDs across branches, malformed anchors, an unignored `.claude/state/` |
 | `memory-files.mjs` | Shared parser the two scripts above import — the single definition of "a memory file" (case-insensitive, slug-optional, every anchor form) |
 
 Filenames are `{ID}-{slug}.md` with an uppercase prefix. The tooling reads lowercase and slugless names too, but the doctor flags them.

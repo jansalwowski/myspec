@@ -35,11 +35,6 @@ export const TYPES = [
 // the slug is optional. The canonical ID is uppercase, zero-padded to three.
 export const MEMORY_FILE_RE = /^([PSE])(\d+)(?:-([^/]*))?\.md$/i;
 
-// Column headings that predate the generator. An index with one of these in
-// its header row is a legacy index and needs the migration in memory-index.mjs
-// before it can be regenerated.
-export const LEGACY_HEADINGS = ['Use When', 'Handles', 'Not For', 'Topic', 'Fact', 'Verified', 'Event', 'Feature', 'Outcome'];
-
 export function canonicalId(prefix, number) {
   return `${prefix.toUpperCase()}${String(number).padStart(3, '0')}`;
 }
@@ -389,7 +384,7 @@ export function parseIndexTable(source) {
   const start = lines.findIndex((line) => /^\|\s*ID\s*\|/i.test(line));
 
   if (start === -1) {
-    return { start: -1, end: -1, header: [], legacy: false, rows: [] };
+    return { start: -1, end: -1, header: [], rows: [] };
   }
 
   const splitCells = (line) => line.split(/(?<!\\)\|/).map((cell) => cell.trim()).slice(1, -1);
@@ -413,7 +408,6 @@ export function parseIndexTable(source) {
     start,
     end,
     header,
-    legacy: header.some((cell) => LEGACY_HEADINGS.includes(cell)),
     rows,
   };
 }

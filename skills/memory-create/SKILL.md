@@ -56,7 +56,7 @@ Prints the claimed ID (e.g. `P053`) and nothing else. It runs the memory conform
 |--------|---------|----|
 | Prints `P053` | Claimed | Use that ID |
 | `No such file` — script missing | Project predates the allocator | Stop. Tell the user to run `/myspec:update`, then retry |
-| Exit 3 with `ERROR …` lines | Conformance errors: duplicate IDs, legacy index headers, memories without `hook:`, malformed anchors | Stop. Show the errors. `/myspec:update` migrates legacy indexes; the rest are per-file fixes |
+| Exit 3 with `ERROR …` lines | Conformance errors: duplicate IDs, memories without `hook:`, malformed anchors | Stop. Show the errors. `memory-index.mjs --backfill` derives missing hooks; the rest are per-file fixes |
 | Exit 1 — could not acquire the lock | Another session held it for > 10 s | Retry once; if it persists, report it |
 
 In the stop cases, do not hand-pick an ID and do not create the file. If the user later abandons the draft, the claimed number stays unused — a gap in the sequence is harmless and there is nothing to release.
