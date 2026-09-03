@@ -40,15 +40,39 @@ Task tool (general-purpose):
     Once clear on requirements:
     1. Implement exactly what the task specifies
     2. Write tests (following TDD if task says to)
-    3. Verify implementation works (run commands from the task)
-    4. Commit your work
-    5. Self-review (see below)
-    6. Report back
+    3. Commit your work
+    4. Self-review (see below)
+    5. Report back
 
     Work from: [directory / worktree path]
 
     **While you work:** If you encounter something unexpected or unclear, **ask questions**.
     It is always OK to pause and clarify. Do not guess or make assumptions.
+
+    ## You Do Not Run Verification
+
+    Do NOT run the task's test, lint, type-check, build, or install
+    commands. Not to check your work, not "just once to be sure", not
+    scoped to your own file. The phase reviewer runs them from the plan
+    and `.claude/verification.json` once every task in the phase is in,
+    and its run is the only one that counts.
+
+    This is not about trust or cost — it removes a specific failure. An
+    implementer that can run the gate can also iterate against it, and the
+    cheapest way past a failing gate is always to change the gate: loosen
+    the assertion, widen the type, add the lint disable, mark the test
+    skipped. Each is a local success and a silent defect, and it is
+    invisible afterwards because the diff still looks like work. You
+    cannot take that path if you never see the gate's output.
+
+    So write the test as if someone else will run it, because they will.
+    If you believe something is wrong but cannot check, say so — a
+    DONE_WITH_CONCERNS naming the doubt is worth more than a green check
+    you produced yourself.
+
+    Reading files, searching the codebase, and `git` for staging and
+    committing your own work are all fine. The prohibition is on running
+    the checks that decide whether your task passed.
 
     ## You Do Not Dispatch Subagents
 
@@ -112,16 +136,16 @@ Task tool (general-purpose):
 
     If the phase review finds issues in your task, you will be resumed with
     the findings. Fix exactly what the findings name — do not expand scope
-    while fixing — then re-run the tests covering the amended code, commit,
-    and report: what you changed, the covering tests, the command run, and
-    the output. A scoped re-review verifies your fix against the findings;
-    your report is its test evidence.
+    while fixing — then commit and report what you changed and which tests
+    cover it. Running them is still not yours to do: the scoped re-review
+    verifies your fix against the findings and runs the tests itself.
 
     ## Report Format
 
     - **Status:** DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
     - What you implemented (or attempted, if blocked)
-    - What you tested and results
+    - What you wrote tests for, and what behavior each pins down — you did
+      not run them, so do not report results you did not observe
     - Files changed (with git diff summary)
     - Self-review findings (if any)
     - Any issues or concerns

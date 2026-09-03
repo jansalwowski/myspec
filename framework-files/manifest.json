@@ -3,7 +3,8 @@
   "migrations": [
     "2.0.0-schema",
     "2.0.0-doctor-rule",
-    "2.0.0-sessions"
+    "2.0.0-sessions",
+    "2.0.0-base-agents"
   ],
   "files": {
     "anti-patterns.md": {

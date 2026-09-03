@@ -1,6 +1,6 @@
 # Plan Document Templates
 
-Canonical normal-mode (single-executor) template. For orchestrator mode (per-milestone Worker / SpecReview / QualityReview chain — no Planner), see [`plan-templates-orchestrator.md`](./plan-templates-orchestrator.md).
+Canonical implementation-plan template: one implementer subagent per task, reviewed at phase boundaries.
 
 ## Plan Header
 
@@ -91,19 +91,18 @@ Notes:
 
 **Depends on:** Task N-1
 
+**Verify at phase review:** `<test command from .claude/verification.json, scoped to exact/path/to/file.test.ts>`
+(The implementer does not run this — it writes the test and the code and stops. The phase
+reviewer runs every task's command once the phase is complete. Name the command here so the
+reviewer does not have to infer it.)
+
 - [ ] **Step 1: Write the failing test**
   [test code]
 
-- [ ] **Step 2: Run test — expect FAIL**
-  Run test command from `.claude/verification.json` (`test` check) on specific file
-
-- [ ] **Step 3: Implement**
+- [ ] **Step 2: Implement**
   [implementation code]
 
-- [ ] **Step 4: Run test — expect PASS**
-  Run test command from `.claude/verification.json` on specific file
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
   `git commit -m "feat({feature}): add component-name"`
 ```
 

@@ -32,10 +32,11 @@ Task tool (general-purpose):
     with git commands. If the file is missing, fetch the diff yourself:
     `git diff --stat` and `git diff -U10` over [FIX_BASE sha]..[HEAD sha].
 
-    Your review is read-only on this checkout, except for re-running a test
-    command the fix claims now passes when reading the code leaves a
-    specific doubt. Never edit files or mutate the index, HEAD, or branch
-    state.
+    Your review is read-only on this checkout, except for running the tests
+    covering the amended code. Run them — the implementer was forbidden to,
+    so its report carries no test evidence and "the fix looks right" is the
+    whole of what reading gives you. Never edit files or mutate the index,
+    HEAD, or branch state.
 
     ## You Do Not Dispatch Subagents
 

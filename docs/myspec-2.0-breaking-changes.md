@@ -126,24 +126,33 @@ Ordered by dependency, not by pain. Change 1 is the foundation every later migra
 
 ### 6. Retire orchestrator agent-chain mode
 
-**Problem.** `feature-plan` can author plans with `orchestration: agent-chain`; `feature-implement` then dispatches `worker-base`, `spec-reviewer`, `quality-reviewer` role prompts via user-scope base agents that `init` step 5.5 and `update` step 3.5 install into `~/.claude/agents/`, `~/.cursor/agents/`, `~/.codex/agents/`. Five open issues (#10 retry oscillation, #11 worktree provisioning, #14 dispatch-only enforcement, #15 cross-harness shims, #18 probe-reviewer) exist only to make this mode work.
+**Problem.** `feature-plan` can author plans with `orchestration: agent-chain`; `feature-implement` then dispatches `worker-base`, `spec-reviewer`, `quality-reviewer` role prompts via user-scope base agents that `init` step 5.5 and `update` step 3.5 install into `~/.claude/agents/`, `~/.cursor/agents/`, `~/.codex/agents/`. A per-project setup writes six files into three global directories with no uninstall and no per-project version — the same boundary violation changes 2, 3 and 5 exist to remove. Five open issues were filed against the mode (#10 retry oscillation, #11 worktree provisioning, #14 dispatch-only enforcement, #15 cross-harness shims, #18 probe-reviewer). **Verified 2026-09-03, after the change landed:** only three of them are mode-bound. #10 is arithmetic over the dispatcher's two per-kind retry counters, #14 gates on the run-mode choice, and #15 generates the six user-scope shims — all three vanish with the mode. #11 and #18 do not: #11 says so in its own text ("affects orchestrator and normal mode alike") and change 3 resolved it; #18's root cause — the agent that authors a verification step also decides whether to skip it — is untouched, since the controller still runs its own Step 4b checkpoint verification. #15 is the only harness-shaped one: shims maintained against contracts myspec does not control.
 
 **Evidence.**
-- lockin memory `feedback_orchestrator_chain_not_runnable_use_normal_fallback`: the chain needs Worker and both reviewers on the same per-task worktree, but `isolation: worktree` forks a fresh worktree from main on every dispatch and `worker-base` has no shell to cd — pick normal-fallback. Recorded as the standing instruction for that repo.
-- lockin memory `feedback_long_feature_implement_chains_slow`: multi-milestone runs are dispatch-latency-bound; one milestone per session.
+- The user-scope install is the load-bearing objection and needs no consumer report: `init` step 5.5 and `update` step 3.5 copy six agent files into three global directories. Nothing removes them, nothing versions them per project, and a second myspec project on the same machine silently shares them.
+- lockin memory `feedback_orchestrator_chain_not_runnable_use_normal_fallback`: the chain needs Worker and both reviewers on the same per-task worktree, but `isolation: worktree` forks a fresh worktree from main on every dispatch and `worker-base` has no shell to cd — pick normal-fallback. Recorded as the standing instruction for that repo. **Scope correction:** this blocks parallel groups only. Sequential tasks dispatch into the controller's own worktree, where the chain does run; the memory should not be read as "the mode never runs".
+- lockin memory `feedback_long_feature_implement_chains_slow`: multi-milestone runs are dispatch-latency-bound; one milestone per session. Per task the chain is Worker → SpecReview → QualityReview → Commit — three dispatches against normal mode's one review per phase. The finer gate *is* the latency.
 - lockin memory `feedback_opus_holistic_review_catches_phase_misses`: the one part that paid off was the final full-diff holistic review, which does not need the role chain.
-- No consumer memory records a successful agent-chain run.
+- No consumer memory records a successful agent-chain run — but lockin is the only consumer that tried it, so this reads as unproven, not disproven. It is supporting evidence, not the reason.
 - Artifacts on HEAD: `skills/feature-implement/references/orchestrator-dispatcher.md`, `references/role-prompts/` (3 files), `skills/feature-plan/references/plan-templates-orchestrator.md`, the run-mode gate at `skills/feature-implement/SKILL.md:129`, agent sources under `skills/feature-implement/agents/{claude,cursor,codex}/`.
+
+**Delta against normal mode.** Normal mode already dispatches a subagent per task, reviews with a diff package, triages by severity, runs a capped fix loop that escalates tier, checkpoints per milestone, and closes with the holistic review. Two properties do not survive the retirement:
+
+| Chain-only property | Verdict |
+|---|---|
+| Review granularity is per task, not per phase | Not worth keeping — this is the latency complaint. A plan that wants a per-task gate puts one task in a phase. |
+| Worker toolset is `Read, Edit, MultiEdit, Write` — no shell, so a Worker cannot edit a test or a lint config to make its own task pass | Worth keeping. Normal-mode implementers have Bash today. |
 
 **Design.**
 - Delete the artifacts above, the `orchestration:` plan frontmatter key, the run-mode gate, and the user-scope agent install in `init` and `update`. This reverts #17 (closed), which wired that install.
+- Carry the no-shell property into normal mode: `implementer-prompt.md` forbids running test, lint, build, or install commands for the task's own verification. Verification stays with the phase reviewer, which already runs it from the plan and `.claude/verification.json`.
 - Keep and promote what worked: per-task implementer subagent in one shared controller worktree (today's fallback), milestone-bound sessions as the default for plans with more than five tasks, and the mandatory end-of-run holistic reviewer on the strongest available model.
-- Close #10, #11, #14, #15, #18 as won't-fix-by-design, or re-scope #11 to the provisioning recipe in change 3.
-- If the mode is kept instead (decision D4), ship the agents from a plugin `agents/` directory rather than copying to user scope. Plugins support this; the dispatch name likely becomes `myspec:worker-base` and precedence over a user-scope copy is undocumented, so test first.
+- **Issue disposition (applied 2026-09-03).** Closed #10 and #14 as won't-fix-by-design, #15 with the mode, and #11 as *completed* — change 3's `_shared/worktree-provisioning.md` and `lib/worktree-provision.sh` cover all three of its gaps, so it is done rather than re-scoped. #18 stays open: only its Phase-2 seam needed re-wording ("between the Step 4 phase review and the Step 4b milestone Checkpoint"); Phases 1 and 3 never depended on the chain. Note for whoever picks it up — the plugin now ships no subagent definitions at all, so a probe reviewer would be the first, and it must come from a plugin `agents/` directory, not a user-scope copy.
+- If the mode is kept instead (decision D4), the only defensible form is shipping the agents from a plugin `agents/` directory rather than copying to user scope. That answers the boundary objection and nothing else — #10, #14 and #18 all remain (#11 is resolved either way, by change 3). Plugins support the directory; the dispatch name likely becomes `myspec:worker-base` and precedence over a user-scope copy is undocumented, so test first.
 
 **Migration.** Existing plans with `orchestration: agent-chain` run as normal mode; `feature-implement` prints one line saying so. `update` offers to delete the six user-scope agent files.
 
-**Why major.** A documented mode and its plan-frontmatter key are removed.
+**Why major.** A documented mode and its plan-frontmatter key are removed, and `init` and `update` stop writing to user scope.
 
 ### 7. Collapse and rename the skill surface
 
@@ -183,7 +192,7 @@ All four decided 2026-09-03: the recommendation column is the decision. Change 1
 | D1 | Upgrade base: any 1.x, or 1.28 first? Any-1.x keeps the pre-1.23 index migration (`LEGACY_HEADINGS` in `lib/memory-files.mjs`, the header migration in `memory-index.mjs`, `legacy-index` in `memory-doctor.mjs`, the legacy-row regex in bootstrap, `update` step 3.6) and adds four new one-shots on top. | Require 1.28: 2.0's `update` refuses a lower `frameworkVersion` with "run the 1.28 update first". Consumers at 1.0.0 (three repos) and 1.6.0 pay one extra run; the legacy path is deleted. |
 | D2 | Who edits `.claude/settings.json` hooks wiring? Today `update` reports and never edits. Change 3 removes one command and adds one. | Let 2.0's `update` own the `hooks` key: deep-merge from `templates/settings-hooks.json`, remove commands listed in the manifest `removed` block, touch nothing else in the file. Otherwise the doctor's `wiring-incomplete` becomes a permanent 2.0 warning. |
 | D3 | `aiDir` canonical default: `.ai` or `ai`. | `.ai` (README, resolver default, and the maintained consumers already agree). |
-| D4 | Retire agent-chain mode (change 6) or fix it (issues #10–#15, #18). | Retire; no successful run on record. |
+| D4 | Retire agent-chain mode (change 6) or fix it (issues #10–#15, #18). | Retire — because `init` writes six agent files into three user-scope directories with no uninstall, and the chain's one unique property (a Worker with no shell) ports to normal mode in a line. "No successful run on record" is one consumer and does not carry the decision. |
 
 ## Migration from any 1.x
 
@@ -197,6 +206,6 @@ All four decided 2026-09-03: the recommendation column is the decision. Change 1
 1. Change 1 (schema, `removed` block, marker header, rename reconciliation) — every later migration depends on it. Settle D1–D3 first.
 2. Change 2 (sessions) and change 3 (isolation) together — they share `.claude/state/`.
 3. Change 4 (rules) and change 5 (unread files) — both shrink what `init` writes; needs the pin reconciliation from step 1.
-4. Change 6 (retire orchestrator) — pure deletion once D4 is settled.
+4. Change 6 (retire orchestrator) — deletion, plus the no-shell clause added to `implementer-prompt.md`, once D4 is settled.
 5. Change 7 (skill collapse and renames) — last, because it renames the entry points every earlier step documents.
 6. Non-breaking items fold into whichever step touches the same skill.

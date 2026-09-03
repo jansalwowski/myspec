@@ -21,8 +21,8 @@ The eight skills you'll use to take a feature from idea to shipped:
 | [skills/feature-mockup.md](skills/feature-mockup.md) | First mockups for an approved spec · Unconfigured project (graceful degradation) · Scope-creep flag + schema handoff |
 | [skills/feature-mockup-review.md](skills/feature-mockup-review.md) | Full review with mixed findings · Focus prompt narrows to loose ends · Unconfigured project (Group E skipped, gap handed off) |
 | [skills/feature-tech-spec.md](skills/feature-tech-spec.md) | Pattern-following design · ADR-heavy with alternatives · Discovers spec gap during design |
-| [skills/feature-plan.md](skills/feature-plan.md) | Single-milestone plan (normal mode) · Multi-milestone with parallel groups + worker context budget (orchestrator mode) · Plan refuses, recommends decompose |
-| [skills/feature-implement.md](skills/feature-implement.md) | Sequential execution with per-phase review · Parallel group with worktree dispatch (orchestrator role chain) · Resume mid-milestone after interruption |
+| [skills/feature-plan.md](skills/feature-plan.md) | Single-milestone plan · Multi-milestone with parallel groups · Plan refuses, recommends decompose |
+| [skills/feature-implement.md](skills/feature-implement.md) | Sequential execution with per-phase review · Parallel group with worktree dispatch · Resume mid-milestone after interruption |
 | [skills/feature-update.md](skills/feature-update.md) | Add a capability to a shipped feature · Remove a deprecated capability |
 | [skills/feature-verify.md](skills/feature-verify.md) | Clean health check · Mixed report with severity-ranked routing |
 | [skills/feature-complete.md](skills/feature-complete.md) | Clean completion · Discovers late drift during completion |
