@@ -97,9 +97,6 @@ ${aiDir}/
     memory-procedural.md    ← copy from framework-files/templates/memory-procedural.md
     memory-semantic.md      ← copy from framework-files/templates/memory-semantic.md
     memory-episodic.md      ← copy from framework-files/templates/memory-episodic.md
-    feature-pre-flight.md   ← copy from framework-files/templates/feature-pre-flight.md
-    example-usage.md        ← copy from framework-files/templates/example-usage.md
-    README.md               ← copy from framework-files/templates/README.md
   ideas/
     INTAKE-INSTRUCTIONS.md      ← copy from scaffolding/ideas/INTAKE-INSTRUCTIONS.md
     PRIORITY-LISTING.md         ← copy from scaffolding/ideas/PRIORITY-LISTING.md
@@ -117,7 +114,6 @@ ${aiDir}/
 Also create these framework files in `${aiDir}/`:
 - `anti-patterns.md` ← copy from `framework-files/anti-patterns.md`
 - `pre-flight.md` ← copy from `framework-files/pre-flight.md`
-- `memory-system.md` ← copy from `framework-files/memory-system.md`
 
 Replace `${aiDir}` placeholders in all copied files with the configured value.
 

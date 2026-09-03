@@ -85,7 +85,7 @@ is left is judgment:
 - Dead links; docs for tools that left the repo; index files whose `updated:` predates the content they index; advertised-but-empty directories
 - Duplication clusters — if a fact is stated in 3+ docs, give it one home + cross-refs
 
-**D. Memory tree** — `${aiDir}/memory/` against `${aiDir}/memory-system.md` (layer budgets, 30-day consolidation), `.claude/rules/memory-system.md`, and `.claude/rules/auto-memory-style.md`:
+**D. Memory tree** — `${aiDir}/memory/` against `.claude/rules/memory-system.md` (triggers, session lifecycle, layer budgets, 30-day consolidation) and `.claude/rules/auto-memory-style.md`:
 - Layer-1 index at its ~200-token budget; entry anchors still grep-match their targets; episodic entries > 30 days old with `persistent: false` and never consolidated; entries over the length caps; ID collisions across namespaces; `.claude/state/sessions/` empty of terminal-status files, nothing left under the pre-2.0 `${aiDir}/memory/sessions/active/` (tier 0 `sessions-unmigrated`); user-level auto-memory `MEMORY.md` overlap with project memory
 
 **E. Hooks + harness config** — `.claude/settings.json`, every `.claude/hooks/*.sh`, `.claude/lib/*.sh`, `.claude/verification.json`, `.myspec.json`. Tier 0 owns existence, registration, executability, `bash -n`, framework and hook content drift, and schema validity; its `install`, `wiring`, and `schema` records are in the brief and are not to be re-derived. This surface is behavior, which no script can settle:

@@ -78,6 +78,8 @@ Without this, a sync silently reverts local edits: the file carries no marker di
 
 Pinning is the project's call, not the skill's. Never add or remove a pin on the project's behalf; report pinned files and let the user decide whether the local reason still holds.
 
+**Pin reconciliation.** A pinned rule never receives the plugin copy, so a pin taken to trim always-loaded context outlives the trim upstream. When a pinned entry's plugin copy is now *smaller* than the local one (`wc -c` both), the reason for the pin has probably been absorbed: show both sizes and the pin reason, and ask — keep the pin, take the plugin copy and drop the pin, or see a diff first. Apply the answer; never decide alone. Report the outcome under `Pinned` in the Step 6 summary.
+
 **Removed entries — delete, then unwire.** The manifest's `removed` block lists files the framework retired: `"<old key>": { "dest": "<path>", "since": "<version>" }`. For each, when `dest` exists (after `${aiDir}` substitution): `git rm` it if tracked, else delete it; drop its `frameworkFiles` key; and when `dest` is under `.claude/hooks/`, delete every `settings.json` hook entry whose `command` names it (Step 3 owns the rest of the wiring). A pinned entry is a deliberate local keep — leave the file and the pin, report it as "retired upstream, kept locally". List deletions under `Removed` in the Step 6 summary.
 
 For `hooks` and `lib`: only process if `.claude/hooks/` directory exists (hooks and their helper lib travel together). If it doesn't exist, skip all hooks AND lib entries and note: "Hooks directory not found — skipping Claude hook + lib updates. Run the `init` skill with Claude hooks enabled to set them up."
@@ -258,7 +260,7 @@ After running the skill:
 - [ ] Every `manifest.json` entry processed with its declared strategy (`overwrite` / `marker-merge`)
 - [ ] Every entry carrying `renamedFrom` checked before applying: destination migrated and its `frameworkFiles` key renamed, a dead old key dropped, or the both-exist case offered a merge
 - [ ] Every `removed` entry deleted (or kept when pinned) and, for hooks, unwired from `settings.json`
-- [ ] Entries pinned in `.myspec.json` skipped and listed in the summary
+- [ ] Entries pinned in `.myspec.json` skipped and listed in the summary; every pin whose plugin copy is now smaller than the local one offered the keep / take / diff choice
 - [ ] `templates/*` entries written to `{aiDir}/.templates/` (no `{aiDir}/templates/` created)
 - [ ] `marker-merge` files: everything after `<!-- myspec:framework-end -->` left untouched; the region above it taken from the plugin copy
 - [ ] `hooks` and `lib` entries processed only when `.claude/hooks/` exists (else both skipped with the note)

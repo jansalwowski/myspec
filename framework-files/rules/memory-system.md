@@ -6,15 +6,13 @@ updated: 2026-09-02
 
 # Agent Memory System
 
-Governs the project-level memory under `${aiDir}/memory/` — session logs plus procedural/semantic/episodic memories written via `/myspec:memory-create`. The harness-managed user-level auto-memory at `~/.claude-personal/projects/<encoded_cwd>/memory/` is governed by `.claude/rules/auto-memory-style.md`.
-
-This rule is always loaded, so it holds only the triggers. Procedures live in the skills they belong to; the escalation and risky-change protocols live in `${aiDir}/pre-flight.md` and `/myspec:session-start`.
+Governs the project-level memory under `${aiDir}/memory/` (session logs, procedural/semantic/episodic memories). The user-level auto-memory store is governed by `.claude/rules/auto-memory-style.md`. Always loaded, so it holds only triggers and contracts; procedures live in the skills, the escalation and risky-change protocols in `${aiDir}/pre-flight.md`.
 
 ## Triggers
 
 | When | Action |
 |------|--------|
-| Session start | `/myspec:bootstrap` — reads Layer 1, reports memory health, sweeps sessions > 6h stale. Scans Layer 2 only when given a task |
+| Session start | `/myspec:bootstrap` — Layer 1, memory health, session sweep; Layer 2 only when given a task |
 | Before significant work (new feature, multi-file change, debugging) | `/myspec:memory-preflight`, unless bootstrap already scanned Layer 2 for this task |
 | Before trivial work (single-file fix, typo, config) | Read `${aiDir}/memory/index.md` only |
 | First code edit | Automatic — `mark-code-changed.sh` creates `.claude/state/sessions/{session_id}.md` (gitignored, primary checkout), one per agent, and appends every code path to its `## Files touched` — Bash writes included |
@@ -23,10 +21,20 @@ This rule is always loaded, so it holds only the triggers. Procedures live in th
 | Debugging an unfamiliar error | `/myspec:memory-lookup` |
 | Work complete | `/myspec:session-complete` — extraction plus archive of your own session file only |
 | User approves a memory | `/myspec:memory-create` |
-| Allocating a memory ID | `.claude/lib/memory-claim-id.sh <procedural\|semantic\|episodic>` — never read the index and pick a number; parallel sessions pick the same one and the tables auto-merge silently. Script missing → run `/myspec:update`. Exit 3 → fix the conformance errors it printed. Never hand-pick in either case |
+| Allocating a memory ID | `.claude/lib/memory-claim-id.sh <procedural\|semantic\|episodic>` — never read the index and pick a number; parallel sessions pick the same one and the tables auto-merge silently. Exit 3 → fix the conformance errors it printed; never hand-pick |
 | After adding, removing, or superseding a memory | `node .claude/lib/memory-index.mjs` — the tables are generated from the files. On an `index.md` merge conflict keep either side and re-run |
-| Memory drift suspected (empty index, wrong columns, duplicate IDs) | `node .claude/lib/memory-doctor.mjs` — reports what disagrees with the tooling and how to fix it |
-| Before reporting anything as done | Run the check, read the output, then claim the result. `verify-before-stop.sh` gates what it can; "should work" is not a result |
+| Memory drift suspected | `node .claude/lib/memory-doctor.mjs` — reports what disagrees with the tooling and how to fix it |
+| Before reporting anything as done | Run the check, read the output, then claim the result; "should work" is not a result |
+
+## Budgets
+
+| Layer | Loaded | Budget | Where |
+|-------|--------|--------|-------|
+| 1 | Always | ~200 tokens | `${aiDir}/memory/index.md` — critical anti-patterns, one line per type index |
+| 2 | Per task | ~500 tokens per index | `${aiDir}/memory/{procedural,semantic,episodic}/index.md` |
+| 3 | On demand | Unlimited | Individual memory files, `${aiDir}/memory/sessions/archive/` |
+
+Episodic memories older than 30 days consolidate into semantic facts; `/myspec:memory-preflight` flags the candidates.
 
 ## Session lifecycle
 
@@ -37,4 +45,4 @@ This rule is always loaded, so it holds only the triggers. Procedures live in th
 | Archive file | `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md`; sessions swept without a real topic use `orphaned-{first 8 of session_id}` |
 | Terminal statuses | `completed` (via `/myspec:session-complete`) or `abandoned` (swept). Archive is a location, not a status |
 | Age policy | mtime < 1h: live, never touch. 1–6h: ambiguous — report and route to `/myspec:session-clean`. > 6h: sweep as `abandoned` |
-| Ownership | Your own session → `/myspec:session-complete`. Other agents' sessions → `/myspec:session-clean` (interactive) or bootstrap's sweep (> 6h only). Never touch a sibling's fresh file |
+| Ownership | Own → `/myspec:session-complete`; others' → `/myspec:session-clean` or bootstrap's > 6h sweep. Never touch a sibling's fresh file |

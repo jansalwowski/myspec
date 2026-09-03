@@ -247,6 +247,7 @@ fs.writeFileSync(process.argv[2],JSON.stringify(m,null,2)+"\n");
 ' "$PLUGIN/framework-files/manifest.json" "$FAKE/framework-files/manifest.json"
 
 build_fixture
+mkdir -p "$REPO/ai/.templates" && printf '# stale\n' > "$REPO/ai/.templates/example-usage.md"
 OUTPUT=$(node "$SCRIPT" --root "$REPO" --plugin-root "$FAKE" install 2>&1); STATUS=$?
 expect_exit 0 "a retired file still on disk does not fail the run"
 expect_line 'WARN +framework-removed: ai/.templates/example-usage.md' "a retired file still on disk is reported"

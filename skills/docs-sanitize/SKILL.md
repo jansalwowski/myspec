@@ -59,15 +59,15 @@ Output summary in this format:
 ## Sanitization Complete
 
 ### Renamed (3)
-- ${aiDir}/MEMORY-SYSTEM.md → ${aiDir}/memory-system.md
+- ${aiDir}/CONVENTIONS.md → ${aiDir}/conventions.md
 - ${aiDir}/features/maps/NOTES.md → ${aiDir}/features/maps/notes.md
 
 ### Archived (1)
 - ${aiDir}/session-log.md → ${aiDir}/memory/sessions/archive/2026-03-18-streetview-fix.md
 
 ### References Updated (2)
-- ${aiDir}/INDEX.md:45 - updated link to memory-system.md
-- ${aiDir}/pre-flight.md:12 - updated link to memory-system.md
+- ${aiDir}/INDEX.md:45 - updated link to conventions.md
+- ${aiDir}/pre-flight.md:12 - updated link to conventions.md
 ```
 
 ## Verification Checklist
