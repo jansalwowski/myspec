@@ -73,7 +73,7 @@ Write `.myspec.json` at project root:
 ```
 
 Build `frameworkFiles` from the manifest — never hardcode the list:
-- one entry per key in the manifest's `files` block (e.g. `"memory-index.md"`, `"templates/session-log.md"`), and
+- one entry per key in the manifest's `files` block (e.g. `"anti-patterns.md"`, `"templates/session-log.md"`), and
 - one `"rules/{filename}"` entry per key in its `rules` block.
 
 Each entry's value is `{ "version": "{VERSION}", "lastUpdated": "{TODAY}" }`. The `setup` skill may later add a `"topologyFile"` key (blueprint `backbone`) — do not add it here.
@@ -122,7 +122,7 @@ ${aiDir}/
 ```
 
 Also create these framework files in `${aiDir}/`:
-- `memory-index.md` ← copy from `framework-files/memory-index.md`
+- `anti-patterns.md` ← copy from `framework-files/anti-patterns.md`
 - `pre-flight.md` ← copy from `framework-files/pre-flight.md`
 - `memory-system.md` ← copy from `framework-files/memory-system.md`
 
@@ -268,7 +268,7 @@ Next steps:
 - [ ] `${aiDir}/memory/` directory structure created with all 3 type indexes
 - [ ] `${aiDir}/memory/sessions/active/` and `${aiDir}/memory/sessions/archive/` created
 - [ ] `${aiDir}/ideas/` directory with instructions files and `processed/`
-- [ ] `${aiDir}/memory-index.md` created (framework memory index)
+- [ ] `${aiDir}/anti-patterns.md` created (framework anti-pattern index — distinct from `${aiDir}/memory/index.md`, the Layer 1 memory index)
 - [ ] `${aiDir}/pre-flight.md` created
 - [ ] `${aiDir}` binding written to `AGENTS.md` (or `CLAUDE.md`) between `myspec:paths` markers
 - [ ] If hooks enabled: `.claude/hooks/` has 6 scripts, all executable

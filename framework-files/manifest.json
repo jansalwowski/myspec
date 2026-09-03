@@ -1,8 +1,9 @@
 {
   "frameworkVersion": "1.28.0",
   "files": {
-    "memory-index.md": {
-      "type": "marker-merge"
+    "anti-patterns.md": {
+      "type": "marker-merge",
+      "renamedFrom": "memory-index.md"
     },
     "pre-flight.md": {
       "type": "marker-merge"

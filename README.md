@@ -130,7 +130,7 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref main
     "techStack": "PHP 8.3, Laravel 11, PostgreSQL"
   },
   "frameworkFiles": {
-    "memory-index.md": { "version": "<current plugin version>", "lastUpdated": "2026-05-11" }
+    "anti-patterns.md": { "version": "<current plugin version>", "lastUpdated": "2026-05-11" }
   }
 }
 ```
@@ -212,7 +212,7 @@ ${aiDir}/                       # AI documentation directory (.ai or ai)
   conventions/                  # Project coding standards
   decisions/                    # Architecture decision records
   plans/                        # Implementation plans
-  memory-index.md               # Framework anti-pattern index (project section appended by setup)
+  anti-patterns.md              # Framework anti-pattern index (project section appended by setup)
   pre-flight.md                 # Pre-work checklist
   memory-system.md              # Memory architecture reference
   INDEX.md                      # Documentation index

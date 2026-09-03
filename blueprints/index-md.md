@@ -24,7 +24,7 @@ Generate `${aiDir}/INDEX.md` with this structure:
 
 ## How to Use
 
-- **Starting work**: Read `memory-index.md` then `pre-flight.md`
+- **Starting work**: Read `anti-patterns.md` then `pre-flight.md`
 - **New feature**: Check `features/index.yaml` then `workflow.md`
 - **Architecture question**: Browse `plans/` section below
 
@@ -32,7 +32,7 @@ Generate `${aiDir}/INDEX.md` with this structure:
 
 | Document | Purpose | Read When |
 |----------|---------|-----------|
-| `memory-index.md` | Common mistakes to avoid | Before any work |
+| `anti-patterns.md` | Common mistakes to avoid | Before any work |
 | `pre-flight.md` | Verification checklist | Before and after implementation |
 | `workflow.md` | Development workflow and policies | Starting any feature |
 

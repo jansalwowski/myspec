@@ -88,14 +88,25 @@ export function mainRoot(cwd = process.cwd()) {
 
 export function aiDirFor(root) {
   const configPath = join(root, '.myspec.json');
-  let value = '.ai';
+  let value = '';
 
   if (existsSync(configPath)) {
     try {
-      value = JSON.parse(readFileSync(configPath, 'utf8')).aiDir || value;
+      value = JSON.parse(readFileSync(configPath, 'utf8')).aiDir || '';
     } catch {
       // A malformed .myspec.json is not this module's problem to report.
     }
+  }
+
+  // No configured value: read the tree that is actually on disk instead of
+  // guessing. The guess was '.ai' here, in memory-claim-id.sh and in
+  // verify-before-stop.sh, and 'ai' in validate-frontmatter.sh and
+  // mark-code-changed.sh, so a keyless project had its session logs written
+  // to one tree while its memories were read from the other. '.ai' wins when
+  // both or neither exist; memory-doctor names the both case as
+  // second-ai-tree.
+  if (!value) {
+    return existsSync(join(root, '.ai')) || !existsSync(join(root, 'ai')) ? '.ai' : 'ai';
   }
 
   // `.ai/` and `.ai` both occur in the wild; the trailing slash breaks joins.

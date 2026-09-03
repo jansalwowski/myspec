@@ -19,9 +19,9 @@ jq '{aiDir, topologyFile, frameworkVersion, name: .project.name, techStack: .pro
 
 No `jq`? Use `python3 -c "import json;d=json.load(open('.myspec.json'));print({k:d.get(k) for k in ('aiDir','topologyFile','frameworkVersion')}, d.get('project'))"`.
 
-Fields used: `project.name` / `project.techStack` (summary), `aiDir` (doc directory,
-default `ai/`), `frameworkVersion` (step 6), `topologyFile`. If `topologyFile` is set,
-read that file.
+Fields used: `project.name` / `project.techStack` (summary), `aiDir` (doc directory —
+when the key is absent the tooling uses whichever of `.ai/` or `ai/` exists on disk, and `.ai` when both or neither do), `frameworkVersion` (step 6), `topologyFile`. If
+`topologyFile` is set, read that file.
 
 If `topologyFile` is not set, check for common topology files at project root: `backbone.yml`, `topology.yml`, `project.yml`. If found, read it and note: suggest the user add `"topologyFile": "{filename}"` to `.myspec.json`.
 
@@ -95,9 +95,10 @@ node .claude/lib/setup-doctor.mjs --quiet
 The deterministic install check, about a second. It covers framework files whose content
 no longer matches the plugin copy (not just the version scalar step 6 compares), hooks
 registered but missing or not executable, hook scripts on disk that no settings file
-wires, `bash -n` failures under `.claude/hooks/` and `.claude/lib/`, and schema breaks in
-`.myspec.json`, `.claude/verification.json`, and `${aiDir}/features/index.yaml`. Every
-finding carries a literal `run:` command or a one-line `fix:`.
+wires, `bash -n` failures under `.claude/hooks/` and `.claude/lib/`, schema breaks in
+`.myspec.json` and `.claude/verification.json`, and entries in `${aiDir}/features/index.yaml`
+that the manifest parser cannot read. Every finding carries a literal `run:` command or a
+one-line `fix:`.
 
 Report the summary in step 7 and fix nothing here. An `ERROR` means part of the harness is
 inert — a hook that never fires, a gate that approves without running anything — which is

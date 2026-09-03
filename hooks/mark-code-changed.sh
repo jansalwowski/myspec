@@ -153,14 +153,21 @@ if ! REPO_ROOT="$(main_worktree_root "$RAW_ROOT")"; then
   REPO_ROOT="$RAW_ROOT"
 fi
 
-# Read aiDir from .myspec.json (default: "ai"); strip a trailing slash so a
-# configured ".ai/" cannot derive dead patterns like ".ai//*" downstream
-AI_DIR="ai"
+# aiDir from .myspec.json; strip a trailing slash so a configured ".ai/"
+# cannot derive dead patterns like ".ai//*" downstream
+AI_DIR=""
 if [ -f "$REPO_ROOT/.myspec.json" ]; then
-  CONFIGURED=$(jq -r '.aiDir // empty' "$REPO_ROOT/.myspec.json" 2>/dev/null)
-  if [ -n "$CONFIGURED" ]; then
-    AI_DIR="${CONFIGURED%/}"
-  fi
+  AI_DIR=$(jq -r '.aiDir // empty' "$REPO_ROOT/.myspec.json" 2>/dev/null)
+  AI_DIR="${AI_DIR%/}"
+fi
+# No configured value: read the tree that is actually on disk instead of
+# guessing. The guess was ".ai" in memory-files.mjs, memory-claim-id.sh and
+# verify-before-stop.sh, and "ai" here and in the sibling PostToolUse hook, so
+# a keyless project had its session logs written to one tree while its
+# memories were read from the other. ".ai" wins when both or neither exist;
+# memory-doctor names the both case as second-ai-tree.
+if [ -z "$AI_DIR" ]; then
+  if [ -d "$REPO_ROOT/.ai" ] || [ ! -d "$REPO_ROOT/ai" ]; then AI_DIR=".ai"; else AI_DIR="ai"; fi
 fi
 
 # File logs only in a myspec-managed project. Now that the root follows the

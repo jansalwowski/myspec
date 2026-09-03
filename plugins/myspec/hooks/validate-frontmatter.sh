@@ -3,7 +3,8 @@
 # PostToolUse hook — validates frontmatter on ${aiDir}/**/*.md writes/edits.
 # Emits a block-decision JSON so the agent sees the issues as feedback and
 # fixes them before continuing (exit-0 stdout alone never reaches the agent).
-# Reads aiDir from .myspec.json (defaults to "ai" if not configured).
+# Reads aiDir from .myspec.json; with no configured value it uses whichever
+# of .ai/ or ai/ exists (.ai when both or neither do).
 # Accepted fields mirror the framework's own templates: identity is any of
 # title/name/topic/id/type; temporal is any of updated/last_updated/created/
 # started/date. ${aiDir}/ideas/ is exempt (its seed docs ship frontmatter-less).
@@ -95,13 +96,23 @@ if [[ "$FILE_PATH" != *.md ]]; then
   exit 0
 fi
 
-# Read aiDir from .myspec.json (default: "ai")
-AI_DIR="ai"
+# aiDir from .myspec.json. The trailing slash is stripped here too: the prefix
+# test below builds the glob ${AI_DIR}/*, and a configured ".ai/" would make
+# that ".ai//*", which matches nothing and silently disables this hook — the
+# same derived-pattern break the doctor flags as aidir-trailing-slash.
+AI_DIR=""
 if [ -f "$REPO_ROOT/.myspec.json" ] && command -v jq &>/dev/null; then
-  CONFIGURED=$(jq -r '.aiDir // empty' "$REPO_ROOT/.myspec.json" 2>/dev/null)
-  if [ -n "$CONFIGURED" ]; then
-    AI_DIR="$CONFIGURED"
-  fi
+  AI_DIR=$(jq -r '.aiDir // empty' "$REPO_ROOT/.myspec.json" 2>/dev/null)
+  AI_DIR="${AI_DIR%/}"
+fi
+# No configured value: read the tree that is actually on disk instead of
+# guessing. The guess was ".ai" in memory-files.mjs, memory-claim-id.sh and
+# verify-before-stop.sh, and "ai" here and in the sibling PostToolUse hook, so
+# a keyless project had its session logs written to one tree while its
+# memories were read from the other. ".ai" wins when both or neither exist;
+# memory-doctor names the both case as second-ai-tree.
+if [ -z "$AI_DIR" ]; then
+  if [ -d "$REPO_ROOT/.ai" ] || [ ! -d "$REPO_ROOT/ai" ]; then AI_DIR=".ai"; else AI_DIR="ai"; fi
 fi
 
 # Only check files inside the AI documentation directory (pure-shell prefix

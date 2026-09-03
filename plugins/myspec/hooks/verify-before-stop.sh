@@ -78,7 +78,10 @@ fi
 # report, not a reason to block a stop.
 DOCTOR="$REPO_ROOT/.claude/lib/memory-doctor.mjs"
 if [ -f "$DOCTOR" ] && [ -f "$REPO_ROOT/.myspec.json" ] && command -v node >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
-  MEMORY_AI_DIR=$(jq -r '.aiDir // ".ai"' "$REPO_ROOT/.myspec.json" 2>/dev/null | sed 's#/*$##')
+  MEMORY_AI_DIR=$(jq -r '.aiDir // empty' "$REPO_ROOT/.myspec.json" 2>/dev/null | sed 's#/*$##')
+  if [ -z "$MEMORY_AI_DIR" ]; then
+    if [ -d "$REPO_ROOT/.ai" ] || [ ! -d "$REPO_ROOT/ai" ]; then MEMORY_AI_DIR=".ai"; else MEMORY_AI_DIR="ai"; fi
+  fi
   if [ -n "$MEMORY_AI_DIR" ] && git -C "$REPO_ROOT" status --porcelain -- "$MEMORY_AI_DIR/memory" 2>/dev/null | grep -q .; then
     if ! DOCTOR_OUT=$(cd "$REPO_ROOT" && node "$DOCTOR" --quiet 2>&1); then
       REASON=$(printf 'Memory conformance check failed for changes under %s/memory. Fix these before stopping (node .claude/lib/memory-index.mjs regenerates the tables; the doctor names the rest):\n\n%s' "$MEMORY_AI_DIR" "$(printf '%s' "$DOCTOR_OUT" | tail -30)" | jq -Rs .)
@@ -94,8 +97,11 @@ fi
 # to approve — all of them are damage the session just did and can undo now.
 # Framework drift is deliberately excluded: its usual cause is a pending
 # /myspec:update, and blocking on that would halt every commit made between a
-# plugin release and the next update run. Gated on uncommitted changes to the
-# harness config, for the same reason the memory check above is gated.
+# plugin release and the next update run. The features group is excluded too —
+# it reads a file under the aiDir, outside the trigger below, so including it
+# would block a stop over something this session never touched. Gated on
+# uncommitted changes to the harness config, for the same reason the memory
+# check above is gated.
 SETUP_DOCTOR="$REPO_ROOT/.claude/lib/setup-doctor.mjs"
 if [ -f "$SETUP_DOCTOR" ] && [ -f "$REPO_ROOT/.myspec.json" ] && command -v node >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
   if git -C "$REPO_ROOT" status --porcelain -- .claude .myspec.json 2>/dev/null | grep -q .; then
