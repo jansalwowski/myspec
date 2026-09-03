@@ -111,7 +111,7 @@ it: report `setup health: not checked — run /myspec:update`.
 
 ### 4. Check for Active Sessions
 
-List `${aiDir}/memory/sessions/active/*.md` (excluding `.gitkeep`).
+List `.claude/state/sessions/*.md` — the primary checkout's, gitignored. Your own session, if one exists yet, is the file whose `## Files touched` lists a path you edited.
 
 For each file, compare its mtime to the current epoch.
 
@@ -121,7 +121,7 @@ For each file, compare its mtime to the current epoch.
 NOW=$(date +%s)
 # Use find, not a bare glob: an unmatched `*.md` glob is a hard error under zsh
 # ("no matches found") and aborts the sweep before the loop body ever runs.
-find "${aiDir}/memory/sessions/active" -maxdepth 1 -type f -name '*.md' -print0 2>/dev/null |
+find .claude/state/sessions -maxdepth 1 -type f -name '*.md' -print0 2>/dev/null |
 while IFS= read -r -d '' f; do
   MTIME=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f")
   AGE=$(( NOW - MTIME ))
@@ -209,7 +209,7 @@ Output a brief structured summary so the user can confirm the agent is properly 
 - [ ] Layer 1 index was read; Layer 2 indexes were scanned if a task was given, counted and deferred if not
 - [ ] Memory doctor run (or its absence reported); summary line in the output, nothing fixed
 - [ ] Setup doctor run (or its absence reported); summary line in the output, nothing fixed
-- [ ] `${aiDir}/memory/sessions/active/` was listed and orphans (> 6h) auto-archived; 1–6h only reported
+- [ ] `.claude/state/sessions/` was listed and orphans (> 6h) auto-archived; 1–6h only reported
 - [ ] Worktree health was checked (or omitted if no worktrees)
 - [ ] Framework version was compared (or omitted silently if unreadable)
 - [ ] Orientation summary was printed with all required fields populated

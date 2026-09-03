@@ -15,7 +15,7 @@ Audit and clean up git worktrees and the branches behind them.
 
 `lib/branch-cleanup.sh` earns the right to use `-D` by proving containment itself, and refuses when it cannot. Do not hand-roll the classification; a "looks merged" judgement is exactly what destroys work.
 
-It also keeps the capability off the bypass path: its git calls happen in a child process, so `guard-git-branch.sh` never sees them and no `MYSPEC_ALLOW_BRANCH_OPS=1` prefix is needed.
+It also keeps the capability off the bypass path: its git calls happen in a child process, so `guard-worktree-context.sh` never sees them and no `MYSPEC_ALLOW_BRANCH_OPS=1` prefix is needed.
 
 ## Workflow
 

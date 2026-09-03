@@ -59,9 +59,9 @@ For any loaded memory with anchors:
 
 ### 7. Check for Active Session
 
-List `${aiDir}/memory/sessions/active/*.md` (excluding `.gitkeep`).
+List `.claude/state/sessions/*.md` (the primary checkout's, gitignored).
 
-→ If your own session exists (matching `session_id`): resume it.
+→ If your own session exists (its `## Files touched` lists a path you edited): resume it.
 → If other sessions are > 6h stale: note them and suggest `/myspec:session-clean` — do not archive them yourself. 1–6h is ambiguous (a sibling agent may still be working): report only.
 → If none exist: proceed (one is auto-created on first code edit).
 

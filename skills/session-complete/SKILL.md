@@ -13,17 +13,17 @@ description: >
 
 ## Prerequisites
 
-Requires at least one file in `${aiDir}/memory/sessions/active/` (excluding `.gitkeep`).
+Requires at least one file in `.claude/state/sessions/` (the primary checkout's, gitignored).
 
 ## Workflow
 
 ### 1. Identify Target Session
 
-List `${aiDir}/memory/sessions/active/*.md` (excluding `.gitkeep`).
+List `.claude/state/sessions/*.md`.
 
 - **Zero files**: Abort. Tell user: "No active sessions found. Either no code was edited this session (the hook only auto-creates on code edits) or all sessions were already archived. Use `/myspec:session-start` to create one manually."
 - **Exactly one file**: Use it.
-- **Multiple files**: Pick the file with the latest mtime as the most likely target. Show the user a list of all active files (`session_id` prefix + topic + cwd + age) and confirm before proceeding. Multiple-active is normal in multi-agent workflows where subagents created their own sessions.
+- **Multiple files**: Yours is the one whose `## Files touched` lists a path you edited this session — the harness never exposes the session id, but the paths are known to you. If none or several match, fall back to the latest mtime, show the user every active file (`session_id` prefix + topic + started + age) and confirm before proceeding. Multiple-active is normal in multi-agent workflows where subagents created their own sessions.
 
 Set `TARGET_FILE` to the chosen file path. Do NOT touch sibling active files.
 
@@ -125,7 +125,7 @@ Report to user:
 
 ## Verification Checklist
 
-- [ ] `TARGET_FILE` no longer exists at `${aiDir}/memory/sessions/active/`
+- [ ] `TARGET_FILE` no longer exists under `.claude/state/sessions/`
 - [ ] Sibling active sessions (other agents) were NOT touched
 - [ ] Archive file exists at `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md` with `status: completed`
 - [ ] Outcome section is filled (what worked, root cause, key insights)

@@ -7,7 +7,7 @@ description: "Use when starting a NON-CODE session (debugging without edits, dis
 
 ## When This Skill Applies
 
-Sessions are **auto-created** on first code edit by `mark-code-changed.sh` (PostToolUse hook) at `${aiDir}/memory/sessions/active/{session_id}.md`. Manual invocation is only useful for:
+Sessions are **auto-created** on first code edit by `mark-code-changed.sh` (PostToolUse hook, Write/Edit and Bash) at `.claude/state/sessions/{session_id}.md` in the primary checkout, gitignored. Manual invocation is only useful for:
 
 - **Discovery work** — exploring unfamiliar code without editing
 - **Debugging without code changes** — investigating logs, configs, or running services
@@ -23,11 +23,11 @@ For ordinary code-editing work, skip this skill — the hook handles it.
 
 ### 1. Check for Existing Active Session
 
-List `${aiDir}/memory/sessions/active/*.md` (excluding `.gitkeep`).
+List `.claude/state/sessions/*.md`.
 
-If one exists with `auto_created: true` and recent mtime — that's the auto-created session for the current agent. Refine its frontmatter (topic, feature, mode) instead of creating a new one.
+Your own session is the file whose `## Files touched` lists a path you edited this session; with `auto_created: true` and a recent mtime it is the hook's log for the current agent. Refine its frontmatter (topic, feature, mode) instead of creating a new one.
 
-If multiple exist — check `cwd` and `started` fields to identify the relevant one. Multiple-active is normal in multi-agent workflows where subagents created their own sessions.
+If several exist and none lists your edits — check `started` and the `Context` line to identify the relevant one, and confirm. Multiple-active is normal in multi-agent workflows where subagents created their own sessions.
 
 ### 2. Determine Mode
 
@@ -39,7 +39,7 @@ If multiple exist — check `cwd` and `started` fields to identify the relevant 
 
 **Refining an auto-created session**: edit the existing file. Update `topic`, `feature`, `mode`, set `auto_created: false`, fill the Context section.
 
-**Creating a new manual session** (no auto-created file exists): write a new file at `${aiDir}/memory/sessions/active/{session_slug}.md` where `session_slug` is a short hyphenated topic (since the harness session_id is not exposed to the agent). Use the template at `${aiDir}/.templates/session-log.md`.
+**Creating a new manual session** (no auto-created file exists): write a new file at `.claude/state/sessions/{session_slug}.md` (create the directory if absent) where `session_slug` is a short hyphenated topic (since the harness session_id is not exposed to the agent). Use the template at `${aiDir}/.templates/session-log.md`.
 
 Fill frontmatter:
 - `session_id`: leave empty if not derivable; the slug serves as the key
@@ -72,15 +72,15 @@ After each significant action, append a row to the log table:
 
 ## Where the Log Lives
 
-Session logs live in the **main checkout of the repository the edited file belongs to** — one queue per repo, whatever cwd the harness hands the hook.
+Session logs live in `.claude/state/sessions/` of the **main checkout of the repository the edited file belongs to** — one queue per repo, whatever cwd the harness hands the hook. The directory is gitignored and outside the doc tree, so no git or worktree operation needs a special case for it.
 
 | Edit happened in | Log lands in |
 |------------------|--------------|
-| The primary checkout | That checkout's `${aiDir}/memory/sessions/active/` |
-| A linked worktree (`.claude/worktrees/<slug>/`) | The **main** checkout's `active/`, not the worktree's |
+| The primary checkout | That checkout's `.claude/state/sessions/` |
+| A linked worktree (`.claude/worktrees/<slug>/`) | The **main** checkout's `.claude/state/sessions/`, not the worktree's |
 | Another repository (cross-repo session) | **That** repo's main checkout, if it is a myspec project; otherwise no log |
 
-A log inside a worktree is invisible to the staleness sweep and to `/myspec:session-complete`, and `git worktree remove` destroys it (gitignored, unrecoverable). The `Context` line still records the real edited path, worktree segment included.
+A log inside a worktree is invisible to the staleness sweep and to `/myspec:session-complete`, and `git worktree remove` destroys it. `## Files touched` records every code path relative to the main checkout, worktree segment included. Bash-driven edits (`sed -i`, redirects, `tee`, `git apply`) create and extend the log too; a script writing from inside a heredoc body is not seen — run it as a file, or use the Write tool.
 
 ## Escalation and Risky Changes
 
@@ -99,7 +99,7 @@ Past 2–3 attempts on the same surface, more iteration usually masks a misdiagn
 
 ## Verification Checklist
 
-- [ ] Session file exists at `${aiDir}/memory/sessions/active/{session_id_or_slug}.md`
+- [ ] Session file exists at `.claude/state/sessions/{session_id_or_slug}.md`
 - [ ] Frontmatter has all required fields populated (topic, mode, started, status)
 - [ ] Mode is one of: `debugging`, `discovery`, `implementation`
 - [ ] Context section has 1-2 sentence goal

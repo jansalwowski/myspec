@@ -84,7 +84,7 @@ const CLAUDE_MD_BUDGET = 800;
 const RULE_BUDGET = 1000;
 
 const GROUPS = {
-  install: ['framework-missing', 'framework-renamed', 'framework-removed', 'framework-drift', 'marker-missing', 'doctor-rule-unrenamed', 'shipped-missing', 'shipped-drift'],
+  install: ['framework-missing', 'framework-renamed', 'framework-removed', 'framework-drift', 'marker-missing', 'doctor-rule-unrenamed', 'sessions-unmigrated', 'shipped-missing', 'shipped-drift'],
   wiring: ['settings-unparseable', 'hook-missing', 'hook-not-executable', 'hook-unregistered', 'hook-syntax', 'wiring-incomplete', 'tooling-absent'],
   schema: ['myspec-unparseable', 'myspec-missing-key', 'myspec-schema-stale', 'aidir-trailing-slash', 'aidir-missing', 'verification-unparseable', 'verification-empty'],
   // Separate from `schema` on purpose: the stop hook blocks on `wiring` and
@@ -662,6 +662,21 @@ if (manifest.value && wants('install')) {
       commands: ['/myspec:update'],
     });
   });
+}
+
+// Live session logs moved from <aiDir>/memory/sessions/active/ to
+// .claude/state/sessions/ in 2.0 (the 2.0.0-sessions migration moves them). A
+// log still under active/ is invisible to every 2.0 skill and sweep.
+const legacyActive = join(root, aiDir, 'memory', 'sessions', 'active');
+
+if (existsSync(legacyActive)) {
+  const stranded = readdirSync(legacyActive).filter((name) => name.endsWith('.md'));
+
+  if (stranded.length > 0) {
+    warn('sessions-unmigrated', 'install', rel(legacyActive), `${rel(legacyActive)}: ${stranded.length} session log(s) still here — since 2.0 live logs live in .claude/state/sessions/ and nothing reads this directory; update moves them`, {
+      commands: ['/myspec:update'],
+    });
+  }
 }
 
 // The doctor's per-repo extension was `.claude/rules/ai-setup-audit.md` before

@@ -7,8 +7,9 @@ started: YYYY-MM-DD HH:MM
 status: active      # active → completed (session-complete) | abandoned (swept)
 auto_created: false
 worktree: ""        # worktree dir basename if session runs in one; empty on main checkout
-cwd: <repo_root>
 ---
+
+<!-- Live logs live in .claude/state/sessions/ (gitignored, primary checkout); archives in ${aiDir}/memory/sessions/archive/ -->
 
 # Session: {topic}
 
@@ -37,3 +38,6 @@ cwd: <repo_root>
 ## Extraction Candidates
 <!-- Fill on session-complete — proposed typed memories -->
 - [ ] [type] description
+
+## Files touched
+<!-- Appended by mark-code-changed.sh on every code edit; keep this section last. A skill recognises its own session by the paths it edited. -->

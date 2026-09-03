@@ -34,8 +34,8 @@ Agents should copy templates when creating new memory system files. Do not modif
 - `${aiDir}/memory/semantic/` — Semantic memories (codebase facts)
 - `${aiDir}/memory/episodic/` — Episodic memories (events, decisions)
 
-**Session files** (in `${aiDir}/memory/sessions/`):
-- `${aiDir}/memory/sessions/active/{session_id}.md` — one file per working agent session
+**Session files**:
+- `.claude/state/sessions/{session_id}.md` — one live log per working agent session (gitignored, primary checkout)
 - `${aiDir}/memory/sessions/archive/` — archived session logs (`YYYY-MM-DD-{slug}.md`)
 
 **Global files** (in `${aiDir}/`):

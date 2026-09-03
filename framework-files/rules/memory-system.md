@@ -17,7 +17,7 @@ This rule is always loaded, so it holds only the triggers. Procedures live in th
 | Session start | `/myspec:bootstrap` — reads Layer 1, reports memory health, sweeps sessions > 6h stale. Scans Layer 2 only when given a task |
 | Before significant work (new feature, multi-file change, debugging) | `/myspec:memory-preflight`, unless bootstrap already scanned Layer 2 for this task |
 | Before trivial work (single-file fix, typo, config) | Read `${aiDir}/memory/index.md` only |
-| First code edit | Automatic — `mark-code-changed.sh` creates `${aiDir}/memory/sessions/active/{session_id}.md`, one per agent |
+| First code edit | Automatic — `mark-code-changed.sh` creates `.claude/state/sessions/{session_id}.md` (gitignored, primary checkout), one per agent, and appends every code path to its `## Files touched` — Bash writes included |
 | Non-code session (debugging without edits, discovery, doc-only) | `/myspec:session-start` |
 | Repeated failure — same file edited 3+ times, same error after 2 different fixes, about to retry a failed approach | Pause and ask the user. `/myspec:memory-lookup` first. Protocol and message template: `${aiDir}/pre-flight.md` |
 | Debugging an unfamiliar error | `/myspec:memory-lookup` |
@@ -32,7 +32,8 @@ This rule is always loaded, so it holds only the triggers. Procedures live in th
 
 | Aspect | Convention |
 |--------|-----------|
-| Active file | `${aiDir}/memory/sessions/active/{session_id}.md` in the **main checkout** of the repo the edited file belongs to — never inside a linked worktree, where `git worktree remove` destroys it unrecoverably |
+| Live file | `.claude/state/sessions/{session_id}.md` in the **main checkout** of the repo the edited file belongs to — gitignored, outside the doc tree, never inside a linked worktree (where `git worktree remove` destroys it) |
+| Own session | The live file whose `## Files touched` lists a path you edited; several or none → newest mtime, and confirm. The harness never exposes the session id to the model |
 | Archive file | `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md`; sessions swept without a real topic use `orphaned-{first 8 of session_id}` |
 | Terminal statuses | `completed` (via `/myspec:session-complete`) or `abandoned` (swept). Archive is a location, not a status |
 | Age policy | mtime < 1h: live, never touch. 1–6h: ambiguous — report and route to `/myspec:session-clean`. > 6h: sweep as `abandoned` |

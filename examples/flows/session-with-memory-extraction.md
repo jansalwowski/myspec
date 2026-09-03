@@ -11,7 +11,7 @@ You're starting a debugging session on a flaky payment-webhook test. You don't y
 | Step | Skill / Hook | What happens |
 |------|--------------|--------------|
 | 1 | `/myspec:bootstrap` | Loads project context, scans memory, picks up active sessions |
-| 2 | (auto on first edit) | `mark-code-changed.sh` PostToolUse hook creates `sessions/active/{id}.md` |
+| 2 | (auto on first edit) | `mark-code-changed.sh` PostToolUse hook creates `.claude/state/sessions/{id}.md` |
 | 3 | (during work) | Agent appends rows to the session log table after significant actions |
 | 4 | `/myspec:session-complete` | Reviews the log, proposes memory extractions, archives the session |
 | 5 | (alternative) `/myspec:memorify` | Mid-session sweep without archiving — for non-tracked or partial captures |
@@ -32,7 +32,7 @@ The skill walks its checklist:
   - **P016** — *Create test users through the auth-service factory* (procedural)
   - **S008** — *Stripe webhook signing secret is per-environment* (semantic)
 - Reads both full files since they matched.
-- Lists `ai/memory/sessions/active/` — empty (no active sessions). No auto-archive needed.
+- Lists `.claude/state/sessions/` — empty (no active sessions). No auto-archive needed.
 
 The agent reports:
 
@@ -45,7 +45,7 @@ The agent reports:
 You start poking at the test and Claude runs an `Edit` tool call to add some logging. The `mark-code-changed.sh` PostToolUse hook fires and creates:
 
 ```
-ai/memory/sessions/active/2026-04-30-1404-flakywebhook.md
+.claude/state/sessions/2026-04-30-1404-flakywebhook.md
 ```
 
 with frontmatter:
@@ -125,7 +125,7 @@ User: `all`.
 
 **Step 5**: For each, asks one clarifying question, drafts the file (with `source_session: 2026-04-30-1404-flakywebhook` in the frontmatter), shows it, gets approval, writes.
 
-**Step 6**: Archives the session — moves the file from `active/` to `archive/2026-04/`. Appends a one-line summary to `ai/memory/sessions/index.md`.
+**Step 6**: Archives the session — moves the file from `.claude/state/sessions/` to `archive/2026-04/`. Appends a one-line summary to `ai/memory/sessions/index.md`.
 
 Final tally:
 

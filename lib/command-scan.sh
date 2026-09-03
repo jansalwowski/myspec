@@ -5,8 +5,8 @@
 #
 # The distinction is the whole point. A substring match fires on a verb inside
 # a commit message, a PR body, or doc prose in a heredoc, and blocks a command
-# that mutates nothing. Sourced by guard-git-branch.sh and
-# guard-worktree-context.sh so the two cannot drift apart.
+# that mutates nothing. Sourced by guard-worktree-context.sh and
+# mark-code-changed.sh so the two cannot drift apart.
 #
 # Public API:
 #   sanitize_command <<< "$cmd"        # blanks quoted spans + heredoc bodies

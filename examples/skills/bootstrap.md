@@ -54,7 +54,7 @@ The invocation carried a task, so the Layer 2 scan runs. Task: "CSV import to us
 
 #### 4. Check for active sessions
 
-Lists `${aiDir}/memory/sessions/active/`. One file: `2026-04-30-1027-uierror.md` with mtime 8 minutes ago. Well inside the live window (< 1 hour — sessions over 6 hours stale get auto-archived as `abandoned`; 1–6 hours only gets reported with a `/myspec:session-clean` suggestion). Auto-created by the hook.
+Lists `.claude/state/sessions/`. One file: `2026-04-30-1027-uierror.md` with mtime 8 minutes ago. Well inside the live window (< 1 hour — sessions over 6 hours stale get auto-archived as `abandoned`; 1–6 hours only gets reported with a `/myspec:session-clean` suggestion). Auto-created by the hook.
 
 The skill notes:
 
@@ -124,7 +124,7 @@ The skill auto-archives:
 ```
 Detected stale active session (4 days old, no activity). Auto-archiving:
 
-  ai/memory/sessions/active/2026-04-26-1530-checkoutbug.md
+  .claude/state/sessions/2026-04-26-1530-checkoutbug.md
     → ai/memory/sessions/archive/2026-04/2026-04-26-1530-checkoutbug.md
 
   Frontmatter updated: status: orphaned, archived_at: 2026-04-30
@@ -171,7 +171,7 @@ User just ran `/myspec:init` an hour ago, set up the basic scaffolding, and now 
 
 #### 4. Active sessions
 
-`${aiDir}/memory/sessions/active/` exists but contains only `.gitkeep`. No active sessions.
+`.claude/state/sessions/` exists but contains only `.gitkeep`. No active sessions.
 
 #### 5. Reports back
 

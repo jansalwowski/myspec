@@ -126,7 +126,8 @@ perl -0pi -e 's/^# .*$/# Renamed Locally/m' "$REPO/ai/anti-patterns.md"
 printf '\n# hand edit\n' >> "$REPO/.claude/hooks/no-absolute-paths.sh"
 set_json .myspec.json 'd.frameworkFiles = {"rules/ideas.md": {version: "1.27.0", lastUpdated: "2026-08-01"}}'
 printf '## Project anchors\n' > "$REPO/.claude/rules/ai-setup-audit.md"
-chmod -x "$REPO/.claude/hooks/guard-git-branch.sh"
+mkdir -p "$REPO/ai/memory/sessions/active" && printf -- '---\nstatus: active\n---\n' > "$REPO/ai/memory/sessions/active/old.md"
+chmod -x "$REPO/.claude/hooks/guard-worktree-context.sh"
 set_json .claude/settings.json 'd.hooks.Stop[0].hooks.push({type:"command",command:".claude/hooks/ghost.sh"})'
 set_json .claude/settings.json 'd.hooks.PostToolUse[0].hooks = d.hooks.PostToolUse[0].hooks.filter(h => !/require-reuse-audit/.test(h.command))'
 printf '#!/usr/bin/env bash\nif [ 1 =\n' > "$REPO/.claude/hooks/broken.sh"
@@ -150,7 +151,8 @@ expect_line 'ERROR marker-missing: ai/pre-flight.md' "a marker-merge file withou
 expect_line 'ERROR shipped-drift: .claude/hooks/no-absolute-paths.sh' "a hand-edited hook is an error"
 expect_line 'WARN +myspec-schema-stale: .myspec.json' "pre-2.0 per-file bookkeeping is a warning"
 expect_line 'WARN +doctor-rule-unrenamed: .claude/rules/ai-setup-audit.md' "the pre-rename doctor extension is a warning"
-expect_line 'ERROR hook-not-executable: .claude/hooks/guard-git-branch.sh' "a registered hook without +x is an error"
+expect_line 'WARN +sessions-unmigrated: ai/memory/sessions/active' "a 1.x live session log is a warning"
+expect_line 'ERROR hook-not-executable: .claude/hooks/guard-worktree-context.sh' "a registered hook without +x is an error"
 expect_line 'ERROR hook-missing: .claude/hooks/ghost.sh' "a registered hook that does not exist is an error"
 expect_line 'WARN +hook-unregistered: .claude/hooks/broken.sh' "an unwired hook script is a warning"
 expect_line 'ERROR hook-syntax: .claude/hooks/broken.sh' "a hook that fails bash -n is an error"
@@ -162,7 +164,7 @@ expect_line 'ERROR framework-drift: ai/anti-patterns.md: header above' "a change
 expect_line 'WARN +over-budget: CLAUDE.md' "an oversized project CLAUDE.md is a warning"
 expect_line 'WARN +dead-path-ref: CLAUDE.md' "a dead path reference in a project file is a warning"
 expect_line 'WARN +dead-skill-ref: CLAUDE.md' "a reference to a skill the plugin does not ship is a warning"
-expect_line 'run: chmod \+x .claude/hooks/guard-git-branch.sh' "findings carry a literal fix command"
+expect_line 'run: chmod \+x .claude/hooks/guard-worktree-context.sh' "findings carry a literal fix command"
 
 run_doctor --quiet
 expect_no_line '^WARN' "--quiet suppresses warnings"

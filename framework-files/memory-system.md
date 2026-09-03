@@ -15,7 +15,7 @@ updated: 2026-03-24
 - **Procedural Index**: `${aiDir}/memory/procedural/index.md`
 - **Semantic Index**: `${aiDir}/memory/semantic/index.md`
 - **Episodic Index**: `${aiDir}/memory/episodic/index.md`
-- **Active Sessions**: `${aiDir}/memory/sessions/active/{session_id}.md` (per-agent, auto-created on first code edit)
+- **Live Sessions**: `.claude/state/sessions/{session_id}.md` (gitignored, primary checkout; per-agent, auto-created on first code edit)
 - **Templates**: `${aiDir}/.templates/memory-{procedural,semantic,episodic}.md`
 
 ## File Structure
@@ -44,7 +44,7 @@ ${aiDir}/memory/
 
 **Purpose**: Track in-progress work, survive context clears, detect loops.
 
-- Auto-created on first code edit by `mark-code-changed.sh` at `${aiDir}/memory/sessions/active/{session_id}.md`
+- Auto-created on first code edit by `mark-code-changed.sh` at `.claude/state/sessions/{session_id}.md`; every code path is appended to `## Files touched`, which is how a skill recognises its own session
 - Per-session-id keying makes this multi-agent safe — each agent gets its own file
 - Manual `/myspec:session-start` only needed for non-code sessions (debugging without edits, discovery, doc-only)
 - Logs each significant action with result and attempt count
@@ -106,7 +106,7 @@ ${aiDir}/memory/
    - Semantic: ${aiDir}/memory/semantic/index.md (architecture, structure)
    - Episodic: ${aiDir}/memory/episodic/index.md (history, context)
 3. Check for existing active sessions (resume own, leave siblings alone)
-4. Session file at ${aiDir}/memory/sessions/active/{session_id}.md (auto-created on first code edit)
+4. Session file at .claude/state/sessions/{session_id}.md (auto-created on first code edit)
 ```
 
 **Tiered approach:**

@@ -112,6 +112,7 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
    2. Push and create a Pull Request
    3. Keep the branch as-is (I'll handle it later)
    4. Discard this work
+   5. Promote develop-mode work to a branch and PR (the diff is uncommitted in the main checkout)
 
    Which option?
    ```
@@ -120,7 +121,7 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 
    **Option 1 — Merge locally:**
 
-   The `guard-git-branch.sh` hook (if installed) blocks branch mutations on the main checkout; the `MYSPEC_ALLOW_BRANCH_OPS=1` prefix marks this as a user-confirmed integration flow and is required for these commands to pass:
+   The `guard-worktree-context.sh` hook (if installed) blocks branch mutations on the main checkout; the `MYSPEC_ALLOW_BRANCH_OPS=1` prefix marks this as a user-confirmed integration flow and is required for these commands to pass:
 
    ```bash
    MYSPEC_ALLOW_BRANCH_OPS=1 git checkout <base-branch>
@@ -159,6 +160,13 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
    MYSPEC_ALLOW_BRANCH_OPS=1 git checkout <base-branch>
    MYSPEC_ALLOW_BRANCH_OPS=1 git branch -D <feature-branch>
    ```
+
+   **Option 5 — Promote develop-mode work:** the session answered `develop` (see `.claude/rules/work-isolation.md`), so the work is an uncommitted diff in the main checkout and no feature branch exists yet. Scope it to the files this feature touched and let the script do the rest — it never changes the main checkout's branch:
+   ```bash
+   .claude/lib/promote-to-worktree.sh --branch feat/<name> --title "<conventional commit subject>" \
+     --only <path> [--only <path>]... --body-file <pr-body> --session-url <url>
+   ```
+   It copies the diff into a fresh worktree, commits, provisions, pushes, opens the PR against the default branch, and restores the main checkout. It refuses when the local default branch is ahead of origin (commits made on it are not in the diff) — resolve that with the user, never by resetting silently.
 
 4. **Worktree cleanup** (only for options 1 & 4, and only if worktree was detected):
 
