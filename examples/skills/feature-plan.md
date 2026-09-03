@@ -98,24 +98,23 @@ Each task carries a **Spec contract** block — verbatim quotes, not paraphrase 
 
 **Depends on:** Task 1
 
+**Verify at phase review:** `pnpm test reports/favorites` — covers add, remove, list, isFavorite
+
 - [ ] **Step 1: Write the failing test**
   `should add a favorite for a user+report pair`
   [test code]
 
-- [ ] **Step 2: Run test — expect FAIL**
-  `pnpm test reports/favorites` → expect 1 fail
-
-- [ ] **Step 3: Implement**
+- [ ] **Step 2: Implement**
   `ReportFavoritesService.add()` using `ReportFavoriteRepository`
   [implementation code]
+  (repeat the cycle for remove, list, isFavorite)
 
-- [ ] **Step 4: Run test — expect PASS**
-  `pnpm test reports/favorites` → expect 1 pass
-  (repeat the cycle for remove, list, isFavorite; then `pnpm typecheck`)
-
-- [ ] **Step 5: Commit**
+- [ ] **Step 3: Commit**
   `git commit -m "feat(favorite-reports): add ReportFavoritesService"`
 ```
+
+The task names its command but does not run it. The implementer writes the test and the code
+and stops; the phase reviewer runs every task's command once the phase is complete.
 
 Task 6 (modifies the existing list query) gets a **Touch only** line because its Files block contains a `Modify:`:
 
@@ -225,6 +224,8 @@ A task in a parallel group carries an isolation note, because its implementer ru
 **Depends on:** Task 1 (barrier)
 **Parallel with:** Task 3
 
+**Verify at phase review:** `pnpm test schedules/repository`
+
 > **Isolation:** runs in its own worktree. Do not reference files created by Task 3.
 
 - [ ] **Step 1: Write the failing test**
@@ -234,10 +235,7 @@ A task in a parallel group carries an isolation note, because its implementer ru
 - [ ] **Step 2: Implement**
   [implementation code]
 
-- [ ] **Step 3: Verification**
-  Runs test, lint, type-check from `.claude/verification.json`.
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 3: Commit**
   `git commit -m "feat(scheduled-reports): add ScheduleRepository"`
 ```
 

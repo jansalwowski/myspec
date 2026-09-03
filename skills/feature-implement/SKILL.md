@@ -167,6 +167,8 @@ Walk milestones in order. For each milestone, walk its DAG topologically. For ea
 
 **Before the phase's first dispatch:** record `PHASE_BASE=$(git rev-parse HEAD)`. The phase review package (Step 4b) diffs `PHASE_BASE..HEAD`. Never substitute `HEAD~1` — it silently drops all but the last commit of a multi-commit phase.
 
+Implementers write code and tests and commit; they never run the test, lint, type-check, build, or install commands. The phase reviewer is the only place verification runs. An implementer that can run its own gate can also iterate against it, and the cheapest way past a failing gate is to weaken it — a loosened assertion or a lint disable reads as work in the diff and as a pass in the log.
+
 **Sequential tasks** — dispatch one subagent at a time:
 
 ```
@@ -335,6 +337,7 @@ Skill text uses **tier names** (`cheap` / `mid` / `premium`). Controller (main t
 - Tell a reviewer what not to flag — a suppressed finding never reaches the user; adjudicate it in triage instead
 - Diff a review with `HEAD~1` — use the recorded `PHASE_BASE` / `FIX_BASE` / `BASE_SHA`
 - Fix review findings in the controller session — resume or dispatch an implementer; controller fixes skip review
+- Let an implementer run its own test, lint, build, or install commands — verification belongs to the phase reviewer, or the gate and the code have the same author
 - Skip the Step 5 holistic review, or run it below `premium` — it is the only pass that sees the whole feature
 
 ## Verification Checklist

@@ -64,7 +64,7 @@ For each implementation step in the tech-spec:
 **REQUIRED:** read [references/plan-templates.md](references/plan-templates.md) before writing any task — it carries the front-matter, Execution Order, task, and barrier templates. Convert each tech-spec implementation step into a full task using that format.
 
 **What the tech-spec provides:** High-level step description, file inventory, interfaces
-**What the plan adds:** Exact TDD steps, test code, run commands, commit messages, parallel group tags
+**What the plan adds:** Exact TDD steps, test code, the phase-review verification command, commit messages, parallel group tags
 
 **Task right-sizing (the step → task mapping is not 1:1):**
 A task is the smallest unit that carries its own test cycle and is worth a fresh reviewer's gate. Fold setup, configuration, scaffolding, and docs steps into the task whose deliverable needs them; split only where a reviewer could meaningfully reject one task while approving its neighbor. The inverse holds too: several trivial same-shape changes (rename sweeps, config plumbing) are ONE task listing every file + change, not N micro-tasks — N reviewer gates on one mechanical sweep is overhead, not protection.
@@ -88,7 +88,7 @@ For plans with **10+ tasks or 3+ milestones**, review in chunks before finalizin
 1. After completing each milestone's tasks, self-review that chunk:
    - Every tech-spec step has a corresponding task
    - Parallel groups have zero file overlap
-   - TDD steps have run commands
+   - TDD steps carry a `Verify at phase review:` command
    - No scope creep beyond tech-spec
 2. If issues found: fix and re-review that chunk
 3. If review loop exceeds 3 iterations on one chunk, present issues to user for guidance
@@ -252,7 +252,7 @@ Before presenting the plan:
 - [ ] `## Global Constraints` holds every project-wide exact (versions, limits, naming, invariants) verbatim with source refs; no task text re-derives one
 - [ ] Task boundaries are right-sized — each task independently rejectable by a reviewer; trivial same-shape changes batched into one task
 - [ ] Every task has exact file paths matching tech-spec file inventory
-- [ ] Every task has TDD steps with run commands
+- [ ] Every task has TDD steps and a `**Verify at phase review:**` command (the implementer never runs it)
 - [ ] Parallel groups have zero file overlap (check file lists)
 - [ ] Barriers exist after every parallel group
 - [ ] Execution order table matches task dependencies

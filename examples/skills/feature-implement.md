@@ -12,7 +12,7 @@ Executes an approved `implementation-plan.md` by dispatching one implementer sub
 
 ## Sequential execution
 
-The simple shape: a single-phase plan with no parallel groups. The skill first asks *where* to work, then walks tasks one at a time. Each implementer owns its task end to end — code, tests, commit — and the phase review runs once at the barrier, not per task.
+The simple shape: a single-phase plan with no parallel groups. The skill first asks *where* to work, then walks tasks one at a time. Each implementer writes its task's code, tests, and commit — and nothing else: the phase review at the barrier is where verification actually runs, once for the whole phase.
 
 ### Setup
 
@@ -57,7 +57,7 @@ Parses the Execution Order table: 6 sequential tasks, no barriers between them �
 For T1 (migration):
 
 1. Edits the plan file: `[ ] T1` → `[~] T1` (before dispatching).
-2. Dispatches one implementer subagent (`implementer-prompt.md`) with the task text inline — it never reads the plan file. The tier is named on the dispatch (`cheap` here: one file plus its test, fully specified in the task text). It writes the migration and its test, runs the task's verification commands, commits with the task block's `**Commit:**` message, self-reviews its own diff, and reports `DONE`.
+2. Dispatches one implementer subagent (`implementer-prompt.md`) with the task text inline — it never reads the plan file. The tier is named on the dispatch (`cheap` here: one file plus its test, fully specified in the task text). It writes the migration and its test, commits with the task block's `**Commit:**` message, self-reviews its own diff, and reports `DONE`. It does **not** run the tests — that is the phase reviewer's job, and the task block names the command under `**Verify at phase review:**`.
 3. The skill leaves T1 at `[~]` — the only route to `[x]` is the phase review.
 
 Repeats for T2–T6 in order, each leaving its checkbox at `[~]`. The implementer never spawns a reviewer of its own: review is the controller's job and is already scheduled.
@@ -68,7 +68,7 @@ After all 6 implementers report `DONE`, the phase hits its barrier and the revie
 
 - plan ↔ spec: the 6 tasks cover AC-1 ("favoriting persists across sessions"), AC-2 (pin-to-top) ✓
 - impl ↔ plan: each task's declared files and interfaces are present ✓
-- test coverage: each in-scope acceptance criterion has a test in the diff; `pnpm test` and `pnpm typecheck` green, lint clean ✓
+- test coverage: each in-scope acceptance criterion has a test in the diff. The reviewer runs each task's `Verify at phase review:` command plus `.claude/verification.json` — the first and only time they run: `pnpm test` and `pnpm typecheck` green, lint clean ✓
 - naming, pattern conformance, maintainability ✓
 - Verdict: `APPROVED`.
 
@@ -115,7 +115,7 @@ User picks **feature-implement-review**. The skill invokes `/myspec:feature-impl
 ### Why this example matters
 
 - **Step 0 is blocking and always asked.** Even on a clean `main` with an obvious recommendation, the skill confirms *where* to work. Silent assumption is the bug Step 0 exists to prevent; worktrees live at `.claude/worktrees/feat-{name}`, never `/tmp`.
-- **The implementer owns its task end to end.** Code, tests, verification commands, commit, self-review — then it reports. It does not spawn a reviewer of its own; that review is already scheduled and a duplicate one costs full price for a verdict that counts for nothing.
+- **The implementer writes; the reviewer verifies.** Code, tests, commit, self-review — then it reports. It never runs the test, lint, build, or install commands, because an implementer that can run its own gate can also weaken it, and a loosened assertion reads as work in the diff and as a pass in the log. It does not spawn a reviewer of its own either; that review is already scheduled.
 - **Review is per-phase, at the barrier.** All six implementers finish, then one reviewer covers the whole phase's diff at once — spec conformance, quality, test coverage, docs — from a package file, never a pasted diff.
 - **Findings are triaged, never suppressed.** The Controller may not tell a reviewer what not to flag. Minor findings park in the plan's `## Execution Log`, plan-conflicting findings get a recorded `Ruling: <what> — <why> — <what it costs if wrong>`, and every ruling resurfaces under "Rulings I made" in the Step 5 completion report.
 - **One commit per task, staged by path.** Each implementer stages exactly its own file list and copies the plan's commit message verbatim, so the history reads cleanly and nothing outside the declared scope sneaks in.
@@ -159,7 +159,7 @@ The skill walks the DAG. **Phase 2 (`parallel:repos`)** is the showcase: T2 Sche
 2. Dispatches **two implementers in one message**, each with `isolation: "worktree"`. A child worktree is bare, so each is provisioned before work starts — real dependency install unless the branch leaves the lockfile alone, `.env`-class files symlinked, lint cache copied (`_shared/worktree-provisioning.md` is the recipe). Each implementer gets only its file list and task text inline:
    - Implementer A → `src/features/schedules/repository.ts` (+ test)
    - Implementer B → `src/features/schedules/run-repository.ts` (+ test)
-3. Both write code and tests, run the task's verification commands in their own worktree, commit, and report `DONE`.
+3. Both write code and tests, commit, and report `DONE` — neither runs the suite in its own worktree.
 4. **Barrier merge:** the controller merges each worktree's commit back onto `feat/scheduled-reports`, one at a time. No conflicts — the file lists were disjoint. Then it runs the barrier verification commands across the merged tree.
 5. **Phase review** over `PHASE_BASE..HEAD` covers both tasks at once → `APPROVED`. Both checkboxes flip to `[x]`.
 

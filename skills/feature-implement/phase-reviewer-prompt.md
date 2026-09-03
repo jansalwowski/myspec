@@ -84,7 +84,11 @@ Task tool (general-purpose):
     - Do tests exist for new functionality?
     - Do tests verify behavior (not just that code runs)?
     - Are edge cases covered?
-    - Do all tests pass? (Run the test commands from the plan)
+    - Do all tests pass? Run each task's `Verify at phase review:` command,
+      plus the checks in `.claude/verification.json`. **This is the only
+      time they run** — the implementers were forbidden to run them, so a
+      command you skip here is a command nobody ran. Report the exact
+      command and its output for each.
 
     **Integration:**
     - Do imports resolve correctly across all new files?
