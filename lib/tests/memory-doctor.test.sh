@@ -152,12 +152,12 @@ memory .ai/memory/episodic/E001-b.md E001 "an event, rewritten"
 # (E001-a.md gains status: superseded)
 memory .ai/memory/episodic/E001-a.md E001 "an event" 'status: superseded'
 
-# Legacy episodic index; its memories lack hook: (WARN, not ERROR).
+# Episodic index beside a hookless, unindexed memory (an error on both counts).
 memory .ai/memory/episodic/E003-nohook.md E003 ""
-index .ai/memory/episodic/index.md '| ID | Date | Event | Feature | Outcome |' \
-  '| E001 | 2026-01-01 | an event | | |'
+index .ai/memory/episodic/index.md '| ID | Hook | Date |' \
+  '| E001 | an event | 2026-01-01 |'
 
-# Non-legacy procedural index with every file-level condition.
+# Procedural index with every file-level condition.
 memory .ai/memory/procedural/P003-nohook.md P003 ""
 memory .ai/memory/procedural/P004-empty.md P004 "empty anchors" 'anchors: []'
 memory .ai/memory/procedural/p005-lower.md P005 "lowercase name"
@@ -202,20 +202,17 @@ expect_line '^ERROR duplicate-id: P002: \.ai/memory/procedural/P002-new\.md, \.a
 expect_line '^ERROR duplicate-id: S001: \.ai/memory/semantic/S001-main\.md, \.ai/memory/semantic/S001-side\.md \(worktree wt-side\)$' "uncommitted worktree duplicate names the worktree"
 expect_no_line '^ERROR duplicate-id: E001' "on-disk tombstone pair is not a duplicate"
 expect_no_line '^ERROR duplicate-id: E002' "superseded tombstone + branch-only file is not a duplicate"
-expect_line '^ERROR legacy-index: \.ai/memory/episodic/index\.md: legacy columns \(Event, Feature, Outcome\).*--backfill' "legacy index header"
-expect_no_line '^ERROR legacy-index: \.ai/memory/procedural' "modern index is not legacy"
-expect_line '^ERROR missing-hook: \.ai/memory/procedural/P003-nohook\.md' "missing hook under a modern index is an error"
-expect_no_line '^ERROR missing-hook: \.ai/memory/episodic' "missing hook under a legacy index is not an error"
+expect_line '^ERROR missing-hook: \.ai/memory/procedural/P003-nohook\.md' "missing hook under the procedural index is an error"
+expect_line '^ERROR missing-hook: \.ai/memory/episodic/E003-nohook\.md' "missing hook under the episodic index is an error"
 expect_line '^ERROR index-drift: \.ai/memory/procedural/index\.md: P003 on disk but not in the table' "file missing from the table"
 expect_line '^ERROR index-drift: \.ai/memory/procedural/index\.md: P009 in the table but no file' "row without a file"
 expect_line '^ERROR index-drift: \.ai/memory/procedural/index\.md: P008 links to P008-old-name\.md, which does not exist' "linked row with a dead target"
 expect_no_line '^ERROR index-drift: \.ai/memory/procedural/index\.md: P005' "bare-ID row still counts as indexed"
-expect_no_line '^ERROR index-drift: \.ai/memory/episodic' "legacy index is not checked for drift"
+expect_line '^ERROR index-drift: \.ai/memory/episodic/index\.md: E003 on disk but not in the table' "the episodic index is checked for drift like any other"
 expect_line '^ERROR malformed-anchor: \.ai/memory/semantic/S002-bad\.md: anchor value "false"' "anchor: false"
 expect_line '^ERROR tooling-missing: \.claude/lib/: missing memory-index\.mjs — run /myspec:update$' "missing lib file"
 
 # warnings
-expect_line '^WARN missing-hook: \.ai/memory/episodic/index\.md: 1 memories without hook: will be backfilled by the migration$' "legacy index hook count"
 expect_line '^WARN anchor-no-pattern: \.ai/memory/semantic/S003-scalar\.md: anchor src/c\.js has no pattern' "scalar anchor has no pattern"
 expect_line '^WARN empty-anchors: \.ai/memory/procedural/P004-empty\.md: .*remove the key or add one$' "anchors: []"
 expect_line '^WARN filename-case: \.ai/memory/procedural/p005-lower\.md: .*rename to P005-lower\.md for consistency$' "lowercase prefix"

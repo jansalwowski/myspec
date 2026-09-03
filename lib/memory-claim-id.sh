@@ -12,7 +12,7 @@
 #
 # HOW
 #   0. Run the conformance check (memory-doctor.mjs). A tree the tooling
-#      cannot read — duplicate IDs, legacy indexes — is not a tree to allocate
+#      cannot read — duplicate IDs, missing hooks — is not a tree to allocate
 #      into; refusing here is cheaper than a collision found by hand.
 #   1. Take a lock in the MAIN checkout (mkdir is atomic even over NFS).
 #   2. High-water = max(IDs on disk in the main checkout AND every linked
@@ -53,7 +53,7 @@
 #   1  could not acquire the lock within 10 s
 #   2  usage error, or not inside a git repository
 #   3  conformance refusal — memory-doctor.mjs reported errors; fix them
-#      (or run /myspec:update for legacy layouts) and retry
+#      and retry
 #
 # MYSPEC_SKIP_MEMORY_DOCTOR=1 skips step 0. It exists for the test fixture and
 # as an escape hatch when the doctor itself is broken; the scans still run.

@@ -16,7 +16,7 @@ Classify the search target:
 - Past decisions or events → search episodic
 - Unsure → search all three
 
-Every index has the same shape, `| ID | Hook | Anchor |` (episodic: `Date`). The Hook is the one-line keyword summary you match against; everything else — the Not-For scope, triggers, the procedure — is in the memory file. An index with other column names is a legacy one that `/myspec:update` migrates.
+Every index has the same shape, `| ID | Hook | Anchor |` (episodic: `Date`). The Hook is the one-line keyword summary you match against; everything else — the Not-For scope, triggers, the procedure — is in the memory file.
 
 ### 2. Scan Procedural Index
 

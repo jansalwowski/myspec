@@ -28,7 +28,7 @@ The target is **retrieval quality, not size**. Memory bodies load only when `/my
 2. Run `node .claude/lib/memory-index.mjs --check`. Exit 1 means the tables are stale — regenerate before triage, so the audit reads files rather than a lagging table.
 3. Read `${aiDir}/memory/index.md` (Layer 1) and the three `${aiDir}/memory/{type}/index.md` tables.
 4. Read every `P*.md`, `S*.md`, `E*.md`. Capture per entry: `id`, `hook`, `feature`, `related`, plus type fields — procedural: `polarity`, `triggers`, `not_for`, `anchors`, `validation_count`, `created`, `validated`; semantic: `topic`, `anchor`, `verified`; episodic: `outcome`, `persistent`, `date`.
-5. Run `node .claude/lib/memory-doctor.mjs` and report its structural faults before triage: duplicate IDs on disk or on any branch (the failure `memory-claim-id.sh` exists to prevent; `status: superseded` tombstones are exempt), legacy index headers, memories without `hook:`, malformed anchors, `related:` IDs with no matching file. Add anything the doctor cannot see: files already marked `status: superseded` that are still cited as live.
+5. Run `node .claude/lib/memory-doctor.mjs` and report its structural faults before triage: duplicate IDs on disk or on any branch (the failure `memory-claim-id.sh` exists to prevent; `status: superseded` tombstones are exempt), memories without `hook:`, malformed anchors, `related:` IDs with no matching file. Add anything the doctor cannot see: files already marked `status: superseded` that are still cited as live.
 
 ### Step 2: Per-entry checks
 
