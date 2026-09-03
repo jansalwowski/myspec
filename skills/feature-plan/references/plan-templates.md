@@ -1,6 +1,6 @@
 # Plan Document Templates
 
-Canonical normal-mode (single-executor) template. For orchestrator mode (per-milestone Worker / SpecReview / QualityReview chain — no Planner), see [`plan-templates-orchestrator.md`](./plan-templates-orchestrator.md).
+Canonical implementation-plan template: one implementer subagent per task, reviewed at phase boundaries.
 
 ## Plan Header
 

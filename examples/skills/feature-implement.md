@@ -1,22 +1,22 @@
 # `/myspec:feature-implement` — examples
 
-Executes an approved `implementation-plan.md` by dispatching write-only Worker subagents per task, reviewing at each phase barrier (SpecReviewer then QualityReviewer), and pausing at milestone checkpoints. The Controller commits; Workers never run tests, lint, or git. Always starts with a blocking question about *where* implementation should happen.
+Executes an approved `implementation-plan.md` by dispatching one implementer subagent per task, reviewing at each phase barrier, and pausing at milestone checkpoints. Always starts with a blocking question about *where* implementation should happen.
 
 **Contents**
 
-- [Sequential execution](#sequential-execution) — one task at a time, single phase, the Controller commits, per-phase review at the barrier
-- [Parallel group with worktree dispatch under orchestrator mode](#parallel-group-with-worktree-dispatch-under-orchestrator-mode) — concurrent Workers in `.claude/worktrees/feat-*`, the role chain
+- [Sequential execution](#sequential-execution) — one task at a time, single phase, per-phase review at the barrier
+- [Parallel group with worktree dispatch](#parallel-group-with-worktree-dispatch) — concurrent implementers in `.claude/worktrees/feat-*`, barrier merge
 - [Resume mid-milestone after interruption](#resume-mid-milestone-after-interruption) — `[x]`/`[~]`/`[ ]` handling and stale-worktree cleanup
 
 ---
 
 ## Sequential execution
 
-The simple shape: a single-phase plan with no parallel groups. The skill first asks *where* to work, then walks tasks one at a time. Workers only write files; the Controller commits; the phase review runs once at the barrier — not per task.
+The simple shape: a single-phase plan with no parallel groups. The skill first asks *where* to work, then walks tasks one at a time. Each implementer owns its task end to end — code, tests, commit — and the phase review runs once at the barrier, not per task.
 
 ### Setup
 
-`favorite-reports` has a 6-task, single-milestone, single-phase plan (see [feature-plan.md single-milestone](feature-plan.md#single-milestone-plan)). All tasks `[ ]`. No `orchestration:` front-matter (normal mode). The user is on `main`, working tree clean.
+`favorite-reports` has a 6-task, single-milestone, single-phase plan (see [feature-plan.md single-milestone](feature-plan.md#single-milestone-plan)). All tasks `[ ]`. The user is on `main`, working tree clean.
 
 ### Invocation
 
@@ -48,7 +48,7 @@ User picks **New branch**. The skill runs `git checkout -b feat/favorite-reports
 
 #### Step 1 — Parse plan → DAG
 
-No `orchestration: agent-chain` in front-matter, so no run-mode prompt. Parses the Execution Order table: 6 sequential tasks, no barriers between them — they form a single phase ending at one barrier. One milestone.
+Parses the Execution Order table: 6 sequential tasks, no barriers between them — they form a single phase ending at one barrier. One milestone.
 
 **Resume detection:** all checkboxes `[ ]`. Fresh run.
 
@@ -57,29 +57,26 @@ No `orchestration: agent-chain` in front-matter, so no run-mode prompt. Parses t
 For T1 (migration):
 
 1. Edits the plan file: `[ ] T1` → `[~] T1` (before dispatching).
-2. Dispatches one Worker subagent with the task text inline (the Worker never reads the plan file). The Worker's toolset is **Read / Edit / MultiEdit / Write only** — no shell, no git, no Grep/Glob. It writes the migration file and its test, then reports `<result>OK src/db/migrations/004_report_favorites.ts, src/db/migrations/__tests__/004_report_favorites.test.ts</result>`. **It does not run the migration, does not run tests, and does not commit.**
-3. The skill leaves T1 at `[~]`. No per-task review, no per-task commit yet.
+2. Dispatches one implementer subagent (`implementer-prompt.md`) with the task text inline — it never reads the plan file. The tier is named on the dispatch (`cheap` here: one file plus its test, fully specified in the task text). It writes the migration and its test, runs the task's verification commands, commits with the task block's `**Commit:**` message, self-reviews its own diff, and reports `DONE`.
+3. The skill leaves T1 at `[~]` — the only route to `[x]` is the phase review.
 
-Repeats the *dispatch* for T2–T6 in order, each leaving its checkbox at `[~]`. Workers write code and tests only.
+Repeats for T2–T6 in order, each leaving its checkbox at `[~]`. The implementer never spawns a reviewer of its own: review is the controller's job and is already scheduled.
 
 #### Step 4 — Phase review (once, at the barrier)
 
-After all 6 tasks' Workers have reported `OK`, the phase hits its barrier and the review runs **once for the whole phase** — two complementary reviewers in sequence:
+After all 6 implementers report `DONE`, the phase hits its barrier and the review runs **once for the whole phase**. The controller writes the package to one temp file — `git log --oneline` + `git diff --stat` + `git diff -U10` over the `PHASE_BASE` recorded before the first dispatch, never `HEAD~1` — and dispatches the phase reviewer (`phase-reviewer-prompt.md`, mid tier) with the path:
 
-1. **SpecReviewer** (mid-tier) — reviews `git diff HEAD` against the spec/tech-spec/plan blocks for the phase. Static checks only:
-   - plan ↔ spec: the 6 tasks cover AC-1 ("favoriting persists across sessions"), AC-2 (pin-to-top) ✓
-   - impl ↔ plan: each task's declared files and interfaces are present ✓
-   - TDD evidence (static, does **not** run tests): each in-scope acceptance criterion has a test in the diff ✓
-   - Verdict: `PASS`.
-2. **QualityReviewer** (mid-tier) — gated on SpecReviewer `PASS`. This is the **sole verification pass**: it runs the test / lint / type-check commands from `.claude/verification.json` (Workers and SpecReviewer never ran them). Then naming, pattern conformance, maintainability, test quality.
-   - `pnpm test` green, `pnpm typecheck` green, lint clean ✓
-   - Verdict: `PASS`.
+- plan ↔ spec: the 6 tasks cover AC-1 ("favoriting persists across sessions"), AC-2 (pin-to-top) ✓
+- impl ↔ plan: each task's declared files and interfaces are present ✓
+- test coverage: each in-scope acceptance criterion has a test in the diff; `pnpm test` and `pnpm typecheck` green, lint clean ✓
+- naming, pattern conformance, maintainability ✓
+- Verdict: `APPROVED`.
 
 Had the review returned findings instead, they would be triaged, never silently dropped: **Minor** findings park in the plan's `## Execution Log` (`Deferred minor (Phase 1): …`) for the holistic reviewer to triage — they never enter a fix loop. **Critical/Important** findings enter a capped loop: rounds 1–3 resume the same implementer with the findings verbatim (its context is intact), rounds 4–5 dispatch fresh on a higher tier, and every round ends with a *scoped* re-review that verdicts each finding ADDRESSED / NOT ADDRESSED against the fix diff only — never a full phase re-review. If round 5 still leaves findings open, the Controller adjudicates each one — parked with a recorded `Ruling:` or carried into the next phase — never a round 6. And the Controller never pre-judges: a dispatch prompt containing "do not flag X" is the bug, not the finding.
 
-#### Controller commits
+#### Checkboxes close
 
-Only now — after both reviewers `PASS` — the **Controller** commits. It stages exactly the file lists the Workers reported (`git add -- <paths>`, never `git add -A`) and uses each task block's `**Commit:**` message verbatim. It then flips all six checkboxes `[~]` → `[x]`.
+Only now — after `APPROVED` — the skill flips all six checkboxes `[~]` → `[x]`. The six commits already exist, one per task, each staging exactly that task's file list (`git add -- <paths>`, never `git add -A`) with the plan's message verbatim:
 
 ```
 feat(favorite-reports): add report_favorites migration
@@ -95,7 +92,7 @@ This is the only milestone, so the skill goes directly to Step 5 (no Milestone C
 #### Step 5 — Completion + review choice
 
 1. Runs the plan's Final Verification section.
-2. Writes the full-feature review package to one temp file (`git log --oneline` + `git diff --stat` + `git diff -U10` over `BASE_SHA..HEAD`) and dispatches the holistic reviewer with the package path plus the plan's Execution Log entries to triage. The tier (premium) is named explicitly on the dispatch — an omitted model would silently inherit the session's model. Returns `APPROVED`, no MUST FIX triage items.
+2. Writes the full-feature review package to one temp file (`git log --oneline` + `git diff --stat` + `git diff -U10` over `BASE_SHA..HEAD`) and dispatches the holistic reviewer with the package path plus the plan's Execution Log entries to triage. This pass is mandatory and the tier (premium) is named explicitly on the dispatch — an omitted model would silently inherit the session's model. Returns `APPROVED`, no MUST FIX triage items.
 3. Prints the completion report — milestone summary, holistic verdict, **Rulings I made: none**, deferred-minors triage — then asks via `AskUserQuestion` — it does **not** auto-hand-off:
 
 > **Implementation complete. What next?**
@@ -111,27 +108,27 @@ User picks **feature-implement-review**. The skill invokes `/myspec:feature-impl
 
 ### Result
 
-- All 6 tasks `[x]`, six commits on `feat/favorite-reports` — all authored by the Controller after the phase passed review.
-- One phase review (SpecReviewer → QualityReviewer), not six.
+- All 6 tasks `[x]`, six commits on `feat/favorite-reports`, checkboxes closed after the phase passed review.
+- One phase review, not six.
 - Routed to `/myspec:feature-implement-review` by the user's Step 5 choice.
 
 ### Why this example matters
 
 - **Step 0 is blocking and always asked.** Even on a clean `main` with an obvious recommendation, the skill confirms *where* to work. Silent assumption is the bug Step 0 exists to prevent; worktrees live at `.claude/worktrees/feat-{name}`, never `/tmp`.
-- **Workers are write-only.** They produce files and tests and nothing else — no shell, no test runs, no commits. This keeps their context lean and makes their output a clean, reviewable artifact. The QualityReviewer is the *sole* place tests/lint run.
-- **Review is per-phase, at the barrier.** All six tasks' Workers finish, then one SpecReviewer + one QualityReviewer cover the whole phase's diff at once. The two passes are complementary: spec conformance first (static), code quality + verification second.
+- **The implementer owns its task end to end.** Code, tests, verification commands, commit, self-review — then it reports. It does not spawn a reviewer of its own; that review is already scheduled and a duplicate one costs full price for a verdict that counts for nothing.
+- **Review is per-phase, at the barrier.** All six implementers finish, then one reviewer covers the whole phase's diff at once — spec conformance, quality, test coverage, docs — from a package file, never a pasted diff.
 - **Findings are triaged, never suppressed.** The Controller may not tell a reviewer what not to flag. Minor findings park in the plan's `## Execution Log`, plan-conflicting findings get a recorded `Ruling: <what> — <why> — <what it costs if wrong>`, and every ruling resurfaces under "Rulings I made" in the Step 5 completion report.
-- **The Controller is the only committer.** It stages exactly the reported file lists and copies the plan's commit messages verbatim, so the history reads cleanly and nothing outside the declared scope sneaks in.
+- **One commit per task, staged by path.** Each implementer stages exactly its own file list and copies the plan's commit message verbatim, so the history reads cleanly and nothing outside the declared scope sneaks in.
 
 ---
 
-## Parallel group with worktree dispatch under orchestrator mode
+## Parallel group with worktree dispatch
 
-The interesting case: a plan authored for orchestrator mode. Concurrent Workers in isolated `.claude/worktrees/feat-*` checkouts, each carried through the full role chain — Worker → SpecReview → QualityReview → Controller commit — before the group's barrier.
+The interesting case: a plan with parallel groups. Concurrent implementers in isolated `.claude/worktrees/feat-*` checkouts, merged back at the group's barrier before the phase review runs.
 
 ### Setup
 
-`scheduled-reports` has the multi-milestone plan with parallel groups (see [feature-plan.md multi-milestone](feature-plan.md#multi-milestone-with-parallel-groups)). All tasks `[ ]`. Its front-matter declares `orchestration: agent-chain` and a `roles:` block (`worker: cheap`, `spec_reviewer: mid`, `quality_reviewer: mid`).
+`scheduled-reports` has the multi-milestone plan with parallel groups (see [feature-plan.md multi-milestone](feature-plan.md#multi-milestone-with-parallel-groups)). All tasks `[ ]`.
 
 ### Invocation
 
@@ -152,44 +149,25 @@ Git state: on `main`, clean, no existing worktree, **plan has `[parallel:*]` gro
 > - **Current branch main** → continue on main
 > - **Main branch** → not recommended
 
-User picks **Worktree**. The skill creates `.claude/worktrees/feat-scheduled-reports` on branch `feat/scheduled-reports` (via the EnterWorktree tool, or `git worktree add .claude/worktrees/feat-scheduled-reports -b feat/scheduled-reports`). Records `BASE_SHA`.
+User picks **Worktree**. The skill creates `.claude/worktrees/feat-scheduled-reports` on branch `feat/scheduled-reports` (via the EnterWorktree tool, or `git worktree add .claude/worktrees/feat-scheduled-reports -b feat/scheduled-reports`), provisions it with `.claude/lib/worktree-provision.sh <path> --base origin/main`, and records `BASE_SHA`.
 
-#### Step 1 — Orchestrator run-mode gate (BLOCKING)
-
-Front-matter has `orchestration: agent-chain`, so **before dispatching anything** the skill shows the disclaimer and asks via `AskUserQuestion`:
-
-> Orchestrator-auto runs end-to-end without per-milestone prompts. Chained autonomy across roles is more surface for cascading errors. Use only for plans you have already reviewed.
->
-> **Plan was authored in orchestrator mode. Run mode?**
->
-> - **orchestrator** (Recommended) → matches plan; pauses at every Milestone Checkpoint
-> - **orchestrator-auto** → no checkpoint prompts on green verification; only pauses on FAIL-SPEC ≥ 3, FAIL-QUALITY ≥ 3, ESCALATE, or verification failure
-> - **normal-fallback** → treat as single-executor; skip the role chain
-
-User picks **orchestrator**. From here the Controller is **dispatch-only** — it writes zero code and runs zero task commands; every task goes through a Worker.
-
-#### Milestone 1 — the role chain in action
+#### Milestone 1 — parallel dispatch and barrier
 
 The skill walks the DAG. **Phase 2 (`parallel:repos`)** is the showcase: T2 ScheduleRepository, T3 ExportRunRepository, disjoint file lists.
 
-1. Marks T2 and T3 both `[~]`.
-2. Dispatches **two Workers in one message**, each with `isolation: "worktree"`. The harness forks each child worktree off the main checkout's HEAD, so the Controller pre-stages each one: `git reset --hard feat/scheduled-reports`, symlink `node_modules`, copy `.eslintcache`. Each Worker gets only its file list and task text inline:
-   - Worker A → `src/features/schedules/repository.ts` (+ test)
-   - Worker B → `src/features/schedules/run-repository.ts` (+ test)
-3. Both Workers write code + tests and report `<result>OK …</result>`. **Neither runs tests nor commits.**
-4. **Per task, in each worktree, the chain runs to completion before the group's barrier:**
-   - Controller stages the Worker's reported files as intent-to-add (`git add --intent-to-add -- …`) so `git diff HEAD` shows new files in full.
-   - **SpecReviewer** (mid) reviews `git diff HEAD` → `PASS`.
-   - **QualityReviewer** (mid) — gated on SpecReviewer PASS — runs `.claude/verification.json` commands (test/lint/typecheck) in that worktree → `PASS`.
-   - **Controller commits** the task in its worktree using the task block's commit message, staging exactly the reported files.
-5. **Barrier merge:** the Controller merges each worktree's commit back onto `feat/scheduled-reports` (cherry-picking, since child bases diverge from session HEAD), one at a time. No conflicts — the file lists were disjoint. Runs the barrier verification commands across the merged tree.
-6. Both checkboxes are now `[x]`.
+1. Records `PHASE_BASE` (`git rev-parse HEAD`), then marks T2 and T3 both `[~]`.
+2. Dispatches **two implementers in one message**, each with `isolation: "worktree"`. A child worktree is bare, so each is provisioned before work starts — real dependency install unless the branch leaves the lockfile alone, `.env`-class files symlinked, lint cache copied (`_shared/worktree-provisioning.md` is the recipe). Each implementer gets only its file list and task text inline:
+   - Implementer A → `src/features/schedules/repository.ts` (+ test)
+   - Implementer B → `src/features/schedules/run-repository.ts` (+ test)
+3. Both write code and tests, run the task's verification commands in their own worktree, commit, and report `DONE`.
+4. **Barrier merge:** the controller merges each worktree's commit back onto `feat/scheduled-reports`, one at a time. No conflicts — the file lists were disjoint. Then it runs the barrier verification commands across the merged tree.
+5. **Phase review** over `PHASE_BASE..HEAD` covers both tasks at once → `APPROVED`. Both checkboxes flip to `[x]`.
 
-A FAIL on either reviewer would loop back to the same Worker with the reviewer's `<verdict>` bullets appended verbatim under `## Reviewer verdict (retry N)` — capped at 3 retries (4th pauses); an `ESCALATE` (plan ↔ spec mismatch the Worker can't fix) pauses immediately for a plan fix.
+Had the review returned Critical/Important findings, the fix loop would run: rounds 1–3 resume the implementer that owns the finding (its context is intact), rounds 4–5 dispatch fresh one tier up, and every round ends with a *scoped* re-review over `FIX_BASE..HEAD` that verdicts each finding ADDRESSED / NOT ADDRESSED — never a full phase re-review. Minor findings never enter the loop; they park in the plan's `## Execution Log` for the holistic reviewer to triage.
 
 #### Milestone Checkpoint
 
-After every task in Milestone 1 has gone through Worker → SpecReview → QualityReview → Commit, the Controller runs the milestone verification commands and pauses (this is `orchestrator`, not `-auto`):
+After every phase in Milestone 1 passes, the skill runs the milestone verification commands and pauses:
 
 > ═══ Milestone 1 complete: Scheduled Reports core CRUD + cron infra ═══
 >
@@ -198,24 +176,25 @@ After every task in Milestone 1 has gone through Worker → SpecReview → Quali
 >
 >   continue / stop / fresh — Choice?
 
-User: `continue`. **Milestone 2's** `parallel:ui` phase dispatches three Workers (SchedulesList, ScheduleForm, RunHistoryTable) in three worktrees under `.claude/worktrees/feat-scheduled-reports`, each carried through the same chain, then merged at the barrier.
+This plan has 12 tasks, so `fresh` carries the `(Recommended)` marker: one milestone per session. The user takes it, the skill commits and exits, and a new `/myspec:feature-implement` session picks up at Milestone 2 from the checkbox state. **Milestone 2's** `parallel:ui` phase then dispatches three implementers (SchedulesList, ScheduleForm, RunHistoryTable) in three worktrees, merged at the barrier the same way.
 
-#### Step 5 — Completion (identical in both modes)
+#### Step 5 — Completion
 
-Orchestrator mode does **not** skip Step 5. The skill runs Final Verification, builds the full-feature review package (one temp file: commit list + stat + `git diff -U10` over `BASE_SHA..HEAD`), and dispatches the holistic reviewer with the package path and the plan's Execution Log entries (this covers the whole feature; the per-milestone SpecReview/QualityReview were per-milestone-diff — no overlap). The completion report surfaces every `Ruling:` line from the Execution Log under **Rulings I made** — in `orchestrator-auto`, non-catastrophic plan conflicts were ruled on and logged instead of pausing the run, so this list is where those decisions reach the user. Then it offers the same 4-option choice (feature-implement-review / code-review / feature-complete / Stop here). No `briefs/` directory is created — Workers received task text inline.
+Final Verification runs, then the controller builds the full-feature review package (one temp file: commit list + stat + `git diff -U10` over `BASE_SHA..HEAD`) and dispatches the holistic reviewer on the premium tier with the package path and the plan's Execution Log entries. Per-phase reviews saw one phase's diff each; this one sees the feature — no overlap, and it is never skipped. The completion report surfaces every `Ruling:` line from the Execution Log under **Rulings I made**, then offers the same 4-option choice (feature-implement-review / code-review / feature-complete / Stop here).
 
 ### Result
 
-- All tasks `[x]`, committed by the Controller after each passed its chain.
-- Parallel Workers ran in `.claude/worktrees/feat-scheduled-reports`, merged at barriers.
-- Per-milestone reviews via the role chain; one holistic review at the end; user-chosen completion.
+- All tasks `[x]`, one commit per task, parallel work merged at each barrier.
+- Parallel implementers ran in `.claude/worktrees/feat-scheduled-reports`, provisioned before dispatch.
+- Per-phase reviews plus one holistic review at the end; user-chosen completion.
 
 ### Why this example matters
 
-- **The role chain is per task, the checkpoint is per milestone.** Worker → SpecReview → QualityReview → Controller commit runs for *every* task; the `continue/stop/fresh` pause only happens at milestone boundaries.
-- **Worktrees live under `.claude/worktrees/feat-*`,** not `/tmp`. They are bare checkouts, so the Controller pre-stages `node_modules`/`.eslintcache` before each Worker dispatch — environment friction is fixed in the dispatch setup, never absorbed by the Controller doing the work directly.
-- **The Controller never executes tasks in orchestrator mode.** "Just doing this one directly" because a Worker hit friction is a contract breach — the value of the chain (gates, retry loop, reviewable Worker output) evaporates if bypassed. If genuinely unworkable, the skill surfaces it and offers explicit `normal-fallback`.
-- **Reviewers, not Workers, run verification.** The QualityReviewer is the sole place tests/lint run; the Controller's only Bash for task work is the cherry-pick/merge and the checkpoint verification.
+- **Parallel dispatch goes out in one message.** All of a group's tasks are dispatched together, each with `isolation: "worktree"`; dispatching them one at a time serializes exactly the work the plan marked parallel.
+- **Worktrees live under `.claude/worktrees/feat-*`,** not `/tmp`, and they are bare. Provisioning them is part of the dispatch — an implementer that cannot install deps or run lint is a setup bug to fix in the dispatch, never a reason for the controller to absorb the task itself.
+- **The barrier is where isolation ends.** Merge one worktree at a time, run the barrier verification, and only then review the phase. A phase review over an unmerged tree reviews something nobody will ship.
+- **`PHASE_BASE`, not `HEAD~1`.** A phase with two parallel commits plus a merge is several commits deep; `HEAD~1` silently reviews the last one.
+- **Past five tasks, one milestone per session.** The checkpoint recommends `fresh` because a long multi-milestone run is dispatch-latency-bound and the controller's context degrades as it goes.
 
 ---
 
@@ -299,7 +278,7 @@ User: `clean`. The skill prunes both worktrees (`git worktree remove`), leaving 
 
 #### Step 3 — Re-dispatch and continue
 
-T5 and T6 are re-dispatched as fresh Workers in new worktrees under `.claude/worktrees/feat-scheduled-reports`, each carried through the role chain (Worker → SpecReview → QualityReview → Controller commit). Only after both pass does the Controller flip them `[~]` → `[x]`. Phase 4 completes, the Phase 5 barrier (T7) runs, and the Milestone 1 checkpoint is reached normally.
+T5 and T6 are re-dispatched as fresh implementers in new worktrees under `.claude/worktrees/feat-scheduled-reports`, merged at the barrier, and reviewed as one phase. Only after the phase review returns `APPROVED` do they flip `[~]` → `[x]`. Phase 4 completes, the Phase 5 barrier (T7) runs, and the Milestone 1 checkpoint is reached normally.
 
 ### Result
 

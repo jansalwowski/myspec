@@ -170,33 +170,6 @@ Create `.claude/verification.json` using `templates/verification.json` as the ba
 
 If commands were left empty, write the placeholder structure and note: "Edit `.claude/verification.json` to add your verification commands."
 
-### Step 5.5: Install Base Subagents (user scope)
-
-The `feature-implement` orchestrator dispatches via two reusable subagents (`worker-base`, `reviewer-base`) installed at **user scope**, available across every project. The canonical source ships in the plugin at `skills/feature-implement/agents/{claude,cursor,codex}/`.
-
-Ask:
-"Install the `worker-base` and `reviewer-base` subagents to your user-scope agent directories? (y/n, default: y)
-
-This copies six files (no project-scope footprint):
-  - `~/.claude/agents/worker-base.md`, `~/.claude/agents/reviewer-base.md`
-  - `~/.cursor/agents/worker-base.md`, `~/.cursor/agents/reviewer-base.md`
-  - `~/.codex/agents/worker-base.toml`, `~/.codex/agents/reviewer-base.toml`
-
-Harnesses you do not use will be skipped automatically (if `~/.{harness}/` does not exist)."
-
-If user said no: skip this step entirely.
-
-If user said yes, for each harness in `[claude, cursor, codex]`:
-
-1. **Source dir:** plugin's `skills/feature-implement/agents/{harness}/`
-2. **Target dir:** `~/.{harness}/agents/`
-3. **Skip condition:** if `~/.{harness}/` does NOT exist as a directory, skip this harness silently (user does not use it).
-4. **Per file** (`worker-base.{md|toml}`, `reviewer-base.{md|toml}` — choose extension by harness: `.md` for claude/cursor, `.toml` for codex):
-   - `mkdir -p ~/.{harness}/agents`
-   - If destination does not exist: copy source → destination. Note as installed.
-   - If destination exists and content matches source byte-for-byte: skip silently. Note as up-to-date.
-   - If destination exists and differs: show a short diff (or note that the file has been locally customized) and ask: "Overwrite `~/.{harness}/agents/{file}`? (y/n, default: n)". On `y`: copy. On `n`: skip and warn that the local version may diverge from the plugin's `<verdict>` / `<result>` contract.
-
 ### Step 6: Offer Blueprint Runs
 
 Ask:
@@ -266,4 +239,3 @@ Next steps:
 - [ ] If hooks enabled: `.claude/lib/` has every helper in `manifest.json`'s `lib` block, all executable
 - [ ] If hooks enabled: `.claude/rules/` has 8 framework rules
 - [ ] If hooks enabled: `.claude/settings.json` and `.claude/verification.json` created
-- [ ] If base agents installed: for each harness with an existing `~/.{harness}/` dir, both `worker-base` and `reviewer-base` exist at `~/.{harness}/agents/` and match the plugin source (or user explicitly opted to keep a divergent local version)

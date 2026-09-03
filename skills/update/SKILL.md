@@ -46,6 +46,7 @@ The 1.x updates carried migrations (legacy memory-index headers, hand-written `f
 | `2.0.0-schema` | **`aiDir`:** if the key is missing, decide once from disk — `.ai` if `.ai/` exists, else `ai` if `ai/` exists, else `.ai` — and write it; strip any trailing slash. This replaces the runtime detection the 1.x hooks carried, so it lands before any hook runs against the new lib. **`frameworkFiles`:** drop `version` and `lastUpdated` from every entry (bookkeeping nothing ever read); drop entries left empty; drop the key when no pins remain. Since 2.0 the block holds pins only. |
 | `2.0.0-doctor-rule` | `.claude/rules/ai-setup-audit.md` → `.claude/rules/doctor.md` via `git mv` when only the old name exists (the `doctor` skill reads only the new one). Both present → leave both, report it, and tell the user to merge by hand. |
 | `2.0.0-sessions` | Live session logs move from `{aiDir}/memory/sessions/active/` to `.claude/state/sessions/` in the primary checkout (gitignored). Move every `*.md` there with plain `mv` (they were never tracked), delete `active/` and its `.gitkeep` (`git rm` if tracked), leave `archive/` where it is. A 1.x log lacks a `## Files touched` section; the hook adds it on the next edit. |
+| `2.0.0-base-agents` | The user-scope `worker-base` / `reviewer-base` subagents backed the orchestrator agent-chain mode, retired in 2.0. For each of `~/.claude/agents/`, `~/.cursor/agents/`, `~/.codex/agents/` that exists, list the `worker-base.{md\|toml}` and `reviewer-base.{md\|toml}` files present and ask once: "Delete these N files? They are inert since 2.0. (y/n, default: n)". On `n`, leave them and say so. Delete nothing else in those directories, and never touch project-scope agent dirs. |
 
 List every migration run under `Migrations` in the Step 6 summary.
 
@@ -113,23 +114,6 @@ node .claude/lib/setup-doctor.mjs --plugin-root "${CLAUDE_PLUGIN_ROOT}" wiring
 For each `wiring-incomplete` finding, add the entry from `templates/settings-hooks.json` under the same event (deep-merge: append to the existing array for that event and matcher, create the event when absent, match existing entries by `command`). For each hook deleted by a `removed` entry, delete its `command` entries. If the file has no `hooks` key, add the template's whole block. Never add, remove, or reorder anything outside `hooks`, and never touch `settings.local.json`. Re-run the same command afterwards: `wiring-incomplete` must be gone; report what remains (`hook-not-executable`, `hook-syntax`) with the `run:` line it carries.
 
 If the doctor is not on disk yet (this run is what installs it), do the comparison by hand this once: for each `command` in the template, check whether that exact string appears under the project's `settings.json` `hooks` key, and add the absent ones.
-
-### Step 3.5: Sync Base Subagents (user scope)
-
-The plugin ships `worker-base` and `reviewer-base` source under `skills/feature-implement/agents/{claude,cursor,codex}/`. They install to **user scope** (`~/.{harness}/agents/`) — never project scope. This step keeps the user-scope copies in sync with the plugin source while preserving any local customizations.
-
-For each harness in `[claude, cursor, codex]`:
-
-1. **Skip condition:** if `~/.{harness}/` does NOT exist as a directory, skip this harness silently (user does not use it).
-2. `mkdir -p ~/.{harness}/agents` if needed.
-3. **For each file** (`worker-base.{md|toml}`, `reviewer-base.{md|toml}` — `.md` for claude/cursor, `.toml` for codex):
-   - **Source:** plugin's `skills/feature-implement/agents/{harness}/{file}`.
-   - **Destination:** `~/.{harness}/agents/{file}`.
-   - If destination missing: copy source → destination. Note as "installed (was missing)".
-   - If destination identical to source: skip silently. Note as "up-to-date".
-   - If destination differs from source: show a short diff (or note that the file has been locally customized) and ask: "Sync `~/.{harness}/agents/{file}` to plugin version? (y/n, default: n)". On `y`: copy. On `n`: skip and warn that the local version may diverge from the plugin's `<verdict>` / `<result>` contract.
-
-Do not write anywhere outside `~/.{harness}/agents/`. Never install as project-scope (`.claude/agents/`, `.cursor/agents/`, `.codex/agents/` in the repo root).
 
 ### Step 3.6: Check memory health
 
@@ -222,9 +206,6 @@ Memory: {indexes up to date / regenerated N, backfilled M hook: lines (K from he
         doctor: {clean / N error(s), M warning(s) — see above}
 Setup:  {clean / N error(s), M warning(s) — see above / skipped — node not found}
 
-Base subagents (user scope, ~/.{harness}/agents/):
-  {per harness: list each file as installed / up-to-date / synced / kept-local / skipped (~/.{harness}/ not present)}
-
 Next: Run the `bootstrap` skill to verify the setup is still correct.
 ```
 
@@ -247,9 +228,7 @@ Do NOT modify the file — this is advisory only.
 - Never update `.myspec.json` project fields (`name`, `description`, `techStack`); `aiDir` is written only by the `2.0.0-schema` migration, and only when absent or carrying a trailing slash
 - Never run a migration whose id is already in `.myspec.json` `migrations`; record each one the moment it completes
 - If a source file is missing from the plugin, skip it and warn the user — do not delete the destination
-- Base subagents (`skills/feature-implement/agents/`) install to user scope only. Never copy to project-scope `.claude/agents/`, `.cursor/agents/`, `.codex/agents/` in the repo root.
-- Skip a harness entirely if `~/.{harness}/` does not exist — the user does not use that tool.
-- Never silently overwrite a locally-customized agent file; always diff + prompt.
+- The plugin ships no subagent definitions. Never write to `~/.{harness}/agents/` outside the `2.0.0-base-agents` migration, and never to project-scope `.claude/agents/`, `.cursor/agents/`, `.codex/agents/`.
 
 ## Verification Checklist
 

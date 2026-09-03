@@ -56,7 +56,7 @@ A running plan does not wait on the user for every wrinkle. Non-catastrophic con
 
 - An irreversible or destructive operation (data loss, dropped tables, force-push)
 - A security-sensitive change (auth, secrets, permissions)
-- A plan ↔ spec contradiction the code cannot bridge (orchestrator mode: `ESCALATE`)
+- A plan ↔ spec contradiction the code cannot bridge
 - Scope explosion — the fix requires work no plan task covers
 
 At Step 5, list every ruling in the completion report under **"Rulings I made"**, in the order made, each with its cost-if-wrong. The list is exhaustive: if the Execution Log holds a ruling, the report holds it.
@@ -129,47 +129,7 @@ options:
 
 Read the implementation plan. **Check front-matter first.**
 
-**If front-matter contains `orchestration: agent-chain` — BLOCKING run-mode gate:**
-
-Before dispatching ANY agent, before any further parsing, before announcing what you'll do — call `AskUserQuestion` and WAIT for the user's choice. Do not proceed on a default. Do not assume. Do not skip.
-
-```
-question: "Plan was authored in orchestrator mode. Run mode?"
-header:   "Run mode"
-options:
-  - "orchestrator"        → matches plan; pauses at every Milestone Checkpoint (Recommended)
-  - "orchestrator-auto"   → no checkpoint prompts on green verification; only pauses on
-                            FAIL-SPEC ≥ 3, FAIL-QUALITY ≥ 3, or verification failure
-  - "normal-fallback"     → treat as single-executor; skip role chain
-```
-
-Always display this disclaimer above the question, every invocation:
-
-```
-Orchestrator-auto runs end-to-end without per-milestone prompts. Chained autonomy
-across roles is more surface for cascading errors. Use only for plans you have
-already reviewed.
-```
-
-Record the user's choice. Only after the choice is captured, **REQUIRED:** read `references/orchestrator-dispatcher.md` for the 5-step chain (Worker(s) → SpecReview → QualityReview → Commit → Checkpoint), loop caps, and the verdict-append retry protocol. Steps 2, 4b, and 5 below still apply unchanged; orchestrator mode replaces Step 4 (Phase Review) with the per-milestone chain.
-
-#### HARD CONSTRAINT — controller MUST NOT execute tasks directly (orchestrator + orchestrator-auto)
-
-Once the user selects `orchestrator` or `orchestrator-auto`, the controller's role is **dispatch only**. Every plan task is implemented by a Worker subagent dispatched via the `Agent` tool with `isolation: "worktree"`. The controller writes ZERO code, edits ZERO files in the feature scope, runs ZERO Bash commands that modify the working tree.
-
-**Forbidden controller actions in orchestrator mode:**
-- Using `Edit`, `Write`, or `NotebookEdit` on files declared in any task's file list
-- Running `git commit`, `git add`, `yarn install`, code-generation scripts, or test commands as part of task execution (verification commands at Checkpoint are the only exception)
-- "Just doing this one task directly" because Worker dispatch hit friction
-- Bypassing the chain on the final task, a small task, a "trivial" task, or a retry
-
-**Environment friction is NEVER a valid bypass reason.** If a Worker can't install deps, can't find `node_modules`, can't run lint, can't see prior milestone commits — fix it **inside the Worker prompt's setup step** (symlink, reset, cherry-pick — see `references/orchestrator-dispatcher.md` "Known limitation" sections). Then re-dispatch. Do not absorb the work into the controller.
-
-**Self-check before every action in orchestrator mode:** "Am I about to edit a file / run a build command / commit? If yes — STOP. Dispatch a Worker instead." If the friction looks insurmountable, surface it to the user with `AskUserQuestion` and let them choose `normal-fallback` explicitly. Do not silently drift to direct execution.
-
-Violating this constraint defeats the entire purpose of orchestrator mode (autonomous self-reviewing chain) and produces unreviewable work — no SpecReview, no QualityReview, no Worker output contract. It is a contract breach, not a shortcut.
-
-If `orchestration` is absent, continue in normal mode below — no run-mode prompt.
+**Legacy front-matter.** A plan carrying `orchestration: agent-chain` was authored for the orchestrator agent-chain mode, retired in 2.0. Run it as a normal plan and print one line: "Plan carries retired `orchestration: agent-chain` front-matter — running in normal mode." Ignore the `roles:` block and any `**Step N (Worker|Reviewer|Controller):**` role annotations — the step text itself still applies. No run-mode prompt exists.
 
 Parse milestones first, then build a DAG within each:
 
@@ -306,6 +266,11 @@ After all phases in a milestone complete (skip this step only for the final mile
   Choice?
 ```
 
+Mark `fresh` as `(Recommended)` when the plan has more than five tasks: a multi-milestone
+run in one session is dispatch-latency-bound and the controller's context degrades across
+milestones. One milestone per session is the default for plans that size. `continue` is
+recommended only for plans of five tasks or fewer.
+
 - **continue** → proceed to next milestone
 - **stop** → ensure all changes committed, output: "Stopped after Milestone N. Resume with `/myspec:feature-implement` — it will detect completed milestones via `[x]` checkboxes.", then exit
 - **fresh** → same as stop, additionally output: "Recommended: start a fresh `/myspec:feature-implement` session. The new agent will auto-detect progress from checkbox state and resume from Milestone N+1."
@@ -313,7 +278,7 @@ After all phases in a milestone complete (skip this step only for the final mile
 ### Step 5: Completion
 
 1. Run Final Verification section from the plan.
-2. Build the full-feature review package (same commands as Step 4b, over `BASE_SHA..HEAD`) and dispatch the holistic reviewer (`./holistic-reviewer-prompt.md`) with the package path plus the plan's Execution Log entries (deferred minors and parked findings) so it can triage which must be fixed before merge. This is the quick in-flight gate; the deeper independent conformance audit lives in `/myspec:feature-implement-review`.
+2. Build the full-feature review package (same commands as Step 4b, over `BASE_SHA..HEAD`) and dispatch the holistic reviewer (`./holistic-reviewer-prompt.md`) on the `premium` tier with the package path plus the plan's Execution Log entries (deferred minors and parked findings) so it can triage which must be fixed before merge. This pass is mandatory — never skipped, never downgraded to a cheaper tier. It is the quick in-flight gate; the deeper independent conformance audit lives in `/myspec:feature-implement-review`.
 3. Print the completion report. It contains, in order: the milestone summary; the holistic verdict; **"Rulings I made"** — every `Ruling:` line from the Execution Log, in the order made, each with its cost-if-wrong ("none" if the log holds no rulings); and the deferred-minors triage outcome. This report is the only place the decisions taken on the user's behalf reach them.
 4. **Ask the user what to do next** via `AskUserQuestion` — do not auto-hand-off:
 
@@ -332,8 +297,6 @@ options:
 
 Execute the choice: invoke `/myspec:feature-implement-review`, `/myspec:code-review`, `/myspec:feature-complete`, or stop and report the branch name. The two review passes are complementary, not exclusive (conformance vs. code quality) — after one finishes, offer this choice again so the user can run the other or proceed.
 
-**Orchestrator mode interaction:** Step 5 runs identically in both modes. Per-milestone SpecReview + QualityReview are scoped to one milestone's diff; the holistic reviewer covers the whole feature. They do not overlap and orchestrator mode does NOT skip Step 5. No `briefs/` directory is created — Workers receive task text inline.
-
 ## Model Selection
 
 Skill text uses **tier names** (`cheap` / `mid` / `premium`). Controller (main thread) maps tier → concrete model based on runtime availability. Plugin runs across Claude Code, Codex, Cursor, etc. — no hardcoded model IDs.
@@ -344,10 +307,6 @@ Skill text uses **tier names** (`cheap` / `mid` / `premium`). Controller (main t
 | Implementer | Multi-file, integration | `mid` | e.g. Sonnet-tier, GPT-5-tier |
 | Phase reviewer | — | `mid` | e.g. Sonnet-tier, GPT-5-tier |
 | Final holistic reviewer | — | `premium` | e.g. Opus-tier |
-| Orchestrator SpecReviewer / QualityReviewer | — | `mid` | e.g. Sonnet-tier, GPT-5-tier |
-| Orchestrator Worker | — | `cheap` | e.g. Haiku-tier, GPT-5-mini-tier |
-
-Orchestrator-mode plans override defaults via the `roles:` front-matter block.
 
 **Name the tier on every dispatch.** An omitted model inherits the session's model — often the most expensive tier — which silently defeats this table. An upstream production run put all 26 of its reviewers on the top tier exactly this way.
 
@@ -376,6 +335,7 @@ Orchestrator-mode plans override defaults via the `roles:` front-matter block.
 - Tell a reviewer what not to flag — a suppressed finding never reaches the user; adjudicate it in triage instead
 - Diff a review with `HEAD~1` — use the recorded `PHASE_BASE` / `FIX_BASE` / `BASE_SHA`
 - Fix review findings in the controller session — resume or dispatch an implementer; controller fixes skip review
+- Skip the Step 5 holistic review, or run it below `premium` — it is the only pass that sees the whole feature
 
 ## Verification Checklist
 

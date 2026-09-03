@@ -2,19 +2,19 @@
 
 Converts an approved `tech-spec.md` into an execution-ready `implementation-plan.md` with milestones, phases, parallel groups, and per-task TDD steps. The plan is what `/feature-implement` later dispatches to subagents.
 
-Every run opens with **Step 0: Choose Plan Mode** (BLOCKING) — an `AskUserQuestion` picking `normal` (single-executor implementer per task) or `orchestrator` (per-milestone Worker / SpecReviewer / QualityReviewer chain). The choice drives template selection and front-matter shape, so the three scenarios below differ from the first prompt onward.
+One implementer subagent owns each task end to end; the plan's shape — milestones, phases, parallel groups — is what `/feature-implement` schedules against.
 
 **Contents**
 
-- [Single-milestone plan (normal mode)](#single-milestone-plan-normal-mode) — small feature, no parallelism
-- [Multi-milestone with parallel groups (orchestrator mode)](#multi-milestone-with-parallel-groups-orchestrator-mode) — role chain, step ownership, worker context budget pass
+- [Single-milestone plan](#single-milestone-plan) — small feature, no parallelism
+- [Multi-milestone with parallel groups](#multi-milestone-with-parallel-groups) — seams, barriers, milestone sizing
 - [Plan refuses, recommends decompose](#plan-refuses-recommends-decompose) — tech-spec is too big
 
 ---
 
-## Single-milestone plan (normal mode)
+## Single-milestone plan
 
-Most features land here: 4–8 tasks, one milestone, mostly sequential because each step depends on the previous. The plan is mechanically derived from the tech-spec, and `normal` mode keeps the task blocks lean — one implementer agent owns each task end to end.
+Most features land here: 4–8 tasks, one milestone, mostly sequential because each step depends on the previous. The plan is mechanically derived from the tech-spec, and the task blocks stay lean — one implementer agent owns each task end to end.
 
 ### Setup
 
@@ -27,20 +27,6 @@ Most features land here: 4–8 tasks, one milestone, mostly sequential because e
 ```
 
 ### Skill flow
-
-#### Step 0: Choose plan mode (BLOCKING)
-
-The skill opens with an `AskUserQuestion`:
-
-```
-Plan mode?
-  - normal        single-executor implementer per task (Recommended)
-  - orchestrator  per-milestone Worker / SpecReview / QualityReview chain
-```
-
-It recommends `normal`: six small sequential tasks, no large milestones, no model-tier mix worth optimizing. The orchestrator option carries its disclaimer ("chained autonomy = more surface for cascading errors. Review milestone checkpoints carefully."), but there's no reason to take it here.
-
-**User**: `normal`
 
 The skill reads `references/plan-templates.md` before drafting.
 
@@ -166,8 +152,7 @@ Plan is ready. Commit before /feature-implement to avoid dangling files.
 
 ### Why this example matters
 
-- **Normal mode is the default, and it's the right call here.** Six small sequential tasks gain nothing from a role chain — orchestrator's autonomy would only add surface for cascading errors. The Step 0 disclaimer exists so the user picks deliberately.
-- **The Spec contract block is non-negotiable even in normal mode.** Every task quotes the spec/tech-spec sentence that constrains it. If a task has no such passage, that's the signal the task shouldn't exist.
+- **The Spec contract block is non-negotiable.** Every task quotes the spec/tech-spec sentence that constrains it. If a task has no such passage, that's the signal the task shouldn't exist.
 - **Global Constraints and Interfaces are the anti-drift rails.** Project-wide exacts live once in the header section (every task implicitly includes them); exact signatures live in each task's Interfaces block. Task 4's hook calls `list(userId)` because Task 2's Produces line says so — an implementer who sees only their task text never guesses a name.
 - **Touch only lands wherever a task modifies an existing file.** Without it, a reviewer flags adjacent pre-existing code as a regression. Task 6 touches the list query, so it scopes the diff explicitly.
 - **Single-milestone, all-sequential is fine.** Don't split into milestones to look "complex." The milestone checkpoint at the end gives the user an exit point.
@@ -175,9 +160,9 @@ Plan is ready. Commit before /feature-implement to avoid dangling files.
 
 ---
 
-## Multi-milestone with parallel groups (orchestrator mode)
+## Multi-milestone with parallel groups
 
-The interesting case: a tech-spec with 11–14 implementation steps, natural seams for parallelism, two clean milestones, and a couple of tasks heavy enough that mixing model tiers pays off. This is where orchestrator mode earns its keep — each task runs through a Worker / SpecReviewer / QualityReviewer chain so spec-fail and quality-fail loops recover without the user.
+The interesting case: a tech-spec with 11–14 implementation steps, natural seams for parallelism, and two clean milestones. This is where the plan's structure does real work — parallel groups let `feature-implement` dispatch several implementers at once, and barriers say where they have to rejoin.
 
 ### Setup
 
@@ -191,40 +176,6 @@ The interesting case: a tech-spec with 11–14 implementation steps, natural sea
 
 ### Skill flow
 
-#### Step 0: Choose plan mode (BLOCKING)
-
-```
-Plan mode?
-  - orchestrator  per-milestone Worker / SpecReview / QualityReview chain (Recommended)
-  - normal        single-executor implementer per task
-```
-
-The skill recommends `orchestrator`: large multi-task milestones, parallel groups, and a tier mix (most tasks are mechanical and cheap-tier; one is heavy enough to warrant `mid`). It shows the disclaimer:
-
-```
-Orchestrator mode gives agents more autonomy across roles. Recovers from
-spec-fail and quality-fail loops without you, but chained autonomy = more
-surface for cascading errors. Review milestone checkpoints carefully.
-```
-
-**User**: `orchestrator`
-
-The skill reads `references/plan-templates-orchestrator.md`. Front-matter now carries `orchestration: agent-chain` and a `roles:` block; tier values are `cheap` / `mid` / `premium` only — never a concrete model name anywhere in the plan.
-
-```yaml
----
-feature: scheduled-reports
-spec_version: 2
-spec: ai/features/scheduled-reports/spec.md
-tech_spec: ai/features/scheduled-reports/tech-spec.md
-orchestration: agent-chain
-roles:
-  worker: cheap
-  spec_reviewer: mid
-  quality_reviewer: mid
----
-```
-
 #### 1–2. Read context + dependency graph
 
 The skill reads the tech-spec and finds three parallel-safe seams:
@@ -233,9 +184,7 @@ The skill reads the tech-spec and finds three parallel-safe seams:
 - **Services seam** — the `ScheduleRunner` job and the API handlers can be built in parallel once shared types exist (the types file becomes the barrier).
 - **UI components seam** — three list/form/history components are file-disjoint.
 
-#### 3. Expand to execution tasks (with role chain + step ownership)
-
-Each milestone section spells out the chain:
+#### 3. Expand to execution tasks
 
 ```markdown
 ### Milestone 1: Core CRUD + cron infrastructure
@@ -248,13 +197,6 @@ Each milestone section spells out the chain:
 | 4 | Task 5: ScheduleRunner job, Task 6: API handlers | parallel:services | Phase 3 |
 | 5 | Task 7: integration test (end-to-end run) | sequential (barrier) | Phase 4 |
 
-**Chain:**
-- Workers — tier `cheap` — one per task, parallel where Mode allows. Writes only — no shell, no git.
-- SpecReviewer — tier `mid` — gates QualityReviewer. Verdicts: `PASS`, `FAIL-SPEC`, `ESCALATE`.
-- QualityReviewer — tier `mid` — runs verification (test, lint, type-check), gates Commit. Verdicts: `PASS`, `FAIL-QUALITY`.
-- Commit — controller stages Worker's reported file list and commits with the task's message. One commit per task.
-- Checkpoint — controller runs milestone-level verification.
-
 ### Milestone 2: Settings UI + notifications
 
 | Phase | Tasks | Mode | Depends On |
@@ -263,7 +205,7 @@ Each milestone section spells out the chain:
 | 7 | Task 11: SchedulesPage wires components | sequential (barrier) | Phase 6 |
 ```
 
-Every step inside a task block is annotated with its owning chain role — the Worker has no shell, so anything that runs tests, lint, or git is a Reviewer or Controller step. The dispatcher strips non-Worker steps from the Worker envelope:
+A task in a parallel group carries an isolation note, because its implementer runs in its own worktree and cannot see a sibling's files:
 
 ```markdown
 ### Task 2: ScheduleRepository [parallel:repos]
@@ -276,8 +218,6 @@ Every step inside a task block is annotated with its owning chain role — the W
 - Create: `src/features/schedules/repository.ts`
 - Test: `src/features/schedules/__tests__/repository.test.ts`
 
-<!-- budget: est 14k tokens, 2 files, 0 LoC modify, 320 LoC create -->
-
 **Interfaces:**
 - Consumes: `schedules` table — from Task 1 migration
 - Produces: `ScheduleRepository.create(input: ScheduleInput): Promise<Schedule>`, `.get(id: string)`, `.listForUser(userId: string)`, `.delete(id: string)` — Tasks 5 and 6 rely on these
@@ -287,54 +227,25 @@ Every step inside a task block is annotated with its owning chain role — the W
 
 > **Isolation:** runs in its own worktree. Do not reference files created by Task 3.
 
-- [ ] **Step 1 (Worker): Write the failing test**
+- [ ] **Step 1: Write the failing test**
   Crafted to fail on the current codebase (asserts behavior Step 2 adds).
   [test code]
 
-- [ ] **Step 2 (Worker): Implement**
+- [ ] **Step 2: Implement**
   [implementation code]
 
-- [ ] **Step 3 (Reviewer): Verification**
-  Single pass — runs test, lint, type-check from `.claude/verification.json`.
-  Non-zero exits become FAIL-QUALITY bullets.
+- [ ] **Step 3: Verification**
+  Runs test, lint, type-check from `.claude/verification.json`.
 
-- [ ] **Step 4 (Controller): Commit**
+- [ ] **Step 4: Commit**
   `git commit -m "feat(scheduled-reports): add ScheduleRepository"`
 ```
 
-#### 3.5. Worker context budget pass
+#### Task right-sizing
 
-This pass runs only in orchestrator mode. For each task the skill computes a pure-arithmetic estimate (no LLM call):
+**Task 8 (`SchedulesList`)** initially bundled the list table *and* the inline filter/sort controls *and* an optimistic-update hook — nine files, three separable deliverables. A reviewer could reject the hook while approving the table, which is the signal to split: Task 8 becomes `useSchedulesList` (the hook) and Task 8b becomes `SchedulesList` (the table consuming it). The skill renumbers downstream tasks and updates the Execution Order table.
 
-```
-est_tokens = 3000 + (loc(task_text) + loc(Modify files) + loc(Create inline code)) * 10
-```
-
-and checks it against the target tier's caps:
-
-| Tier | Files | LoC modify | LoC create | est_tokens |
-|------|-------|------------|------------|------------|
-| cheap | 7 | 2200 | 1200 | 35k |
-| mid | 12 | 6000 | 3000 | 80k |
-
-The result is surfaced as a one-line `<!-- budget: ... -->` comment after each task's Files block (visible above on Task 2), so the user can audit the math. The Worker dispatch envelope strips it before substitution.
-
-Most tasks come in well under the cheap cap. Two don't:
-
-- **Task 5 (`ScheduleRunner` job)** estimates **~46k tokens** — bullmq registration, retry/backoff state machine, and a cadence resolver, all in one block. That's over the 35k cheap cap but under 80k, and the logic is genuinely cohesive (splitting the retry machine from the cadence resolver would leave two half-tasks that can't be tested independently). So it gets a tier override rather than a split:
-
-  ```markdown
-  ### Task 5: ScheduleRunner job [parallel:services]
-
-  **Tier override:** worker=mid
-  (reason: bullmq + retry/backoff + cadence resolver, est 46k tokens > cheap cap)
-
-  <!-- budget: est 46k tokens, 6 files, 1100 LoC modify, 540 LoC create -->
-  ```
-
-- **Task 8 (`SchedulesList`)** initially bundled the list table *and* the inline filter/sort controls *and* an optimistic-update hook — estimated **~52k tokens / 9 files**, blowing the cheap file cap *and* token cap. It has a natural seam (the data hook is independent of the presentational table), so the **preferred resolution applies: split.** Task 8 becomes `useSchedulesList` (the hook) and Task 8b becomes `SchedulesList` (the table consuming it). Both re-estimate under cap; the skill renumbers downstream tasks and updates the Execution Order table.
-
-After the pass, the override count is 1 of 12 tasks (~8%) — comfortably under the ~30% ceiling, so `roles.worker: cheap` stays the right global default.
+**Task 5 (`ScheduleRunner` job)** is also big — bullmq registration, a retry/backoff state machine, and a cadence resolver — but it stays one task: splitting the retry machine from the cadence resolver would leave two half-tasks neither of which can be tested independently. Size is a signal, not a rule; the test cycle is the boundary.
 
 #### Step 4: Review loop (large plans only)
 
@@ -343,8 +254,7 @@ After the pass, the override count is 1 of 12 tasks (~8%) — comfortably under 
 - Every tech-spec step → corresponding task ✓
 - Parallel groups → zero file overlap ✓
 - Every task has a Spec contract block; every `Modify:` task has Touch only ✓
-- Every step is owner-annotated; each task ends with exactly one Controller commit ✓
-- Step 3.5 ran: every task has a budget comment and respects caps; oversized tasks split or overridden ✓
+- Every task has an Interfaces block whose signatures match between producer and consumer ✓
 
 Passes.
 
@@ -360,15 +270,15 @@ The user is already on `feat/scheduled-reports` (not the default branch), so the
 
 ### Result
 
-`implementation-plan.md` with 12 tasks (after the Task 8 split), 2 milestones, 3 parallel groups, orchestrator front-matter, full Worker/SpecReviewer/QualityReviewer chain annotations, and one tier override. Status `draft`.
+`implementation-plan.md` with 12 tasks (after the Task 8 split), 2 milestones, and 3 parallel groups. Status `draft`.
 
 ### Why this example matters
 
-- **Orchestrator mode is a three-role chain, not a single executor.** Worker writes (no shell, no git), SpecReviewer gates on spec conformance (`PASS` / `FAIL-SPEC` / `ESCALATE`), QualityReviewer runs verification (`PASS` / `FAIL-QUALITY`), Controller commits and checkpoints. The per-step `(Worker|Reviewer|Controller)` annotation is what lets the dispatcher strip non-Worker steps from the Worker envelope.
-- **The Step 3.5 budget pass is plan-time enforcement, so the implement session does no size estimation.** Two tasks exceeded the cheap cap and resolved differently: Task 5 was indivisible → `Tier override: worker=mid`; Task 8 had a clean seam → split. Splitting is always preferred; the override is the fallback.
-- **Tier vocabulary stays abstract.** `cheap` / `mid` / `premium` only — the controller maps tiers to concrete models at dispatch. No model names leak into the plan.
-- **The `<!-- budget: ... -->` comment makes the arithmetic auditable** and then disappears before the Worker ever sees the task.
+- **Parallel groups are a file-disjointness claim, not a wish.** Each group's tasks touch strictly separate files, and the barrier after the group is where the worktrees rejoin and verification runs. A group whose tasks share a file is a plan bug.
+- **Interfaces are what make parallelism safe.** Task 5 and Task 6 are written simultaneously by implementers who never see each other's code; the Produces line on Task 2 is the only place they learn the signature they both call.
+- **Right-sizing cuts both ways.** Task 8 split because a reviewer could reject one half and approve the other; Task 5 stayed whole because neither half has its own test cycle.
 - **Vertical-slice milestones still hold.** Milestone 1 is a complete vertical (migration → repos → types → services → integration test) — testable end-to-end before any UI exists.
+- **Two milestones means two sessions.** Past five tasks the milestone checkpoint recommends `fresh`: a long multi-milestone run in one session is dispatch-latency-bound and the controller's context degrades as it goes.
 
 ---
 
@@ -388,7 +298,7 @@ A feature `analytics-dashboard` somehow ended up with an approved tech-spec cont
 
 ### Skill flow
 
-The skill runs Step 0 (the user picks `normal`), then reads the tech-spec in Step 1 and counts steps. 24 is well past the ~20-task ceiling in the skill's Red Flags. Before expanding any tasks, it stops:
+The skill reads the tech-spec in Step 1 and counts steps. 24 is well past the ~20-task ceiling in the skill's Red Flags. Before expanding any tasks, it stops:
 
 > The tech-spec for `analytics-dashboard` has 24 implementation steps. The recommended ceiling for a single plan is ~20 tasks — beyond that, milestone checkpoints get unwieldy and parallel groups become hard to keep file-disjoint.
 >
@@ -415,9 +325,9 @@ A — decompose
 
 ### Skill flow (continued)
 
-The skill does **not** create a plan, and never reaches Step 3.5 or Step 7. It hands off:
+The skill does **not** create a plan, and never reaches Step 7. It hands off:
 
-> Skipping plan creation. Run `/myspec:feature-decompose analytics-dashboard` next. After decomposition, you'll run `/myspec:feature-tech-spec` per sub-feature (the parent's tech-spec content carries over as starting drafts), then `/myspec:feature-plan` per sub-feature — and you'll choose the plan mode fresh for each.
+> Skipping plan creation. Run `/myspec:feature-decompose analytics-dashboard` next. After decomposition, you'll run `/myspec:feature-tech-spec` per sub-feature (the parent's tech-spec content carries over as starting drafts), then `/myspec:feature-plan` per sub-feature.
 
 ### Result
 
@@ -425,7 +335,7 @@ No `implementation-plan.md` written. The user pivots to decomposition. See [feat
 
 ### Why this example matters
 
-- **The ~20-task ceiling is a hard stop, regardless of plan mode.** Picking orchestrator mode wouldn't rescue a 24-step tech-spec — the refusal happens at Step 1, before mode-specific work. The fix is a smaller scope, not a fancier executor.
+- **The ~20-task ceiling is a hard stop.** The refusal happens at Step 1, before any task is expanded. The fix is a smaller scope, not a longer plan.
 - **Plan-stage decomposition routing is rare but valuable.** Catching it at spec or tech-spec is preferable, but the plan stage is the last useful checkpoint before subagents start dispatching.
 - **The skill names the seams.** "Steps 1–6 are ingestion, 7–11 are query layer…" — that summary is what makes the decompose path tractable. Without it, the user re-reads the tech-spec to figure out where to cut.
 - **Override exists** — option B is offered so users with a deadline don't get stuck. But the recommendation is unambiguous and the consequences of B are spelled out.

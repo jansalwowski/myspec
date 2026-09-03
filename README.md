@@ -82,8 +82,8 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref main
 | `/myspec:feature-mockup-review` | Audit mockups for UX issues, scope creep, loose ends, missing states, and project hard-guard violations ([examples](examples/skills/feature-mockup-review.md)) |
 | `/myspec:feature-tech-spec` | Create technical design from approved spec |
 | `/myspec:feature-tech-spec-review` | Review tech-spec for implementability and pattern conformance |
-| `/myspec:feature-plan` | Create execution-ready implementation plan from tech-spec. Step 0 picks **normal** (single-executor, default) or **orchestrator** (per-milestone Worker / SpecReview / QualityReview chain — no Planner since plan tasks are already atomic) — opt-in |
-| `/myspec:feature-implement` | Execute implementation plan with subagent dispatch. Auto-detects `orchestration: agent-chain` in plan front-matter and offers `orchestrator` / `orchestrator-auto` / `normal-fallback` run modes |
+| `/myspec:feature-plan` | Create execution-ready implementation plan from tech-spec: milestones, phases, parallel groups, per-task spec contracts and interfaces |
+| `/myspec:feature-implement` | Execute implementation plan by dispatching one implementer subagent per task, reviewing at every phase boundary, and closing with a holistic full-diff review |
 | `/myspec:feature-implement-review` | Independently audit that the built code fulfills the spec and plan (traceability + behavioral); writes conformance-report.md and routes findings — never edits code |
 | `/myspec:code-review` | Review changed code for quality, standards, and bugs — universal dimensions plus project rules. Configurable via `/myspec:setup code-review` |
 | `/myspec:feature-update` | Plan changes to an already-implemented feature |

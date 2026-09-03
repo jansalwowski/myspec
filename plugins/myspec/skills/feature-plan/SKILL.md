@@ -30,30 +30,6 @@ All gates pass → proceed to Workflow Step 0.
 
 ## Workflow
 
-### Step 0: Choose Plan Mode (BLOCKING)
-
-Drives template selection in Step 5 and front-matter shape. Call `AskUserQuestion`:
-
-```
-question: "Plan mode?"
-header:   "Plan mode"
-options:
-  - "normal"        → single-executor implementer per task (default)
-  - "orchestrator"  → per-milestone Worker / SpecReview / QualityReview chain
-```
-
-Recommend `normal` unless the feature has large multi-task milestones or benefits from mixed model-tier optimization. Show this disclaimer with the orchestrator option:
-
-```
-Orchestrator mode gives agents more autonomy across roles. Recovers from
-spec-fail and quality-fail loops without you, but chained autonomy = more
-surface for cascading errors. Review milestone checkpoints carefully.
-```
-
-Selection:
-- `normal` → **REQUIRED:** Read `references/plan-templates.md` before generating the plan.
-- `orchestrator` → **REQUIRED:** Read `references/plan-templates-orchestrator.md`. Front-matter must include `orchestration: agent-chain` and a `roles:` block. Tier values: `cheap`, `mid`, `premium` only — no concrete model names anywhere in plan text.
-
 ### Step 1: Read Context
 
 1. Read `${aiDir}/features/{feature}/tech-spec.md` — note implementation steps, file inventory, interfaces
@@ -85,7 +61,7 @@ For each implementation step in the tech-spec:
 
 ### Step 3: Expand to Execution Tasks
 
-Convert each tech-spec implementation step into a full task using the format in [references/plan-templates.md](references/plan-templates.md).
+**REQUIRED:** read [references/plan-templates.md](references/plan-templates.md) before writing any task — it carries the front-matter, Execution Order, task, and barrier templates. Convert each tech-spec implementation step into a full task using that format.
 
 **What the tech-spec provides:** High-level step description, file inventory, interfaces
 **What the plan adds:** Exact TDD steps, test code, run commands, commit messages, parallel group tags
@@ -97,58 +73,13 @@ A task is the smallest unit that carries its own test cycle and is worth a fresh
 Populate the plan's `## Global Constraints` section with the project-wide exacts collected in Step 1 — version floors, size/perf limits, naming rules, invariants — copied verbatim from `spec.md` / `tech-spec.md` with source refs. Every task's requirements implicitly include this section; per-task text must not re-derive or paraphrase these values — re-derivation is how they drift.
 
 **Spec contract — verbatim quotes (REQUIRED per task):**
-For every task, populate the `**Spec contract:**` block with verbatim quotes from `spec.md` and/or `tech-spec.md` covering this task's behavior. Paste the sentence; do NOT paraphrase. In orchestrator mode the Worker subagent does NOT read `spec.md` or `tech-spec.md` — only the task text. Any requirement that does not make the spec → task translation is invisible to the Worker. If you find yourself rewording spec language, the original wording IS the contract — quote it. If a task has no spec/tech-spec passage that constrains it, ask whether the task should exist.
+For every task, populate the `**Spec contract:**` block with verbatim quotes from `spec.md` and/or `tech-spec.md` covering this task's behavior. Paste the sentence; do NOT paraphrase. The implementer subagent does NOT read `spec.md` or `tech-spec.md` — it receives the task text and nothing else. Any requirement that does not make the spec → task translation is invisible to it. If you find yourself rewording spec language, the original wording IS the contract — quote it. If a task has no spec/tech-spec passage that constrains it, ask whether the task should exist.
 
 **Touch only (REQUIRED for tasks with `Modify:` files):**
-For every task whose Files block contains a `Modify:` entry, populate the `**Touch only:**` line specifying which lines/sections the task is allowed to alter. This pairs with the QualityReviewer's diff-scope rule — without it, reviewers flag adjacent pre-existing tech debt as regressions and Workers waste retries on out-of-scope fixes.
+For every task whose Files block contains a `Modify:` entry, populate the `**Touch only:**` line specifying which lines/sections the task is allowed to alter. This pairs with the phase reviewer's diff-scope rule — without it, reviewers flag adjacent pre-existing tech debt as regressions and implementers waste retries on out-of-scope fixes.
 
 **Interfaces — Consumes/Produces (REQUIRED per task):**
 Populate the `**Interfaces:**` block with exact signatures — names, parameter and return types from the tech-spec — for what this task consumes from earlier tasks and produces for later ones. A task's implementer sees only their own task text; this block is how they learn the names and types neighboring tasks use, and it is what makes parallel groups safe. A signature that differs between producer and consumer tasks is a plan bug — fix it before presenting.
-
-**Orchestrator-mode additions (REQUIRED in orchestrator mode):**
-- **Step ownership annotation:** every step inside a task block carries its chain role — `**Step N (Worker|Reviewer|Controller): …**`. Worker has no shell; steps that run tests/lint/git must be Reviewer or Controller. Without annotation, the dispatcher cannot strip non-Worker steps from the Worker envelope. See [`references/plan-templates-orchestrator.md`](references/plan-templates-orchestrator.md) "Task Details".
-- **Per-task tier override (OPTIONAL):** for tasks heavier than the milestone default (complex AST, multi-system integration), add `**Tier override:** worker=<tier>` with a one-line reason. Sparingly — > 30% of tasks needing override means bump `roles.worker` instead.
-
-### Step 3.5: Worker Context Budget Pass (orchestrator mode only)
-
-Skip in normal mode. Run after Step 3, before Step 4. Goal: keep each task within the cheap-tier Worker's effective context window so the implement session does not burn tokens on size estimation at dispatch time.
-
-Heuristic per task (no LLM call — pure `wc -l` + arithmetic):
-
-```
-est_tokens =
-    3000                                       # fixed overhead (agent + envelope + tool calls)
-  + (loc(task_text) + loc(Modify files) + loc(Create inline code)) * 10
-                                                # 10 tokens/LoC — conservative upper bound
-                                                # for mixed code+prose (TS source typically
-                                                # 6-10 tok/LoC; padded for safety)
-```
-
-One ratio uniformly across task text and file content. Earlier drafts used two ratios (1.3 prose vs 12 code) — the 12× gap was undocumented and the prose ratio was too low for inline code blocks. Single 10-tok/LoC factor is conservative everywhere and easy to tune.
-
-Per-task caps (full table in `references/plan-templates-orchestrator.md` "Worker context budget"):
-
-| Tier | Files | LoC modify | LoC create | est_tokens |
-|------|-------|------------|------------|------------|
-| cheap | 7 | 2200 | 1200 | 35k |
-| mid | 12 | 6000 | 3000 | 80k |
-
-For each task in the plan:
-
-1. Parse Files block → count files; classify Create vs Modify.
-2. For each Modify file → `wc -l <path>`.
-3. For each Create file → count LoC in the task block's inline code fences for that file.
-4. Compute `est_tokens` per the formula above.
-5. Resolve target tier (task `Tier override:` if set, else `roles.worker`).
-6. Compare to that tier's caps.
-
-If any cap exceeded:
-- **Preferred:** split the task. Identify a natural seam (one file, one Files-block subset, one TDD cycle) and emit two subtasks. Renumber. Update Execution Order table.
-- **Fallback (genuinely indivisible task):** add `**Tier override:** worker=mid` with reason `(est Xk tokens > cheap cap)`. If `est_tokens` > 80k even at mid, splitting is mandatory.
-
-Surface the math in the plan's task block as a one-line comment after the Files block: `<!-- budget: est 28k tokens, 5 files, 1800 LoC modify, 600 LoC create -->`. Lets the user audit. Stripped by the Worker dispatch envelope before substitution.
-
-This pass is silent on normal mode. Normal-mode plans do not carry the comment and do not enforce caps.
 
 ### Step 4: Review Loop (large plans only)
 
@@ -303,6 +234,10 @@ When handing off to `/myspec:feature-implement`:
 - `stop` — commit all changes, exit (resume with `/myspec:feature-implement` later)
 - `fresh` — commit all changes, exit with instructions to spawn a fresh agent
 
+Past five tasks, `fresh` is the recommended answer: a multi-milestone run in one session is
+dispatch-latency-bound and the controller's context degrades across milestones. Size milestones
+so one is a session's worth of work.
+
 **Task status in plan file** (managed by `feature-implement`, not by the author):
 - `[ ]` — todo (all tasks start as todo when the plan is generated)
 - `[~]` — in progress (set when agent starts dispatching a task)
@@ -324,9 +259,6 @@ Before presenting the plan:
 - [ ] All acceptance criteria from spec.md are covered by at least one task
 - [ ] Every task has a populated **Spec contract** block with verbatim quotes (not paraphrased) from spec.md / tech-spec.md
 - [ ] Every task whose Files contain `Modify:` has a populated **Touch only** line
-- [ ] (Orchestrator mode) Tier overrides — if any — list a one-line reason; total override count is ≤ ~30% of tasks
-- [ ] (Orchestrator mode) Every task step is annotated with its owner: `Worker`, `Reviewer`, or `Controller`. No step mixes roles. Every task ends with exactly one `Controller` commit step.
-- [ ] (Orchestrator mode) Step 3.5 ran: every task has an estimated-budget comment and respects its tier's caps (cheap ≤ 35k est_tokens / 7 files / 2200 LoC modify). Oversized tasks were split or carry a `Tier override:`.
 - [ ] Every task has an Interfaces block (Consumes/Produces, exact signatures); names and types match verbatim between producer and consumer tasks
 - [ ] Within each milestone, lower-level layers (data, services) precede higher-level layers (UI, presentation) per project conventions
 - [ ] Phase numbers are globally unique across all milestones
