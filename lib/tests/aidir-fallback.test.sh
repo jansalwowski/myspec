@@ -5,13 +5,13 @@
 # its absence and the 2.0.0-schema migration in `update` writes it, so the
 # shipped code no longer reads the disk to guess: with no key, every consumer
 # resolves the documented default `.ai` — even when only ai/ exists on disk.
-# In 1.x five consumers each carried their own detection and disagreed
-# (memory-files.mjs, memory-claim-id.sh and verify-before-stop.sh assumed .ai;
-# validate-frontmatter.sh and mark-code-changed.sh assumed ai), which is the
-# bug this fixture was written against. The thing to prove now is that they
-# still agree with each other, that a configured value wins, and that a
-# trailing slash never reaches a derived pattern. A grep for a shared constant
-# would not catch a consumer that stopped calling the resolver.
+# In 1.x five consumers each carried their own detection and disagreed, which
+# is the bug this fixture was written against. (Since 2.0 the session hook
+# writes under .claude/state/ and no longer reads aiDir at all; the remaining
+# consumers are the library, memory-claim-id.sh, verify-before-stop.sh and
+# validate-frontmatter.sh.) The thing to prove is that the library and the
+# frontmatter hook agree, that a configured value wins, and that a trailing
+# slash never reaches a derived pattern.
 #
 # Usage: aidir-fallback.test.sh
 
@@ -41,7 +41,7 @@ build() {
   (cd "$REPO" && git init -q -b main .)
   printf '{"frameworkVersion":"0.0.0","project":{"name":"fx"}}\n' > "$REPO/.myspec.json"
   for d in "$@"; do mkdir -p "$REPO/$d"; done
-  cp "$PLUGIN/hooks/validate-frontmatter.sh" "$PLUGIN/hooks/mark-code-changed.sh" "$REPO/.claude/hooks/"
+  cp "$PLUGIN/hooks/validate-frontmatter.sh" "$REPO/.claude/hooks/"
   chmod +x "$REPO/.claude/hooks/"*.sh
 }
 
@@ -51,15 +51,6 @@ lib_resolves() {
 import { aiDirFor } from '$PLUGIN/lib/memory-files.mjs';
 process.stdout.write(aiDirFor('$REPO'));
 " 2>/dev/null
-}
-
-# Where mark-code-changed.sh puts a session log — it creates the tree it picks.
-hook_resolves() {
-  printf '{"session_id":"aidirtest","cwd":"%s","tool_input":{"file_path":"%s/src/app.ts"}}' "$REPO" "$REPO" \
-    | bash "$REPO/.claude/hooks/mark-code-changed.sh" >/dev/null 2>&1
-  if   [ -d "$REPO/.ai/memory/sessions/active" ]; then printf '.ai'
-  elif [ -d "$REPO/ai/memory/sessions/active" ];  then printf 'ai'
-  else printf 'none'; fi
 }
 
 # Whether validate-frontmatter.sh polices a file at <dir>/notes.md. It blocks
@@ -81,7 +72,6 @@ frontmatter_polices() {  # frontmatter_polices <dir>
 
 build plain-ai ai/memory
 expect_eq "$(lib_resolves)" ".ai" "memory-files.mjs resolves the .ai default, not the ai/ tree on disk"
-expect_eq "$(hook_resolves)" ".ai" "mark-code-changed.sh writes into the same default tree"
 expect_eq "$(frontmatter_polices ai)" "no" "validate-frontmatter.sh does not police the unconfigured ai/ tree"
 expect_eq "$(frontmatter_polices .ai)" "yes" "validate-frontmatter.sh polices the default tree"
 
@@ -89,7 +79,7 @@ expect_eq "$(frontmatter_polices .ai)" "yes" "validate-frontmatter.sh polices th
 
 build neither
 expect_eq "$(lib_resolves)" ".ai" "with no tree the documented .ai default is used"
-expect_eq "$(hook_resolves)" ".ai" "the hook agrees with the library on the default"
+expect_eq "$(frontmatter_polices .ai)" "yes" "validate-frontmatter.sh agrees with the library on the default"
 
 # --- no key is a doctor error, so the default never hides a misconfiguration --
 
@@ -104,7 +94,8 @@ build configured .ai/memory
 printf '{"aiDir":"docs/ai","frameworkVersion":"0.0.0"}\n' > "$REPO/.myspec.json"
 mkdir -p "$REPO/docs/ai"
 expect_eq "$(lib_resolves)" "docs/ai" "a configured aiDir wins"
-expect_eq "$(hook_resolves)" "none" "the hook honours the configured value, not the .ai tree"
+expect_eq "$(frontmatter_polices .ai)" "no" "validate-frontmatter.sh honours the configured value, not the .ai tree"
+expect_eq "$(frontmatter_polices docs/ai)" "yes" "validate-frontmatter.sh polices the configured tree"
 
 # --- a configured trailing slash does not break derived patterns -------------
 

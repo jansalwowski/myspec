@@ -14,7 +14,7 @@ Feature-specific checks to run before working on {feature-name}.
   → **Verify**: Layer 1 index reviewed
 - [ ] Check `${aiDir}/memory/procedural/index.md` for relevant patterns
   → **Verify**: Scanned the Hook column for keyword matches
-- [ ] Verify `${aiDir}/memory/sessions/active/*.md` state (resume own, sweep dangling via /myspec:session-clean)
+- [ ] Verify `.claude/state/sessions/*.md` state (resume own, sweep dangling via /myspec:session-clean)
   → **Verify**: No conflicting active sessions
 
 ## Conditional Checks

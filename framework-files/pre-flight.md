@@ -17,7 +17,7 @@ Run these checks before starting work on any feature or task.
 
 - [ ] Read `${aiDir}/memory/index.md` (Layer 1 global index) for critical patterns to avoid
   → **Verify**: Can name 1 anti-pattern relevant to current task
-- [ ] Check `${aiDir}/memory/sessions/active/*.md` for existing sessions:
+- [ ] Check `.claude/state/sessions/*.md` for existing sessions (yours lists a path you edited under `## Files touched`):
   - If one is related to this work → Ask user: resume it or complete it first?
   - If unrelated sessions are dangling (> 6h stale) → run `/myspec:session-clean`; 1–6h is ambiguous, report only
   - Never touch another agent's fresh session (multi-agent workflows keep several active files)
@@ -48,7 +48,7 @@ Template: "This change touches [X]. Recommend committing current state first."
 
 ## During Work
 
-- [ ] Ensure a session file exists at `${aiDir}/memory/sessions/active/{session_id}.md` (auto-created on first code edit; for non-code sessions use `/myspec:session-start`)
+- [ ] Ensure a session file exists at `.claude/state/sessions/{session_id}.md` (auto-created on first code edit, Bash writes included; for non-code sessions use `/myspec:session-start`)
 - [ ] After each significant action, append a row to the session log table: `| # | Action | File(s) | Result | Attempt | Type | Note |` — Attempt increments on a repeated approach, Result is ✅ / ❌ / 💡, Type is P / S / E
 - [ ] Scan `${aiDir}/memory/` indexes when encountering errors
 
@@ -69,7 +69,7 @@ Template: "I've made {N} attempts without success. What I've tried: [list]. Shou
 ## Completing Work
 
 - [ ] Verify before claiming: run the check, read the output, then record the result — "should work" is not a result (`/myspec:session-complete` carries the claim/evidence table)
-- [ ] Set your session file's status to `completed` (own file in `${aiDir}/memory/sessions/active/`)
+- [ ] Set your session file's status to `completed` (own file in `.claude/state/sessions/`)
 - [ ] Fill `Outcome` section in session log
 - [ ] Ask user: "Should we create a memory from this session?"
 - [ ] Archive session log to `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md` (all of this is what `/myspec:session-complete` does)

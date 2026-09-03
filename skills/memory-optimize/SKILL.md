@@ -18,7 +18,7 @@ The target is **retrieval quality, not size**. Memory bodies load only when `/my
 - Never hand-write index rows. Edit the files, then run `node .claude/lib/memory-index.mjs`; `--check` must exit 0 before reporting done.
 - Never retire an entry created less than 30 days ago — a new memory has not had time to be matched even once, so `validation_count: 0` carries no signal yet. RE-ANCHOR, RETUNE, and RELINK are non-destructive and allowed at any age.
 - A dead anchor path is not a dead memory — the second check in Step 2 decides.
-- Out of scope: `~/.claude-personal/projects/<encoded_cwd>/memory/` (`/myspec:memory-sanitize`) and `${aiDir}/memory/sessions/` (`/myspec:session-clean`).
+- Out of scope: `~/.claude-personal/projects/<encoded_cwd>/memory/` (`/myspec:memory-sanitize`) and session logs — `.claude/state/sessions/` and `${aiDir}/memory/sessions/archive/` (`/myspec:session-clean`).
 
 ## Workflow
 

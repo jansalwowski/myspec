@@ -115,7 +115,10 @@ options:
 
 - **Worktree:** if path exists → enter it; else create via the EnterWorktree
   tool (or `git worktree add .claude/worktrees/feat-{name} -b feat/{name}`
-  if EnterWorktree isn't available in this session).
+  if EnterWorktree isn't available in this session). Then provision it —
+  `.claude/lib/worktree-provision.sh <path> --base origin/<default-branch>` —
+  a bare worktree has no `node_modules` or lint cache, and the recipe in
+  `_shared/worktree-provisioning.md` says when a real install is required.
 - **New branch:** `git checkout -b feat/{name}`. If branch exists, offer
   checkout vs. numeric suffix (`feat/{name}-2`).
 - **Current branch:** no-op.

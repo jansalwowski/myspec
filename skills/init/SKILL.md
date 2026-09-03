@@ -41,7 +41,8 @@ Ask these **one at a time** and wait for each answer:
 5. **Hooks**
    "Set up Claude-compatible repo hooks and rules under `.claude/`? (y/n, default: y)
    This configures:
-   - Git branch guard (prevents branch mutations on main checkout)
+   - Work-isolation gate (asks develop vs worktree before the first source edit; blocks main-checkout builds and branch mutations while a session works in a worktree)
+   - Session tracking (creates a live log in `.claude/state/sessions/` on the first code edit)
    - Frontmatter validation (enforces YAML frontmatter on AI docs)
    - Verification on stop (runs lint/tests before agent completes)
 
@@ -89,10 +90,8 @@ ${aiDir}/
     episodic/
       index.md         ← copy from framework-files/templates/index-episodic.md
     sessions/
-      active/
-        .gitkeep            ← create empty file
       archive/
-        .gitkeep            ← create empty file
+        .gitkeep            ← create empty file   (live logs go to .claude/state/sessions/, created by the hook)
   .templates/
     session-log.md          ← copy from framework-files/templates/session-log.md
     memory-procedural.md    ← copy from framework-files/templates/memory-procedural.md
@@ -145,7 +144,8 @@ If the markers already exist in the file, replace everything between them. Do no
 ### Step 5: Set Up Hooks (if user said yes)
 
 Create `.claude/hooks/` directory. Copy these files from the plugin's `hooks/` directory:
-- `guard-git-branch.sh`
+- `guard-worktree-context.sh`
+- `require-isolation-decision.sh`
 - `validate-frontmatter.sh`
 - `mark-code-changed.sh`
 - `verify-before-stop.sh`
@@ -166,6 +166,7 @@ Copy `.claude/rules/` framework rules from `framework-files/rules/`:
 - `skill-optimization.md`
 - `paths.md`
 - `skill-self-test.md`
+- `work-isolation.md`
 
 Create `.claude/settings.json` using `templates/settings-hooks.json` as the base.
 
@@ -230,7 +231,7 @@ Hooks:   {enabled / skipped}
 Created:
   .myspec.json
   ${aiDir}/ (features, memory, ideas, templates)
-  {if hooks: .claude/hooks/ (6 hooks), .claude/lib/ (N helpers, per manifest), .claude/rules/ (7 rules)}
+  {if hooks: .claude/hooks/ (7 hooks), .claude/lib/ (N helpers, per manifest), .claude/rules/ (8 rules)}
   {if hooks: .claude/settings.json, .claude/verification.json}
   {if base agents installed: list each ~/.{harness}/agents/{file} that was installed or updated, grouped by harness}
 
@@ -260,13 +261,13 @@ Next steps:
 - [ ] `.myspec.json` `frameworkVersion` matches `manifest.json`'s (no hardcoded literal), `migrations` copied from the manifest, no `frameworkFiles` block, `aiDir` without a trailing slash
 - [ ] `${aiDir}/features/index.yaml` created
 - [ ] `${aiDir}/memory/` directory structure created with all 3 type indexes
-- [ ] `${aiDir}/memory/sessions/active/` and `${aiDir}/memory/sessions/archive/` created
+- [ ] `${aiDir}/memory/sessions/archive/` created (no `active/` — live logs live in `.claude/state/sessions/`)
 - [ ] `${aiDir}/ideas/` directory with instructions files and `processed/`
 - [ ] `${aiDir}/anti-patterns.md` created (framework anti-pattern index — distinct from `${aiDir}/memory/index.md`, the Layer 1 memory index)
 - [ ] `${aiDir}/pre-flight.md` created
 - [ ] `${aiDir}` binding written to `AGENTS.md` (or `CLAUDE.md`) between `myspec:paths` markers
-- [ ] If hooks enabled: `.claude/hooks/` has 6 scripts, all executable
+- [ ] If hooks enabled: `.claude/hooks/` has 7 scripts, all executable
 - [ ] If hooks enabled: `.claude/lib/` has every helper in `manifest.json`'s `lib` block, all executable
-- [ ] If hooks enabled: `.claude/rules/` has 7 framework rules
+- [ ] If hooks enabled: `.claude/rules/` has 8 framework rules
 - [ ] If hooks enabled: `.claude/settings.json` and `.claude/verification.json` created
 - [ ] If base agents installed: for each harness with an existing `~/.{harness}/` dir, both `worker-base` and `reviewer-base` exist at `~/.{harness}/agents/` and match the plugin source (or user explicitly opted to keep a divergent local version)

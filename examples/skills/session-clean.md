@@ -1,6 +1,6 @@
 # `/myspec:session-clean` — examples
 
-Sweeps abandoned session files in `ai/memory/sessions/active/`. Empty templates are deleted; sessions with real content are archived. Pairs with the `mark-code-changed.sh` hook that auto-creates active sessions on first code edit — over time those auto-created files pile up if no one runs `/myspec:session-complete` on them.
+Sweeps abandoned session files in `.claude/state/sessions/`. Empty templates are deleted; sessions with real content are archived. Pairs with the `mark-code-changed.sh` hook that auto-creates active sessions on first code edit — over time those auto-created files pile up if no one runs `/myspec:session-complete` on them.
 
 > **Related**: For wrapping up a *single* session you've been actively working in, use [`/myspec:session-complete`](session-complete.md). `session-clean` is the broom for the leftovers — sessions other agents started and never closed.
 
@@ -18,7 +18,7 @@ The high-yield case: the active directory has accumulated a week of auto-created
 
 ### Setup
 
-The user hasn't run a sweep in a while. `ai/memory/sessions/active/` contains:
+The user hasn't run a sweep in a while. `.claude/state/sessions/` contains:
 
 ```
 2026-04-23-1015-automockups.md      (mtime 8d ago,   empty template, status: active)
@@ -83,7 +83,7 @@ User: `yes`.
 
 #### 5. Execute
 
-For row 2 (archive): edits frontmatter `status: active` → `status: archived`, then `git mv ai/memory/sessions/active/2026-04-24-0900-autocalibration.md ai/memory/sessions/archive/2026-04-24-0900-autocalibration.md`.
+For row 2 (archive): edits frontmatter `status: active` → `status: abandoned`, then `mv .claude/state/sessions/2026-04-24-0900-autocalibration.md ai/memory/sessions/archive/2026-04-24-0900-autocalibration.md`.
 
 For rows 1 and 3 (delete): `rm` (untracked auto-created files).
 
@@ -108,7 +108,7 @@ When parallel agents are working in worktrees, some "abandoned" sessions are act
 
 The user kicked off a parallel-group `feature-implement` phase 2h ago. Three subagents are working in worktrees `wt-T2/`, `wt-T3/`, `wt-T4/`. The user has switched terminals and run `/myspec:session-clean` from the main checkout.
 
-`ai/memory/sessions/active/` contains:
+`.claude/state/sessions/` contains:
 
 ```
 2026-04-30-0900-orchestrator.md   (mtime 5m ago,    cwd = main checkout, this session)
@@ -195,7 +195,7 @@ Running it on a tidy directory should be a no-op, not noise.
 
 ### Setup
 
-`ai/memory/sessions/active/` contains only `2026-04-30-1100-currentwork.md` — the running agent's own in-progress session.
+`.claude/state/sessions/` contains only `2026-04-30-1100-currentwork.md` — the running agent's own in-progress session.
 
 ### Invocation
 

@@ -6,7 +6,16 @@
         "hooks": [
           {
             "type": "command",
-            "command": ".claude/hooks/guard-git-branch.sh"
+            "command": ".claude/hooks/guard-worktree-context.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/require-isolation-decision.sh"
           }
         ]
       }
@@ -30,6 +39,15 @@
           {
             "type": "command",
             "command": ".claude/hooks/require-reuse-audit.sh"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/mark-code-changed.sh"
           }
         ]
       }

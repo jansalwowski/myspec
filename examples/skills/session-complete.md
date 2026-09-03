@@ -108,7 +108,7 @@ After both are written, the skill edits each file's `related:` field — `P020.r
 
 #### 7. Archive
 
-Moves `ai/memory/sessions/active/2026-04-30-1400-oauthcallback.md` → `ai/memory/sessions/archive/2026-04/2026-04-30-1400-oauthcallback.md`. Appends a one-line summary to `ai/memory/sessions/index.md`:
+Moves `.claude/state/sessions/2026-04-30-1400-oauthcallback.md` → `ai/memory/sessions/archive/2026-04/2026-04-30-1400-oauthcallback.md`. Appends a one-line summary to `ai/memory/sessions/index.md`:
 
 ```markdown
 | 2026-04-30 | OAuth callback 401 | OAuth state cookie SameSite mismatch | P020, S009 |
@@ -182,7 +182,7 @@ Multi-agent workflows (e.g., parallel `feature-implement` subagents) can leave s
 
 The user ran a parallel-group phase of `feature-implement` earlier. Each parallel subagent (3 agents in worktrees) created its own session log via the hook. The user is wrapping up.
 
-`ai/memory/sessions/active/` contains:
+`.claude/state/sessions/` contains:
 
 - `2026-04-30-0900-orchestrator.md` (started 1h ago, mtime 5 min ago — main agent, just finished phase review)
 - `2026-04-30-0905-T2.md` (started 55 min ago, mtime 30 min ago — completed parallel task)

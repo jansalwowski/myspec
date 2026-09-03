@@ -19,7 +19,7 @@ Agent receives task: "Fix API responses - cached data persists after user change
 ```
 Read ${aiDir}/memory/index.md (Layer 1 global index)
 Read ${aiDir}/pre-flight.md
-No existing session in ${aiDir}/memory/sessions/active/
+No existing session in .claude/state/sessions/
 Scan ${aiDir}/memory/procedural/index.md — keyword match!
 Scan ${aiDir}/memory/semantic/index.md — no match
 Scan ${aiDir}/memory/episodic/index.md — no match
@@ -325,7 +325,7 @@ Agent reads S001 first to understand the underlying cause (internal state), then
 ### 10. Session Archival
 
 Session logs flow through:
-1. **Active**: `${aiDir}/memory/sessions/active/{session_id}.md` (auto-created on first code edit, or by `/myspec:session-start`)
+1. **Live**: `.claude/state/sessions/{session_id}.md` (auto-created on first code edit, or by `/myspec:session-start`)
 2. **Archive**: `${aiDir}/memory/sessions/archive/2024-01-15-cache-fix.md` (moved by `/myspec:session-complete`)
 
 ### 11. Future Usage

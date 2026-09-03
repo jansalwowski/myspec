@@ -11,7 +11,7 @@
 # proving containment itself, and refuses when it cannot.
 #
 # It also keeps that capability off the copyable-bypass path: the git calls
-# happen in this child process, which guard-git-branch.sh never inspects.
+# happen in this child process, which guard-worktree-context.sh never inspects.
 # The audited flow holds the capability, not a string any agent can repeat.
 #
 # TWO PROOFS OF CONTAINMENT — either one is sufficient

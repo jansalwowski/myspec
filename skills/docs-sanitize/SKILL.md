@@ -22,8 +22,8 @@ find "${aiDir}/" -name "*.md" -type f | grep -E "[A-Z].*\.md$" | grep -v -E "(RE
 
 Session lifecycle (staleness triage, archiving of dangling sessions) belongs to `/myspec:session-clean` — do not re-implement it here. This step only fixes files in the wrong **place**:
 
-- Files under `${aiDir}/memory/sessions/active/` whose `status:` is already terminal (`completed` | `abandoned`) — they were finished but never moved. **Fix**: `git mv` to `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md`.
-- Legacy-location session files (`${aiDir}/sessions/*.md`, or any file named `session-log.md` / `active.md` under `${aiDir}`) from pre-directory-model versions. **Fix**: `git mv` into `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md`, setting a terminal `status:` if missing (`completed` if the log has an Outcome, else `abandoned`).
+- Live logs under `.claude/state/sessions/` whose `status:` is already terminal (`completed` | `abandoned`) — they were finished but never moved. **Fix**: `mv` to `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md` and `git add`.
+- Session files left under `${aiDir}/memory/sessions/active/` (the pre-2.0 location; `/myspec:update` moves them) or any file named `session-log.md` / `active.md` under `${aiDir}`. **Fix**: live ones (`status: active`) → `mv` to `.claude/state/sessions/`; finished ones → `git mv` into `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md`, setting a terminal `status:` if missing (`completed` if the log has an Outcome, else `abandoned`).
 
 ### 3. Broken References
 
@@ -47,7 +47,7 @@ Output summary in this format:
 - old/path.md → new/path.md
 
 ### Archived (N)
-- ${aiDir}/memory/sessions/active/{id}.md → ${aiDir}/memory/sessions/archive/YYYY-MM-DD-slug.md
+- .claude/state/sessions/{id}.md → ${aiDir}/memory/sessions/archive/YYYY-MM-DD-slug.md
 
 ### References Updated (N)
 - file:line - description of change
@@ -77,4 +77,4 @@ After running:
 - [ ] Run project documentation sanitize command if configured
 - [ ] Check git status - all renames should use `git mv`
 - [ ] Verify no broken links in documentation
-- [ ] No terminal-status files left under `active/`; no session files outside `${aiDir}/memory/sessions/`
+- [ ] No terminal-status files left under `.claude/state/sessions/`; no session files under `${aiDir}` outside `memory/sessions/archive/`

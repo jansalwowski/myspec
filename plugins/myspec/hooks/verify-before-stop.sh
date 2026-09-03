@@ -144,9 +144,12 @@ fi
 # wrong tree. That silent false pass is worse than no gate at all, so block.
 # The marker is deliberately left in place (the EXIT trap is registered below)
 # so the block persists until a real install exists.
-# Deliberate link: export MYSPEC_ALLOW_LINKED_MODULES=1 before launching.
-if [ -L "$REPO_ROOT/node_modules" ] && [ "${MYSPEC_ALLOW_LINKED_MODULES:-}" != "1" ]; then
-  REASON=$(printf 'node_modules in %s is a symlink, so lint, type-check and test results here describe a different checkout dependency tree. Run a real install in this worktree before reporting any result as verified.' "$REPO_ROOT" | jq -Rs .)
+# Deliberate link: isolation.allowLinkedModules: true in .myspec.json (project-
+# wide, for repos whose worktrees share the main checkout's dependencies by
+# construction) or MYSPEC_ALLOW_LINKED_MODULES=1 in the environment.
+ALLOW_LINKED=$(jq -r '.isolation.allowLinkedModules // false' "$REPO_ROOT/.myspec.json" 2>/dev/null || printf 'false')
+if [ -L "$REPO_ROOT/node_modules" ] && [ "$ALLOW_LINKED" != "true" ] && [ "${MYSPEC_ALLOW_LINKED_MODULES:-}" != "1" ]; then
+  REASON=$(printf 'node_modules in %s is a symlink, so lint, type-check and test results here describe a different checkout dependency tree. Run a real install in this worktree before reporting any result as verified (or, if this repo shares one tree by design, set isolation.allowLinkedModules: true in .myspec.json).' "$REPO_ROOT" | jq -Rs .)
   echo "{\"decision\": \"block\", \"reason\": $REASON}"
   exit 0
 fi

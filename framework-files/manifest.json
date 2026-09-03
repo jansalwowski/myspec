@@ -2,7 +2,8 @@
   "frameworkVersion": "1.28.0",
   "migrations": [
     "2.0.0-schema",
-    "2.0.0-doctor-rule"
+    "2.0.0-doctor-rule",
+    "2.0.0-sessions"
   ],
   "files": {
     "anti-patterns.md": {
@@ -74,12 +75,20 @@
     "skill-self-test.md": {
       "type": "overwrite",
       "dest": ".claude/rules/skill-self-test.md"
+    },
+    "work-isolation.md": {
+      "type": "overwrite",
+      "dest": ".claude/rules/work-isolation.md"
     }
   },
   "hooks": {
-    "guard-git-branch.sh": {
+    "guard-worktree-context.sh": {
       "type": "overwrite",
-      "dest": ".claude/hooks/guard-git-branch.sh"
+      "dest": ".claude/hooks/guard-worktree-context.sh"
+    },
+    "require-isolation-decision.sh": {
+      "type": "overwrite",
+      "dest": ".claude/hooks/require-isolation-decision.sh"
     },
     "validate-frontmatter.sh": {
       "type": "overwrite",
@@ -138,7 +147,24 @@
     "setup-doctor.mjs": {
       "type": "overwrite",
       "dest": ".claude/lib/setup-doctor.mjs"
+    },
+    "set-isolation.sh": {
+      "type": "overwrite",
+      "dest": ".claude/lib/set-isolation.sh"
+    },
+    "worktree-provision.sh": {
+      "type": "overwrite",
+      "dest": ".claude/lib/worktree-provision.sh"
+    },
+    "promote-to-worktree.sh": {
+      "type": "overwrite",
+      "dest": ".claude/lib/promote-to-worktree.sh"
     }
   },
-  "removed": {}
+  "removed": {
+    "hooks/guard-git-branch.sh": {
+      "dest": ".claude/hooks/guard-git-branch.sh",
+      "since": "2.0.0"
+    }
+  }
 }
