@@ -108,7 +108,7 @@ expect_no_line 'framework-removed' "a manifest with an empty removed block repor
 expect_no_line 'shipped-drift' "clean install reports no hook or lib drift"
 expect_no_line 'dead-path-ref' "framework-owned rules are not scanned for dead refs"
 expect_no_line 'over-budget' "framework-owned rules are not warned about as over budget"
-expect_line 'framework files over their always-loaded budget' "plugin-owned budget overruns are reported as a note"
+expect_no_line 'framework files over their always-loaded budget' "no plugin-owned always-loaded rule is over the 1000-token budget (regression guard for the 2.0 rules diet)"
 expect_line 'setup doctor: 0 error\(s\)' "summary counts zero errors"
 
 # The stop hook runs exactly these two groups; they must be silent on a clean
@@ -247,6 +247,7 @@ fs.writeFileSync(process.argv[2],JSON.stringify(m,null,2)+"\n");
 ' "$PLUGIN/framework-files/manifest.json" "$FAKE/framework-files/manifest.json"
 
 build_fixture
+mkdir -p "$REPO/ai/.templates" && printf '# stale\n' > "$REPO/ai/.templates/example-usage.md"
 OUTPUT=$(node "$SCRIPT" --root "$REPO" --plugin-root "$FAKE" install 2>&1); STATUS=$?
 expect_exit 0 "a retired file still on disk does not fail the run"
 expect_line 'WARN +framework-removed: ai/.templates/example-usage.md' "a retired file still on disk is reported"

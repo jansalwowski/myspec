@@ -196,12 +196,12 @@ This updates framework-owned files while preserving your project customizations.
 
 ## Framework rules shipped to `.claude/rules/`
 
-`init` (first-time) and `update` (subsequent) install eight rule files into the consuming project's `.claude/rules/` directory (three of them path-gated):
+`init` (first-time) and `update` (subsequent) install eight rule files into the consuming project's `.claude/rules/` directory. Three load on every turn (`workflow.md`, `memory-system.md`, `auto-memory-style.md`); the other five carry `paths:` frontmatter and load only for matching work:
 
 | File | Governs |
 |------|---------|
 | `workflow.md` | Feature workflow phases, the status state machine, when to invoke which skill |
-| `memory-system.md` | Project-level memory (`${aiDir}/memory/` — sessions, procedural/semantic/episodic). Session lifecycle, escalation protocol, verification discipline. |
+| `memory-system.md` | Project-level memory (`${aiDir}/memory/` — sessions, procedural/semantic/episodic). Triggers, layer budgets, session lifecycle. |
 | `auto-memory-style.md` | Harness-managed **user-level** auto-memory at `~/.claude-personal/projects/<encoded_cwd>/memory/`. Length budget per type, cut list, pre-write ADD/UPDATE/NO-OP consolidation, conflict resolution. |
 | `ideas.md` | Ideas pipeline (intake → priority → processing) |
 | `skill-optimization.md` | Skill-authoring meta-rules (frontmatter, naming, token efficiency) |
@@ -227,6 +227,5 @@ ${aiDir}/                       # AI documentation directory (.ai or ai)
   plans/                        # Implementation plans
   anti-patterns.md              # Framework anti-pattern index (project section appended by setup)
   pre-flight.md                 # Pre-work checklist
-  memory-system.md              # Memory architecture reference
   INDEX.md                      # Documentation index
 ```

@@ -13,12 +13,6 @@
     "pre-flight.md": {
       "type": "marker-merge"
     },
-    "memory-system.md": {
-      "type": "overwrite"
-    },
-    "templates/README.md": {
-      "type": "overwrite"
-    },
     "templates/memory-procedural.md": {
       "type": "overwrite"
     },
@@ -38,12 +32,6 @@
       "type": "overwrite"
     },
     "templates/session-log.md": {
-      "type": "overwrite"
-    },
-    "templates/feature-pre-flight.md": {
-      "type": "overwrite"
-    },
-    "templates/example-usage.md": {
       "type": "overwrite"
     }
   },
@@ -164,6 +152,22 @@
   "removed": {
     "hooks/guard-git-branch.sh": {
       "dest": ".claude/hooks/guard-git-branch.sh",
+      "since": "2.0.0"
+    },
+    "memory-system.md": {
+      "dest": "${aiDir}/memory-system.md",
+      "since": "2.0.0"
+    },
+    "templates/README.md": {
+      "dest": "${aiDir}/.templates/README.md",
+      "since": "2.0.0"
+    },
+    "templates/feature-pre-flight.md": {
+      "dest": "${aiDir}/.templates/feature-pre-flight.md",
+      "since": "2.0.0"
+    },
+    "templates/example-usage.md": {
+      "dest": "${aiDir}/.templates/example-usage.md",
       "since": "2.0.0"
     }
   }
