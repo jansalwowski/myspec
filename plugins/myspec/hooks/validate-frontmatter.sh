@@ -3,8 +3,7 @@
 # PostToolUse hook — validates frontmatter on ${aiDir}/**/*.md writes/edits.
 # Emits a block-decision JSON so the agent sees the issues as feedback and
 # fixes them before continuing (exit-0 stdout alone never reaches the agent).
-# Reads aiDir from .myspec.json; with no configured value it uses whichever
-# of .ai/ or ai/ exists (.ai when both or neither do).
+# Reads aiDir from .myspec.json (required since 2.0; .ai when absent).
 # Accepted fields mirror the framework's own templates: identity is any of
 # title/name/topic/id/type; temporal is any of updated/last_updated/created/
 # started/date. ${aiDir}/ideas/ is exempt (its seed docs ship frontmatter-less).
@@ -105,14 +104,11 @@ if [ -f "$REPO_ROOT/.myspec.json" ] && command -v jq &>/dev/null; then
   AI_DIR=$(jq -r '.aiDir // empty' "$REPO_ROOT/.myspec.json" 2>/dev/null)
   AI_DIR="${AI_DIR%/}"
 fi
-# No configured value: read the tree that is actually on disk instead of
-# guessing. The guess was ".ai" in memory-files.mjs, memory-claim-id.sh and
-# verify-before-stop.sh, and "ai" here and in the sibling PostToolUse hook, so
-# a keyless project had its session logs written to one tree while its
-# memories were read from the other. ".ai" wins when both or neither exist;
-# memory-doctor names the both case as second-ai-tree.
+# No configured value: the documented default, never a guess from disk. aiDir
+# is required since 2.0; the setup doctor reports its absence and `update`
+# writes it. memory-files.mjs resolves the same way.
 if [ -z "$AI_DIR" ]; then
-  if [ -d "$REPO_ROOT/.ai" ] || [ ! -d "$REPO_ROOT/ai" ]; then AI_DIR=".ai"; else AI_DIR="ai"; fi
+  AI_DIR=".ai"
 fi
 
 # Only check files inside the AI documentation directory (pure-shell prefix

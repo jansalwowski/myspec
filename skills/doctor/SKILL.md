@@ -37,8 +37,8 @@ due for a pass; reach for tier 1 when the user named a surface or tier 0 pointed
 
 ### Phase 0 — Load configuration
 
-1. Read `.myspec.json` for `aiDir` — when the key is absent the tooling uses whichever of `.ai/` or `ai/` exists on disk, and `.ai` when both or neither do. Use it everywhere `${aiDir}` appears below.
-2. Read the project extension if present — `.claude/rules/doctor.md`, falling back to `.claude/rules/ai-setup-audit.md` (its name before this skill was renamed; still read, so an existing extension keeps working). Take its `## Project anchors`, `## Read-only`, and `## Extra checks` sections. When only the old name is present, say so once and suggest renaming it. Neither present → note "no project extension; auditing framework surfaces only."
+1. Read `.myspec.json` for `aiDir` — the key is required since 2.0; when it is absent the tooling uses `.ai` and the setup doctor reports it. Use it everywhere `${aiDir}` appears below.
+2. Read the project extension if present — `.claude/rules/doctor.md`. Take its `## Project anchors`, `## Read-only`, and `## Extra checks` sections. Not present → note "no project extension; auditing framework surfaces only." The pre-rename `ai-setup-audit.md` is not read: tier 0 reports it as `doctor-rule-unrenamed` and `update` moves it.
 3. Detect the default branch: `git symbolic-ref --short refs/remotes/origin/HEAD`, falling back to `main`/`master`.
 4. Run the deterministic checks and keep the result — it is the ground truth every later phase quotes:
 
@@ -48,9 +48,7 @@ due for a pass; reach for tier 1 when the user named a surface or tier 0 pointed
 
    Each record is `{ id, group, path, detail, remediation: { commands, text } }`. Group them by
    `group` and carry them forward: `install` and `wiring` records go into surface E's brief,
-   `schema` into E, `features` into F, `budget` and `refs` into A. A `marker-header-drift`
-   record is worth naming to the user directly: `update` structurally cannot repair it, so it
-   survives every sync until someone applies the plugin header by hand. The brief says *these are established
+   `schema` into E, `features` into F, `budget` and `refs` into A. The brief says *these are established
    facts, verified by command — do not re-check them, and do not report a finding that
    contradicts one*. A `NOTE` about an unresolved plugin root means the `install` group did not
    run; say so in Phase 3 rather than filling the gap by hand.
@@ -147,7 +145,7 @@ mechanical can see them.
 
 ## Project extension format
 
-`.claude/rules/doctor.md` (or the legacy `.claude/rules/ai-setup-audit.md`), hand-authored, all sections optional. Section headings are the contract — keep the exact names:
+`.claude/rules/doctor.md`, hand-authored, all sections optional. Section headings are the contract — keep the exact names:
 
 ```markdown
 ## Project anchors

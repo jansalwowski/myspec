@@ -78,10 +78,10 @@ fi
 # report, not a reason to block a stop.
 DOCTOR="$REPO_ROOT/.claude/lib/memory-doctor.mjs"
 if [ -f "$DOCTOR" ] && [ -f "$REPO_ROOT/.myspec.json" ] && command -v node >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+  # aiDir is required since 2.0; .ai is the documented default when absent,
+  # the same resolution memory-files.mjs uses.
   MEMORY_AI_DIR=$(jq -r '.aiDir // empty' "$REPO_ROOT/.myspec.json" 2>/dev/null | sed 's#/*$##')
-  if [ -z "$MEMORY_AI_DIR" ]; then
-    if [ -d "$REPO_ROOT/.ai" ] || [ ! -d "$REPO_ROOT/ai" ]; then MEMORY_AI_DIR=".ai"; else MEMORY_AI_DIR="ai"; fi
-  fi
+  MEMORY_AI_DIR="${MEMORY_AI_DIR:-.ai}"
   if [ -n "$MEMORY_AI_DIR" ] && git -C "$REPO_ROOT" status --porcelain -- "$MEMORY_AI_DIR/memory" 2>/dev/null | grep -q .; then
     if ! DOCTOR_OUT=$(cd "$REPO_ROOT" && node "$DOCTOR" --quiet 2>&1); then
       REASON=$(printf 'Memory conformance check failed for changes under %s/memory. Fix these before stopping (node .claude/lib/memory-index.mjs regenerates the tables; the doctor names the rest):\n\n%s' "$MEMORY_AI_DIR" "$(printf '%s' "$DOCTOR_OUT" | tail -30)" | jq -Rs .)

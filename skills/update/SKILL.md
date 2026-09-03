@@ -31,12 +31,29 @@ Resolve the plugin directory in this order:
 
 Compare versions. If they match, tell the user: "Already up to date (v{version}). No changes needed." and stop.
 
+**Upgrade base.** 2.0 migrates from 1.28.0 or later only. If the project's `frameworkVersion` is missing or lower than 1.28.0, stop with:
+
+"This project is on v{version}; myspec 2.0 upgrades from 1.28.0 or later. Run the 1.28 update first: check out the plugin at tag v1.28.0 (`git clone --branch v1.28.0 https://github.com/jansalwowski/myspec`), start Claude with `--plugin-dir <that checkout>`, run `/myspec:update`, then return to this version."
+
+The 1.x updates carried migrations (legacy memory-index headers, hand-written `frameworkFiles` inventories) that 2.0 no longer ships.
+
+### Step 1.5: Run One-Shot Migrations
+
+`manifest.json` lists `migrations`, the one-shot moves this version of the framework needs; `.myspec.json` lists the ones already applied under `migrations`. Run each manifest entry the project has not recorded, in manifest order, and append its id to `.myspec.json` `migrations` the moment it completes — so an interrupted run resumes where it stopped and a re-run is a no-op. Never run one twice. A project without a `migrations` key has run none.
+
+| id | What it does |
+|---|---|
+| `2.0.0-schema` | **`aiDir`:** if the key is missing, decide once from disk — `.ai` if `.ai/` exists, else `ai` if `ai/` exists, else `.ai` — and write it; strip any trailing slash. This replaces the runtime detection the 1.x hooks carried, so it lands before any hook runs against the new lib. **`frameworkFiles`:** drop `version` and `lastUpdated` from every entry (bookkeeping nothing ever read); drop entries left empty; drop the key when no pins remain. Since 2.0 the block holds pins only. |
+| `2.0.0-doctor-rule` | `.claude/rules/ai-setup-audit.md` → `.claude/rules/doctor.md` via `git mv` when only the old name exists (the `doctor` skill reads only the new one). Both present → leave both, report it, and tell the user to merge by hand. |
+
+List every migration run under `Migrations` in the Step 6 summary.
+
 ### Step 2: Inventory Files to Update
 
 From `manifest.json`, collect all files. Each file has a `type`:
 
 - **`overwrite`** — replace the destination file entirely with the plugin's version
-- **`marker-merge`** — replace only the content between `<!-- myspec:framework-start -->` and `<!-- myspec:framework-end -->` markers, preserving everything outside the markers
+- **`marker-merge`** — replace the framework-owned region (line 1 through `<!-- myspec:framework-end -->`), preserving the project section after it
 
 For `files` entries: destination is `{aiDir}/{filename}` — **except** `templates/{name}` entries, which install to `{aiDir}/.templates/{name}` (the dot-directory `init` creates; skills read templates from there — never create `{aiDir}/templates/`).
 For `rules` entries: source is `framework-files/rules/{filename}`, destination is the `dest` path (e.g., `.claude/rules/workflow.md`).
@@ -46,21 +63,21 @@ For `lib` entries: source is `lib/{filename}`, destination is the `dest` path (e
 **Renamed entries — migrate the destination before applying.** A `files` or `rules` entry may carry `renamedFrom: "<old key>"`. It means the framework changed a file's name, and the project on disk still holds the old one. Before applying such an entry:
 
 1. If the new destination exists → nothing to migrate; apply the entry normally.
-2. If it does not exist and the old destination does → `git mv` (or plain move) the old file to the new name **and** rename its `.myspec.json` `frameworkFiles` key in place, keeping `version`, `lastUpdated`, and any `pinned` value. Then apply the entry to the renamed file, so a `marker-merge` merges into the project's real content instead of a fresh copy. List it under `Renamed` in the Step 6 summary.
-
-   For a `marker-merge` entry, a rename is also the one moment the framework may replace the header **above** `<!-- myspec:framework-start -->` with the plugin's — frontmatter and title. Normally that region is project-owned and untouchable, which is why a title corrected upstream never reaches an existing project; but a file being re-identified under a new name carries the old name's title, and leaving it is how a project ends up with `anti-patterns.md` still calling itself a memory index. Show the old and new header and confirm before writing. Outside a rename, never touch it — report it as the doctor's `marker-header-drift` and let the user decide.
-3. If neither exists → create from source as usual.
-4. If **both** exist → do not touch either. This is a project that renamed by hand (the documented workaround before the framework carried the rename) and now has two files. Report it and stop for that entry: only the user knows which one their blueprints write to, and merging two project sections unasked can lose content.
+2. If it does not exist and the old destination does → `git mv` (or plain move) the old file to the new name **and** rename its `.myspec.json` `frameworkFiles` key in place if one exists, keeping any `pinned` value. Then apply the entry to the renamed file, so a `marker-merge` merges into the project's real content instead of a fresh copy. List it under `Renamed` in the Step 6 summary.
+3. If neither exists → create from source as usual. If `.myspec.json` still carries the **old** key (a project that renamed by hand and pinned the old name so update would stop recreating it), drop that key and report "already renamed locally".
+4. If **both** exist → the project renamed by hand before the framework carried the rename. Show the project section of each (everything after `<!-- myspec:framework-end -->`) and offer to append the old file's project section to the new file's, then delete the old file and drop its key. On decline, leave both untouched and report it; the doctor keeps naming the pair as `framework-renamed` until one goes. Never merge unasked: only the user knows which one their blueprints wrote to.
 
 Skipping step 2 is what makes this dangerous: `overwrite`/`marker-merge` both treat a missing destination as "create from source", so the entry would land a *fresh empty-project-section* file beside the real one, and every blueprint that writes to the new name would write to the empty duplicate.
 
 Never invent a `renamedFrom`; it comes from the manifest only. A pinned renamed entry is still renamed — move the file and the key, then skip the content apply.
 
-**Pinned files — skip, never overwrite.** A project may carry a locally-customized copy of a framework file. `.myspec.json` records that as `frameworkFiles["<manifest key>"].pinned`, whose value is a short reason string. Before applying any entry, look up its key (`rules/workflow.md`, `hooks/guard-git-branch.sh`, `lib/branch-cleanup.sh`, `templates/session-log.md`, …) and skip it if `pinned` is set. Collect these for the summary; do not bump their `version`/`lastUpdated`.
+**Pinned files — skip, never overwrite.** A project may carry a locally-customized copy of a framework file. `.myspec.json` records that as `frameworkFiles["<manifest key>"].pinned`, whose value is a short reason string. Before applying any entry, look up its key (`rules/workflow.md`, `hooks/guard-git-branch.sh`, `lib/branch-cleanup.sh`, `templates/session-log.md`, …) and skip it if `pinned` is set. Collect these for the summary.
 
 Without this, a sync silently reverts local edits: the file carries no marker distinguishing "customized" from "stale", so `overwrite` treats deliberate local content as drift. That has happened — a sync reverted four rules whose upstream copies had not changed at all, costing ~690 tokens of always-loaded context until it was noticed.
 
 Pinning is the project's call, not the skill's. Never add or remove a pin on the project's behalf; report pinned files and let the user decide whether the local reason still holds.
+
+**Removed entries — delete, then unwire.** The manifest's `removed` block lists files the framework retired: `"<old key>": { "dest": "<path>", "since": "<version>" }`. For each, when `dest` exists (after `${aiDir}` substitution): `git rm` it if tracked, else delete it; drop its `frameworkFiles` key; and when `dest` is under `.claude/hooks/`, delete every `settings.json` hook entry whose `command` names it (Step 3 owns the rest of the wiring). A pinned entry is a deliberate local keep — leave the file and the pin, report it as "retired upstream, kept locally". List deletions under `Removed` in the Step 6 summary.
 
 For `hooks` and `lib`: only process if `.claude/hooks/` directory exists (hooks and their helper lib travel together). If it doesn't exist, skip all hooks AND lib entries and note: "Hooks directory not found — skipping Claude hook + lib updates. Run the `init` skill with Claude hooks enabled to set them up."
 
@@ -74,24 +91,25 @@ For each file in the manifest:
 3. Write to destination, replacing the existing file entirely
 4. For hooks and lib: run `chmod +x {dest}` after writing. Some helpers are sourced and some are invoked directly (`branch-cleanup.sh`, `memory-claim-id.sh`) — setting the bit on all of them is harmless for the sourced ones and required for the rest.
 
-**`marker-merge` strategy:**
-1. Read the source file from `framework-files/{filename}`
-2. Extract content between `<!-- myspec:framework-start -->` and `<!-- myspec:framework-end -->` markers
-3. Read the destination file
-4. Replace the content between those same markers in the destination with the new framework content
-5. Write the merged result back
+**`marker-merge` strategy:** the file has two regions. Everything from line 1 through `<!-- myspec:framework-end -->` — frontmatter, title, standing note, and the marked framework section — is framework-owned; everything after the end marker is the project section and is never touched.
+1. Read the source file from `framework-files/{filename}` and replace `${aiDir}` placeholders
+2. Read the destination file and locate `<!-- myspec:framework-end -->`
+3. Write the source's framework-owned region (line 1 through its own end marker) followed by the destination's project section, unchanged
+4. If the destination has no end marker, stop for that file and report it (the doctor names it `marker-missing`); do not guess where the project section starts
+
+Before 2.0 only the marked section was framework-owned, so a title or note corrected upstream never reached an existing project (#55). Owning the header is what fixes that; a project that wants its own wording pins the file.
 
 If a destination file doesn't exist for `marker-merge`, create it from the source (treat as overwrite for missing files).
 
-**Hook-wiring check (only if hooks were processed):** copying a hook file does nothing until it is registered in `.claude/settings.json`, and a registered hook without `+x` never runs either. Both are mechanical, so run them rather than reading for them:
+**Hook wiring (only if hooks were processed).** Copying a hook file does nothing until it is registered in `.claude/settings.json`, and a registered hook without `+x` never runs either. Since 2.0 `update` owns the `hooks` key of that file — and only that key. Run:
 
 ```bash
 node .claude/lib/setup-doctor.mjs --plugin-root "${CLAUDE_PLUGIN_ROOT}" wiring
 ```
 
-It compares the project's `settings.json` against `templates/settings-hooks.json` per event→command pair, and adds executability, existence, and `bash -n`. Report every finding with the `run:` / `fix:` line it carries and do NOT edit `settings.json` — it is user-owned and not in `manifest.json`. For each `wiring-incomplete` finding, cite `templates/settings-hooks.json` as the reference for the exact structure (deep-merge: append to existing `hooks` arrays, do not replace). If `.claude/settings.json` has no `hooks` key at all, instruct the user to copy the whole `hooks` block from the template.
+For each `wiring-incomplete` finding, add the entry from `templates/settings-hooks.json` under the same event (deep-merge: append to the existing array for that event and matcher, create the event when absent, match existing entries by `command`). For each hook deleted by a `removed` entry, delete its `command` entries. If the file has no `hooks` key, add the template's whole block. Never add, remove, or reorder anything outside `hooks`, and never touch `settings.local.json`. Re-run the same command afterwards: `wiring-incomplete` must be gone; report what remains (`hook-not-executable`, `hook-syntax`) with the `run:` line it carries.
 
-If the doctor is not on disk yet (the project predates it, and this run is what installs it), do the comparison by hand this once: for each `command` in the template, check whether that exact string appears anywhere under the project's `settings.json` `hooks` key, and report the absent ones.
+If the doctor is not on disk yet (this run is what installs it), do the comparison by hand this once: for each `command` in the template, check whether that exact string appears under the project's `settings.json` `hooks` key, and add the absent ones.
 
 ### Step 3.5: Sync Base Subagents (user scope)
 
@@ -148,13 +166,12 @@ Step 5 is about to stamp `frameworkVersion` to the new version, so run this **be
 
 Read the result as a checklist of this run:
 
-- `framework-missing` / `framework-drift` → a manifest entry did not get written. Re-apply that entry, do not stamp over it.
+- `framework-missing` / `framework-drift` → a manifest entry did not get written. Re-apply that entry, do not stamp over it. For a `marker-merge` file this covers the header above the start marker too: the framework-owned region is line 1 through the end marker.
 - `marker-missing` → a `marker-merge` file lost its `<!-- myspec:framework-start -->` / `<!-- myspec:framework-end -->` markers; restore them from the plugin copy before the next update silently skips the file forever.
 - `shipped-drift` / `shipped-missing` on `.claude/hooks/*` or `.claude/lib/*` → a hook or helper is stale or absent; these are `overwrite` entries, so re-copy.
-- `marker-header-drift` → the file's title or frontmatter above the marker differs from the plugin copy. `marker-merge` cannot reach it, so no re-run fixes this; apply the plugin header by hand or record that the local wording is deliberate.
 - Anything in the `schema` or `features` group → fix before finishing; an unparseable `.myspec.json` or `verification.json` silently disables the surfaces that read it, and an entry the features parser cannot read is invisible to every status audit.
 
-Report the summary line in Step 6. `framework-unlisted` warnings are expected on a project that predates `frameworkFiles` tracking — Step 5 clears them by writing the missing entries.
+Report the summary line in Step 6. `myspec-schema-stale` cannot appear here: Step 1.5 ran the schema migration first. If it does, that migration did not complete — re-run it before stamping.
 
 ### Step 4: Refresh `${aiDir}` binding in project context
 
@@ -178,9 +195,7 @@ If the markers already exist, replace everything between them with the current v
 
 ### Step 5: Update `.myspec.json`
 
-Update `frameworkVersion` to the new version from `manifest.json`.
-
-Update `frameworkFiles` entries — set `lastUpdated` to today's date for each file that was updated.
+Update `frameworkVersion` to the new version from `manifest.json`. Nothing else changes here: `frameworkFiles` holds pins only, and Step 1.5 recorded the migrations as they ran.
 
 ### Step 6: Print Summary
 
@@ -193,6 +208,12 @@ Updated files:
 Renamed (framework changed the filename; project content preserved):
   {for each renamedFrom entry migrated: "{old} → {new}"; or omit the block}
 
+Migrations (one-shot, recorded in .myspec.json):
+  {each migration id run this time with one line of what it did; or "none pending"}
+
+Removed (retired by the framework):
+  {each deleted file; "kept locally (pinned)" for pinned ones; or omit the block}
+
 Preserved (project-customized sections):
   {list marker-merge files where project content was kept}
 
@@ -201,7 +222,7 @@ Pinned (skipped — locally customized):
 
 Hooks: {updated N scripts / skipped — hooks directory not found}
 Lib:   {updated N helpers / skipped — hooks directory not found}
-Hook wiring: {all N hooks already wired in settings.json / M hook(s) need manual settings.json entries — see above}
+Hook wiring: {all N hooks already wired / added M entries, removed K / N finding(s) remain — see above}
 Memory: {migrated N legacy index(es), backfilled M hook: lines (K from heading — review) / indexes already generated / skipped — no memory tree}
         doctor: {clean / N error(s), M warning(s) — see above}
 Setup:  {clean / N error(s), M warning(s) — see above / skipped — node not found}
@@ -226,9 +247,10 @@ Do NOT modify the file — this is advisory only.
 ## Rules
 
 - Never overwrite a file whose `frameworkFiles[...].pinned` is set, and never add or clear a pin yourself
-- Never overwrite content outside `<!-- myspec:framework-start/end -->` markers for `marker-merge` files
-- Never modify files not listed in `manifest.json`
-- Never update `.myspec.json` project fields (`name`, `description`, `techStack`, `aiDir`)
+- Never overwrite content after `<!-- myspec:framework-end -->` in a `marker-merge` file
+- Never modify files not listed in `manifest.json`, with two exceptions this skill owns: the `hooks` key of `.claude/settings.json`, and `.claude/rules/ai-setup-audit.md` for the `2.0.0-doctor-rule` migration
+- Never update `.myspec.json` project fields (`name`, `description`, `techStack`); `aiDir` is written only by the `2.0.0-schema` migration, and only when absent or carrying a trailing slash
+- Never run a migration whose id is already in `.myspec.json` `migrations`; record each one the moment it completes
 - If a source file is missing from the plugin, skip it and warn the user — do not delete the destination
 - Base subagents (`skills/feature-implement/agents/`) install to user scope only. Never copy to project-scope `.claude/agents/`, `.cursor/agents/`, `.codex/agents/` in the repo root.
 - Skip a harness entirely if `~/.{harness}/` does not exist — the user does not use that tool.
@@ -238,19 +260,21 @@ Do NOT modify the file — this is advisory only.
 
 After running the skill:
 
-- [ ] `.myspec.json` `frameworkVersion` read and compared to `manifest.json`; stopped early if already current
+- [ ] `.myspec.json` `frameworkVersion` read and compared to `manifest.json`; stopped early if already current, or with the 1.28 instruction if below 1.28.0
+- [ ] Every manifest `migrations` id not yet in `.myspec.json` run in order and recorded as it completed
 - [ ] Every `manifest.json` entry processed with its declared strategy (`overwrite` / `marker-merge`)
-- [ ] Every entry carrying `renamedFrom` checked before applying: destination migrated and its `frameworkFiles` key renamed, or the both-exist case reported and left untouched
-- [ ] Entries pinned in `.myspec.json` skipped, their versions left untouched, and listed in the summary
+- [ ] Every entry carrying `renamedFrom` checked before applying: destination migrated and its `frameworkFiles` key renamed, a dead old key dropped, or the both-exist case offered a merge
+- [ ] Every `removed` entry deleted (or kept when pinned) and, for hooks, unwired from `settings.json`
+- [ ] Entries pinned in `.myspec.json` skipped and listed in the summary
 - [ ] `templates/*` entries written to `{aiDir}/.templates/` (no `{aiDir}/templates/` created)
-- [ ] `marker-merge` files: content outside `<!-- myspec:framework-start/end -->` markers left untouched
+- [ ] `marker-merge` files: everything after `<!-- myspec:framework-end -->` left untouched; the region above it taken from the plugin copy
 - [ ] `hooks` and `lib` entries processed only when `.claude/hooks/` exists (else both skipped with the note)
 - [ ] Each updated hook and lib helper had `chmod +x` applied
 - [ ] Memory migration run when a memory tree exists: `--backfill --dry-run` shown, `--backfill` applied, `--check` clean, doctor summary reported, `.claude/state/` gitignored
 - [ ] `${aiDir}` binding refreshed between `myspec:paths` markers; content outside markers unchanged
-- [ ] `.myspec.json` `frameworkVersion` bumped and `frameworkFiles[*].lastUpdated` set; project fields (`name`, `description`, `techStack`, `aiDir`) untouched
-- [ ] Hook-wiring check run via `setup-doctor.mjs wiring` (or by hand when the doctor was not yet installed): findings reported; `settings.json` NOT modified
+- [ ] `.myspec.json` `frameworkVersion` bumped; project fields (`name`, `description`, `techStack`) untouched; `frameworkFiles` holds pins only
+- [ ] Hook wiring run via `setup-doctor.mjs wiring` (or by hand when the doctor was not yet installed): missing template entries added and removed hooks unwired under `settings.json` `hooks`, nothing else in that file touched, `wiring-incomplete` gone on re-run
 - [ ] Full `setup-doctor.mjs` run in Step 3.7, before the Step 5 version stamp; every `install`-, `schema`- and `features`-group error resolved or reported
-- [ ] No file outside `manifest.json` was modified
-- [ ] Summary printed with `Updated files`, `Preserved`, `Hooks`, `Lib`, and `Hook wiring` lines
+- [ ] No file outside `manifest.json` was modified, except `settings.json` `hooks` and the doctor-rule rename
+- [ ] Summary printed with `Updated files`, `Migrations`, `Removed`, `Preserved`, `Hooks`, `Lib`, and `Hook wiring` lines
 - [ ] Generated-config advisory printed when a `mockups` block exists (`mockup-design.md` read, never modified)

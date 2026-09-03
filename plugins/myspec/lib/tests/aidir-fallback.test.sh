@@ -1,18 +1,17 @@
 #!/usr/bin/env bash
-# Regression fixture for the aiDir fallback.
+# Regression fixture for aiDir resolution.
 #
-# When .myspec.json carries no aiDir, five pieces of shipped code have to agree
-# on where the docs live. They did not: memory-files.mjs, memory-claim-id.sh
-# and verify-before-stop.sh assumed ".ai" while validate-frontmatter.sh and
-# mark-code-changed.sh assumed "ai". A keyless project therefore had its
-# session logs written to one tree and its memories read from the other, with
-# nothing reporting the mismatch.
-#
-# The fix is detection rather than a better guess, so the thing to prove is
-# behavioural and in both directions: with only ai/ on disk every consumer
-# resolves ai, with only .ai/ every consumer resolves .ai, and a configured
-# value still wins over both. A grep for a shared constant would not catch a
-# consumer that stopped calling the resolver.
+# Since 2.0 aiDir is a required key in .myspec.json. The setup doctor reports
+# its absence and the 2.0.0-schema migration in `update` writes it, so the
+# shipped code no longer reads the disk to guess: with no key, every consumer
+# resolves the documented default `.ai` — even when only ai/ exists on disk.
+# In 1.x five consumers each carried their own detection and disagreed
+# (memory-files.mjs, memory-claim-id.sh and verify-before-stop.sh assumed .ai;
+# validate-frontmatter.sh and mark-code-changed.sh assumed ai), which is the
+# bug this fixture was written against. The thing to prove now is that they
+# still agree with each other, that a configured value wins, and that a
+# trailing slash never reaches a derived pattern. A grep for a shared constant
+# would not catch a consumer that stopped calling the resolver.
 #
 # Usage: aidir-fallback.test.sh
 
@@ -78,40 +77,33 @@ frontmatter_polices() {  # frontmatter_polices <dir>
   esac
 }
 
-# --- only ai/ on disk --------------------------------------------------------
+# --- no key, only ai/ on disk: the default is not a guess -------------------
 
 build plain-ai ai/memory
-expect_eq "$(lib_resolves)" "ai" "memory-files.mjs follows an existing ai/ tree"
-expect_eq "$(hook_resolves)" "ai" "mark-code-changed.sh writes into the same tree"
-expect_eq "$(frontmatter_polices ai)" "yes" "validate-frontmatter.sh polices the same tree"
+expect_eq "$(lib_resolves)" ".ai" "memory-files.mjs resolves the .ai default, not the ai/ tree on disk"
+expect_eq "$(hook_resolves)" ".ai" "mark-code-changed.sh writes into the same default tree"
+expect_eq "$(frontmatter_polices ai)" "no" "validate-frontmatter.sh does not police the unconfigured ai/ tree"
+expect_eq "$(frontmatter_polices .ai)" "yes" "validate-frontmatter.sh polices the default tree"
 
-# --- only .ai/ on disk -------------------------------------------------------
-
-build dot-ai .ai/memory
-expect_eq "$(lib_resolves)" ".ai" "memory-files.mjs follows an existing .ai/ tree"
-expect_eq "$(hook_resolves)" ".ai" "mark-code-changed.sh writes into the same tree"
-expect_eq "$(frontmatter_polices .ai)" "yes" "validate-frontmatter.sh polices the same tree"
-
-# --- neither on disk: the documented default ---------------------------------
+# --- no key, nothing on disk ---------------------------------------------------
 
 build neither
 expect_eq "$(lib_resolves)" ".ai" "with no tree the documented .ai default is used"
 expect_eq "$(hook_resolves)" ".ai" "the hook agrees with the library on the default"
 
-# --- both on disk: ambiguous, .ai wins, doctor names it ----------------------
+# --- no key is a doctor error, so the default never hides a misconfiguration --
 
-build both ai/memory .ai/memory
-expect_eq "$(lib_resolves)" ".ai" "with both trees .ai wins"
-expect_eq "$(hook_resolves)" ".ai" "the hook agrees with the library when both exist"
-if node "$PLUGIN/lib/memory-doctor.mjs" --root "$REPO" 2>/dev/null | grep -q 'second-ai-tree'; then ok
-else fail "memory-doctor reports the ambiguity as second-ai-tree"; fi
+build keyless
+OUT=$(node "$PLUGIN/lib/setup-doctor.mjs" --root "$REPO" --plugin-root "$PLUGIN" schema 2>&1)
+if printf '%s\n' "$OUT" | grep -Eq '^ERROR myspec-missing-key: .*aiDir'; then ok
+else fail "the setup doctor reports a missing aiDir as an error"; fi
 
-# --- a configured value still wins over what is on disk ----------------------
+# --- a configured value wins over anything on disk ----------------------------
 
 build configured .ai/memory
 printf '{"aiDir":"docs/ai","frameworkVersion":"0.0.0"}\n' > "$REPO/.myspec.json"
 mkdir -p "$REPO/docs/ai"
-expect_eq "$(lib_resolves)" "docs/ai" "a configured aiDir beats detection"
+expect_eq "$(lib_resolves)" "docs/ai" "a configured aiDir wins"
 expect_eq "$(hook_resolves)" "none" "the hook honours the configured value, not the .ai tree"
 
 # --- a configured trailing slash does not break derived patterns -------------
