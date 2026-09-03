@@ -108,7 +108,7 @@ expect_no_line 'framework-removed' "a manifest with an empty removed block repor
 expect_no_line 'shipped-drift' "clean install reports no hook or lib drift"
 expect_no_line 'dead-path-ref' "framework-owned rules are not scanned for dead refs"
 expect_no_line 'over-budget' "framework-owned rules are not warned about as over budget"
-expect_line 'framework files over their always-loaded budget' "plugin-owned budget overruns are reported as a note"
+expect_no_line 'framework files over their always-loaded budget' "no plugin-owned always-loaded rule is over the 1000-token budget (regression guard for the 2.0 rules diet)"
 expect_line 'setup doctor: 0 error\(s\)' "summary counts zero errors"
 
 # The stop hook runs exactly these two groups; they must be silent on a clean
