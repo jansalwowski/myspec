@@ -36,9 +36,24 @@ It:
 2. From a clean working tree: `./scripts/bump-version.sh X.Y.Z`
 3. `git diff` — review the version bumps
 4. `git add -A && git commit -m "chore: bump to vX.Y.Z"`
-5. `git tag vX.Y.Z`
-6. `git push && git push --tags`
-7. Pushing the tag **auto-drafts the GitHub release** (repo automation) with generated PR links — a subsequent `gh release create` fails with HTTP 422. Enrich the draft instead: `gh release edit vX.Y.Z --title "..." --notes "..."`, keeping the auto-generated "What's Changed" links at the bottom. Only if no draft appears after ~30s, fall back to `gh release create vX.Y.Z --generate-notes`.
+5. **Write the release notes now**, before the tag exists — see step 8 for why. Draft from the PRs since the previous tag, and include an **Upgrading** section whenever anything under `framework-files/`, `hooks/`, or `lib/` changed.
+6. `git tag vX.Y.Z`
+7. `git push && git push --tags`
+8. Pushing the tag **auto-publishes the GitHub release** — `.github/workflows/release.yml` runs `gh release create "$TAG" --title "$TAG" --generate-notes`, with no `--draft`. The release is public within about a minute of the tag landing, titled with the bare tag and carrying nothing but a list of PR titles.
+
+   **So have the notes written before you push the tag.** Between the push and your edit there is a live release that says nothing useful; for a patch that is noise, and for a major it is the version most people will read on the day.
+
+   Enrich it with `gh release edit`, not `create` — the release already exists, so `gh release create` fails with HTTP 422:
+
+   ```bash
+   gh release view vX.Y.Z --json body --jq .body > /tmp/generated.md   # the PR links
+   cat notes.md /tmp/generated.md > /tmp/final.md                      # yours first, links last
+   gh release edit vX.Y.Z --title "vX.Y.Z — short theme" --notes-file /tmp/final.md
+   ```
+
+   Keep the generated "What's Changed" and "Full Changelog" lines at the bottom — they are the only per-PR attribution the release carries. If no release object exists after ~30s the workflow failed: check its run, then `gh release create vX.Y.Z --notes-file /tmp/final.md` by hand.
+
+   To close the live window instead of racing it, add `--draft` to the workflow's `gh release create` and publish with `gh release edit --draft=false` once the notes are in. That trades a public gap for a release that does not exist until someone finishes it.
 
 ## Versioning rules (semver)
 

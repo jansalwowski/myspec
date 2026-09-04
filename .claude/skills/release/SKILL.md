@@ -41,13 +41,21 @@ Run all checks; any failure → report it and stop (fix first, never release aro
 
 ### Step 4: Release Notes
 
-Pushing the tag auto-drafts a GitHub release with generated PR links — `gh release create` will fail with HTTP 422 once it exists. Enrich the draft instead:
+Pushing the tag **auto-publishes** the release — the workflow runs `gh release create --generate-notes` with no `--draft`. It is public within about a minute, titled with the bare tag and carrying only PR titles. `gh release create` then fails with HTTP 422 because the release already exists.
 
-1. Poll `gh release view v{X.Y.Z}` (retry a few times over ~30s) until the auto-draft appears.
-2. Draft highlights from the commits/PRs since the previous tag — group by fixes / features / docs. If anything under `framework-files/`, `hooks/`, or `lib/` changed, include an **Upgrading** section telling consumers to run `/myspec:update`.
-3. Show the draft notes; accept-or-edit before publishing.
-4. `gh release edit v{X.Y.Z} --title "v{X.Y.Z} — {short theme}" --notes "{notes}"` — keep the auto-generated "What's Changed" PR links and "Full Changelog" line at the bottom of the notes.
-5. Fallback: if no auto-draft appears after ~30s, `gh release create v{X.Y.Z} --title ... --notes ...`.
+**Write the notes before Step 3 pushes the tag.** Every minute between the push and the edit is a live release that says nothing.
+
+1. Draft highlights from the commits/PRs since the previous tag — group by fixes / features / docs. If anything under `framework-files/`, `hooks/`, or `lib/` changed, include an **Upgrading** section telling consumers to run `/myspec:update`.
+2. Show the notes; accept-or-edit **before** the tag is pushed.
+3. After the push, poll `gh release view v{X.Y.Z}` (retry over ~30s) until the release object exists.
+4. Append the generated body to yours, then land both:
+   ```bash
+   gh release view v{X.Y.Z} --json body --jq .body > /tmp/generated.md
+   cat /tmp/notes.md /tmp/generated.md > /tmp/final.md
+   gh release edit v{X.Y.Z} --title "v{X.Y.Z} — {short theme}" --notes-file /tmp/final.md
+   ```
+   Keep the "What's Changed" PR links and "Full Changelog" line at the bottom — they are the only per-PR attribution the release carries.
+5. If no release object appears after ~30s the workflow failed: check its run, then `gh release create v{X.Y.Z} --notes-file /tmp/final.md` by hand.
 
 ### Step 5: Verify
 
@@ -67,7 +75,8 @@ Pushing the tag auto-drafts a GitHub release with generated PR links — `gh rel
 - [ ] Preflight fully passed (main, clean, synced, mirrors identical, hooks parse, CI green or explicitly overridden)
 - [ ] Version confirmed by the user against the semver table
 - [ ] Bump diff contained only the five version files; committed as `chore: bump to v{X.Y.Z}`
-- [ ] Tag pushed; notes landed via `gh release edit` on the auto-draft (or `create` fallback after the ~30s window)
+- [ ] Notes written and approved **before** the tag was pushed
+- [ ] Notes landed via `gh release edit` (the tag auto-publishes; `create` only as a fallback if the workflow failed)
 - [ ] Release page shows enriched notes with PR links preserved; Upgrading section present if framework-files changed
 
 ## Integration

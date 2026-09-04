@@ -62,5 +62,5 @@ A framework file's **name** is the same kind of contract, and it is the one that
 
 Use the repo-local `/release` skill (`.claude/skills/release/` — maintainer tooling, not shipped with the plugin); `RELEASING.md` is the authoritative reference. Two learned-the-hard-way facts (v1.19.0, 2026-08-03):
 
-- **Pushing a tag auto-drafts the GitHub release.** A subsequent `gh release create` fails with HTTP 422 "tag_name already exists". Enrich the draft with `gh release edit vX.Y.Z` instead, keeping the auto-generated PR links at the bottom.
+- **Pushing a tag auto-publishes the GitHub release** — the workflow runs `gh release create --generate-notes` with no `--draft`, so it is live within a minute, titled with the bare tag. Write the notes *before* tagging, then enrich with `gh release edit vX.Y.Z` (`create` fails HTTP 422 "tag_name already exists"), keeping the generated PR links at the bottom. Corrected 2026-09-04 during the v2.0.0 release; it was recorded as "auto-drafts" from v1.19.0 and nobody had checked `isDraft`.
 - **No apostrophes inside `$(cat <<EOF …)` heredocs in hook scripts.** Bash's command-substitution scanner treats the unmatched quote as an open string and the script fails to parse with a misleading error. Run `bash -n` on every hook after any message-text edit.
