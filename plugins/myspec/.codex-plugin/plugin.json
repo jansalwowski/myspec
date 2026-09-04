@@ -1,6 +1,6 @@
 {
   "name": "myspec",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "Specification-Driven Development framework for Codex. Provides skills for feature workflows, memory system, ideas pipeline, and project scaffolding.",
   "author": {
     "name": "Jan Salwowski",
