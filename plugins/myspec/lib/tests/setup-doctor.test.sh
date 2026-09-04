@@ -212,7 +212,9 @@ expect_no_line 'ERROR framework-drift' "drift while an update is pending is not 
 
 build_fixture
 mv "$REPO/ai/anti-patterns.md" "$REPO/ai/memory-index.md"
-set_json .myspec.json 'd.frameworkFiles["memory-index.md"] = d.frameworkFiles["anti-patterns.md"]; delete d.frameworkFiles["anti-patterns.md"]'
+# build_fixture writes no frameworkFiles block, so seed it: without this the
+# whole expression threw and the setup silently did nothing.
+set_json .myspec.json 'd.frameworkFiles = d.frameworkFiles || {}; d.frameworkFiles["memory-index.md"] = d.frameworkFiles["anti-patterns.md"] || {}; delete d.frameworkFiles["anti-patterns.md"]'
 
 run_doctor install
 expect_exit 0 "an unmigrated rename does not fail the run"
@@ -264,6 +266,34 @@ build_fixture
 set_json .myspec.json 'delete d.migrations'
 run_doctor schema
 expect_line 'WARN +myspec-schema-stale: .myspec.json has no migrations list' "a missing migrations list means the 2.0 migrations have not run"
+
+# --- pass 3b: a pinned framework rule over budget ------------------------------
+# The 2.0 rules diet shrank the always-loaded rules, but two consumer repos pin
+# workflow.md with the reason "trimmed for always-loaded context budget". update
+# never touches a pin, so the stale fork keeps costing tokens the pin was taken
+# to save — and the plugin-owned note ("update overwrites local edits, report
+# upstream") is the opposite of what that reader should do.
+
+build_fixture
+node -e '
+const {readFileSync,writeFileSync}=require("fs");
+const {join}=require("path");
+const root=process.argv[1];
+const cfg=JSON.parse(readFileSync(join(root,".myspec.json"),"utf8"));
+cfg.frameworkFiles={"rules/workflow.md":{pinned:"trimmed for always-loaded context budget"}};
+writeFileSync(join(root,".myspec.json"),JSON.stringify(cfg,null,2)+"\n");
+const rule=join(root,".claude","rules","workflow.md");
+writeFileSync(rule,readFileSync(rule,"utf8")+"\n"+("stale forked prose. ".repeat(500)));
+' "$REPO"
+run_doctor budget
+
+expect_line 'WARN +over-budget-pinned: .claude/rules/workflow.md' "a pinned framework rule over budget is a warning, not a note"
+expect_line 'pinned in .myspec.json' "the finding says the file is pinned"
+expect_line 'trimmed for always-loaded context budget' "the finding quotes the pin reason"
+expect_line 'update skips it' "the finding says update will not fix this"
+expect_line 'plugin copy is now smaller' "the finding says the pin now costs more than it saves"
+expect_no_line 'report upstream' "a pinned file is not reported as a plugin-owned issue"
+expect_no_line 'WARN +over-budget: .claude/rules/workflow.md' "a managed file is not also reported as project-owned"
 
 # --- pass 4: argument handling ------------------------------------------------
 
