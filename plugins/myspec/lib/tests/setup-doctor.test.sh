@@ -267,6 +267,44 @@ set_json .myspec.json 'delete d.migrations'
 run_doctor schema
 expect_line 'WARN +myspec-schema-stale: .myspec.json has no migrations list' "a missing migrations list means the 2.0 migrations have not run"
 
+# --- pass 3a: pins are honoured for every manifest block -----------------------
+# update looks a pin up by its manifest key — `rules/workflow.md`,
+# `hooks/guard-worktree-context.sh`, `lib/branch-cleanup.sh` — and skips the
+# entry. The doctor tracked only `files` and `rules`, so a pinned hook or helper
+# drifted forever with no way to clear it (issue #71). Worse, `shipped-drift` is
+# what update Step 3.7 reads as "this entry did not get written, re-apply it",
+# which pointed at the one file that must not be re-applied.
+
+build_fixture
+node -e '
+const {readFileSync,writeFileSync}=require("fs");
+const {join}=require("path");
+const root=process.argv[1];
+const cfg=JSON.parse(readFileSync(join(root,".myspec.json"),"utf8"));
+cfg.frameworkFiles={
+  "hooks/guard-worktree-context.sh":{pinned:"extra guard for our monorepo"},
+  "lib/branch-cleanup.sh":{pinned:"local lint-gate fixes"},
+};
+writeFileSync(join(root,".myspec.json"),JSON.stringify(cfg,null,2)+"\n");
+for (const f of [".claude/hooks/guard-worktree-context.sh",".claude/lib/branch-cleanup.sh"]) {
+  writeFileSync(join(root,f), readFileSync(join(root,f),"utf8")+"\n# local fork\n");
+}
+' "$REPO"
+run_doctor install
+
+expect_exit 0 "a pinned hook and lib helper do not fail the run"
+expect_no_line 'shipped-drift: .claude/hooks/guard-worktree-context.sh' "a pinned hook is not reported as drifted"
+expect_no_line 'shipped-drift: .claude/lib/branch-cleanup.sh' "a pinned lib helper is not reported as drifted"
+
+# The pin must not blind the check for its neighbours.
+node -e '
+const {readFileSync,writeFileSync}=require("fs");const {join}=require("path");
+const root=process.argv[1];const f=join(root,".claude/hooks/mark-code-changed.sh");
+writeFileSync(f, readFileSync(f,"utf8")+"\n# unpinned drift\n");
+' "$REPO"
+run_doctor install
+expect_line 'shipped-drift: .claude/hooks/mark-code-changed.sh' "an unpinned hook still drifts while a sibling is pinned"
+
 # --- pass 3b: a pinned framework rule over budget ------------------------------
 # The 2.0 rules diet shrank the always-loaded rules, but two consumer repos pin
 # workflow.md with the reason "trimmed for always-loaded context budget". update
