@@ -91,7 +91,7 @@ For each file in the manifest:
 
 **`overwrite` strategy:**
 1. Read the source file from `framework-files/{filename}` (or `framework-files/rules/{filename}` for rules, `hooks/{filename}` for hooks, `lib/{filename}` for lib)
-2. Replace `${aiDir}` placeholders with the configured `aiDir` value
+2. **`files` and `rules` only:** replace `${aiDir}` placeholders with the configured `aiDir` value. **Copy `hooks` and `lib` byte-for-byte** — see the rule below
 3. Write to destination, replacing the existing file entirely
 4. For hooks and lib: run `chmod +x {dest}` after writing. Some helpers are sourced and some are invoked directly (`branch-cleanup.sh`, `memory-claim-id.sh`) — setting the bit on all of them is harmless for the sourced ones and required for the rest.
 
@@ -239,6 +239,7 @@ Do NOT modify the file — this is advisory only.
 
 ## Rules
 
+- **Never substitute `${aiDir}` into a `hooks` or `lib` entry.** Those files resolve `aiDir` at runtime and carry `${aiDir}` as live shell and JS template-literal syntax — `lib/setup-doctor.mjs` alone has eight, including its destination-path computations. Substituting freezes every path to this project's value at install time and leaves helpers ignoring their own `aiDir` argument (`memoryFilesInRefs(root, aiDir)` stops reading its parameter). The corruption is silent: within one project the frozen value is correct, so nothing misbehaves until the value changes. Only the `files` and `rules` blocks carry `${aiDir}` as a placeholder.
 - Never overwrite a file whose `frameworkFiles[...].pinned` is set, and never add or clear a pin yourself
 - Never overwrite content after `<!-- myspec:framework-end -->` in a `marker-merge` file
 - Never modify files not listed in `manifest.json`, with two exceptions this skill owns: the `hooks` key of `.claude/settings.json`, and `.claude/rules/ai-setup-audit.md` for the `2.0.0-doctor-rule` migration
@@ -260,7 +261,7 @@ After running the skill:
 - [ ] `templates/*` entries written to `{aiDir}/.templates/` (no `{aiDir}/templates/` created)
 - [ ] `marker-merge` files: everything after `<!-- myspec:framework-end -->` left untouched; the region above it taken from the plugin copy
 - [ ] `hooks` and `lib` entries processed only when `.claude/hooks/` exists (else both skipped with the note)
-- [ ] Each updated hook and lib helper had `chmod +x` applied
+- [ ] Each updated hook and lib helper had `chmod +x` applied, and was written byte-for-byte with no `${aiDir}` substitution
 - [ ] Memory health checked when a memory tree exists: `--check` clean (after regeneration or backfill where needed), doctor summary reported, `.claude/state/` gitignored
 - [ ] `${aiDir}` binding refreshed between `myspec:paths` markers; content outside markers unchanged
 - [ ] `.myspec.json` `frameworkVersion` bumped; project fields (`name`, `description`, `techStack`) untouched; `frameworkFiles` holds pins only
