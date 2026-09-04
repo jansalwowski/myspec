@@ -1,6 +1,6 @@
 ---
 name: "memorize"
-description: "Use when the user explicitly asks to remember, save, or memorize a specific piece of information given inline, e.g. '/memorize the prod DB is in us-east-1'. Captures one memory per call. Do NOT use to scavenge memories from conversation context (memorify), to edit existing memories, or for trivial config already visible in code or docs."
+description: "Use when the user names the exact thing to remember inline, e.g. '/memorize the prod DB is in us-east-1'. Captures one memory per call. Do NOT use to sweep the conversation for candidates (memorify) or to edit an existing memory."
 ---
 
 # Memorize

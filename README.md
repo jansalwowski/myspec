@@ -88,7 +88,7 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref main
 | `/myspec:code-review` | Review changed code for quality, standards, and bugs — universal dimensions plus project rules. Configurable via `/myspec:setup code-review` |
 | `/myspec:feature-update` | Plan changes to an already-implemented feature |
 | `/myspec:feature-verify` | Verify feature implementation matches spec |
-| `/myspec:features-status-audit` | Batch-audit the whole feature manifest against on-disk docs (`lib/features-status-audit/audit.mjs`) |
+| `/myspec:feature-status-audit` | Batch-audit the whole feature manifest against on-disk docs (`lib/feature-status-audit/audit.mjs`) |
 | `/myspec:feature-complete` | Mark feature done, update docs |
 | `/myspec:feature-spec-cleanup` | Move technical content from spec to tech-spec |
 | `/myspec:feature-spec-sync` | Detect and fix documentation drift |
@@ -111,8 +111,7 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref main
 | `/myspec:brainstorm` | Explore a problem space before committing to a spec |
 | `/myspec:root-cause-debugging` | Systematic 4-phase debugging methodology with 3-attempt escalation rule |
 | `/myspec:skill-verify` | Verify a skill file follows optimization guidelines |
-| `/myspec:worktree-cleanup` | Clean up git worktrees after feature branches |
-| `/myspec:docs-sanitize` | Clean up documentation naming and structure |
+| `/myspec:worktree-clean` | Clean up git worktrees after feature branches |
 | `/myspec:doctor` | Health check of every agent-facing surface, in three tiers: `lib/setup-doctor.mjs` for the mechanical checks (~1s, no model), one surface on request, or the full six-surface audit (CLAUDE.md + rules, skills/agents, `${aiDir}` docs, memory tree, hooks + harness config, feature manifest) with approval-gated fixes as grouped PRs |
 | `/myspec:upstream-sync` | Check tracked upstream repos (e.g. obra/superpowers) for changes worth porting into local skills |
 

@@ -1,6 +1,6 @@
 ---
 name: "setup"
-description: "Use when generating project-specific files from guided wizards. Blueprints by name: backbone, claude-md, conventions, code-review, mockup, index-md, workflow, pre-flight, anti-patterns. Keywords: setup backbone, generate project files, create topology file, configure reviewer, configure mockups, run blueprint. Do NOT use for first-time project init (use init)."
+description: "Use to generate project-specific files from guided wizards. Blueprints: backbone, claude-md, conventions, code-review, mockup, index-md, workflow, pre-flight, anti-patterns. Do NOT use for first-time init (init)."
 ---
 
 # Setup

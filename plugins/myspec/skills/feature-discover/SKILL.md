@@ -1,6 +1,6 @@
 ---
 name: "feature-discover"
-description: "Use when code exists but no spec does — undocumented features, reverse engineering, document existing code. Produces discovery.md and optionally spec.md + tech-spec.md from code exploration. Accepts a feature description and/or file paths. Do NOT use for features that already have a spec."
+description: "Use when code exists but no spec does — undocumented features, reverse engineering. Produces discovery.md and optionally spec.md plus tech-spec.md from code exploration. Do NOT use where a spec already exists."
 tags: [feature, discovery, reverse-engineering, documentation]
 ---
 

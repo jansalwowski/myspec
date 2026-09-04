@@ -1,6 +1,6 @@
 ---
 name: "feature-mockup"
-description: "Use when building UI mockups for a feature under ${aiDir}/features/{feature}/mockups/ — exploring a flow, validating a spec visually, prototyping screens, edit modals, or admin surfaces before tech design. Keywords: mockup, mock up, prototype screen, wireframe, visualize spec, UX exploration. Do NOT use for production UI code, schema/migration changes, new design-system components, or distinctive-aesthetic landing pages (use frontend-design for those)."
+description: "Use to build spec-validation UI mockups under ${aiDir}/features/{feature}/mockups/ before tech design. Keywords: mockup, prototype screen, wireframe, visualize spec. Do NOT use for production UI or aesthetic landing pages (frontend-design), or to critique mockups (feature-mockup-review)."
 tags: [mockup, feature, design, ux, prototyping]
 ---
 

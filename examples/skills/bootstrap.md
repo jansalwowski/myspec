@@ -64,7 +64,7 @@ The skill notes:
 
 Both doctors run and both come back clean, so neither adds a line beyond its summary: `node .claude/lib/memory-doctor.mjs --quiet` prints `memory doctor: clean`, and `node .claude/lib/setup-doctor.mjs --quiet` prints `setup doctor: clean` after about a second of mechanical checks (framework files still matching the plugin copy, every hook wired and executable, configs parsing). Neither fixes anything — bootstrap only reports.
 
-`git worktree list` shows only the main checkout — worktree health clean, line omitted from the summary. `.myspec.json` `frameworkVersion` matches the plugin manifest — version line omitted too. (A stale worktree would surface a `worktree-cleanup` warning; a version gap would surface a `/myspec:update` prompt, and would also downgrade any framework-file drift the setup doctor found from an error to a warning, since a pending update explains it.)
+`git worktree list` shows only the main checkout — worktree health clean, line omitted from the summary. `.myspec.json` `frameworkVersion` matches the plugin manifest — version line omitted too. (A stale worktree would surface a `worktree-clean` warning; a version gap would surface a `/myspec:update` prompt, and would also downgrade any framework-file drift the setup doctor found from an error to a warning, since a pending update explains it.)
 
 #### 6. Reports back
 

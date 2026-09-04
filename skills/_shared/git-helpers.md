@@ -26,7 +26,7 @@ Cache the result for the current turn — don't re-run the cascade per prompt.
 
 ## Conventions
 
-- **Worktree path:** `.claude/worktrees/feat-{feature-name}` (matches `worktree-cleanup` and `feature-implement`)
+- **Worktree path:** `.claude/worktrees/feat-{feature-name}` (matches `worktree-clean` and `feature-implement`)
 - **Feature branch name:** `feat/{feature-name}` (conventional, kebab-case)
 - **Commit message:** `feat({feature-name}): {summary}` — conventional commits, matches existing feature-plan rule
 

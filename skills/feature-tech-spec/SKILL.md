@@ -1,6 +1,6 @@
 ---
 name: "feature-tech-spec"
-description: "Use when designing implementation for an approved feature. Creates tech-spec.md with architecture and implementation steps. Requires approved spec.md. Do NOT use for features still in planning."
+description: "Use to design the implementation of an approved feature. Creates tech-spec.md with architecture and implementation steps. Requires an approved spec.md."
 tags: [technical, specification, architecture, implementation]
 ---
 

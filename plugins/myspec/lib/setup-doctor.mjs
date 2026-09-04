@@ -434,7 +434,7 @@ if (featuresIndex !== null) {
 
   if (!hasFeaturesKey) {
     error('features-index-unreadable', 'features', rel(featuresIndexPath), `${rel(featuresIndexPath)}: no top-level features: key — the manifest audit reads zero features from it`, {
-      commands: ['node "${CLAUDE_PLUGIN_ROOT}/lib/features-status-audit/audit.mjs"'],
+      commands: ['node "${CLAUDE_PLUGIN_ROOT}/lib/feature-status-audit/audit.mjs"'],
     });
   }
 

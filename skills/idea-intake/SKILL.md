@@ -1,11 +1,6 @@
 ---
 name: "idea-intake"
-description: >
-  Use when a new idea file is added to the ${aiDir}/ideas/ directory and needs to be
-  triaged into the priority queue. Covers idea analysis, priority assignment,
-  dependency identification, and PRIORITY-LISTING.md updates. Keywords: new
-  idea, idea queue, idea triage, intake, queue idea. Do NOT use for converting
-  ideas to feature specs — use idea-process for that.
+description: "Use when a new idea file lands in ${aiDir}/ideas/ and needs triaging into the priority queue — analysis, priority, dependencies, PRIORITY-LISTING.md. Keywords: new idea, idea queue, idea triage, queue idea. Do NOT use to convert an idea to a spec (idea-process)."
 tags: [ideas, planning, intake, queue]
 ---
 

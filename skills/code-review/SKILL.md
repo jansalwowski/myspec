@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: "Use when reviewing implemented code for quality, standards conformance, and potential issues — after a feature is built, before feature-complete or a PR. Keywords: code review, review changes, review diff, pre-merge review, find bugs in changes. Universal dimensions plus per-repo rules. Do NOT use for spec.md (feature-spec-review), tech-spec.md (feature-tech-spec-review), or SKILL.md (skill-verify)."
+description: "Use to review implemented code for bugs, quality, and standards conformance — after a feature is built, before a PR. Keywords: review changes, review diff, pre-merge review, find bugs. Do NOT use for spec.md, tech-spec.md, or SKILL.md."
 tags: [code-review, quality, validation, critical-thinking, review]
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: "bootstrap"
-description: "Use when starting any work session and the agent needs project orientation before answering questions or making changes. Keywords: bootstrap, start session, orient, where am I, what is this project, project context, pre-flight, what's the state. Do NOT use mid-task, multiple times in one session, or for one-off questions with no code involvement."
+description: "Use when a session starts and the agent needs project orientation before answering or changing anything. Keywords: orient, where am I, what is this project, what's the state. Do NOT use mid-task or twice in one session."
 ---
 
 # Bootstrap
@@ -152,7 +152,7 @@ Run `git worktree list` and count non-main worktrees. For each:
 
 Run `git worktree prune --dry-run` to detect pruneable references.
 
-→ If issues found: include warning in Step 6 summary — "**Worktree health**: WARNING — N stale/orphaned worktrees. Use the `worktree-cleanup` skill."
+→ If issues found: include warning in Step 6 summary — "**Worktree health**: WARNING — N stale/orphaned worktrees. Use the `worktree-clean` skill."
 → If clean: include "**Worktree health**: clean (N active worktrees)"
 → If no worktrees: omit the line entirely.
 
@@ -195,7 +195,7 @@ Output a brief structured summary so the user can confirm the agent is properly 
 **Active sessions**: [N (list of session_id prefixes + topics) / 0]
 **Auto-archived**: [M orphaned sessions / 0 (omit line if 0)]
 **Dangling**: [M sessions 1–6h stale — run /myspec:session-clean (omit line if 0)]
-**Worktree health**: [clean (N active) / WARNING — N stale/orphaned. Use the `worktree-cleanup` skill]
+**Worktree health**: [clean (N active) / WARNING — N stale/orphaned. Use the `worktree-clean` skill]
 **myspec version**: [omit if versions match / plugin v{plugin} ahead of project v{project} — run /myspec:update / plugin v{plugin} behind project v{project} — update your plugin / project on v{project}, plugin has v{plugin} (non-semver)]
 **Boundaries**: [any never_modify paths relevant to task, or "none relevant"]
 ```

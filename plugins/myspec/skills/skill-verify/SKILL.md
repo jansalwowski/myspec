@@ -1,12 +1,6 @@
 ---
 name: skill-verify
-description: >
-  Use when auditing or reviewing an existing skill's SKILL.md for quality,
-  compliance, and effectiveness. Covers frontmatter validation, anti-pattern
-  detection, and token efficiency assessment. Keywords: verify skill,
-  audit skill, check skill, validate skill, skill lint, skill review, skill
-  compliance. Do NOT use for creating new skills, for
-  feature spec review (use feature-spec-review), or for general code review.
+description: "Use to audit an existing SKILL.md for quality, compliance, and token efficiency — frontmatter validation, anti-pattern detection. Keywords: verify skill, check skill, skill lint. Do NOT use to create skills."
 ---
 
 # Skill Verify

@@ -1,6 +1,6 @@
 ---
 name: session-clean
-description: "Use when sweeping dangling session files in .claude/state/sessions/ or orphaned untracked files in ${aiDir}/memory/sessions/archive/. Keywords: session cleanup, dangling sessions, session sweep, orphaned archives, empty session pruning. Do NOT use to archive the running agent's own active session (session-complete) or to clean worktrees (worktree-cleanup)."
+description: "Use to sweep dangling session files in .claude/state/sessions/ that belong to nobody still working. Keywords: session cleanup, dangling sessions, session sweep, orphaned archives. Do NOT use on your own session (session-complete) or for worktrees (worktree-clean)."
 ---
 
 # Session Clean

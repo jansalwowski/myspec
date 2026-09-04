@@ -1,9 +1,6 @@
 ---
 name: "feature-spec-sync"
-description: >
-  Use when documentation seems outdated, after refactoring, or before feature completion.
-  Handles spec.md / tech-spec.md drift, stale file paths, and version mismatches.
-  Do NOT use for creating new specs or mid-implementation.
+description: "Use when docs have drifted from code — after refactoring, or before completing a feature. Handles spec.md and tech-spec.md drift, stale paths, version mismatches."
 tags: [documentation, maintenance, verification, sync]
 ---
 

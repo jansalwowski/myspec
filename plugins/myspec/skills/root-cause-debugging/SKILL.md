@@ -1,9 +1,6 @@
 ---
 name: root-cause-debugging
-description: >
-  Use when encountering any bug, test failure, build error, or unexpected behavior.
-  Covers: root cause investigation, multi-component diagnostics, hypothesis testing.
-  Do NOT use for feature planning, code review, or performance optimization.
+description: "Use for any bug, test failure, build error, or unexpected behavior. Covers root-cause investigation, multi-component diagnostics, hypothesis testing."
 ---
 
 # Root Cause Debugging

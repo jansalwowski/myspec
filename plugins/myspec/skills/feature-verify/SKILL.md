@@ -1,12 +1,6 @@
 ---
 name: feature-verify
-description: >
-  Use when auditing a feature's overall health — before starting work, or when
-  unsure documentation matches reality. Covers spec, tech-spec, plan,
-  implementation, sub-features, memories, and manifest sync.
-  Keywords: feature health, feature audit, verify feature, feature drift, health check.
-  Do NOT use for fixing drift (feature-spec-sync), completing features
-  (feature-complete), or creating new specs (feature-spec).
+description: "Use to audit one feature's health — spec, tech-spec, plan, implementation, sub-features, memories, manifest sync. Keywords: feature health, verify feature, feature drift. Do NOT use to audit every feature (feature-status-audit)."
 allowed-tools: [Read, Grep, Glob]
 ---
 
@@ -128,7 +122,7 @@ If no memories found and no memory indexes exist: skip this section silently (pe
 
 Verify the right documents exist for the current manifest status:
 
-The Required/Expected columns mirror the authoritative matrix in `lib/features-status-audit/audit.mjs` (EXPECTATIONS) — keep those in sync. The `complete` row's CHANGELOG/archived-plan expectations and active-plan flag are deliberate deep-audit additions: audit.mjs treats them as informational post-signals only.
+The Required/Expected columns mirror the authoritative matrix in `lib/feature-status-audit/audit.mjs` (EXPECTATIONS) — keep those in sync. The `complete` row's CHANGELOG/archived-plan expectations and active-plan flag are deliberate deep-audit additions: audit.mjs treats them as informational post-signals only.
 
 | Status | Required | Expected | Flag If |
 |--------|----------|----------|---------|

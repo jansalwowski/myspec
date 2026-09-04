@@ -1,7 +1,7 @@
 ---
 name: feature-implement
 tags: [feature, implementation, execution, parallel, worktree]
-description: "Use when executing an implementation-plan.md from ${aiDir}/features/ — dispatches subagents per task, parallelizing when the plan allows (worktree isolation). Keywords: execute plan, implement feature, run plan, start implementation. Do NOT use for creating plans (feature-plan), for debugging (root-cause-debugging), or for plans without an Execution Order table."
+description: "Use to execute an approved implementation-plan.md — dispatches one implementer subagent per task, parallelizing where the plan allows. Keywords: execute plan, run plan, start implementation. Do NOT use to create plans (feature-plan)."
 ---
 
 # Feature Implement

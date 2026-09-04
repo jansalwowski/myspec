@@ -1,6 +1,6 @@
 ---
 name: doctor
-description: "Use when checking whether the project's myspec and agent setup is healthy, or auditing and optimizing it — CLAUDE.md, .claude/rules, skills, agents, hooks, ${aiDir} docs, memory tree, feature manifest. Takes an optional surface (A–F or its name) to check just one. Keywords: healthcheck, health check, is my setup broken, doctor, audit ai setup, optimize ai workflows, context bloat, token budget, rules drift, stale skills, broken hooks. Do NOT use for application code (code-review), one skill (skill-verify), one feature (feature-verify), manifest-only checks (features-status-audit), or memory grooming (memory-sanitize, memory-optimize)."
+description: "Use to check or optimize the health of the project's myspec setup — CLAUDE.md, rules, skills, hooks, ${aiDir} docs, memory tree, feature manifest. An optional surface (A-F) checks one. Keywords: healthcheck, is my setup broken, context bloat, rules drift."
 tags: [audit, maintenance, hooks, context-budget, drift]
 ---
 
@@ -95,7 +95,7 @@ is left is judgment:
 - Whether each derived pattern survives its config value, beyond the `aiDir` trailing slash tier 0 catches
 
 **F. Features tree + ideas** — `${aiDir}/features/`, `${aiDir}/ideas/` (structural pass, don't deep-read specs):
-- Run the features-status-audit engine first: `node "${CLAUDE_PLUGIN_ROOT}/lib/features-status-audit/audit.mjs"` — it owns manifest ↔ disk drift, orphans, status vocabulary, missing docs
+- Run the feature-status-audit engine first: `node "${CLAUDE_PLUGIN_ROOT}/lib/feature-status-audit/audit.mjs"` — it owns manifest ↔ disk drift, orphans, status vocabulary, missing docs
 - Add only what the script doesn't cover: manifest `note:` fields carrying embedded history (belongs in CHANGELOG.md); largest-file outliers; index freshness (spot-check 3 mapped paths); ideas queue vs shipped reality
 
 ### Phase 2 — Verify and rank
@@ -176,4 +176,4 @@ Additional per-surface checklist items, tagged [A]–[F].
 ## Integration
 
 **Routes to** [OPTIONAL]: `/myspec:skill-verify` — deep audit of a flagged skill. `/myspec:feature-verify` — deep audit of a flagged feature. `/myspec:session-clean` — dangling session files found in surface D. `/myspec:memory-sanitize` — user-level auto-memory findings.
-**See also:** `/myspec:features-status-audit` — surface F runs its engine; invoke it standalone for a manifest-only check. `node .claude/lib/setup-doctor.mjs` — tier 0 standalone; `bootstrap` reports its summary every session and `update` verifies itself with it.
+**See also:** `/myspec:feature-status-audit` — surface F runs its engine; invoke it standalone for a manifest-only check. `node .claude/lib/setup-doctor.mjs` — tier 0 standalone; `bootstrap` reports its summary every session and `update` verifies itself with it.

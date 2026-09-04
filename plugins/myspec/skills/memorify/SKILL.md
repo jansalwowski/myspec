@@ -1,6 +1,6 @@
 ---
 name: "memorify"
-description: "Use when the user asks to scan the current conversation for things worth remembering — phrasings like 'memorify this', 'anything to remember from this?', 'save what we learned'. Yields zero, one, or many memories. Do NOT use when the exact content is already named (memorize), when wrapping a tracked session (session-complete), or for trivial config visible in code."
+description: "Use when the user asks to scan the conversation for what is worth keeping — 'memorify this', 'anything to remember?', 'save what we learned'. Yields zero, one, or many memories. Do NOT use when the content is already named (memorize) or when wrapping a session (session-complete)."
 ---
 
 # Memorify

@@ -1,6 +1,6 @@
 ---
 name: "feature-scenario"
-description: "Use when creating test scenarios for a feature. Generates Gherkin-format scenarios.md with happy paths, edge cases, error states. Requires spec.md. Do NOT use for unit tests."
+description: "Use to create Gherkin test scenarios for a feature. Generates scenarios.md with happy paths, edge cases and error states. Requires spec.md. Do NOT use for unit tests."
 tags: [testing, scenarios, gherkin, specification]
 ---
 

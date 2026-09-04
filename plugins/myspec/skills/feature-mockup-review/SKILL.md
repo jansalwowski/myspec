@@ -1,6 +1,6 @@
 ---
 name: "feature-mockup-review"
-description: "Use when reviewing mockups in ${aiDir}/features/{feature}/mockups/ for UX issues, scope creep, loose ends (dead buttons/links), missing states, production-flow fidelity, accessibility, or hard-guard violations. Keywords: review mockup, critique mockup, mockup ux check, mockup audit, mockup loose ends. Do NOT use for spec.md (use feature-spec-review), tech-spec.md (use feature-tech-spec-review), production code (use code-review), or creating mockup files (use feature-mockup)."
+description: "Use to critique mockups in ${aiDir}/features/{feature}/mockups/ — UX issues, scope creep, dead buttons, missing states, accessibility, hard-guard violations. Keywords: review mockup, mockup audit, loose ends. Do NOT use to build mockups (feature-mockup)."
 tags: [feature-workflow, mockup, validation, ux, review, critical-thinking]
 ---
 
