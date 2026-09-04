@@ -65,17 +65,20 @@ const {join,dirname}=require("path");
 const plugin=process.argv[1], root=process.argv[2], aiDir="ai";
 const m=JSON.parse(readFileSync(join(plugin,"framework-files","manifest.json"),"utf8"));
 const V=m.frameworkVersion;
-// init and update replace ${aiDir} in what they copy. Copying verbatim here
-// would compare plugin bytes against plugin bytes and could never catch a
-// drift check that forgot the substitution — which is exactly what it missed.
+// init and update substitute ${aiDir} into the DOCUMENTS they copy, so copying
+// those verbatim would compare plugin bytes against plugin bytes and could
+// never catch a drift check that forgot the substitution. Hooks and lib are the
+// opposite: ${aiDir} there is live shell/JS syntax, so a faithful install copies
+// them byte-for-byte (issue #74).
 const put=(src,dest)=>{mkdirSync(join(root,dirname(dest)),{recursive:true});writeFileSync(join(root,dest),readFileSync(src,"utf8").split("${aiDir}").join(aiDir));return dest;};
+const putRaw=(src,dest)=>{mkdirSync(join(root,dirname(dest)),{recursive:true});copyFileSync(src,join(root,dest));return dest;};
 for(const k of Object.keys(m.files)){
   const dest = k.startsWith("templates/") ? aiDir+"/.templates/"+k.slice(10) : aiDir+"/"+k;
   put(join(plugin,"framework-files",k),dest);
 }
 for(const [k,e] of Object.entries(m.rules)){ put(join(plugin,"framework-files","rules",k),e.dest); }
-for(const [k,e] of Object.entries(m.hooks)){ chmodSync(join(root,put(join(plugin,"hooks",k),e.dest)),0o755); }
-for(const [k,e] of Object.entries(m.lib)){ chmodSync(join(root,put(join(plugin,"lib",k),e.dest)),0o755); }
+for(const [k,e] of Object.entries(m.hooks)){ chmodSync(join(root,putRaw(join(plugin,"hooks",k),e.dest)),0o755); }
+for(const [k,e] of Object.entries(m.lib)){ chmodSync(join(root,putRaw(join(plugin,"lib",k),e.dest)),0o755); }
 writeFileSync(join(root,".myspec.json"),JSON.stringify({aiDir,frameworkVersion:V,project:{name:"fixture"},migrations:m.migrations||[]},null,2)+"\n");
 copyFileSync(join(plugin,"templates","settings-hooks.json"),join(root,".claude","settings.json"));
 copyFileSync(join(plugin,"templates","verification.json"),join(root,".claude","verification.json"));
@@ -266,6 +269,33 @@ build_fixture
 set_json .myspec.json 'delete d.migrations'
 run_doctor schema
 expect_line 'WARN +myspec-schema-stale: .myspec.json has no migrations list' "a missing migrations list means the 2.0 migrations have not run"
+
+# --- pass 2b: ${aiDir} substituted into code is drift, not installation --------
+# hooks/ and lib/ resolve aiDir at runtime and carry ${aiDir} as live shell and
+# JS template-literal syntax. init/update must copy them byte-for-byte; a copy
+# with the value baked in is corrupt, and matchesShipped used to accept it — so
+# the corruption was invisible and survived every later update (issue #74).
+
+build_fixture
+node -e '
+const {readFileSync,writeFileSync}=require("fs");const {join}=require("path");
+const root=process.argv[1];
+for (const f of [".claude/lib/setup-doctor.mjs",".claude/hooks/validate-frontmatter.sh"]) {
+  const p=join(root,f);
+  writeFileSync(p, readFileSync(p,"utf8").split("${aiDir}").join("ai"));
+}
+' "$REPO"
+run_doctor install
+
+expect_line 'shipped-drift: .claude/lib/setup-doctor.mjs' "a lib helper with the aiDir value baked in is drift"
+expect_line 'shipped-drift: .claude/hooks/validate-frontmatter.sh' "a hook with the aiDir value baked in is drift"
+
+# Documents are the opposite case: both spellings are a correct install, because
+# init and update disagree about which of them substitutes the rules.
+build_fixture
+cp "$PLUGIN/framework-files/rules/paths.md" "$REPO/.claude/rules/paths.md"
+run_doctor install
+expect_no_line 'framework-drift: .claude/rules/paths.md' "a rule holding the literal placeholder is not drift"
 
 # --- pass 3a: pins are honoured for every manifest block -----------------------
 # update looks a pin up by its manifest key — `rules/workflow.md`,

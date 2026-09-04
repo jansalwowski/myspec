@@ -115,7 +115,7 @@ Also create these framework files in `${aiDir}/`:
 - `anti-patterns.md` ← copy from `framework-files/anti-patterns.md`
 - `pre-flight.md` ← copy from `framework-files/pre-flight.md`
 
-Replace `${aiDir}` placeholders in all copied files with the configured value.
+Replace `${aiDir}` placeholders with the configured value in the **documents** copied above — the `${aiDir}/` tree and `.claude/rules/`. **Never in `.claude/hooks/` or `.claude/lib/`:** those resolve `aiDir` at runtime and carry `${aiDir}` as live shell and JS template-literal syntax, so substituting there freezes their paths to this project's value and breaks any helper that takes `aiDir` as an argument. Copy them byte-for-byte.
 
 ### Step 4.5: Announce `${aiDir}` binding to project context
 
