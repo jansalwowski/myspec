@@ -1,10 +1,10 @@
 ---
 name: feature-status-audit
-description: "Use to audit the whole feature manifest at once against on-disk docs. Keywords: manifest drift, index.yaml audit, orphan features, docs ahead of status, feature inventory. Do NOT use for one feature's deep audit (feature-verify)."
+description: "Use when the whole feature manifest needs auditing against on-disk docs. Keywords: manifest drift, index.yaml audit, orphan features, docs ahead of status, feature inventory. Do NOT use for one feature's deep audit (feature-verify)."
 allowed-tools: [Bash, Read]
 ---
 
-# Features Status Audit
+# Feature Status Audit
 
 Batch cross-check of `${aiDir}/features/index.yaml` (and per-feature sub-indexes) against actual documentation files on disk. Complements `/myspec:feature-verify` — this skill scans **all** features in seconds; `/myspec:feature-verify` does a deep 8-category audit on **one** feature.
 

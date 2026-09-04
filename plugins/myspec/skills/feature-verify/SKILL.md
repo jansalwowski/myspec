@@ -1,6 +1,6 @@
 ---
 name: feature-verify
-description: "Use to audit one feature's health — spec, tech-spec, plan, implementation, sub-features, memories, manifest sync. Keywords: feature health, verify feature, feature drift. Do NOT use to audit every feature (feature-status-audit)."
+description: "Use when one feature's health needs auditing — spec, tech-spec, plan, implementation, sub-features, memories, manifest sync. Keywords: feature health, verify feature, feature drift. Do NOT use to audit every feature (feature-status-audit)."
 allowed-tools: [Read, Grep, Glob]
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: "memory-create"
-description: "Use as the shared memory write path — called by session-complete, memorize and memorify, or directly for a user-approved insight. Handles procedural, semantic and episodic types with a consolidation check. Do NOT use for user-facing capture (memorize, memorify) or without approval."
+description: "Use when an approved insight needs writing to memory — the shared path called by session-complete, memorize and memorify. Handles procedural, semantic and episodic types with a consolidation check. Do NOT use for user-facing capture (memorize, memorify) or without approval."
 ---
 
 # Memory Create

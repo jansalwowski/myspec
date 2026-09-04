@@ -1,6 +1,6 @@
 ---
 name: feature-spec-review
-description: "Use to review a spec.md before tech design — completeness, consistency, testability, scope, dependency hygiene. Keywords: review spec, critique requirements, validate spec. Do NOT use for tech-spec.md (feature-tech-spec-review)."
+description: "Use when a spec.md needs review before tech design — completeness, consistency, testability, scope, dependency hygiene. Keywords: review spec, critique requirements, validate spec. Do NOT use for tech-spec.md (feature-tech-spec-review)."
 tags: [feature, specification, validation, critical-thinking]
 ---
 
