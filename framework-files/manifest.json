@@ -1,5 +1,5 @@
 {
-  "frameworkVersion": "1.28.0",
+  "frameworkVersion": "2.0.0",
   "migrations": [
     "2.0.0-schema",
     "2.0.0-doctor-rule",
