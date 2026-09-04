@@ -1,6 +1,6 @@
 ---
 name: "memory-preflight"
-description: "Use when starting implementation work, before writing code, to surface relevant past memories. Keywords: preflight, memory check, pre-work scan, load memory, memory pre-flight. Do NOT use for research-only tasks, documentation updates, or answering questions."
+description: "Use before writing code, to surface relevant past memories. Keywords: preflight, memory check, pre-work scan, load memory. Do NOT use for research-only tasks, doc updates, or answering questions."
 allowed-tools: [Read, Grep, Glob, Bash]
 ---
 

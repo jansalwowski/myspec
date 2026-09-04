@@ -1,6 +1,6 @@
 ---
 name: "idea-process"
-description: "Use when converting, promoting, or graduating an approved idea to feature documentation. Creates spec.md, dependencies.md, scenarios.md, seed.json in ${aiDir}/features/. Requires idea listed in PRIORITY-LISTING.md with satisfied dependencies. Do NOT use for idea intake or existing feature modifications."
+description: "Use to graduate an approved idea into feature documentation in ${aiDir}/features/. Requires the idea listed in PRIORITY-LISTING.md with dependencies satisfied. Keywords: promote idea, graduate idea, convert idea. Do NOT use for triage (idea-intake)."
 tags: [ideas, feature, specification, processing]
 ---
 

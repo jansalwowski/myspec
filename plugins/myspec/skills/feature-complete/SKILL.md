@@ -1,11 +1,6 @@
 ---
 name: "feature-complete"
-description: >
-  Use when feature implementation is complete and all plan tasks are checked off
-  (or remaining tasks are explicitly deferred with user sign-off).
-  Keywords: feature done, complete feature, finish feature, update feature status,
-  implementation merged, archive plan, branch merge, finish PR.
-  Do NOT use mid-implementation.
+description: "Use when implementation is done and every plan task is checked off or explicitly deferred. Keywords: feature done, finish feature, archive plan, merge branch, finish PR. Do NOT use mid-implementation."
 tags: [feature, documentation, completion, workflow, branch, merge, pr]
 ---
 

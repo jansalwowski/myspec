@@ -41,7 +41,7 @@ Two status vocabularies exist; do not mix them.
 - **Doc status** (`status:` in spec.md / tech-spec.md frontmatter): `draft | approved | deprecated`. The review skills flip `draft → approved` on pass (no Critical/High findings) with user confirmation; `feature-update` flips `approved → draft`; deprecation is manual or via `cross-spec-validation`.
 - **Manifest status** (per-feature `status:` in `${aiDir}/features/index.yaml` — the single source of truth for progress): `planned | draft | in-progress | complete | deprecated`. `feature-spec` and `idea-process` create `draft`; `feature-implement` flips `draft → in-progress` at execution start; `feature-complete` flips `in-progress → complete` only when the plan's checkboxes are all `[x]` or remaining tasks are explicitly deferred; `planned` and `deprecated` are set by hand.
 
-Completion percentage comes from **implementation-plan.md checkboxes** whenever a plan exists (tech-spec checkboxes are a fallback when no plan exists; code inspection never is). Per-status doc expectations are codified in `/myspec:features-status-audit` — treat its matrix as authoritative.
+Completion percentage comes from **implementation-plan.md checkboxes** whenever a plan exists (tech-spec checkboxes are a fallback when no plan exists; code inspection never is). Per-status doc expectations are codified in `/myspec:feature-status-audit` — treat its matrix as authoritative.
 
 ## Sub-Feature Convention
 

@@ -1,12 +1,6 @@
 ---
 name: "session-complete"
-description: >
-  Use when a tracked work session is finished and ready to be archived.
-  Keywords: end session, finish session, wrap up, close session, session
-  done, archive session, extract memories. Pairs with the mark-code-changed.sh
-  hook that auto-creates active session files on first code edit. Do NOT use
-  mid-implementation, for abandoned sessions, or for quick fixes that left no
-  active session file.
+description: "Use when a tracked session is finished and ready to archive. Keywords: end session, wrap up, close session, archive session, extract memories. Archives your own session only. Do NOT use mid-implementation or on another agent's file (session-clean)."
 ---
 
 # Session Complete

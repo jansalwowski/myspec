@@ -1,6 +1,6 @@
 ---
 name: "memory-sanitize"
-description: "Use when grooming the user-level auto-memory store at ~/.claude-personal/projects/ — stale entries, bloated bodies, duplicates, contradictions, or memories that belong in CLAUDE.md/rules instead. Keywords: sanitize memory, prune memories, compress memory, memory triage, memory groom. Do NOT use for project ${aiDir}/memory/ (use memory-optimize), or for searching memories (use memory-lookup)."
+description: "Use to groom the user-level auto-memory store at ~/.claude-personal/projects/ — stale entries, bloated bodies, duplicates, contradictions. Keywords: prune memories, compress memory, memory triage. Do NOT use for the project store (memory-optimize)."
 ---
 
 # Memory Sanitize

@@ -1,6 +1,6 @@
 ---
 name: feature-tech-spec-review
-description: "Use when reviewing tech-spec.md for implementability, spec alignment, and pattern conformance before planning. Keywords: review tech-spec, validate technical design, critique tech-spec, technical review. Do NOT use for spec.md review (feature-spec-review), implementation review (feature-implement-review), or code review (code-review)."
+description: "Use to review tech-spec.md for implementability, spec alignment, and pattern conformance before planning. Keywords: validate technical design, critique tech-spec. Do NOT use for spec.md (feature-spec-review) or code (code-review)."
 tags: [feature, tech-spec, validation, critical-thinking, review]
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: "session-start"
-description: "Use when starting a NON-CODE session (debugging without edits, discovery, doc-only work) — code-editing sessions get their log auto-created by the mark-code-changed.sh hook on first edit. Keywords: begin session, new session, start tracking, debugging session. Do NOT use for code-editing work (auto-handled), quick fixes, or one-shot questions."
+description: "Use when starting a NON-CODE session (debugging without edits, discovery, doc-only work) — code sessions get their log from the mark-code-changed.sh hook on first edit. Keywords: begin session, start tracking. Do NOT use for code-editing work."
 ---
 
 # Session Start

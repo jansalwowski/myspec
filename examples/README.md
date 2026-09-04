@@ -112,9 +112,9 @@ Skills not yet covered by per-skill examples:
 - **Spec quality** — `feature-spec-review`, `feature-tech-spec-review` (mostly gating; visible in flows)
 - **Drift fixers** — `feature-spec-sync`, `feature-spec-cleanup` (covered in [flows/spec-drift-recovery.md](flows/spec-drift-recovery.md))
 - **Auxiliary** — `feature-scenario`, `feature-seed-data`
-- **Batch audits** — `features-status-audit`
+- **Batch audits** — `feature-status-audit`
 - **Project setup** — `init`, `update`, `setup`
 - **Memory + sessions** — `memory-preflight`, `memory-create`, `session-start`
-- **Utilities** — `skill-verify`, `worktree-cleanup`, `docs-sanitize`, `upstream-sync`
+- **Utilities** — `skill-verify`, `worktree-clean`, `upstream-sync`
 
 If you'd find walk-throughs useful for any of these in isolation, open an issue or send a PR — examples are easy to add: each skill gets one file in `skills/{skill-name}.md` with H2 sections per scenario.

@@ -1,12 +1,6 @@
 ---
 name: "feature-update"
-description: >
-  Use when an already-implemented feature needs new or changed requirements — edits
-  the existing spec.md and tech-spec.md in place rather than recreating them.
-  Keywords: modify feature, update feature, change feature, extend feature, add to feature,
-  refine feature, spec_version bump.
-  Do NOT use for new features (feature-spec), for first-time implementation
-  (feature-tech-spec), or for bug fixes that don't change requirements.
+description: "Use when an already-implemented feature needs changed requirements — edits spec.md and tech-spec.md in place instead of recreating them. Keywords: modify feature, change feature, extend feature, spec_version bump. Do NOT use for new features (feature-spec)."
 tags: [feature, specification, modification, workflow]
 ---
 

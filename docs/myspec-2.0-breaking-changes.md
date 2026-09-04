@@ -164,17 +164,20 @@ Ordered by dependency, not by pain. Change 1 is the foundation every later migra
 - `features-status-audit` is the only plural skill; `memory-sanitize` (user-level store) and `memory-optimize` (project store) do not say which store they groom; `session-clean` sits beside `worktree-cleanup`.
 - Consumers add their own skills on top (crm-front-app has five), so every framework description competes with project descriptions for the same budget.
 
-**Design.**
-- `memory` — one skill, argument-routed: `/myspec:memory save|scan|lookup|preflight|optimize|sanitize`. Body is the current `memory-create` write path; the others become `references/` loaded on the matching argument.
-- `session` — `start|complete|clean`. `idea` — `intake|process`.
-- `feature` family stays split (each is a pipeline stage with its own gates), but `feature-mockup-review` folds into `feature-mockup` as a review mode, and `feature-scenario` + `feature-seed-data` fold into `feature-spec` as optional steps where `idea-process` already puts them.
-- `docs-sanitize` retires. `features-status-audit` → `feature-status-audit`. `worktree-cleanup` → `worktree-clean`.
-- Risk to test before committing: auto-invocation keys off the description, so one `memory` skill must carry every trigger set the six descriptions carried, within the 500-character rule.
-- Target: ≤30 skills, descriptions ≤350 chars each, total under 7k chars.
+**Design (revised 2026-09-04 — the collapse was built, then dropped).**
+- Descriptions are rewritten, not truncated: each keeps its trigger condition, drops keywords derivable from the skill's own name, and keeps only the one "Do NOT" naming a genuinely confusable neighbour. **43 skills, 9,548 chars, none over 350.**
+- `docs-sanitize` retires. `features-status-audit` → `feature-status-audit` (the only plural name; `lib/` dir renames with it). `worktree-cleanup` → `worktree-clean`.
+- **The argument-routed collapse is NOT adopted.** It was implemented in full — `memory save|scan|lookup|preflight|optimize|sanitize`, `session start|complete|clean`, `idea intake|process`, plus folding `feature-mockup-review` into a `--review` mode and `feature-scenario` + `feature-seed-data` into `feature-spec` — reaching 31 skills and 6,826 chars, and then reverted.
 
-**Migration.** Plugins have no alias or redirect mechanism; an old name simply fails. Keep a stub `SKILL.md` per retired name for one minor cycle whose body says "renamed to /myspec:memory save" and stops. Consumer CLAUDE.md blueprints (`blueprints/claude-md.md`, `index-md.md`), `rules/workflow.md`, README, and every `Integration` section update.
+**Why the collapse was reverted.** It removed 13 entry points from slash-command autocomplete (memory −6, session −2, idea −1, mockup-review −1, scenario + seed-data −2, docs-sanitize −1). Autocomplete completes *skill names*; an argument is free text it cannot see, and skill frontmatter has no `argument-hint` — that is a custom-slash-command feature, not a skill one. So `/myspec:memo…` stopped offering seven completions and offered one, with the six modes discoverable only by reading the router's Modes table. The maintainer uses that completion heavily. The diet alone captures −36% (14,965 → 9,548); the collapse would have added a further ~2,600 chars of saving, about 650 tokens a session. That was judged the wrong trade against daily discoverability.
 
-**Why major.** Skill names are removed, which RELEASING.md defines as major.
+Two secondary costs the collapse also carried, both avoided by the revert: `memory-lookup` and `memory-preflight` are `allowed-tools: [Read, Grep, Glob]`, read-only by construction, and a merged skill that also writes cannot be — the restriction would have degraded to prose. And the retirement stubs are live skills for one minor cycle, so the surface would have been 49 files and 7,905 chars until they were removed.
+
+- Original target was ≤30 skills, ≤350 chars each, under 7k total. **≤350 each is met; the count and total targets are deliberately missed** — they were only reachable by collapsing entry points.
+
+**Migration.** Plugins have no alias or redirect mechanism; an old name simply fails. Three stubs — `features-status-audit`, `worktree-cleanup`, `docs-sanitize` — each name their replacement and stop; removed one minor cycle after 2.0. `rules/workflow.md`, README, `examples/`, and the affected `Integration` sections update with the renames.
+
+**Why major.** Skill names are removed and renamed, which RELEASING.md defines as major.
 
 ## Non-breaking changes worth riding along
 
@@ -207,5 +210,5 @@ All four decided 2026-09-03: the recommendation column is the decision. Change 1
 2. Change 2 (sessions) and change 3 (isolation) together — they share `.claude/state/`.
 3. Change 4 (rules) and change 5 (unread files) — both shrink what `init` writes; needs the pin reconciliation from step 1.
 4. Change 6 (retire orchestrator) — deletion, plus the no-shell clause added to `implementer-prompt.md`, once D4 is settled.
-5. Change 7 (skill collapse and renames) — last, because it renames the entry points every earlier step documents.
+5. Change 7 (description diet and renames) — last, because it renames the entry points every earlier step documents.
 6. Non-breaking items fold into whichever step touches the same skill.

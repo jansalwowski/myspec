@@ -1,6 +1,6 @@
 ---
 name: "feature-spec-cleanup"
-description: "Use when a spec.md has leaked implementation details (SQL, language code blocks, ORM patterns, database indexes, source file paths) that belong in tech-spec.md. Keywords: spec cleanup, separate business from technical, move code out of spec, spec hygiene. Do NOT use for creating new specs."
+description: "Use when a spec.md has leaked implementation detail — SQL, code blocks, ORM patterns, indexes, file paths — that belongs in tech-spec.md. Keywords: spec cleanup, move code out of spec, spec hygiene. Do NOT use to create specs."
 tags: [documentation, cleanup, maintenance, spec]
 ---
 
