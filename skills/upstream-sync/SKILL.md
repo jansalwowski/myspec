@@ -1,6 +1,6 @@
 ---
 name: "upstream-sync"
-description: "Use to check whether tracked upstream repos have changes worth porting into local skills. Surfaces a per-mapping diff and commit history for the pairs in upstream-sources.yml. Do NOT use for dependency bumps."
+description: "Use when tracked upstream repos should be checked for changes worth porting into local skills. Surfaces a per-mapping diff and commit history for the pairs in upstream-sources.yml. Do NOT use for dependency bumps."
 ---
 
 # Upstream Sync

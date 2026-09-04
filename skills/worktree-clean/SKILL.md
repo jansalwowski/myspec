@@ -1,13 +1,13 @@
 ---
 name: worktree-clean
-description: "Use to clean up stale git worktrees and orphaned branches. Keywords: prune worktrees, stale branches, git cleanup, squash-merged branch won't delete."
+description: "Use when stale git worktrees and the branches behind them need cleaning up. Keywords: prune worktrees, stale branches, git cleanup, squash-merged branch won't delete. Do NOT use to create branches or worktrees."
 ---
 
-# Worktree Cleanup
+# Worktree Clean
 
 Audit and clean up git worktrees and the branches behind them.
 
-**Announce at start:** "Running worktree cleanup audit."
+**Announce at start:** "Running worktree clean audit."
 
 ## Why this delegates to a script
 

@@ -1,11 +1,11 @@
 ---
 name: session-clean
-description: "Use to sweep dangling session files in .claude/state/sessions/ that belong to nobody still working. Keywords: session cleanup, dangling sessions, session sweep, orphaned archives. Do NOT use on your own session (session-complete) or for worktrees (worktree-clean)."
+description: "Use when dangling session files need sweeping — live logs in .claude/state/sessions/ belonging to nobody still working, plus orphaned untracked files in ${aiDir}/memory/sessions/archive/. Keywords: session cleanup, session sweep, orphaned archives. Do NOT use on your own session (session-complete)."
 ---
 
 # Session Clean
 
-Sweep abandoned session files in `.claude/state/sessions/` (live logs — gitignored, primary checkout), plus orphaned (untracked) files in `${aiDir}/memory/sessions/archive/`. Empty / no-value sessions are deleted; substantive active sessions are archived; substantive archived sessions are left alone.
+Sweep abandoned session files in `.claude/state/sessions/` (live logs — gitignored, primary checkout), plus orphaned (untracked) files in `${aiDir}/memory/sessions/archive/`. Empty / no-value sessions are deleted; substantive active sessions are archived; substantive live logs whose `status:` is already terminal are archived as-is (finished but never moved); substantive archived sessions are left alone.
 
 **Announce at start:** "Running session cleanup audit."
 
@@ -43,7 +43,7 @@ A file is **safe to act on** only if ALL hold:
 
 - `mtime` is more than 6 hours ago (`date +%s` minus file mtime > 21600) — the 1–6h band is ambiguous, below
 - `worktree:` from frontmatter does **not** match a **non-main entry** of `git worktree list --porcelain` (compare `worktree:` against entry basenames; the main checkout is always listed but considered shared — for sessions without a worktree marker, use mtime alone). Field missing also passes.
-- For live logs: `status:` is `active` (defensive: skip anything else). For untracked files in `archive/`: `status:` is a terminal status (`completed` | `abandoned`) or missing; `status: active` inside `archive/` is anomalous, route to ambiguous.
+- For live logs: `status:` is `active`, or a terminal status (`completed` | `abandoned`) — a terminal live log is finished but was never moved, and is misplaced rather than dangling (defensive: skip any other value). For untracked files in `archive/`: `status:` is a terminal status or missing; `status: active` inside `archive/` is anomalous, route to ambiguous.
 
 If `mtime` is 1–6h old OR the worktree marker matches a live worktree but no commits in last 1h → **ambiguous**.
 
@@ -51,8 +51,9 @@ If `mtime` is 1–6h old OR the worktree marker matches a live worktree but no c
 
 | Location | Classification | Liveness | Action |
 |---|---|---|---|
-| `active/` | Empty / no value | safe | DELETE (`rm`) |
-| `active/` | Substantive | safe | ARCHIVE (`mv` to `archive/YYYY-MM-DD-{slug}.md`, set `status: abandoned` in frontmatter; the archive is committed content, so `git add` it and tell the user) |
+| `active/` | Empty / no value (any `status:`) | safe | DELETE (`rm`) |
+| `active/` | Substantive, `status: active` | safe | ARCHIVE (`mv` to `archive/YYYY-MM-DD-{slug}.md`, set `status: abandoned` in frontmatter; the archive is committed content, so `git add` it and tell the user) |
+| `active/` | Substantive, `status:` already terminal | safe | ARCHIVE (misplaced, not dangling — `mv` to `archive/YYYY-MM-DD-{slug}.md` and `git add`; keep the existing `status:`) |
 | `active/` | Empty or Substantive | ambiguous | ASK per file |
 | `archive/` (untracked, orphaned) | Empty / no value | safe | ASK per file — recommend DELETE (`rm`); orphan with no value and no git history to preserve |
 | `archive/` (untracked, orphaned) | Substantive | safe | SKIP — already in archive, content has value, leave for the user to commit |
@@ -88,6 +89,7 @@ Ask: "Proceed? (yes / no / selective)"
 For ambiguous rows, ask per file: `delete / archive / skip`.
 For orphaned `archive/` rows marked ASK→DELETE, ask per file: `delete / skip`.
 
+For ARCHIVE of a live log whose `status:` is already terminal: leave `status:` alone (it finished properly; only its location is wrong), then `mv` and `git add` as below.
 For ARCHIVE: edit frontmatter `status: active` → `status: abandoned` (the session was swept, not completed — `/myspec:session-complete` owns `completed`), then `mv` to `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md` and `git add` it. Slug: kebab-case of `topic`; if topic is empty or still `auto:*`, use `orphaned-{first 8 of session_id}`. Date: from `started:` if parseable, else today.
 For DELETE of a live log: `rm`.
 For DELETE in `archive/` (orphan): `rm` only — never run `git rm` here (in-scope archive files are always untracked by construction).
@@ -105,6 +107,7 @@ Print one-line summary on completion.
 - [ ] User confirmed before any delete/archive
 - [ ] Orphaned archive deletes confirmed per file
 - [ ] Substantive active sessions archived to `archive/YYYY-MM-DD-{slug}.md` with `status: abandoned` set in frontmatter
+- [ ] Substantive terminal-status live logs archived with their existing `status:` preserved
 - [ ] Empty live logs removed (`rm`)
 - [ ] Empty orphaned archive sessions removed (`rm` only)
 - [ ] No tracked file under `archive/` was touched

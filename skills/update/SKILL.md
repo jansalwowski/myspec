@@ -1,6 +1,6 @@
 ---
 name: "update"
-description: "Use to refresh myspec framework files in an existing project after the plugin updated. Keywords: upgrade framework, sync framework files. Do NOT use for first-time setup (init)."
+description: "Use when an existing project's myspec framework files need refreshing after the plugin updated. Keywords: upgrade framework, sync framework files. Do NOT use for first-time setup (init)."
 ---
 
 # Update

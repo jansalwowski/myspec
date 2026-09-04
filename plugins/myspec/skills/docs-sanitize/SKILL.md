@@ -1,14 +1,31 @@
 ---
 name: docs-sanitize
-description: "Retired in 2.0, not replaced. Do NOT auto-invoke."
+description: "Retired in myspec 2.0, not replaced."
+disable-model-invocation: true
+allowed-tools: [Read]
 ---
 
 # docs-sanitize (retired)
 
 This skill was retired in myspec 2.0 with no direct replacement.
 
-Where its work went: its jobs are `/myspec:doctor` surface C (naming, dead references) and `/myspec:session-clean` (misplaced session files).
+## Workflow
 
-**Do nothing else.** Tell the user that and stop.
+1. Tell the user this skill is retired and where its three jobs went:
+   - naming-convention violations under `${aiDir}` → `/myspec:doctor` surface C
+   - misplaced session files → `/myspec:session-clean`
+   - references to renamed or moved files → `/myspec:doctor` surface C
+2. Stop.
 
-This stub is removed one minor cycle after 2.0.
+## Rules
+
+- Do nothing else. Do not run the old procedure from memory.
+- Do not invoke a replacement on the user's behalf — name it and let them choose.
+- `disable-model-invocation: true` keeps this out of the always-loaded description budget; it stays reachable as a slash command.
+- Remove this stub one minor cycle after 2.0.
+
+## Verification Checklist
+
+- [ ] Told the user the skill is retired
+- [ ] Named where each of the three jobs went
+- [ ] Ran no audit, edit, or move

@@ -1,6 +1,6 @@
 ---
 name: doctor
-description: "Use to check or optimize the health of the project's myspec setup — CLAUDE.md, rules, skills, hooks, ${aiDir} docs, memory tree, feature manifest. An optional surface (A-F) checks one. Keywords: healthcheck, is my setup broken, context bloat, rules drift."
+description: "Use when the project's myspec setup needs a health check — CLAUDE.md, rules, skills, agents, hooks, ${aiDir} docs, memory tree, feature manifest. An optional surface (A-F) checks one. Keywords: healthcheck, setup broken, context bloat, rules drift. Do NOT use for project code (code-review), one skill (skill-verify), or one feature (feature-verify)."
 tags: [audit, maintenance, hooks, context-budget, drift]
 ---
 
@@ -83,6 +83,7 @@ is left is judgment:
 **C. `${aiDir}` core docs** — everything under `${aiDir}/` outside `features/`, `memory/`, `ideas/` (README, INDEX, pre-flight, conventions/, backbone, key components):
 - Spot-check 3–5 load-bearing claims per doc against code: lint flags, ports, directory locations, "not implemented" / "do not do X" claims, architecture framing
 - Dead links; docs for tools that left the repo; index files whose `updated:` predates the content they index; advertised-but-empty directories
+- Naming: `.md` files under `${aiDir}` in SCREAMING_CASE or PascalCase, `README.md` and `INDEX.md` excepted — `find "${aiDir}" -name '*.md' | grep -E '/[A-Z][^/]*\.md$' | grep -vE '/(README|INDEX)\.md$'`. The fix is `git mv` to kebab-case plus every inbound reference (this is the retired `docs-sanitize`'s naming job)
 - Duplication clusters — if a fact is stated in 3+ docs, give it one home + cross-refs
 
 **D. Memory tree** — `${aiDir}/memory/` against `.claude/rules/memory-system.md` (triggers, session lifecycle, layer budgets, 30-day consolidation) and `.claude/rules/auto-memory-style.md`:
