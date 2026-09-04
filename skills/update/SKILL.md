@@ -209,6 +209,23 @@ Setup:  {clean / N error(s), M warning(s) — see above / skipped — node not f
 Next: Run the `bootstrap` skill to verify the setup is still correct.
 ```
 
+**2.0 advisory (print only when a `2.0.0-*` migration ran in this session).** The
+mechanical work is done; what remains lives in files this skill is forbidden to
+touch. Append:
+
+```
+2.0 changed things update cannot fix for you:
+  - references to `{aiDir}/memory/sessions/active/` in your own hooks and docs
+  - references to the renamed skills: features-status-audit, worktree-cleanup,
+    docs-sanitize
+  - plans written under 1.x: implementers no longer run tests, so any
+    "Run test — expect FAIL" step now has no owner
+  Full list, with the greps: docs/upgrading-to-2.0.md in the plugin.
+```
+
+Print it once, after the summary, and do not act on any of it — each item is a
+judgment call in a file the project owns.
+
 **Generated-config advisory (print only when `.myspec.json` has a `mockups` block):** blueprint-generated files are project-owned and never auto-updated. Read `{aiDir}/conventions/mockup-design.md` frontmatter `myspec_version` (treat a missing key as "unstamped") and append to the summary:
 
 ```
@@ -252,3 +269,4 @@ After running the skill:
 - [ ] No file outside `manifest.json` was modified, except `settings.json` `hooks` and the doctor-rule rename
 - [ ] Summary printed with `Updated files`, `Migrations`, `Removed`, `Preserved`, `Hooks`, `Lib`, and `Hook wiring` lines
 - [ ] Generated-config advisory printed when a `mockups` block exists (`mockup-design.md` read, never modified)
+- [ ] 2.0 advisory printed when a `2.0.0-*` migration ran this session, pointing at `docs/upgrading-to-2.0.md`; nothing it names was acted on
