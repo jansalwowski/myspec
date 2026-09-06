@@ -460,7 +460,10 @@ export function memoryFilesInRefs(root, aiDir) {
   const dirs = TYPES.map((type) => `${aiDir}/memory/${type.dir}`);
 
   byTip.forEach((refnames, sha) => {
-    let listing = '';
+    // Bare, like `refs` above: the catch returns, so nothing reads it before
+    // the assignment. An initializer here is dead weight a consumer's lint gate
+    // flags inside a file it can only silence by pinning.
+    let listing;
 
     try {
       listing = execFileSync('git', ['ls-tree', '-r', '--name-only', sha, '--', ...dirs], {
