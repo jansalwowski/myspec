@@ -168,6 +168,14 @@ root_config:
   # eslint: eslint.config.js
   # prettier: .prettierrc
   # typescript: tsconfig.json
+
+# ── AUDIT ────────────────────────────────────────────────────────────────────
+
+# Read by /myspec:backbone-sync. Anything left out of this file on purpose goes
+# in `ignore:` — otherwise every audit re-reports it and the audit gets muted.
+audit:
+  ignore: []
+  stale_days: 365
 ```
 
 ### Single-app template
@@ -178,7 +186,24 @@ Same as monorepo but without the `packages` section, no `relationships` section,
 
 Write to project root as `{filename from Q7}` (default: `backbone.yml`).
 
-After writing the file, update `.myspec.json` by adding:
-```json
-"topologyFile": "{filename}"
-```
+## Post-generation
+
+The `setup` skill runs this section after writing the file. (The heading name is the
+contract — `skills/setup/SKILL.md` looks for "Post-generation" exactly.)
+
+1. Add the filename to `.myspec.json`:
+   ```json
+   "topologyFile": "{filename}"
+   ```
+2. Run the audit once, to confirm what was just written matches reality. A fresh
+   interview is the easiest time these answers will ever be to correct:
+   ```bash
+   node "${CLAUDE_PLUGIN_ROOT}/lib/backbone-audit/audit.mjs"
+   ```
+   Leave a `# TODO:` marker on any value still unverified — the audit treats a
+   TODO-marked value as "not filled in yet" and skips it, rather than reporting it
+   as drift. Fix everything else it reports before finishing.
+3. Tell the user in one line that `/myspec:backbone-sync` re-runs this audit later
+   and fixes what drifted — `bootstrap` reads this file every session and
+   `feature-tech-spec` enumerates `packages:` from it for the reuse audit, so a unit
+   missing here gets reimplemented rather than reused.

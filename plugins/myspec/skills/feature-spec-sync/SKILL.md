@@ -1,6 +1,6 @@
 ---
 name: "feature-spec-sync"
-description: "Use when docs have drifted from code — after refactoring, or before completing a feature. Handles spec.md and tech-spec.md drift, stale paths, version mismatches."
+description: "Use when feature docs have drifted from code — after refactoring, or before completing a feature. Handles spec.md and tech-spec.md drift, stale paths, version mismatches. Do NOT use for the project topology file (backbone-sync) or the feature manifest (feature-status-audit)."
 tags: [documentation, maintenance, verification, sync]
 ---
 

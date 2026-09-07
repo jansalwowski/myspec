@@ -73,6 +73,8 @@ The standard path: implementation finished, verify is green, the user runs compl
 
 8. **Cross-reference check**: `dependencies.md` has no upstream dependencies, no downstream features yet. Nothing to update.
 
+9. **Topology check**: skipped — the feature added no workspace member, package or top-level command, so the topology file cannot have gone stale from it.
+
 The skill reports:
 
 > Phase 1 complete. Documentation synced. Plan archived.
@@ -214,6 +216,15 @@ Sometimes verify wasn't run, or it was run too early, and the completion phase e
 7. **Archive plan**: moves to `plans/2026-04-30-scheduled-reports-v1.md`. CHANGELOG row notes the late inclusion: "Folded in 503-retry shim during completion (see ADR-3)."
 
 8. **Cross-reference check**: `notification-system/dependencies.md` lists `scheduled-reports` as dependent — no change needed since the contract is unchanged.
+
+9. **Topology check**: the feature added `packages/retry-shim`, so the skill runs the audit:
+
+   ```
+   HIGH     workspace member "packages/retry-shim" (@acme/retry-shim) is not in the topology file
+            fix:   add it under apps: or packages: with path: packages/retry-shim
+   ```
+
+   It reads the new package's `package.json` and entry file and adds a real entry — `purpose: 503 retry shim for the reports webhook`, `stack: [TypeScript]` — rather than a `TODO`. Re-running the audit is clean. Had the audit exited 3, or printed a NOT CHECKED block covering workspace members, the skill would say so in the completion summary instead of claiming the file is current.
 
 #### Phase 2 — Branch integration
 
