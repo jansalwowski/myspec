@@ -88,7 +88,19 @@ Task tool (general-purpose):
       plus the checks in `.claude/verification.json`. **This is the only
       time they run** — the implementers were forbidden to run them, so a
       command you skip here is a command nobody ran. Report the exact
-      command and its output for each.
+      command and its output for each. Where a check carries a non-empty
+      `diffCommand`, run that one instead of its `command`, with
+      `MYSPEC_BASE_REF` set to `git merge-base HEAD <default branch>`.
+
+    **Attributing a failing check:**
+    A repo can be red before this phase started. A whole-repo lint, type-check,
+    or test command that exits non-zero is not by itself a finding — the
+    finding is a failure this phase caused. Before reporting one, establish
+    which it is: every failure it reports must name a file in the phase diff,
+    or a symbol the phase diff introduced or changed. If it does not, the
+    failure is pre-existing debt — say so, name it as out of scope, and do not
+    open a fix round over it. Never resolve the ambiguity by weakening the
+    command or narrowing what you run.
 
     **Integration:**
     - Do imports resolve correctly across all new files?

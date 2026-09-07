@@ -170,6 +170,8 @@ Create `.claude/verification.json` using `templates/verification.json` as the ba
 
 If commands were left empty, write the placeholder structure and note: "Edit `.claude/verification.json` to add your verification commands."
 
+Then run each supplied command once. Any that already fails on a clean tree is measuring pre-existing debt, and as a gate it blocks every stop over failures no session caused. For those, tell the user which command failed and offer to fill in its `diffCommand` — the variant the gate runs instead, scoped to `$MYSPEC_BASE_REF` (the merge base with the default branch, exported by the stop hook) and guarded against an empty file set. Leave `command` as the full-repo run.
+
 ### Step 6: Offer Blueprint Runs
 
 Ask:

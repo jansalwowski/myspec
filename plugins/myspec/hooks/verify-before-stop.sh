@@ -174,6 +174,31 @@ run_with_cap() {
   fi
 }
 
+# Base ref for diff-scoped checks. A repo whose lint or type-check is already
+# red on the default branch cannot use a whole-repo command as a gate — it
+# blocks every stop over debt this session did not create, and the block is
+# indistinguishable from a real regression. Such a check declares a
+# `diffCommand` instead, and this is the ref it measures against: the merge
+# base with the default branch, so the range is "what this branch changed"
+# on a feature branch and "what is uncommitted" when HEAD is that branch.
+# Left empty when no default branch resolves (a repo with no remote and no
+# main/master); the loop below then falls back to the whole-repo command
+# rather than skipping the check.
+MYSPEC_BASE_REF=""
+DEFAULT_REF=$(git -C "$REPO_ROOT" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || printf '')
+if [ -z "$DEFAULT_REF" ]; then
+  for CANDIDATE in origin/main origin/master main master; do
+    if git -C "$REPO_ROOT" rev-parse --verify --quiet "$CANDIDATE" >/dev/null 2>&1; then
+      DEFAULT_REF="$CANDIDATE"
+      break
+    fi
+  done
+fi
+if [ -n "$DEFAULT_REF" ]; then
+  MYSPEC_BASE_REF=$(git -C "$REPO_ROOT" merge-base HEAD "$DEFAULT_REF" 2>/dev/null || printf '')
+fi
+export MYSPEC_BASE_REF
+
 # Run each required check
 FAILED_CHECKS=()
 FAILED_OUTPUT=()
@@ -188,6 +213,11 @@ for i in $(seq 0 $((CHECKS_COUNT - 1))); do
 
   NAME=$(jq -r ".checks[$i].name" "$CONFIG_FILE")
   COMMAND=$(jq -r ".checks[$i].command" "$CONFIG_FILE")
+  DIFF_COMMAND=$(jq -r ".checks[$i].diffCommand // \"\"" "$CONFIG_FILE")
+
+  if [ -n "${DIFF_COMMAND// /}" ] && [ -n "$MYSPEC_BASE_REF" ]; then
+    COMMAND="$DIFF_COMMAND"
+  fi
 
   OUTPUT=$(cd "$REPO_ROOT" && MYSPEC_STOP_HOOK_ACTIVE=1 run_with_cap "$COMMAND" 2>&1) && EXIT_CODE=0 || EXIT_CODE=$?
 

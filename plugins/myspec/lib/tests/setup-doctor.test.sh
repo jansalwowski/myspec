@@ -363,6 +363,27 @@ expect_line 'plugin copy is now smaller' "the finding says the pin now costs mor
 expect_no_line 'report upstream' "a pinned file is not reported as a plugin-owned issue"
 expect_no_line 'WARN +over-budget: .claude/rules/workflow.md' "a managed file is not also reported as project-owned"
 
+# --- pass 3e: diff-scoped verification checks --------------------------------
+#
+# A repo that is already red on its default branch configures a check as a
+# diffCommand instead of a whole-repo command. That counts as configured, but
+# only if it actually reads the base ref the stop hook exports — otherwise it
+# quietly replaces the gate with something narrower.
+
+build_fixture
+set_json .claude/verification.json 'd.checks[0].command = ""; d.checks[0].diffCommand = "files=$(git diff --name-only \"$MYSPEC_BASE_REF\"); [ -z \"$files\" ] || npx eslint $files"; d.checks[1].command = "tsc --noEmit"; d.checks[2].command = "npm test"'
+
+run_doctor schema
+expect_exit 0 "a diff-scoped check does not fail the run"
+expect_no_line 'verification-empty' "a check configured only as a diffCommand counts as configured"
+expect_no_line 'verification-diff-unscoped' "a diffCommand that reads the base ref is not flagged"
+
+set_json .claude/verification.json 'd.checks[0].diffCommand = "npx eslint src/"'
+
+run_doctor schema
+expect_line 'WARN +verification-diff-unscoped: .claude/verification.json' "a diffCommand that ignores the base ref is a warning"
+expect_line 'MYSPEC_BASE_REF' "the finding names the ref the command should scope to"
+
 # --- pass 4: argument handling ------------------------------------------------
 
 OUTPUT=$(node "$SCRIPT" --list-checks 2>&1); STATUS=$?

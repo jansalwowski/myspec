@@ -422,13 +422,31 @@ if (verification.present && verification.error) {
 } else if (verification.value && Array.isArray(verification.value.checks)) {
   // One finding, not one per check: a fresh init leaves all three blank, and
   // three lines saying the same thing is how a report starts being skimmed.
+  // A check configured only as a diffCommand still counts as configured — the
+  // stop gate runs that one in place of `command`.
   const blank = verification.value.checks
-    .filter((check) => check && check.required === true && !String(check.command || '').trim())
+    .filter((check) => check && check.required === true
+      && !String(check.command || '').trim()
+      && !String(check.diffCommand || '').trim())
     .map((check) => String(check.name || '?'));
 
   if (blank.length > 0) {
     warn('verification-empty', 'schema', '.claude/verification.json', `.claude/verification.json: required check(s) ${blank.join(', ')} have an empty command — the stop gate reports them as passing without running anything`, {
       text: 'fill in the commands, or set "required": false',
+    });
+  }
+
+  // A diffCommand that never reads $MYSPEC_BASE_REF is not diff-scoped: it
+  // replaces the whole-repo command with something narrower for reasons the
+  // gate cannot see, and the check silently stops covering the branch.
+  const unscoped = verification.value.checks
+    .filter((check) => check && String(check.diffCommand || '').trim()
+      && !String(check.diffCommand).includes('MYSPEC_BASE_REF'))
+    .map((check) => String(check.name || '?'));
+
+  if (unscoped.length > 0) {
+    warn('verification-diff-unscoped', 'schema', '.claude/verification.json', `.claude/verification.json: diffCommand on ${unscoped.join(', ')} never references $MYSPEC_BASE_REF — it runs instead of the full command without being scoped to what this branch changed`, {
+      text: 'scope the command to the base ref, e.g. git diff --name-only --diff-filter=ACMR "$MYSPEC_BASE_REF"',
     });
   }
 }

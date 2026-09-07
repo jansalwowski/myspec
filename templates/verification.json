@@ -1,20 +1,24 @@
 {
+  "notes": "Checks run from the repo root. Give a check a non-empty 'diffCommand' when its plain 'command' already fails on the default branch: the gate runs 'diffCommand' instead, with $MYSPEC_BASE_REF exported as the merge base with the default branch. Scope the command to that range and guard it against an empty file set, e.g. files=$(git diff --name-only --diff-filter=ACMR $MYSPEC_BASE_REF -- '*.ts'); [ -z \"$files\" ] || npx eslint $files",
   "checks": [
     {
       "name": "Lint",
       "command": "",
+      "diffCommand": "",
       "description": "Linter — replace with your project's lint command (e.g., 'npm run lint', 'pnpm lint', 'ruff check .')",
       "required": true
     },
     {
       "name": "TypeCheck",
       "command": "",
+      "diffCommand": "",
       "description": "Type checking — replace with your project's type-check command (e.g., 'npx tsc --noEmit', 'pnpm typecheck')",
       "required": true
     },
     {
       "name": "Test",
       "command": "",
+      "diffCommand": "",
       "description": "Test suite — replace with your project's test command (e.g., 'npm test', 'pnpm test', 'pytest')",
       "required": true
     }
