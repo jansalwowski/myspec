@@ -25,7 +25,7 @@ The same hook scripts are now portable:
 - in Claude, `init` can copy them into `.claude/hooks/`
 - in Codex, the plugin runs them directly from this repository
 
-Both runtimes share the same project-level verification config at `.claude/verification.json` when it exists.
+Both runtimes share the same project-level verification config at `.claude/verification.json` when it exists. A repo whose lint or type-check is already red on the default branch gives that check a `diffCommand`: the gate runs it in place of `command`, with `$MYSPEC_BASE_REF` exported as the merge base with the default branch, so the check covers what the branch changed instead of blocking on pre-existing debt.
 
 ### Add the marketplace (once per machine)
 
