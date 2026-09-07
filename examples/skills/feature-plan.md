@@ -125,6 +125,26 @@ Do not refactor the surrounding query builder — pre-existing tech debt is out 
 
 Because the plan is one milestone and under 10 tasks, the Step 4 review loop is skipped.
 
+#### 4.5 Spec coverage check
+
+Step 4.5 runs on every plan, large or small. The skill walks `spec.md` and `tech-spec.md` — not the plan — and names the task behind each requirement:
+
+```markdown
+## Spec Coverage
+
+| Source | Requirement (verbatim) | Tasks |
+|--------|------------------------|-------|
+| spec.md AC-1 | "A star control appears on every report row." | T5 |
+| spec.md AC-2 | "A user can mark a report as a favorite, and the star reflects the favorited state immediately." | T4, T5 |
+| spec.md AC-3 | "Favorites persist across sessions and devices." | T1, T2 |
+| spec.md AC-4 | "Favorited reports pin to the top of the report list." | T6 |
+| spec.md AC-5 | "Removing a favorite unpins the report without a page reload." | T4, T6 |
+| tech-spec.md step 1 | "Add report_favorites (user_id, report_id, created_at) with a unique pair index." | T1 |
+| … | (steps 2–6 map 1:1 to T2–T6) | |
+```
+
+Every row lands on a task, so there is nothing to defer and the plan proceeds to Step 5.
+
 ### User confirms
 
 ```
@@ -152,6 +172,7 @@ Plan is ready. Commit before /feature-implement to avoid dangling files.
 ### Why this example matters
 
 - **The Spec contract block is non-negotiable.** Every task quotes the spec/tech-spec sentence that constrains it. If a task has no such passage, that's the signal the task shouldn't exist.
+- **Spec Coverage is the same check run backwards.** Spec contract proves every task has a requirement; Step 4.5 proves every requirement has a task. Only the second one catches a requirement that never became a task at all — which no downstream reader can see, because the implementer gets task text and the phase reviewer gets a diff.
 - **Global Constraints and Interfaces are the anti-drift rails.** Project-wide exacts live once in the header section (every task implicitly includes them); exact signatures live in each task's Interfaces block. Task 4's hook calls `list(userId)` because Task 2's Produces line says so — an implementer who sees only their task text never guesses a name.
 - **Touch only lands wherever a task modifies an existing file.** Without it, a reviewer flags adjacent pre-existing code as a regression. Task 6 touches the list query, so it scopes the diff explicitly.
 - **Single-milestone, all-sequential is fine.** Don't split into milestones to look "complex." The milestone checkpoint at the end gives the user an exit point.
@@ -256,10 +277,24 @@ A task in a parallel group carries an isolation note, because its implementer ru
 
 Passes.
 
+#### Step 4.5: Spec coverage check
+
+The coverage walk finds one criterion no task realizes:
+
+```markdown
+| spec.md AC-9 | "A failed schedule run notifies the owner by email." | DEFERRED — tech-spec §Non-Goals excludes the notification transport; tracked as idea `run-failure-alerts` |
+```
+
+The tech-spec deliberately excluded it, so this is a scope cut rather than a planning miss — but it is still the user's call, so the skill carries it into Step 6 rather than dropping it. Had the gap been an oversight, the fix would be a new task plus the AC quoted into its Spec contract block, not a `DEFERRED` row.
+
 ### User confirms
 
+The skill presents the plan and names the deferral:
+
+> One acceptance criterion has no task: **AC-9** ("A failed schedule run notifies the owner by email"). The tech-spec lists the notification transport under Non-Goals, so I've marked it DEFERRED and filed `run-failure-alerts` as an idea. Confirm, or say the word and I'll add a task for it.
+
 ```
-yes
+yes — defer it
 ```
 
 ### Step 7: Commit decision (BLOCKING)
