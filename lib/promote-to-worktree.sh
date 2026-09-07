@@ -145,8 +145,8 @@ if git -C "$REPO_ROOT" rev-parse --verify --quiet "origin/$BASE" >/dev/null; the
   fi
 fi
 
-PATCH=$(mktemp -t promote-patch)
-UNTRACKED_LIST=$(mktemp -t promote-untracked)
+PATCH=$(mktemp "${TMPDIR:-/tmp}/promote-patch.XXXXXX")
+UNTRACKED_LIST=$(mktemp "${TMPDIR:-/tmp}/promote-untracked.XXXXXX")
 cleanup() { rm -f "$PATCH" "$UNTRACKED_LIST"; }
 trap cleanup EXIT
 
@@ -200,7 +200,7 @@ if git -C "$WORKTREE" diff --cached --quiet; then
   exit 1
 fi
 
-COMMIT_MSG=$(mktemp -t promote-commit)
+COMMIT_MSG=$(mktemp "${TMPDIR:-/tmp}/promote-commit.XXXXXX")
 {
   printf '%s\n' "$TITLE"
 
@@ -236,7 +236,7 @@ git -C "$WORKTREE" push --quiet -u origin "$BRANCH"
 
 PR_URL=""
 if [ "$CREATE_PR" -eq 1 ]; then
-  PR_BODY=$(mktemp -t promote-pr-body)
+  PR_BODY=$(mktemp "${TMPDIR:-/tmp}/promote-pr-body.XXXXXX")
   {
     if [ -n "$BODY_FILE" ] && [ -f "$BODY_FILE" ]; then
       cat "$BODY_FILE"

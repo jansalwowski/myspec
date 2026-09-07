@@ -101,6 +101,21 @@ worktree_for_branch() {
   '
 }
 
+# Echoes a file's mtime as a Unix timestamp, or 0.
+#
+# Chaining `stat -f %m || stat -c %Y` does not work: on GNU, -f is
+# --file-system, so it SUCCEEDS on a directory and prints a non-numeric block.
+# The || fallback therefore never fires, and the result reaches $(( )), where
+# bash reads the word `File` as a variable name and `set -u` aborts the script
+# mid-run. Try the GNU form first and validate that what came back is a number.
+mtime_of() {
+  local p="$1" t
+  t=$(stat -c %Y "$p" 2>/dev/null) || t=""
+  case "$t" in ''|*[!0-9]*) t=$(stat -f %m "$p" 2>/dev/null) || t="" ;; esac
+  case "$t" in ''|*[!0-9]*) t=0 ;; esac
+  printf '%s' "$t"
+}
+
 # Echoes the merged PR head SHA, or nothing.
 merged_pr_head() {
   command -v gh >/dev/null 2>&1 || return 0
@@ -181,7 +196,7 @@ classify() {
     fi
 
     local age
-    age=$(( $(date +%s) - $(stat -f %m "$WT" 2>/dev/null || stat -c %Y "$WT" 2>/dev/null || echo 0) ))
+    age=$(( $(date +%s) - $(mtime_of "$WT") ))
     if [ "$age" -lt 3600 ]; then
       DETAIL="worktree touched $(( age / 60 ))min ago — may be a live session"
       return
