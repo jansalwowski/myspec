@@ -1,0 +1,38 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  suites:
+    name: shell test suites
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The liveness sweep in backbone-audit reads git history, and a
+          # shallow clone makes it refuse to run rather than report.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run every suite
+        run: |
+          status=0
+          shopt -s nullglob
+          for suite in lib/tests/*.test.sh hooks/tests/*.test.sh; do
+            echo "::group::$suite"
+            if bash "$suite"; then
+              echo "PASS $suite"
+            else
+              echo "::error file=$suite::$suite failed"
+              status=1
+            fi
+            echo "::endgroup::"
+          done
+          exit $status
