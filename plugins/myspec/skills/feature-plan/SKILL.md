@@ -91,13 +91,48 @@ For plans with **10+ tasks or 3+ milestones**, review in chunks before finalizin
 
 Skip this step for smaller plans (single milestone, < 10 tasks).
 
+### Step 4.5: Spec Coverage Check (REQUIRED, all plans)
+
+Step 3 guarantees every task quotes a spec passage. It does not guarantee the
+reverse — that every spec passage reached a task. That gap is invisible
+downstream: the implementer subagent reads only its task text, and the phase
+reviewer reads only the diff against the plan, so a requirement that never
+became a task is a requirement nobody checks for the rest of the feature.
+
+Walk the two source documents, not the plan — reading the plan and asking "what
+does this cover" finds only what is already there:
+
+1. List every acceptance criterion in `spec.md` and every implementation step
+   in `tech-spec.md`, in source order.
+2. For each, name the task ID(s) that realize it. Match on the behavior the
+   requirement describes, not on shared vocabulary — a task that touches the
+   same file as an AC does not thereby cover it.
+3. Write the results to the plan's `## Spec Coverage` table (see
+   [references/plan-templates.md](references/plan-templates.md)).
+
+**A requirement with no task is a blocking gap.** Resolve every one before
+Step 5, by exactly one of:
+
+- **Add or extend a task** so the requirement is realized, then re-quote it into
+  that task's `**Spec contract:**` block. This is the default.
+- **Mark it `DEFERRED` with a reason** in the Tasks column, and surface the list
+  of deferrals to the user in Step 6 alongside the plan. A deferral is a scope
+  decision, so it is the user's to make — never defer a requirement silently,
+  and never defer one merely because it is awkward to plan.
+
+Do not close a gap by rewording the requirement, by widening an existing task's
+description to sound like it covers more, or by pointing at a task that only
+partly realizes it. If a spec requirement cannot be turned into a task at all,
+the tech-spec is missing a step — say so and stop, rather than planning around
+it.
+
 ### Step 5: Save Plan
 
 Save to the path shown in [## Plan Document Format](#plan-document-format).
 
 ### Step 6: Present and Hand Off
 
-Present the plan. On approval, hand off to `/myspec:feature-implement`.
+Present the plan. If Step 4.5 recorded any `DEFERRED` row, list those requirements and their reasons here and get the user's decision before handing off — the plan is otherwise approved with a scope cut nobody named. On approval, hand off to `/myspec:feature-implement`.
 
 ### Step 7: Commit Decision (BLOCKING before feature-implement)
 
@@ -243,7 +278,7 @@ so one is a session's worth of work.
 
 Before presenting the plan:
 
-- [ ] Every tech-spec implementation step has a corresponding task
+- [ ] `## Spec Coverage` holds one row per spec.md acceptance criterion and per tech-spec.md implementation step, each mapped to task IDs or explicitly `DEFERRED` with a reason (Step 4.5)
 - [ ] Header `spec` / `tech_spec` keys point at the feature's `spec.md` and `tech-spec.md`
 - [ ] `## Global Constraints` holds every project-wide exact (versions, limits, naming, invariants) verbatim with source refs; no task text re-derives one
 - [ ] Task boundaries are right-sized — each task independently rejectable by a reviewer; trivial same-shape changes batched into one task
@@ -252,7 +287,7 @@ Before presenting the plan:
 - [ ] Parallel groups have zero file overlap (check file lists)
 - [ ] Barriers exist after every parallel group
 - [ ] Execution order table matches task dependencies
-- [ ] All acceptance criteria from spec.md are covered by at least one task
+- [ ] Every `DEFERRED` row was surfaced to the user in Step 6, not decided unilaterally
 - [ ] Every task has a populated **Spec contract** block with verbatim quotes (not paraphrased) from spec.md / tech-spec.md
 - [ ] Every task whose Files contain `Modify:` has a populated **Touch only** line
 - [ ] Every task has an Interfaces block (Consumes/Produces, exact signatures); names and types match verbatim between producer and consumer tasks
@@ -271,3 +306,4 @@ Before presenting the plan:
 - Duplicate tech-spec architecture in the plan (reference it)
 - Split one mechanical sweep into N micro-tasks — batch same-shape trivial changes into one task
 - Expand into more than ~20 tasks (if tech-spec has more steps, group related ones)
+- Close a Spec Coverage gap by rewording the requirement or by pointing at a task that only partly realizes it — add a task, or defer it in the open
