@@ -110,6 +110,7 @@ expect_no_line 'myspec-schema-stale' "a 2.0-shape .myspec.json is not stale"
 expect_no_line 'framework-removed' "a manifest with an empty removed block reports nothing retired"
 expect_no_line 'shipped-drift' "clean install reports no hook or lib drift"
 expect_no_line 'dead-path-ref' "framework-owned rules are not scanned for dead refs"
+expect_no_line 'topology-missing' "a project with no topologyFile key is not reported"
 expect_no_line 'over-budget' "framework-owned rules are not warned about as over budget"
 expect_no_line 'framework files over their always-loaded budget' "no plugin-owned always-loaded rule is over the 1000-token budget (regression guard for the 2.0 rules diet)"
 expect_line 'setup doctor: 0 error\(s\)' "summary counts zero errors"
@@ -136,6 +137,7 @@ set_json .claude/settings.json 'd.hooks.PostToolUse[0].hooks = d.hooks.PostToolU
 printf '#!/usr/bin/env bash\nif [ 1 =\n' > "$REPO/.claude/hooks/broken.sh"
 chmod +x "$REPO/.claude/hooks/broken.sh"
 set_json .myspec.json 'd.aiDir = "ai/"'
+set_json .myspec.json 'd.topologyFile = "backbone.yml"'
 printf 'not json' > "$REPO/.claude/verification.json"
 printf 'features:\n    - name: misindented\n      status: complete\n' > "$REPO/ai/features/index.yaml"
 {
@@ -167,6 +169,8 @@ expect_line 'ERROR framework-drift: ai/anti-patterns.md: header above' "a change
 expect_line 'WARN +over-budget: CLAUDE.md' "an oversized project CLAUDE.md is a warning"
 expect_line 'WARN +dead-path-ref: CLAUDE.md' "a dead path reference in a project file is a warning"
 expect_line 'WARN +dead-skill-ref: CLAUDE.md' "a reference to a skill the plugin does not ship is a warning"
+expect_line 'WARN +topology-missing: .myspec.json' "a topologyFile pointing at nothing is a warning, not a blocker"
+expect_line 'bootstrap and the reuse audit fall back to guessing' "the topology finding says what it breaks"
 expect_line 'run: chmod \+x .claude/hooks/guard-worktree-context.sh' "findings carry a literal fix command"
 
 run_doctor --quiet

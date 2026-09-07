@@ -67,7 +67,7 @@ Dispatch six parallel read-only agents (Agent tool, general-purpose), one per su
 
 **A. Always-loaded context** — `CLAUDE.md` (repo + parent dir), every `.claude/rules/*.md`.
 Tier 0 has already measured the budgets (`over-budget`) and resolved every path and
-`/myspec:*` reference (`dead-path-ref`, `dead-skill-ref`); those records are in the brief. What
+`/myspec:*` reference and the `topologyFile` pointer (`dead-path-ref`, `dead-skill-ref`, `topology-missing`); those records are in the brief. What
 is left is judgment:
 - Duplication across files and against `${aiDir}/pre-flight.md` / `${aiDir}/memory/index.md`; contradictions (session lifecycle, routing, vocabularies)
 - Rules with no actionable content (things any agent does anyway); sections compressible to a line or table
@@ -80,7 +80,8 @@ is left is judgment:
 - Descriptions: trigger keywords + "Do NOT use for", never a workflow summary; if a skill triggers on a common word, its body must meet the frequent-load budget (< 200 words)
 - Flag skills needing deep rework for a follow-up `/myspec:skill-verify` run instead of re-auditing them inline
 
-**C. `${aiDir}` core docs** — everything under `${aiDir}/` outside `features/`, `memory/`, `ideas/` (README, INDEX, pre-flight, conventions/, backbone, key components):
+**C. `${aiDir}` core docs + project topology** — everything under `${aiDir}/` outside `features/`, `memory/`, `ideas/` (README, INDEX, pre-flight, conventions/, key components), plus the topology file named in `.myspec.json` wherever it sits (it is usually at the project root, not under `${aiDir}`, which is why it needs naming here):
+- Run the backbone engine first: `node "${CLAUDE_PLUGIN_ROOT}/lib/backbone-audit/audit.mjs"` — it owns declared-vs-disk drift, workspace members and commands the file never learned about, and the git-backed liveness signals. Do not re-derive them. Exit 3 means it could not run at all: no topology file (a finding only when tier 0 reports `topology-missing`, i.e. `.myspec.json` names one), or a YAML construct it refuses to guess at, which is itself the finding. Read its NOT CHECKED block before characterising the result — a check that did not run is not a clean one. Add only what the script doesn't cover: the prose claims in `/myspec:backbone-sync` step 4
 - Spot-check 3–5 load-bearing claims per doc against code: lint flags, ports, directory locations, "not implemented" / "do not do X" claims, architecture framing
 - Dead links; docs for tools that left the repo; index files whose `updated:` predates the content they index; advertised-but-empty directories
 - Naming: `.md` files under `${aiDir}` in SCREAMING_CASE or PascalCase, `README.md` and `INDEX.md` excepted — `find "${aiDir}" -name '*.md' | grep -E '/[A-Z][^/]*\.md$' | grep -vE '/(README|INDEX)\.md$'`. The fix is `git mv` to kebab-case plus every inbound reference (this is the retired `docs-sanitize`'s naming job)
@@ -177,4 +178,4 @@ Additional per-surface checklist items, tagged [A]–[F].
 ## Integration
 
 **Routes to** [OPTIONAL]: `/myspec:skill-verify` — deep audit of a flagged skill. `/myspec:feature-verify` — deep audit of a flagged feature. `/myspec:session-clean` — dangling session files found in surface D. `/myspec:memory-sanitize` — user-level auto-memory findings.
-**See also:** `/myspec:feature-status-audit` — surface F runs its engine; invoke it standalone for a manifest-only check. `node .claude/lib/setup-doctor.mjs` — tier 0 standalone; `bootstrap` reports its summary every session and `update` verifies itself with it.
+**See also:** `/myspec:feature-status-audit` — surface F runs its engine; invoke it standalone for a manifest-only check. `/myspec:backbone-sync` — surface C runs its engine; invoke it standalone to fix topology drift. `node .claude/lib/setup-doctor.mjs` — tier 0 standalone; `bootstrap` reports its summary every session and `update` verifies itself with it.

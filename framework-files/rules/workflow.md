@@ -49,4 +49,4 @@ The top-level manifest holds main features only. A feature flagged `subfeatures:
 
 ## Documentation Requirements
 
-New feature → `${aiDir}/features/{feature}/`; feature changes → update the same directory; architecture decisions → `${aiDir}/decisions/`. Every markdown file under `${aiDir}/` carries YAML frontmatter — enforced by the `validate-frontmatter.sh` PostToolUse hook (`${aiDir}/ideas/` exempt).
+New feature → `${aiDir}/features/{feature}/`; feature changes → update the same directory; architecture decisions → `${aiDir}/decisions/`; a new app, package, or top-level command → the topology file named in `.myspec.json` (`/myspec:backbone-sync` audits it). Every markdown file under `${aiDir}/` carries YAML frontmatter — enforced by the `validate-frontmatter.sh` PostToolUse hook (`${aiDir}/ideas/` exempt).

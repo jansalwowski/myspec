@@ -72,6 +72,19 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
    - If dependencies changed, update `dependencies.md` bidirectionally
    - If this feature is now usable by others, update their docs
 
+9. **Topology Check** — only if this feature added a workspace member, a top-level
+   command, or a new shared package. The topology file is where `feature-tech-spec`
+   looks for reuse candidates, so a package that never lands there is invisible to
+   every later feature and gets reimplemented.
+   - `node "${CLAUDE_PLUGIN_ROOT}/lib/backbone-audit/audit.mjs"` — no `--severity`
+     filter here: the finding for an undocumented command is `low`, so filtering
+     would hide one of the three cases this step exists for
+   - Exit 3: the project has no topology file, or the audit refused to run — skip,
+     and say which in the completion summary
+   - Exit 1 or 2: add the new units, or run `/myspec:backbone-sync`
+   - Exit 0 with a NOT CHECKED block: the sweep that would have found a new unit
+     did not run — compare the new units against the file by hand
+
 **Phase 1 checklist:**
 
 - [ ] All implementation steps in tech-spec.md marked `[x]`
@@ -80,6 +93,7 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 - [ ] `last_updated` in tech-spec.md frontmatter updated to today
 - [ ] Implementation plan archived to `plans/` directory (if plan existed)
 - [ ] `CHANGELOG.md` updated with new entry (if plan was archived)
+- [ ] Topology file updated if the feature added an app, package, or command (step 9)
 - [ ] Run project documentation audit command if configured
 
 ### Phase 2 — Verification
