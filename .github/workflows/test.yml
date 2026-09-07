@@ -21,6 +21,15 @@ jobs:
         with:
           node-version: '20'
 
+      - name: TEMPORARY — diagnose branch-cleanup on Linux
+        run: |
+          git --version; bash --version | head -1; jq --version || true
+          # The suite discards the script's stderr, which is why CI shows only
+          # `got=<none>`. Unmask it for this one run.
+          sed -i 's|--json 2>/dev/null)|--json)|' lib/tests/branch-cleanup.test.sh
+          DEBUG_VERDICTS=1 bash lib/tests/branch-cleanup.test.sh 2>&1 | head -60 || true
+          git checkout -- lib/tests/branch-cleanup.test.sh
+
       - name: Run every suite
         run: |
           status=0
