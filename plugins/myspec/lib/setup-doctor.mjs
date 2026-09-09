@@ -60,6 +60,7 @@ import {
 } from 'node:fs';
 import {
   dirname,
+  isAbsolute,
   join,
   relative,
   resolve,
@@ -782,12 +783,56 @@ function hookCommands(value) {
 
 // Every event -> command pair, so a hook wired under the wrong event reads as
 // missing rather than as present.
+// A hook command may quote its script and name the project root as
+// $CLAUDE_PROJECT_DIR — the form Claude Code recommends, because a bare
+// relative command resolves against the session's cwd rather than the project
+// (a nested worktree then fails every matching tool call). Both spellings name
+// the same file, so every comparison below works on the resolved repo-relative
+// path instead of the raw command string.
+function normalizeHookScript(script) {
+  return script
+    .replace(/["']/g, '')
+    .replace(/\$\{CLAUDE_PROJECT_DIR\}/g, root)
+    .replace(/\$CLAUDE_PROJECT_DIR/g, root)
+    .replace(/^\.\//, '');
+}
+
+function hookScriptToken(command) {
+  // Usually the script is the first token, but an interpreter may lead it
+  // (`bash "$CLAUDE_PROJECT_DIR/.claude/hooks/x.sh"`).
+  const tokens = command.trim().split(/\s+/);
+
+  return tokens.find((token) => normalizeHookScript(token).endsWith('.sh')) ?? tokens[0];
+}
+
+function hookScriptPath(script) {
+  const normalized = normalizeHookScript(script);
+
+  if (isAbsolute(normalized)) {
+    return normalized;
+  }
+
+  return join(root, normalized);
+}
+
+// Key a template/settings comparison on the script a command runs, so the two
+// equivalent spellings match. Commands that run no script compare literally.
+function hookPairKey(command) {
+  const script = hookScriptToken(command);
+
+  if (!normalizeHookScript(script).endsWith('.sh')) {
+    return command;
+  }
+
+  return rel(hookScriptPath(script));
+}
+
 function hookPairs(value) {
   const pairs = new Set();
   const hooks = value && value.hooks && typeof value.hooks === 'object' ? value.hooks : {};
 
   Object.entries(hooks).forEach(([event, entries]) => {
-    hookCommands(entries).forEach((command) => pairs.add(`${event} ${command}`));
+    hookCommands(entries).forEach((command) => pairs.add(`${event} ${hookPairKey(command)}`));
   });
 
   return pairs;
@@ -812,14 +857,13 @@ const registered = [
 ];
 
 registered.forEach((command) => {
-  // The command may carry arguments; the script is the first token.
-  const script = command.trim().split(/\s+/)[0];
+  const script = hookScriptToken(command);
 
-  if (!script.endsWith('.sh')) {
+  if (!normalizeHookScript(script).endsWith('.sh')) {
     return;
   }
 
-  const scriptPath = join(root, script.replace(/^\.\//, ''));
+  const scriptPath = hookScriptPath(script);
 
   if (!existsSync(scriptPath)) {
     error('hook-missing', 'wiring', script, `${script} is registered in settings but does not exist — the harness fails the hook on every matching tool call`, {
@@ -837,7 +881,9 @@ registered.forEach((command) => {
 });
 
 if (existsSync(hooksDir)) {
-  const registeredScripts = new Set(registered.map((command) => command.trim().split(/\s+/)[0].replace(/^\.\//, '')));
+  const registeredScripts = new Set(
+    registered.map((command) => rel(hookScriptPath(hookScriptToken(command)))),
+  );
 
   readdirSync(hooksDir)
     .filter((name) => name.endsWith('.sh'))

@@ -121,6 +121,47 @@ run_doctor --quiet wiring schema
 expect_exit 0 "the blocking groups exit 0 on a clean install"
 expect_no_line '^ERROR' "the blocking groups report no errors on a clean install"
 
+# --- pass 1b: hooks registered via $CLAUDE_PROJECT_DIR ------------------------
+
+# Claude Code recommends "$CLAUDE_PROJECT_DIR"/.claude/hooks/x.sh over the bare
+# relative form the template ships, because a relative command resolves against
+# the session's cwd — a nested worktree then fails every matching tool call.
+# The doctor resolved the raw first token against the repo root, so that correct
+# form produced <root>/"$CLAUDE_PROJECT_DIR"/... : every hook reported as both
+# missing and unregistered, and the stop hook blocked on findings whose
+# suggested fix (/myspec:update) would have resynced the same broken checker.
+cp "$REPO/.claude/settings.json" "$ROOT/settings-relative.json"
+set_json .claude/settings.json '
+const walk = (n) => {
+  if (Array.isArray(n)) { n.forEach(walk); return; }
+  if (!n || typeof n !== "object") { return; }
+  if (typeof n.command === "string" && /^\.claude\/hooks\//.test(n.command)) {
+    n.command = "\"$CLAUDE_PROJECT_DIR\"/" + n.command;
+  }
+  Object.values(n).forEach(walk);
+};
+walk(d.hooks)'
+
+run_doctor wiring
+expect_exit 0 "hooks registered via \$CLAUDE_PROJECT_DIR exit 0"
+expect_no_line 'hook-missing' "a \$CLAUDE_PROJECT_DIR hook path is not reported missing"
+expect_no_line 'hook-unregistered' "a \$CLAUDE_PROJECT_DIR hook is recognised as wired"
+expect_no_line 'wiring-incomplete' "a \$CLAUDE_PROJECT_DIR command matches the template's relative one"
+
+# An interpreter may lead the command; the script is still the first .sh token.
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/verify-before-stop.sh\""'
+
+run_doctor wiring
+expect_no_line 'hook-unregistered: .claude/hooks/verify-before-stop.sh' "an interpreter-led command still resolves its script"
+
+# A genuinely absent hook must still be caught in this spelling.
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks.push({type:"command",command:"\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/ghost.sh"})'
+
+run_doctor wiring
+expect_line 'ERROR hook-missing: .*ghost.sh' "a missing hook is still an error in the \$CLAUDE_PROJECT_DIR form"
+
+cp "$ROOT/settings-relative.json" "$REPO/.claude/settings.json"
+
 # --- pass 2: one break per check ---------------------------------------------
 
 printf '\n# hand edit\n' >> "$REPO/.claude/rules/paths.md"
