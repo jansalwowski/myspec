@@ -864,9 +864,13 @@ registered.forEach((command) => {
   }
 
   const scriptPath = hookScriptPath(script);
+  // Report the resolved repo-relative path, not the raw token: the template
+  // registers hooks as "$CLAUDE_PROJECT_DIR"/... and that variable is not set
+  // in the terminal the `run:` line gets pasted into.
+  const label = rel(scriptPath);
 
   if (!existsSync(scriptPath)) {
-    error('hook-missing', 'wiring', script, `${script} is registered in settings but does not exist — the harness fails the hook on every matching tool call`, {
+    error('hook-missing', 'wiring', label, `${label} is registered in settings but does not exist — the harness fails the hook on every matching tool call`, {
       commands: ['/myspec:update'],
     });
 
@@ -874,8 +878,8 @@ registered.forEach((command) => {
   }
 
   if ((statSync(scriptPath).mode & 0o111) === 0) {
-    error('hook-not-executable', 'wiring', script, `${script} is registered but not executable — it never runs, and nothing reports that it did not`, {
-      commands: [`chmod +x ${script}`],
+    error('hook-not-executable', 'wiring', label, `${label} is registered but not executable — it never runs, and nothing reports that it did not`, {
+      commands: [`chmod +x ${label}`],
     });
   }
 });
