@@ -150,11 +150,60 @@ expect_no_line 'hook-missing' "a relative hook path is not reported missing"
 expect_no_line 'hook-unregistered' "a relative hook is recognised as wired"
 expect_no_line 'wiring-incomplete' "a relative command matches the template's \$CLAUDE_PROJECT_DIR one"
 
-# An interpreter may lead the command; the script is still the first .sh token.
+# An interpreter may lead the command; the script is then token 1. Such a
+# command does not exec the file, so a mode 644 script there is correct and
+# calling it an error would block every session: the stop hook runs this group.
 set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/verify-before-stop.sh\""'
+chmod 644 "$REPO/.claude/hooks/verify-before-stop.sh"
 
 run_doctor wiring
+expect_exit 0 "an interpreter-led command with a non-executable script exits 0"
+expect_no_line '^ERROR' "an interpreter-led command reports no errors"
+expect_no_line 'hook-not-executable' "a script run through bash needs no executable bit"
 expect_no_line 'hook-unregistered: .claude/hooks/verify-before-stop.sh' "an interpreter-led command still resolves its script"
+expect_no_line 'wiring-incomplete' "an interpreter-led command matches the template's bare one"
+
+# The bit still matters when the harness execs the file itself.
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = ".claude/hooks/verify-before-stop.sh"'
+
+run_doctor wiring
+expect_line 'ERROR hook-not-executable: .claude/hooks/verify-before-stop.sh' "a directly exec'd hook without the bit is still an error"
+chmod 755 "$REPO/.claude/hooks/verify-before-stop.sh"
+
+# The braced spelling resolves too. The template writes the bare one, so no
+# other case in the suite would catch a broken \${CLAUDE_PROJECT_DIR} branch.
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "${CLAUDE_PROJECT_DIR}/.claude/hooks/verify-before-stop.sh"'
+
+run_doctor wiring
+expect_exit 0 "a braced \${CLAUDE_PROJECT_DIR} hook path resolves"
+expect_no_line 'hook-missing' "a braced hook path is not reported missing"
+expect_no_line 'hook-unregistered' "a braced hook is recognised as wired"
+
+# A .sh that is only an argument is not the hook script: reporting it missing
+# blocks the gate on a file the harness never runs, and /myspec:update cannot
+# fix it.
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "npx prettier --check src/setup.sh"'
+
+run_doctor wiring
+expect_no_line 'hook-missing: src/setup.sh' "a .sh passed as an argument is not treated as the hook script"
+expect_line 'WARN +hook-unregistered: .claude/hooks/verify-before-stop.sh' "a command that runs no hook leaves that hook unregistered"
+expect_line 'wiring-incomplete' "a command that runs no hook leaves the Stop gate unwired"
+
+# Nor is a path a command merely mentions. Certifying that gate as wired is the
+# worse failure of the two: nothing then reports that the hook never runs.
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "echo .claude/hooks/verify-before-stop.sh"'
+
+run_doctor wiring
+expect_line 'WARN +hook-unregistered: .claude/hooks/verify-before-stop.sh' "a mentioned hook path does not count as wired"
+expect_line 'wiring-incomplete' "a mentioned hook path does not satisfy the template pair"
+
+# A variable this process cannot expand is unresolvable, not missing.
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "\"$CLAUDE_PLUGIN_ROOT\"/hooks/verify-before-stop.sh"'
+
+run_doctor wiring
+expect_no_line 'hook-missing' "an unexpandable variable in a hook path is not reported missing"
+
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = ".claude/hooks/verify-before-stop.sh"'
 
 # A genuinely absent hook must still be caught, in either spelling.
 set_json .claude/settings.json 'd.hooks.Stop[0].hooks.push({type:"command",command:"\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/ghost.sh"})'
