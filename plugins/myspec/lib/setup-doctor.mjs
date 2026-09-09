@@ -59,7 +59,9 @@ import {
   statSync,
 } from 'node:fs';
 import {
+  basename,
   dirname,
+  isAbsolute,
   join,
   relative,
   resolve,
@@ -782,12 +784,78 @@ function hookCommands(value) {
 
 // Every event -> command pair, so a hook wired under the wrong event reads as
 // missing rather than as present.
+// A hook command may quote its script and name the project root as
+// $CLAUDE_PROJECT_DIR — the form Claude Code recommends, because a bare
+// relative command resolves against the session's cwd rather than the project
+// (a nested worktree then fails every matching tool call). Both spellings name
+// the same file, so every comparison below works on the resolved repo-relative
+// path instead of the raw command string.
+function normalizeHookScript(script) {
+  return script
+    .replace(/["']/g, '')
+    // Replacer functions, not strings: `$&`, `$'` and `$1` inside a checkout
+    // path are replacement patterns to String.replace, and would corrupt it.
+    .replace(/\$\{CLAUDE_PROJECT_DIR\}/g, () => root)
+    .replace(/\$CLAUDE_PROJECT_DIR/g, () => root)
+    .replace(/^\.\//, '');
+}
+
+// A command led by one of these runs its script as an argument instead of
+// exec'ing it, which is why such a script needs no executable bit.
+const HOOK_INTERPRETERS = new Set(['bash', 'sh', 'zsh', 'dash', 'node']);
+
+// The script a hook command runs, or null when it runs none. That is token 0,
+// or token 1 behind an interpreter; a `.sh` any later is an argument to some
+// other program (`npx prettier --check src/setup.sh`), and naming it the hook
+// would report a file the harness never runs and mark a gate wired that is not.
+// `execd` says whether the harness runs the file itself — the only case where
+// its mode matters. `unresolved` says the path still holds a shell variable
+// this process cannot expand, so nothing may claim the file is missing.
+function hookScript(command) {
+  const tokens = command.trim().split(/\s+/);
+  const lead = normalizeHookScript(tokens[0] ?? '');
+  const next = tokens.length > 1 ? normalizeHookScript(tokens[1]) : '';
+
+  if (lead.endsWith('.sh')) {
+    return hookScriptAt(lead, tokens.slice(1), true);
+  }
+
+  if (HOOK_INTERPRETERS.has(basename(lead)) && next.endsWith('.sh')) {
+    return hookScriptAt(next, tokens.slice(2), false);
+  }
+
+  return null;
+}
+
+function hookScriptAt(normalized, args, execd) {
+  return {
+    path: isAbsolute(normalized) ? normalized : join(root, normalized),
+    args,
+    execd,
+    unresolved: normalized.includes('$'),
+  };
+}
+
+// Key a template/settings comparison on the script a command runs plus the
+// arguments it passes, so the two equivalent spellings match while a hook wired
+// with the wrong flags still reads as unwired. Commands that run no script
+// compare literally.
+function hookPairKey(command) {
+  const script = hookScript(command);
+
+  if (!script) {
+    return command;
+  }
+
+  return [rel(script.path), ...script.args].join(' ');
+}
+
 function hookPairs(value) {
   const pairs = new Set();
   const hooks = value && value.hooks && typeof value.hooks === 'object' ? value.hooks : {};
 
   Object.entries(hooks).forEach(([event, entries]) => {
-    hookCommands(entries).forEach((command) => pairs.add(`${event} ${command}`));
+    hookCommands(entries).forEach((command) => pairs.add(`${event} ${hookPairKey(command)}`));
   });
 
   return pairs;
@@ -812,32 +880,46 @@ const registered = [
 ];
 
 registered.forEach((command) => {
-  // The command may carry arguments; the script is the first token.
-  const script = command.trim().split(/\s+/)[0];
+  const script = hookScript(command);
 
-  if (!script.endsWith('.sh')) {
+  // A path this process cannot expand ($CLAUDE_PLUGIN_ROOT, a project's own
+  // variable) may be perfectly valid at hook time, so it gets no verdict
+  // rather than a false one — asserting it is missing blocks the stop gate on
+  // a file the doctor never looked at.
+  if (!script || script.unresolved) {
     return;
   }
 
-  const scriptPath = join(root, script.replace(/^\.\//, ''));
+  const scriptPath = script.path;
+  // Report the resolved repo-relative path, not the raw token: the template
+  // registers hooks as "$CLAUDE_PROJECT_DIR"/... and that variable is not set
+  // in the terminal the `run:` line gets pasted into.
+  const label = rel(scriptPath);
 
   if (!existsSync(scriptPath)) {
-    error('hook-missing', 'wiring', script, `${script} is registered in settings but does not exist — the harness fails the hook on every matching tool call`, {
+    error('hook-missing', 'wiring', label, `${label} is registered in settings but does not exist — the harness fails the hook on every matching tool call`, {
       commands: ['/myspec:update'],
     });
 
     return;
   }
 
-  if ((statSync(scriptPath).mode & 0o111) === 0) {
-    error('hook-not-executable', 'wiring', script, `${script} is registered but not executable — it never runs, and nothing reports that it did not`, {
-      commands: [`chmod +x ${script}`],
+  // Only when the harness execs the file: `bash x.sh` runs a mode 644 script
+  // by design, and calling that an error blocks every session over nothing.
+  if (script.execd && (statSync(scriptPath).mode & 0o111) === 0) {
+    error('hook-not-executable', 'wiring', label, `${label} is registered but not executable — it never runs, and nothing reports that it did not`, {
+      commands: [`chmod +x ${label}`],
     });
   }
 });
 
 if (existsSync(hooksDir)) {
-  const registeredScripts = new Set(registered.map((command) => command.trim().split(/\s+/)[0].replace(/^\.\//, '')));
+  const registeredScripts = new Set(
+    registered
+      .map((command) => hookScript(command))
+      .filter(Boolean)
+      .map((script) => rel(script.path)),
+  );
 
   readdirSync(hooksDir)
     .filter((name) => name.endsWith('.sh'))

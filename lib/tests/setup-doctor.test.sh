@@ -113,6 +113,9 @@ expect_no_line 'dead-path-ref' "framework-owned rules are not scanned for dead r
 expect_no_line 'topology-missing' "a project with no topologyFile key is not reported"
 expect_no_line 'over-budget' "framework-owned rules are not warned about as over budget"
 expect_no_line 'framework files over their always-loaded budget' "no plugin-owned always-loaded rule is over the 1000-token budget (regression guard for the 2.0 rules diet)"
+expect_no_line 'hook-missing' "the template's \$CLAUDE_PROJECT_DIR hook commands resolve"
+expect_no_line 'hook-unregistered' "every shipped hook is recognised as wired"
+expect_no_line 'wiring-incomplete' "settings written from the template is fully wired"
 expect_line 'setup doctor: 0 error\(s\)' "summary counts zero errors"
 
 # The stop hook runs exactly these two groups; they must be silent on a clean
@@ -120,6 +123,95 @@ expect_line 'setup doctor: 0 error\(s\)' "summary counts zero errors"
 run_doctor --quiet wiring schema
 expect_exit 0 "the blocking groups exit 0 on a clean install"
 expect_no_line '^ERROR' "the blocking groups report no errors on a clean install"
+
+# --- pass 1b: hooks still registered in the pre-2.2 relative form ------------
+
+# The template now registers hooks as "$CLAUDE_PROJECT_DIR"/.claude/hooks/x.sh,
+# because a bare relative command resolves against the session's cwd rather than
+# the project — a nested worktree then fails every matching tool call. Pass 1
+# covers that shipped form. Every install written before the switch still holds
+# the relative one, and update must not treat it as unwired: the two spellings
+# name the same file, so a literal comparison would wire each hook a second time.
+cp "$REPO/.claude/settings.json" "$ROOT/settings-projectdir.json"
+set_json .claude/settings.json '
+const walk = (n) => {
+  if (Array.isArray(n)) { n.forEach(walk); return; }
+  if (!n || typeof n !== "object") { return; }
+  if (typeof n.command === "string") {
+    n.command = n.command.replace(/^"\$CLAUDE_PROJECT_DIR"\//, "");
+  }
+  Object.values(n).forEach(walk);
+};
+walk(d.hooks)'
+
+run_doctor wiring
+expect_exit 0 "hooks registered in the legacy relative form exit 0"
+expect_no_line 'hook-missing' "a relative hook path is not reported missing"
+expect_no_line 'hook-unregistered' "a relative hook is recognised as wired"
+expect_no_line 'wiring-incomplete' "a relative command matches the template's \$CLAUDE_PROJECT_DIR one"
+
+# An interpreter may lead the command; the script is then token 1. Such a
+# command does not exec the file, so a mode 644 script there is correct and
+# calling it an error would block every session: the stop hook runs this group.
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/verify-before-stop.sh\""'
+chmod 644 "$REPO/.claude/hooks/verify-before-stop.sh"
+
+run_doctor wiring
+expect_exit 0 "an interpreter-led command with a non-executable script exits 0"
+expect_no_line '^ERROR' "an interpreter-led command reports no errors"
+expect_no_line 'hook-not-executable' "a script run through bash needs no executable bit"
+expect_no_line 'hook-unregistered: .claude/hooks/verify-before-stop.sh' "an interpreter-led command still resolves its script"
+expect_no_line 'wiring-incomplete' "an interpreter-led command matches the template's bare one"
+
+# The bit still matters when the harness execs the file itself.
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = ".claude/hooks/verify-before-stop.sh"'
+
+run_doctor wiring
+expect_line 'ERROR hook-not-executable: .claude/hooks/verify-before-stop.sh' "a directly exec'd hook without the bit is still an error"
+chmod 755 "$REPO/.claude/hooks/verify-before-stop.sh"
+
+# The braced spelling resolves too. The template writes the bare one, so no
+# other case in the suite would catch a broken \${CLAUDE_PROJECT_DIR} branch.
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "${CLAUDE_PROJECT_DIR}/.claude/hooks/verify-before-stop.sh"'
+
+run_doctor wiring
+expect_exit 0 "a braced \${CLAUDE_PROJECT_DIR} hook path resolves"
+expect_no_line 'hook-missing' "a braced hook path is not reported missing"
+expect_no_line 'hook-unregistered' "a braced hook is recognised as wired"
+
+# A .sh that is only an argument is not the hook script: reporting it missing
+# blocks the gate on a file the harness never runs, and /myspec:update cannot
+# fix it.
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "npx prettier --check src/setup.sh"'
+
+run_doctor wiring
+expect_no_line 'hook-missing: src/setup.sh' "a .sh passed as an argument is not treated as the hook script"
+expect_line 'WARN +hook-unregistered: .claude/hooks/verify-before-stop.sh' "a command that runs no hook leaves that hook unregistered"
+expect_line 'wiring-incomplete' "a command that runs no hook leaves the Stop gate unwired"
+
+# Nor is a path a command merely mentions. Certifying that gate as wired is the
+# worse failure of the two: nothing then reports that the hook never runs.
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "echo .claude/hooks/verify-before-stop.sh"'
+
+run_doctor wiring
+expect_line 'WARN +hook-unregistered: .claude/hooks/verify-before-stop.sh' "a mentioned hook path does not count as wired"
+expect_line 'wiring-incomplete' "a mentioned hook path does not satisfy the template pair"
+
+# A variable this process cannot expand is unresolvable, not missing.
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "\"$CLAUDE_PLUGIN_ROOT\"/hooks/verify-before-stop.sh"'
+
+run_doctor wiring
+expect_no_line 'hook-missing' "an unexpandable variable in a hook path is not reported missing"
+
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = ".claude/hooks/verify-before-stop.sh"'
+
+# A genuinely absent hook must still be caught, in either spelling.
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks.push({type:"command",command:"\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/ghost.sh"})'
+
+run_doctor wiring
+expect_line 'ERROR hook-missing: .claude/hooks/ghost.sh' "a missing hook is still an error, reported by its repo-relative path"
+
+cp "$ROOT/settings-projectdir.json" "$REPO/.claude/settings.json"
 
 # --- pass 2: one break per check ---------------------------------------------
 
