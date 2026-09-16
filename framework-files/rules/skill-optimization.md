@@ -3,6 +3,8 @@ title: "Skill Optimization Reference"
 purpose: "Quick reference for creating effective agent skills"
 paths:
   - .claude/skills/**
+  - skills/**
+  - plugins/*/skills/**
 updated: 2026-08-22
 ---
 
@@ -35,19 +37,31 @@ Replace documentary language with procedural commands:
 **Required:** `name`, `description`.
 
 **Constraints:**
-- `name`: 1-64 chars, lowercase letters, digits, hyphens only. Must match parent directory name.
-- `description`: 1-1024 chars. For model-invocable skills, third person and starts with "Use when…".
+- `name`: 1-64 chars, lowercase letters, digits, hyphens only. No leading or trailing hyphen, no consecutive hyphens. No XML tags, and no reserved words (`anthropic`, `claude`). Must match parent directory name.
+- `description`: 1-1024 chars, no XML tags. For model-invocable skills, third person and starts with "Use when…".
 
 **Allowed optional fields by portability tier:**
 
 | Tier | Fields |
 |------|--------|
-| Spec (cross-platform) | `license`, `compatibility`, `allowed-tools` (experimental) |
+| Spec (cross-platform) | `license`, `compatibility`, `metadata`, `allowed-tools` (experimental) |
 | Claude Code + VS Code Copilot | `disable-model-invocation`, `user-invocable` |
-| Claude Code only | `model`, `effort`, `context`, `agent`, `hooks`, `paths`, `shell`, `argument-hint`, `arguments`, `when_to_use` |
-| Convention (ignored by agents) | `tags`, `triggers`, `metadata`, `dependencies` |
+| Claude Code only | `model`, `effort`, `context`, `agent`, `hooks`, `paths`, `shell`, `argument-hint`, `arguments`, `when_to_use`, `disallowed-tools`, `background` |
+| Convention (ignored by agents) | `tags`, `triggers`, `dependencies` |
+
+The spec defines exactly six fields: `name`, `description`, `license`, `compatibility`, `metadata`, `allowed-tools`. Pick a portability target before writing frontmatter and write the choice down — reflexive cross-platform portability is its own anti-pattern, but so is discovering the constraint late. claude.ai uploads and the Skills API **reject** non-spec fields with an error rather than ignoring them, so a skill destined for either must stay spec-clean.
 
 `triggers` is **not** used for activation — agents only match on `description`. Put trigger phrases in the description.
+
+**`allowed-tools` grants, it does not restrict.** Its only effect is to pre-approve tools and remove confirmation friction. It cannot stop a skill writing files — declaring `Read Grep Glob` on a read-only skill adds no safety, and a careless value removes safety. Support varies between implementations: VS Code rejects the field outright.
+
+**Its type depends on the target.** The spec defines a space-separated *string* (`allowed-tools: Bash(git:*) Read`). Claude Code additionally accepts a comma-separated string and a YAML list, and normalizes all three to the same result — so `[Read, Grep]` is correct for a Claude Code-only skill and wrong only for one that must also satisfy the spec validator or upload to claude.ai. Flag the list form on the spec portability tier, never unconditionally.
+
+**The genuine restriction field is Claude Code-only `disallowed-tools`** — but it is **cleared when the user sends the next message**, so it scopes a single turn, not a session. It is not a sandbox either; treat neither field as a safety boundary.
+
+**Invalid combination:** `disable-model-invocation: true` together with `user-invocable: false` leaves the skill invocable by nobody.
+
+**Claude Code listing cap:** `description` and `when_to_use` are truncated at 1,536 characters *combined* in the skill listing. `when_to_use` is not free space — it competes for the same budget, and the tail is what gets cut. Front-load triggers.
 
 ## Description Pattern
 
@@ -93,7 +107,11 @@ Agents don't verify unless commanded. Always include "Verification Checklist" se
 
 ## Token Efficiency
 
-When a skill activates, the full body lands in context — the cost is paid on every load. The Anthropic spec recommends body bodies under **5,000 tokens** (~3,750 words / ~500 lines).
+When a skill activates, the full body lands in context — the cost is paid on every load. The spec recommends bodies under **5,000 tokens** (~3,750 words / ~500 lines), and in Claude Code that number has teeth: after `/compact`, only the first 5,000 tokens of each re-attached skill come back, so a longer body silently stops applying mid-session.
+
+Measure rather than estimate. `claude plugin details <plugin>` reports per-skill always-on and on-invoke cost; a word-count estimate misses bundled files and runs roughly 2x low.
+
+**Skill count is itself a budget.** The skill listing is capped at a fraction of the context window, and descriptions are evicted least-invoked-first under pressure. Installing more skills does not merely cost more tokens — past a threshold it deletes the descriptions that make existing skills discoverable. If a skill that used to activate reliably has gone quiet, suspect listing pressure before suspecting its description.
 
 | Skill type | Body target |
 |------------|-------------|
