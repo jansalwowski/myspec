@@ -3,6 +3,8 @@ title: "Skill Optimization Reference"
 purpose: "Quick reference for creating effective agent skills"
 paths:
   - .claude/skills/**
+  - skills/**
+  - plugins/*/skills/**
 updated: 2026-08-22
 ---
 
@@ -51,7 +53,11 @@ The spec defines exactly six fields: `name`, `description`, `license`, `compatib
 
 `triggers` is **not** used for activation — agents only match on `description`. Put trigger phrases in the description.
 
-**`allowed-tools` grants, it does not restrict.** It is a space-separated *string* of pre-approved tools (`allowed-tools: Bash(git:*) Read`), not a YAML array, and its only effect is to remove confirmation friction. It cannot stop a skill writing files — declaring `Read Grep Glob` on a read-only skill adds no safety, and a careless value removes safety. The genuine restriction field is Claude Code-only `disallowed-tools`. Support for `allowed-tools` varies between implementations: VS Code rejects it outright.
+**`allowed-tools` grants, it does not restrict.** Its only effect is to pre-approve tools and remove confirmation friction. It cannot stop a skill writing files — declaring `Read Grep Glob` on a read-only skill adds no safety, and a careless value removes safety. Support varies between implementations: VS Code rejects the field outright.
+
+**Its type depends on the target.** The spec defines a space-separated *string* (`allowed-tools: Bash(git:*) Read`). Claude Code additionally accepts a comma-separated string and a YAML list, and normalizes all three to the same result — so `[Read, Grep]` is correct for a Claude Code-only skill and wrong only for one that must also satisfy the spec validator or upload to claude.ai. Flag the list form on the spec portability tier, never unconditionally.
+
+**The genuine restriction field is Claude Code-only `disallowed-tools`** — but it is **cleared when the user sends the next message**, so it scopes a single turn, not a session. It is not a sandbox either; treat neither field as a safety boundary.
 
 **Invalid combination:** `disable-model-invocation: true` together with `user-invocable: false` leaves the skill invocable by nobody.
 

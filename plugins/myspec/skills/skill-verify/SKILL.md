@@ -13,9 +13,10 @@ description: "Use when an existing SKILL.md needs auditing for quality, complian
    - If no argument: ask user which skill to verify
    - Confirm file exists before proceeding
 
-2. **Run the native validators first** — deterministic, and they cost nothing to re-run. Report their output before any judgment-based check. If a command is unavailable, note it and fall back to manual checks.
-   - `claude plugin validate <path> --strict` — schema, frontmatter parsing, name format, path escaping, unrecognized fields
-   - `claude plugin details <plugin>` (when the skill ships in an installed plugin) — measured always-on and on-invoke token cost. Use these in step 9; a word-count estimate misses bundled files and runs ~2x low.
+2. **Run the native validators** — cheap, deterministic, and a useful floor. They are **not** a substitute for steps 5-7. If a command is unavailable, note it and continue.
+   - `claude plugin validate <path> --strict` — YAML parse, manifest schema, component path escaping, `shell` enum, `metadata` shape.
+   - **A clean `validate` proves almost nothing this skill checks.** Probed against 2.1.273, `--strict` passes `name: -pdf`, `name: pdf--x`, a reserved-word name, a `name` that does not match its directory, an unknown frontmatter key, a list-form `allowed-tools`, and `disable-model-invocation: true` with `user-invocable: false`. Never report a clean validate as "frontmatter is fine" — every frontmatter rule in step 5 still has to run by hand.
+   - `claude plugin details <plugin>` (when the skill ships in an **installed** plugin) — measured always-on and on-invoke token cost. Use these in step 9; a word-count estimate misses bundled files and runs ~2x low.
 
 3. **Read Skill Content**
    - Read the full SKILL.md; parse YAML frontmatter; capture body separately
@@ -27,12 +28,18 @@ description: "Use when an existing SKILL.md needs auditing for quality, complian
    - Otherwise: model-invocable; all description trigger rules apply.
    - Flag a portability target mismatch when Claude Code-only fields (`disable-model-invocation`, `hooks`, `agent`, `context`) sit alongside body claims of cross-platform portability.
 
-5. **Validate Frontmatter** (check against Frontmatter Rules)
-   - `name`: present, 1-64 chars, `[a-z0-9-]`, no leading/trailing hyphen, no consecutive hyphens, matches parent directory name
+5. **Validate Frontmatter** — read [references/detection-patterns.md](references/detection-patterns.md) for the regexes and caps before starting; do not re-derive them. Several rules apply only to some portability targets, so settle the target from step 4 first.
+   - `name`: present, 1-64 chars, `[a-z0-9-]`, no leading/trailing hyphen, no consecutive hyphens. A single character is legal.
+   - `name` matches the parent directory: **spec/upload tier only.** Claude Code treats `name` as a display label and loads the skill under its directory name regardless — flag a mismatch as Low there, Critical only where the skill must satisfy the spec validator or upload to claude.ai.
    - `description`: present, 1-1024 chars (spec cap). If model-invocable: starts with "Use when", third person, no XML tags.
-   - If targeting Claude Code and `when_to_use` is present: `description` + `when_to_use` must stay under 1,536 chars combined — the listing truncates past that, and the tail is what gets cut. Front-load triggers.
-   - Confirm every field against the portability tier the skill targets. A non-spec field is a hard upload failure on claude.ai and the Skills API, not a silent ignore.
-   - If a `dependencies:` block exists (myspec convention): every `packages` entry must appear in some `package.json`, every `paths` entry must exist on disk. Missing → Critical, never auto-fixed. Skip entirely when absent.
+   - If targeting Claude Code and `when_to_use` is present: it is not free space — it shares the listing cap with `description`, and the tail is what gets cut. Front-load triggers.
+   - Confirm every field against the portability tier. A non-spec field is a hard upload failure on claude.ai and the Skills API, not a silent ignore — but only where upload is a target.
+   - If a `dependencies:` block exists (myspec convention), verify it by running the checks, not by reading:
+     ```
+     git ls-files '**/package.json' package.json | xargs grep -l "\"<pkg>\":"   # each packages entry
+     [ -e "<path>" ]                                                            # each paths entry
+     ```
+     A missing package or path is **Critical**, never auto-fixed — the fix is human judgment. Skip the step entirely when the block is absent. See `.claude/rules/skill-self-test.md`; note the hazard in `AGENTS.md` about declaring plugin-internal paths, which false-fail in every consumer repo.
 
 6. **Detect Anti-Patterns** — scan for every row in the Anti-Patterns Reference table. Read [references/detection-patterns.md](references/detection-patterns.md) for the regexes first; do not re-derive them.
    - Apply the mechanical regex scans in one pass, then the judgment-based rows (#4, #14, #15, #16) one at a time
@@ -83,7 +90,7 @@ description: "Use when an existing SKILL.md needs auditing for quality, complian
       ```
     - Do NOT apply `[requires confirmation]` fixes without explicit approval.
 
-15. **Execute Changes** — apply approved fixes, then re-run step 2's validators and report the new numbers
+15. **Execute Changes** — apply approved fixes, then re-run `claude plugin validate` and recount lines and words. Do **not** re-run `claude plugin details`: it reads the installed marketplace copy, not the working tree, so it would report the pre-fix number as the result. Either reinstall the plugin first or report the recount and label it an estimate that runs low.
 
 16. **Recommend Testing** — the audit is static; activation is not. Read [references/testing-skills.md](references/testing-skills.md) and recommend the applicable tests by name and size.
     - Always: the trigger test (~20 queries, near-miss negatives, 3 runs, pick the best validation iteration). No native tooling covers activation.
@@ -92,21 +99,18 @@ description: "Use when an existing SKILL.md needs auditing for quality, complian
 
 ## Frontmatter Rules
 
-| Field | Constraint | Detection |
+| Field | Constraint | Applies to |
 |-------|-----------|-----------|
-| `name` | 1-64 chars, `[a-z0-9-]`, no leading/trailing hyphen, no `--` | `/^[a-z0-9](?:[a-z0-9]|-(?!-)){0,62}[a-z0-9]$/` |
-| `name` | Matches directory name | Compare with parent directory basename |
-| `name` | No reserved words `anthropic` / `claude`, no XML tags | Substring scan |
-| `description` | 1-1024 chars, non-empty, no XML tags | Character count |
-| `description` + `when_to_use` | Under 1,536 combined (Claude Code listing cap) | Sum both fields |
-| `description` | Starts with "Use when" (model-invocable only) | Skip if `disable-model-invocation: true` |
-| `description` | Third person — no `I`, `you`, `your`, `we`, `my` | Pronoun scan; injected into system prompt |
-| `description` | No workflow summary (model-invocable only) | No sequential action verbs |
-| `description` | Contains negative triggers (model-invocable only) | Look for "Do NOT use" |
-| `allowed-tools` | Space-separated **string**, not a YAML array | `/^allowed-tools:\s*\[/m` → wrong type |
-| File paths | Forward slashes only, even on Windows | Backslash scan |
+| `name` | 1-64 chars, `[a-z0-9-]`, no leading/trailing hyphen, no `--`; 1 char is legal | All targets |
+| `name` | Matches parent directory name | Spec/upload only — Low elsewhere |
+| `name` | No reserved words `anthropic` / `claude`, no XML tags | Anthropic targets |
+| `description` | 1-1024 chars, non-empty, no XML tags | All targets |
+| `description` + `when_to_use` | Under 1,536 combined | Claude Code listing cap |
+| `description` | Starts with "Use when", third person, no workflow summary, has a negative trigger | Model-invocable only |
+| `allowed-tools` | Space-separated string | Spec/upload only — Claude Code also accepts comma-separated and YAML list |
+| File paths | Forward slashes, even on Windows | All targets |
 
-The spec defines exactly six fields: `name`, `description`, `license`, `compatibility`, `metadata`, `allowed-tools`. Everything else is vendor-specific. The tier table lives in `.claude/rules/skill-optimization.md` (co-loaded with this skill) — do not duplicate it here. Infer the portability target from field usage when unstated, and flag conflicts.
+Regexes and the exact caps are in `references/detection-patterns.md`; the portability tier table is in `.claude/rules/skill-optimization.md`. That rule is path-gated — if it did not co-load, read it directly before judging any field against a tier, and say in the report which tier was assumed. Infer the target from field usage when unstated, and flag conflicts.
 
 ## Anti-Patterns Reference
 
@@ -115,14 +119,14 @@ The spec defines exactly six fields: `name`, `description`, `license`, `compatib
 | 1 | **Workflow summary in description** | Sequential verbs: "analyzes X, then generates Y". Short-circuits progressive disclosure — the agent concludes it already knows the procedure and skips the body | Critical |
 | 2 | **Generic/vague description** | "helps with", "manages", "handles things"; no concrete keywords | High |
 | 3 | **README-style documentation** | "This skill helps...", "Understanding X is important", explanation without commands | High |
-| 4 | **Monolithic skill** | 3+ unrelated capabilities; more than one core action verb | High |
+| 4 | **Monolithic skill** | 3+ capabilities that share no workflow and would be invoked independently, **or** body over 800 lines. The test is the skill's stated purpose, not its step count — a multi-step procedure serving one purpose is not monolithic | High |
 | 5 | **Wrong voice for audience** | Description: any first/second person. Body: documentary ("you should") instead of imperative ("Run", "Check") | Medium |
 | 6 | **Buried critical steps** | Key constraints after line 50 with no early reference. The middle of a long body is where instructions go unread | Medium |
 | 7 | **External dependencies** | Requires `git clone`, `npm install`, network fetch, or live URLs at runtime | Medium |
 | 8 | **Command lists without context** | Flat commands, no conditionals, no error handling, no verification | Medium |
 | 9 | **Force-loading references** | `@skill-name` or `@path` syntax burns tokens before they are needed. Cross-references missing REQUIRED/OPTIONAL markers | High |
 | 10 | **No progressive disclosure** | Body >300 lines with inlined reference material that only one step consults | High |
-| 11 | **`allowed-tools` misused as a sandbox** | Treating it as a restriction. It is a **pre-approval grant** — it removes confirmation friction and cannot stop a skill writing files, so a careless value removes safety rather than adding it. Also flag the YAML-array form; the spec requires a space-separated string. Real restriction is Claude Code-only `disallowed-tools` | High |
+| 11 | **`allowed-tools` misused as a sandbox** | Body or comments treat it as a restriction. It is a **pre-approval grant** — it removes confirmation friction and cannot stop a skill writing files, so a careless value removes safety rather than adding it. `disallowed-tools` is the real restriction but is cleared on the next user message, so neither is a safety boundary. Judge the *claim*, not the field's presence | High |
 | 12 | **Decoration and post-invocation persuasion** | `> Note:` blockquotes, hard-wrapped prose, 3-deep bullet ladders, horizontal rules in body, emoji headers, ASCII boxes. Also "Bottom Line"/"Remember" recaps and social proof — the reader already invoked the skill. Charged on every load | High |
 | 13 | **Unexplained all-caps imperatives** | MUST/ALWAYS/NEVER with no rationale nearby. Flag only caps with no stated *why* — escalating to MUST for a rule that is actually being missed is legitimate | Low |
 | 14 | **Explanations the model already knows** | Tutorials for mainstream libraries, definitions of common terms. Test: "Does the model need this? Does this paragraph justify its token cost?" | Medium |
@@ -189,7 +193,7 @@ Per-type body targets live in the Token Efficiency table of `.claude/rules/skill
 
 | Severity | Definition | Impact |
 |----------|-----------|--------|
-| **Critical** | Skill broken: workflow in description, name mismatch, missing frontmatter, invocable by nobody, declared dependency absent | Broken or misleading |
+| **Critical** | Skill broken: workflow in description, missing frontmatter, invocable by nobody, declared dependency absent, name mismatch *where the spec validator or upload applies* | Broken or misleading |
 | **High** | Significantly degraded: poor discoverability, false safety, force-loading, missing guardrails | Underperforms |
 | **Medium** | Suboptimal: wrong voice, buried constraints, missing verification, verbose | Reduced effectiveness |
 | **Low** | Polish: wording, extra keywords, compressed examples | Minor improvement |
@@ -206,8 +210,10 @@ Per-type body targets live in the Token Efficiency table of `.claude/rules/skill
 
 Outcome checks (not a workflow echo — per `.claude/rules/skill-optimization.md`):
 
-- [ ] `claude plugin validate --strict` was run and its output reported, or its absence noted
-- [ ] Token cost came from `claude plugin details` where the skill ships in a plugin; any hand estimate is labelled as running low
+- [ ] `claude plugin validate --strict` was run and reported, and a clean result was **not** treated as frontmatter clearance — every step 5 rule was still checked by hand
+- [ ] Token cost came from `claude plugin details` only where the plugin is installed and unmodified since; any post-fix number is a recount labelled as running low
+- [ ] The portability target was stated in the report, and every tier-scoped rule (`name` directory match, `allowed-tools` type, non-spec fields) was judged against that target rather than unconditionally
+- [ ] If a `dependencies:` block exists: every package located in a package.json and every path confirmed on disk by running the checks, or a Critical finding raised
 - [ ] Every frontmatter finding cites the violated constraint (field, tier, or format rule) and the portability target it applies to
 - [ ] Every row of the Anti-Patterns Reference and the Structural Completeness table was checked — none skipped silently; regexes taken from `references/detection-patterns.md`
 - [ ] Every normative guidance block was classified against the Guidance Form Rules table; each form-mismatch finding names the failure type and the right form

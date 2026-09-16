@@ -1,11 +1,11 @@
 # Detection Patterns
 
-Regexes and heuristics for skill-verify step 5 (frontmatter) and step 6 (anti-pattern scan). Judgment-based rows (#4, #14, #15, #16) and every Structural Completeness row have no regex — see `structural-completeness.md`.
+Regexes and heuristics for skill-verify step 5 (frontmatter) and step 6 (anti-pattern scan). Both steps load this file. Judgment-based rows (#4, #14, #15, #16) and every Structural Completeness row have no regex — see `structural-completeness.md`.
 
 ```
-# name format — spec-exact: no leading/trailing hyphen, no consecutive hyphens
-/^[a-z0-9](?:[a-z0-9]|-(?!-)){0,62}[a-z0-9]$/
-/^[a-z0-9]$/                           # single-char names are legal too
+# name format — spec-exact: no leading/trailing hyphen, no consecutive hyphens,
+# and a single character is legal (the alternation is required, not optional)
+/^[a-z0-9]$|^[a-z0-9](?:[a-z0-9]|-(?!-)){0,62}[a-z0-9]$/
 
 # name reserved words and XML
 /\b(anthropic|claude)\b/i
@@ -14,15 +14,21 @@ Regexes and heuristics for skill-verify step 5 (frontmatter) and step 6 (anti-pa
 # description starts with "Use when"
 /^Use when/
 
-# allowed-tools wrong type — spec requires a space-separated string
-/^allowed-tools:\s*\[/m
+# allowed-tools type — SPEC/UPLOAD TIER ONLY. Claude Code accepts space-separated,
+# comma-separated, and YAML list forms and normalizes all three, so the list form is
+# correct for a Claude Code-only skill. Flag only when the spec validator or a
+# claude.ai/Skills API upload is a target. Matches both list spellings:
+/^allowed-tools:\s*(\[|\n\s*-\s)/m
 
 # invalid invocation combo — nobody can invoke (Critical)
 # both present and true/false respectively:
 /^disable-model-invocation:\s*true/m   AND   /^user-invocable:\s*false/m
 
-# backslash paths (must be forward slashes even on Windows)
-/[a-zA-Z0-9_.-]\\[a-zA-Z0-9_.-]/
+# backslash paths (must be forward slashes even on Windows).
+# Requires a drive letter or a real file extension — a naive backslash scan matches
+# shell escapes (printf '\n') and regex literals (/\bshould\b/) and has a 0%
+# true-positive rate on prose-and-regex-bearing skills.
+/(?:^|[\s"'`(=])[A-Za-z]:\\|\\[A-Za-z0-9_-]+\\[A-Za-z0-9_-]+\.[a-z]{1,5}\b/
 
 # Anti-Pattern #1 — workflow in description (sequential action verbs)
 /\b(analyzes?|generates?|creates?|validates?|checks?)\b.*(then|next|after|finally)/i
@@ -46,8 +52,14 @@ Regexes and heuristics for skill-verify step 5 (frontmatter) and step 6 (anti-pa
 # examples consulted in only one step. Inverse check: a references/ file that every
 # run loads is indirection with no payoff — propose inlining it.
 
-# Reference depth — file references must stay one level deep from SKILL.md
-/\]\([^)]*\/[^)]*\/[^)]*\)/            # two or more path separators in a link target
+# Reference depth — file references must stay one level deep from SKILL.md.
+# Excludes URL schemes (https:// supplies two separators on its own), ../ sibling
+# includes such as ../_shared/review-output.md, and {placeholder} paths inside output
+# templates the skill emits (those are not references to bundled files).
+/\]\((?!\w+:\/\/)(?!\.\.\/)(?!\.?\/?\{)[^){}]*\/[^){}]*\/[^){}]*\)/
+# This is a candidate finder, not a verdict: confirm the target resolves on disk
+# relative to the skill root before flagging. A link that does not resolve is either
+# template content or a dead link — a different finding, not a depth violation.
 
 # Anti-Pattern #8 — no conditional branching
 /\b(if |when |unless |otherwise)\b/i   # absence across the workflow is the flag
