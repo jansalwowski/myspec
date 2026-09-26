@@ -52,6 +52,8 @@ Parses the Execution Order table: 6 sequential tasks, no barriers between them �
 
 **Resume detection:** all checkboxes `[ ]`. Fresh run.
 
+**Setup** also writes `.claude/state/implement-in-progress.json` (`started_at` plus the feature name). Until Step 5 removes it, the Stop hook reports failing verification checks at controller turn ends as a warning rather than a block — mid-run the tree is red by design, and the controller may not fix code itself.
+
 #### Step 2–3 — Task dispatch loop
 
 For T1 (migration):
@@ -91,7 +93,7 @@ This is the only milestone, so the skill goes directly to Step 5 (no Milestone C
 
 #### Step 5 — Completion + review choice
 
-1. Runs the plan's Final Verification section.
+1. Removes the orchestration marker, so the Stop hook blocks on failures again, then runs the plan's Final Verification section.
 2. Writes the full-feature review package to one temp file (`git log --oneline` + `git diff --stat` + `git diff -U10` over `BASE_SHA..HEAD`) and dispatches the holistic reviewer with the package path plus the plan's Execution Log entries to triage. This pass is mandatory and the tier (premium) is named explicitly on the dispatch — an omitted model would silently inherit the session's model. Returns `APPROVED`, no MUST FIX triage items.
 3. Prints the completion report — milestone summary, holistic verdict, **Rulings I made: none**, deferred-minors triage — then asks via `AskUserQuestion` — it does **not** auto-hand-off:
 

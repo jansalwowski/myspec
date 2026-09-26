@@ -3,6 +3,8 @@
 # Stop hook — runs verification checks before agent completes.
 # Reads commands from .claude/verification.json (requires jq).
 # Outputs {"decision": "block", "reason": "..."} on failure or {"decision": "approve"} on success.
+# During feature-implement (.claude/state/implement-in-progress.json, at most
+# 8h old) check failures become a non-blocking systemMessage warning instead.
 
 set -euo pipefail
 
@@ -222,6 +224,38 @@ if [ -n "$DEFAULT_REF" ]; then
 fi
 export MYSPEC_BASE_REF
 
+# Orchestration marker. While /myspec:feature-implement runs, the controller
+# ends many turns on a tree that is red by design: a barrier accepted with a
+# recorded failure, a fix round in flight in a subagent, a failing test owned
+# by the next phase. Blocking there forces a turn the controller cannot use
+# (it may not fix code itself), so failures downgrade to a non-blocking
+# warning. The skill writes the marker at setup and removes it before its
+# final verification; feature-complete removes it too. It lives in the
+# checkout the session works in, not the primary one: it describes this tree,
+# and a concurrent run in another worktree must keep its own gate. A marker
+# older than IMPLEMENT_MARKER_TTL (8h, the isolation-decision TTL) or without
+# a readable started_at is a crashed run: it is deleted and the gate blocks.
+# Only the verification.json checks are downgraded; the conformance and
+# symlink blocks above are session damage, not expected red.
+IMPLEMENT_MARKER="$REPO_ROOT/.claude/state/implement-in-progress.json"
+IMPLEMENT_MARKER_TTL=28800
+IMPLEMENT_ACTIVE=0
+if [ -f "$IMPLEMENT_MARKER" ]; then
+  STARTED_AT=$(jq -r '.started_at // empty' "$IMPLEMENT_MARKER" 2>/dev/null || printf '')
+  case "$STARTED_AT" in
+    ''|*[!0-9]*) STARTED_AT="" ;;
+  esac
+  if [ -n "$STARTED_AT" ]; then
+    MARKER_AGE=$(( $(date +%s) - STARTED_AT ))
+    if [ "$MARKER_AGE" -ge 0 ] && [ "$MARKER_AGE" -le "$IMPLEMENT_MARKER_TTL" ]; then
+      IMPLEMENT_ACTIVE=1
+    fi
+  fi
+  if [ "$IMPLEMENT_ACTIVE" -eq 0 ]; then
+    rm -f "$IMPLEMENT_MARKER"
+  fi
+fi
+
 # Run each required check
 FAILED_CHECKS=()
 FAILED_OUTPUT=()
@@ -261,6 +295,13 @@ if [ ${#FAILED_CHECKS[@]} -gt 0 ]; then
     DETAILS+="${ENTRY}"$'\n---\n'
   done
   DETAILS=${DETAILS%$'\n---\n'}
+  if [ "$IMPLEMENT_ACTIVE" -eq 1 ]; then
+    # Non-blocking: no decision block, so the stop proceeds; systemMessage
+    # surfaces the failure to the user.
+    MESSAGE=$(printf "Verification failing (%s) during feature-implement orchestration; not blocking (marker %s). The final verification step still gates.\n\n%s" "$NAMES" ".claude/state/implement-in-progress.json" "$DETAILS" | jq -Rs .)
+    echo "{\"decision\": \"approve\", \"systemMessage\": $MESSAGE}"
+    exit 0
+  fi
   # Escape for JSON
   REASON=$(printf "Verification failed (%s). Fix errors before completing.\n\n%s" "$NAMES" "$DETAILS" | jq -Rs .)
   echo "{\"decision\": \"block\", \"reason\": $REASON}"
