@@ -84,7 +84,19 @@ This skill is interactive — it never edits without user confirmation. Walking 
 
 ### Path validation
 
-The skill globs the file inventory paths, finds the misses, fuzzy-matches against the codebase, and proposes:
+The skill runs `lib/feature-spec-sync/dead-paths.mjs --only=user-invitations`, which checks every backticked repo path in the feature's live docs (spec.md, tech-spec.md, index.yaml, scenarios.md, seed.json — not just the File Inventory; plans/ and rename tables are skipped):
+
+```
+dead-paths: 4 docs, 23 unique paths checked, 4 dead (6 references)
+MISSING  ai/features/user-invitations/tech-spec.md:88  src/invitations/service.ts
+MISSING  ai/features/user-invitations/tech-spec.md:89  src/invitations/types.ts
+MISSING  ai/features/user-invitations/tech-spec.md:90  src/invitations/email-template.ts
+MOVED    ai/features/user-invitations/tech-spec.md:91  src/invitations/__tests__/service.test.ts -> src/services/__tests__/service.test.ts
+MISSING  ai/features/user-invitations/spec.md:42  src/invitations/service.ts
+MISSING  ai/features/user-invitations/scenarios.md:17  src/invitations/types.ts
+```
+
+For MISSING paths with no unique match, the skill fuzzy-matches against the codebase, then proposes:
 
 ```
 File path drift detected:
@@ -102,7 +114,7 @@ File path drift detected:
    → action: REMOVE from inventory (likely extracted to another feature)
 
 4. src/invitations/__tests__/service.test.ts
-   → fuzzy match: src/services/__tests__/invitation-service.test.ts
+   → MOVED: src/services/__tests__/service.test.ts
    → action: UPDATE path
 
 Apply these changes?
@@ -110,7 +122,7 @@ Apply these changes?
 
 User: *"Yes for 1, 2, 4. For #3, remove from inventory and add a note that the email template now lives in notification-system."*
 
-The agent edits `tech-spec.md`'s File Inventory and adds a Decisions row:
+The agent edits every cited line (tech-spec.md, spec.md, scenarios.md) and adds a Decisions row to `tech-spec.md`:
 
 ```
 - **Decision (2026-04-30)**: Invitation email template extracted to
