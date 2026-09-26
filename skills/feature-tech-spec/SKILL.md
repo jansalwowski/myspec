@@ -40,8 +40,11 @@ status: draft
 based_on_spec_version: {spec_version from spec.md}
 created: {TODAY}
 last_updated: {TODAY}
+verification_mode: visual   # optional: visual | api | data | mixed | none
 ---
 ```
+
+`verification_mode` names the medium a milestone's behavior is proven in — a browser, an endpoint, a query — so `feature-plan` can write checkpoint probes a separate executor runs at each milestone. Omit it and nothing changes. Set it (anything but `none`) and the conditional `### Test Hooks` section below becomes required.
 
 Required sections:
 
@@ -100,6 +103,13 @@ type Entity {
 |--------|------|---------|
 | POST | /api/... | Description |
 
+### Test Hooks (required when `verification_mode` is set and not `none`)
+The only handles a checkpoint probe may reference. Keep the four line labels exactly — `feature-tech-spec-review` and `feature-plan` read them by name.
+- **Target:** how to serve what the probes hit (`pnpm dev:scratch` → `http://localhost:5173/dev/reports`)
+- **Contract surface:** stable, refactor-tolerant handles — `visual`: test IDs and reactive state attributes on the public surface (`data-testid="report-row"`, `data-state="loading"`); `api`: request/response shapes; `data`: schema expectations. Never CSS classes, internal DOM structure, or private state.
+- **Real inputs** (optional): a real corpus the feature's engine must handle, and the invariant it must hold (`fixtures/corpus/*.pdf` — rendered output byte-identical to base). Named here, every milestone touching that path gets a real-input probe.
+- **Scratch environment** (required when a probe writes): the concrete database, bucket (every bucket variable), and queue port overrides the probes run under. The checklist they must satisfy is [`_shared/scratch-isolation.md`](../_shared/scratch-isolation.md).
+
 ### Decisions
 Document key architectural decisions as ADRs:
 - **Decision**: What was decided
@@ -135,6 +145,7 @@ Document key architectural decisions as ADRs:
 - [ ] `### Reuse audit` section present with >= 1 row; every `skip` row has a Reason (unless `reuseAudit.enabled: false`)
 - [ ] Key Interfaces / Types section defines new types introduced
 - [ ] Database Changes section present (or explicitly marked "None")
+- [ ] If `verification_mode` is set and not `none`: `### Test Hooks` has Target and Contract surface (plus Scratch environment when a probe writes), with no CSS-class or internal-DOM handles
 - [ ] Run verification checks from `.claude/verification.json` — all pass
 
 ## Integration

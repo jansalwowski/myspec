@@ -80,12 +80,21 @@ Resume behavior: A new agent reads the plan, skips `[x]` tasks, re-executes `[~]
 | 1 | Task 1: [Backend task] | sequential | — |
 | 2 | Task 2: [Frontend task] | sequential | Phase 1 |
 | 3 | Task 3: [Tests] | sequential | Phase 2 |
+
+**Checkpoint probes:**
+- Target: `pnpm dev:scratch` → `http://localhost:5173/dev/reports`
+- Scratch env: `DATABASE_URL=postgres://localhost:5433/reports_scratch`, `S3_BUCKET=reports-scratch`, `S3_ENDPOINT=http://localhost:9000`, `REDIS_URL=redis://localhost:6380/0`
+- P1 [visual]: `await expect(page.getByTestId('report-row')).toHaveCount(3)`
+- P2 [api]: `curl -s localhost:3000/api/reports | jq '.items | length'` → `3`
+- P3 [real-input]: `node scripts/render.js fixtures/corpus/*.pdf | sha256sum` → same as base
+- D1 [demo]: open `/dev/reports`; create a report; open its detail view — screenshot each step
 ```
 
 Notes:
 - Phase numbers must be globally unique across the entire plan (Milestone 2 starts at the next available phase number)
 - First phase of Milestone 2+ uses `Milestone N` in Depends On (not a phase number from the previous milestone)
 - Single-milestone plans omit the `### Milestone N:` heading — the Execution Order table stands alone
+- `**Checkpoint probes:**` is required on every milestone when tech-spec.md sets `verification_mode` to anything but `none`, and absent otherwise. At the milestone checkpoint `feature-implement` hands this block, verbatim and alone, to a separate probe executor — so each probe is a literal command or assertion in the medium's own language with its expected value, never a description ("check the list renders"). Probes reference only the tech-spec's `### Test Hooks` *Contract surface*; Target and Scratch env are copied from its *Target* and *Scratch environment* lines. Tags: `[visual]` / `[api]` / `[data]` pick the medium; `[real-input]` runs the *Real inputs* corpus through the real engine (required on a milestone touching that path); `[demo]` serves the milestone on scratch data for the user to click through (recommended for `visual` / `mixed`). A single-milestone plan puts the block after its Execution Order table
 
 ## Sequential Task
 

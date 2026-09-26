@@ -11,7 +11,7 @@ PKG=$(mktemp "${TMPDIR:-/tmp}/phase-review.XXXXXX")
 
 `PHASE_BASE` is the sha recorded before the phase's first dispatch — never `HEAD~1`, which silently drops all but the last commit of a multi-commit phase.
 
-Substitute the barrier verification log (`VERIFY_LOG`, SKILL.md Step 4a) and the spec requirement IDs the phase touches as well.
+Substitute the barrier verification log (`VERIFY_LOG`, SKILL.md Step 4a) and the spec requirement IDs the phase touches as well, plus `[SCRATCH_CHECKLIST path]` — `../_shared/scratch-isolation.md` resolved to an absolute path, as in `probe-executor-prompt.md`.
 
 ```
 Task tool (general-purpose):
@@ -113,6 +113,12 @@ Task tool (general-purpose):
       each. If you run a `.claude/verification.json` check whose
       `diffCommand` is non-empty, run that instead of its `command`, with
       `MYSPEC_BASE_REF` set to `git merge-base HEAD <default branch>`.
+    - For an invariant over real output ("output unchanged", "byte-identical",
+      "never splits"), prefer a real-engine / real-data check over a mock: a
+      test that mocks the engine pins what the mock returns, not what the
+      engine does. Run one yourself on scratch infrastructure (the checklist
+      at [SCRATCH_CHECKLIST path]), or flag the missing real-engine
+      coverage as Important.
 
     **Test-weakening audit (mandatory):**
     Implementers may run their own tests, so the cheapest way past a red

@@ -171,11 +171,18 @@ Had the review returned Critical/Important findings, the fix loop would run: rou
 
 #### Milestone Checkpoint
 
-After every phase in Milestone 1 passes, the skill runs the milestone verification commands and pauses:
+After every phase in Milestone 1 passes, the skill runs the milestone verification commands. The milestone carries a `**Checkpoint probes:**` block (the tech-spec sets `verification_mode: mixed`), so the controller dispatches the probe executor with that block verbatim and nothing else — no spec, no phase verdicts, no implementer reports. The executor works through the scratch-isolation checklist (separate database, a second Redis on its own port, a "before" fingerprint of the real database and queue; no bucket in this feature), runs each probe, and reports:
+
+> P1: PASS — observed: `201`, body `{"id":"sch_1","cadence":"WEEKLY_MONDAY"}` — artifact: `…/probe-artifacts.x7Q/p1.json`
+> P2: BLOCKED — observed: `ECONNREFUSED localhost:6380` — artifact: `…/probe-artifacts.x7Q/p2.log`
+> Verdict: PROBES_BLOCKED
+
+The scratch Redis was never started. The controller does not rerun P2 against the default Redis, and does not count the green integration test as a substitute — it asks the user. The user starts the scratch Redis and picks **fix**; nothing in the code needs changing, so the executor is re-dispatched with the same probes, returns `PROBES_PASSED` with the post-run check showing the real database and queue untouched, and each probe line goes into the Execution Log. Then the checkpoint pauses:
 
 > ═══ Milestone 1 complete: Scheduled Reports core CRUD + cron infra ═══
 >
 >   Completed: T1 migration, T2 ScheduleRepository, T3 ExportRunRepository, T4 shared types, …
+>   Probes:    2 passed, 0 waived
 >   Next: Milestone 2 — UI + notifications (4 tasks)
 >
 >   continue / stop / fresh — Choice?
@@ -199,6 +206,7 @@ Final Verification runs, then the controller builds the full-feature review pack
 - **The barrier is where isolation ends.** Merge one worktree at a time, run the full suite once, and only then review the phase. Only one suite runs per worktree at a time; concurrent runs share caches and ports and cause timing flakes. A phase review over an unmerged tree reviews something nobody will ship.
 - **`PHASE_BASE`, not `HEAD~1`.** A phase with two parallel commits plus a merge is several commits deep; `HEAD~1` silently reviews the last one.
 - **Past five tasks, one milestone per session.** The checkpoint recommends `fresh` because a long multi-milestone run is dispatch-latency-bound and the controller's context degrades as it goes.
+- **The controller does not grade its own milestone.** A blocked probe is the moment an adjacent signal ("the integration test is green") is most tempting; the probe gate only passes on the executor's evidence or a waiver the user gave by name, and the waiver reaches the completion report.
 
 ---
 

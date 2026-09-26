@@ -155,6 +155,18 @@ Implementation Steps total 11, organized into two milestones:
 - **Milestone 1**: data model + service + bullmq registration + retry logic.
 - **Milestone 2**: settings UI + email integration + run history.
 
+The feature has an API and a settings screen, so the frontmatter sets `verification_mode: mixed` and the conditional Test Hooks section is written — the only handles checkpoint probes may use:
+
+```markdown
+### Test Hooks
+
+- **Target:** `pnpm dev:scratch` → API on `http://localhost:3000`, settings page at `http://localhost:5173/settings/schedules`
+- **Contract surface:** `visual` — `data-testid="schedule-row"`, `data-testid="schedule-form"`, `data-state="saving|saved|error"` on the form; `api` — `GET /api/schedules` → `{ items: Schedule[] }`, `POST /api/schedules` → `201 Schedule`
+- **Scratch environment:** `DATABASE_URL=postgres://localhost:5433/reports_scratch`; `REDIS_URL=redis://localhost:6380/0` (a second Redis on its own port — bullmq ignores a changed DB index for its repeatable-job keys); `SMTP_HOST=localhost SMTP_PORT=1025` (a local mail catcher)
+```
+
+Because ADR-1 puts scheduling on the Redis the app already uses, the scratch queue is a separate port, not a different DB index — the shared checklist in `_shared/scratch-isolation.md` exists because the index alone once kept feeding the real worker.
+
 ### User confirms with edits
 
 ```
@@ -172,6 +184,7 @@ The skill edits the ADR, re-renders, gets approval, writes.
 - **ADRs are not optional when there's no pattern.** The next agent reading this in a year needs to know *why* bullmq was chosen — without ADR-1, they'll re-litigate that decision and possibly pick differently.
 - **Each ADR follows the same shape**: Decision → Context → Alternatives → Consequences. The skill enforces this; ad-hoc prose doesn't survive code review.
 - **User edits land before write.** ADR-3's retry policy was a judgment call — the user nudged it once and the skill applied the change without rewriting the rest.
+- **The verification surface is designed, not improvised.** `verification_mode` plus Test Hooks let `feature-plan` write milestone probes before any code exists, against handles that survive a refactor.
 
 ---
 
