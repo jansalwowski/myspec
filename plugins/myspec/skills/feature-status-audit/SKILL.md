@@ -1,6 +1,6 @@
 ---
 name: feature-status-audit
-description: "Use when the whole feature manifest needs auditing against on-disk docs. Keywords: manifest drift, index.yaml audit, orphan features, docs ahead of status, feature inventory. Do NOT use for one feature's deep audit (feature-verify)."
+description: "Use when the whole feature manifest needs auditing against on-disk docs. Keywords: manifest drift, index.yaml audit, orphan features, docs ahead of status, stale status, plan checkbox drift, feature inventory. Do NOT use for one feature's deep audit (feature-verify)."
 allowed-tools: [Bash, Read]
 ---
 
@@ -53,6 +53,11 @@ The script outputs:
 | `draft with no documentation files` | `/myspec:feature-spec` or remove manifest entry |
 | `subfeatures: true but no index.yaml` | create the sub-feature manifest |
 | `implementation-plan.md still present though status=complete` | archive into `plans/` via `/myspec:feature-complete` |
+| `implementation-plan.md is N/N [x] but status=draft\|in-progress` | confirm the merge (see the `git log:` hint line), then `/myspec:feature-complete` |
+| `status=complete but implementation-plan.md is k/N [x]` | finish or defer the open tasks, then `/myspec:feature-complete`; or revert status |
+| `archived plans/... is 0/N [x]` | `/myspec:feature-verify <name>` — the plan was archived without being ticked, or the work never happened |
+| `spec.md` / `tech-spec.md frontmatter status: draft` under `complete` | bump the doc's frontmatter `status` |
+| `all N sub-features complete but spec.md acceptance criteria are k/M [x]` | `/myspec:feature-verify <parent>` — tick delivered ACs or split the rest into a new sub-feature |
 | Orphan directory | register in manifest or delete |
 
 ### 4. Hand off
@@ -71,6 +76,18 @@ The script encodes this policy. Reference when explaining flags:
 | `complete` | `spec.md`, `tech-spec.md` | — | `implementation-plan.md` present (should be archived) |
 | `deprecated` | — | — | — |
 
+## Status drift checks
+
+Beyond file presence, the script compares the manifest status against what the docs say:
+
+| Check | Fires when |
+|-------|-----------|
+| Plan ratio | Non-complete status with `implementation-plan.md` 100% `[x]`; `complete` with an unarchived plan holding `[ ]`/`[~]`; `complete` with any `plans/*.md` at 0/N |
+| Doc status | `spec.md` or `tech-spec.md` frontmatter `status: draft` while the manifest says `complete` |
+| Parent ACs | Every sub-feature `complete` while the parent `spec.md` *Acceptance Criteria* section has unticked boxes; skipped when the spec ticks none (it does not use checkbox ACs) |
+
+Counting takes list-item checkboxes (`[ ]`, `[~]`, `[x]`) only; table cells and fenced code are ignored. For a fully ticked plan under a non-complete status, the script adds up to three `git log --grep=<feature>` matches as a hint; nothing is printed outside a git repo. JSON output carries `planProgress`, `archivedPlans`, `specStatus`, `techSpecStatus`, and `gitHint` per feature. Symbols cited in review reports are not checked — that is `/myspec:feature-implement-review`'s job.
+
 ## Edge cases
 
 - **Hyphenated vs non-hyphenated top key**: script accepts both `features:`, `subfeatures:`, `sub-features:`.
@@ -84,6 +101,7 @@ The script encodes this policy. Reference when explaining flags:
 - [ ] Reviewed summary counts (healthy vs with issues)
 - [ ] Read the issues table top-to-bottom, grouping by feature
 - [ ] Cross-checked at least one flagged "directory missing" by running `ls ${aiDir}/features/<name>/`
+- [ ] For each plan-ratio flag with a `git log:` hint, checked whether the work actually merged before routing
 - [ ] Noted orphan directories separately (they often represent renamed features)
 - [ ] Routed each flagged feature to the right fix skill rather than fixing ad-hoc
 - [ ] Did not modify any files during the audit
