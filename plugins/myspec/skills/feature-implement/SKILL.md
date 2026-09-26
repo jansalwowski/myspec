@@ -160,12 +160,20 @@ Parse milestones first, then build a DAG within each:
 2. Record `BASE_SHA`: `git rev-parse HEAD`
 3. Set the feature's `status: in-progress` in `${aiDir}/features/index.yaml` (owner of the `draft → in-progress` transition; `feature-complete` later flips it to `complete`).
 4. Create task tracking with all tasks.
+5. Write the orchestration marker. Mid-run the tree is red by design (an accepted barrier failure, a fix round in flight, a test the next phase owns), and the Stop hook would otherwise block every controller turn end on it. With the marker present it reports failing checks as a warning instead; it ignores and deletes a marker older than 8h, so a crashed run cannot disable the gate for good.
+
+   ```bash
+   STATE="$(git rev-parse --show-toplevel)/.claude/state"; mkdir -p "$STATE"
+   printf '{"started_at":%s,"feature":"%s"}\n' "$(date +%s)" "<feature>" > "$STATE/implement-in-progress.json"
+   ```
+
+   Rewrite it the same way before each phase's first dispatch so a long run stays inside the 8h window. Remove it (`rm -f "$(git rev-parse --show-toplevel)/.claude/state/implement-in-progress.json"`) on **stop** or **fresh** at a milestone checkpoint and at the start of Step 5.
 
 ### Step 3: Execute Milestones
 
 Walk milestones in order. For each milestone, walk its DAG topologically. For each phase:
 
-**Before the phase's first dispatch:** record `PHASE_BASE=$(git rev-parse HEAD)`. The phase review package (Step 4b) diffs `PHASE_BASE..HEAD`. Never substitute `HEAD~1` — it silently drops all but the last commit of a multi-commit phase.
+**Before the phase's first dispatch:** refresh the orchestration marker (Step 2.5) and record `PHASE_BASE=$(git rev-parse HEAD)`. The phase review package (Step 4b) diffs `PHASE_BASE..HEAD`. Never substitute `HEAD~1` — it silently drops all but the last commit of a multi-commit phase.
 
 Implementers write code and tests and commit; they never run the test, lint, type-check, build, or install commands. The phase reviewer is the only place verification runs. An implementer that can run its own gate can also iterate against it, and the cheapest way past a failing gate is to weaken it — a loosened assertion or a lint disable reads as work in the diff and as a pass in the log.
 
@@ -274,12 +282,12 @@ milestones. One milestone per session is the default for plans that size. `conti
 recommended only for plans of five tasks or fewer.
 
 - **continue** → proceed to next milestone
-- **stop** → ensure all changes committed, output: "Stopped after Milestone N. Resume with `/myspec:feature-implement` — it will detect completed milestones via `[x]` checkboxes.", then exit
-- **fresh** → same as stop, additionally output: "Recommended: start a fresh `/myspec:feature-implement` session. The new agent will auto-detect progress from checkbox state and resume from Milestone N+1."
+- **stop** → remove the orchestration marker, ensure all changes committed, output: "Stopped after Milestone N. Resume with `/myspec:feature-implement` — it will detect completed milestones via `[x]` checkboxes.", then exit
+- **fresh** → same as stop (marker removed), additionally output: "Recommended: start a fresh `/myspec:feature-implement` session. The new agent will auto-detect progress from checkbox state and resume from Milestone N+1."
 
 ### Step 5: Completion
 
-1. Run Final Verification section from the plan.
+1. Remove the orchestration marker (Step 2.5) so the Stop hook blocks again, then run the Final Verification section from the plan.
 2. Build the full-feature review package (same commands as Step 4b, over `BASE_SHA..HEAD`) and dispatch the holistic reviewer (`./holistic-reviewer-prompt.md`) on the `premium` tier with the package path plus the plan's Execution Log entries (deferred minors and parked findings) so it can triage which must be fixed before merge. This pass is mandatory — never skipped, never downgraded to a cheaper tier. It is the quick in-flight gate; the deeper independent conformance audit lives in `/myspec:feature-implement-review`.
 3. Print the completion report. It contains, in order: the milestone summary; the holistic verdict; **"Rulings I made"** — every `Ruling:` line from the Execution Log, in the order made, each with its cost-if-wrong ("none" if the log holds no rulings); and the deferred-minors triage outcome. This report is the only place the decisions taken on the user's behalf reach them.
 4. **Ask the user what to do next** via `AskUserQuestion` — do not auto-hand-off:
@@ -350,6 +358,7 @@ After all phases complete:
 - [ ] Execution Log deferred minors triaged by the holistic review (fixed or explicitly accepted)
 - [ ] Every `Ruling:` line from the Execution Log surfaced under "Rulings I made" in the completion report
 - [ ] No uncommitted changes from implementation
+- [ ] Orchestration marker `.claude/state/implement-in-progress.json` removed before Final Verification
 - [ ] Read `.claude/verification.json` and run each required check — all pass
 
 ## Integration

@@ -98,7 +98,7 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 
 ### Phase 2 — Verification
 
-1. Read `.claude/verification.json` and run each required check
+1. Remove any leftover feature-implement orchestration marker (`rm -f "$(git rev-parse --show-toplevel)/.claude/state/implement-in-progress.json"`) — while it exists the Stop hook only warns on failing checks. Then read `.claude/verification.json` and run each required check
 2. Run project documentation audit command if configured
 3. If all pass → continue to Phase 3
 
