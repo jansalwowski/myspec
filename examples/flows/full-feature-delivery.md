@@ -190,7 +190,7 @@ The agent reads the approved spec, examines existing patterns (the notification-
 /myspec:feature-tech-spec-review scheduled-exports
 ```
 
-Builds the Requirement Coverage table (each spec.md requirement ID → implementation steps; an empty row is Critical), then verifies every acceptance criterion traces to a step, every step has a file path matching the inventory, every interface is defined, and — the Task-extractability dimension — each step is self-contained enough to hand to a single implementation task without cross-step guesswork. Passes. Status flipped to `approved`.
+Builds the Requirement Coverage table (each spec.md requirement ID → implementation steps with a Fidelity verdict; an empty row is Critical, a step that narrows its requirement High), then verifies every acceptance criterion traces to a step, every step has a file path matching the inventory, every interface is defined, and — the Task-extractability dimension — each step is self-contained enough to hand to a single implementation task without cross-step guesswork. Passes. Status flipped to `approved`.
 
 ---
 

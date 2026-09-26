@@ -42,7 +42,7 @@ tags: [feature, tech-spec, validation, critical-thinking, review]
    - Scope / Size Assessment: Judgment-based split detection (see Scope Assessment section)
 
 4. **Cross-Validate Spec Alignment**
-   - Build the Requirement Coverage table (see [Requirement Coverage](#requirement-coverage)): one row per spec.md requirement ID, mapped to implementation step(s). Every row with no step is a Critical finding
+   - Build the Requirement Coverage table (see [Requirement Coverage](#requirement-coverage)): one row per spec.md requirement ID, mapped to implementation step(s) with a Fidelity verdict. Every row with no step is a Critical finding; a step that narrows the requirement is High, one that contradicts it Critical
    - Check: Every acceptance criterion in spec.md is traceable to a file in the inventory or a step
    - Check: No implementation step introduces functionality not in spec.md (scope creep)
    - Check: `based_on_spec_version` matches spec.md `spec_version` — mismatch is Critical
@@ -81,7 +81,7 @@ tags: [feature, tech-spec, validation, critical-thinking, review]
 
 | Dimension | Detection Patterns | What to Check |
 |-----------|-------------------|---------------|
-| **Spec Alignment** | Requirement Coverage table has an empty Steps cell; step with no spec backing | Every requirement ID maps to a step, no orphan steps, version match |
+| **Spec Alignment** | Requirement Coverage table has an empty Steps cell or a `narrows`/`contradicts` Fidelity cell; step with no spec backing | Every requirement ID maps to a step, no orphan steps, version match |
 | **Feasibility** | Unknown packages, non-existent APIs, impossible constraints | Steps achievable with the project's tech stack |
 | **Completeness** | `TBD`, `TODO`, `???`, empty sections, missing file inventory | All required sections present, all steps have detail |
 | **Pattern Conformance** | Service/GraphQL/validator/component patterns | Matches backend.md, frontend.md, database.md conventions |
@@ -115,14 +115,16 @@ When splitting is recommended:
 Build this table by walking `spec.md`, not the tech-spec — reading the steps and asking what they cover finds only what is already there. One row per requirement, in source order, using the IDs spec.md assigns (`REQ-001`, `NFR-2`; unprefixed numbering → `R<n>`). A requirement gets its own row even when an AC restates it.
 
 ```markdown
-| Requirement | Steps |
-|-------------|-------|
-| REQ-001 | 2, 5 |
-| REQ-002 | — |
-| NFR-1 | Out of scope — spec.md §Out of Scope lists offline mode |
+| Requirement | Steps | Fidelity |
+|-------------|-------|----------|
+| REQ-001 | 2, 5 | full |
+| REQ-002 | — | — |
+| REQ-003 | 4 | narrows — step 4 filters by owner only; REQ-003 also covers shared reports |
+| NFR-1 | Out of scope — spec.md §Out of Scope lists offline mode | — |
 ```
 
 - A row cites the step(s) that realize the requirement's behavior, not steps that merely share its vocabulary or files.
+- Fidelity: read the cited steps against the requirement's text, and against any requirement a step itself cites. `narrows` (drops a case, input, actor, or condition the requirement states) is a **High** Spec Alignment finding; `contradicts` is **Critical**. Quote both passages in the finding.
 - An empty (`—`) Steps cell is a **Critical** Spec Alignment finding (missing core implementation path); quote the requirement in the finding.
 - A requirement may be marked out of scope only when spec.md itself excludes it; the reason cites that passage. The reviewer never decides a requirement is out of scope.
 - Include the table in the review output so the author and `feature-plan` can check it.
@@ -242,7 +244,7 @@ After running the skill:
 - [ ] Each implementation step is task-extractable (concrete enough for a plan task without interpretation)
 - [ ] Reuse-audit gate applied: section present, >= 1 row, valid Decision/Reason (or `reuseAudit.enabled: false`)
 - [ ] `based_on_spec_version` matches spec.md `spec_version`
-- [ ] Requirement Coverage table built from spec.md, one row per requirement ID; every empty Steps cell reported as Critical
+- [ ] Requirement Coverage table built from spec.md, one row per requirement ID; every empty Steps cell reported as Critical; every `narrows` / `contradicts` Fidelity cell reported as High / Critical
 - [ ] File inventory paths follow project conventions (per `.claude/rules/` or `${aiDir}/conventions/`)
 - [ ] Models include required audit fields (if project defines them)
 - [ ] Service/component patterns match project conventions

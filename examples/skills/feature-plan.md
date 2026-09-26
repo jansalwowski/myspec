@@ -123,6 +123,14 @@ Task 6 (modifies the existing list query) gets a **Touch only** line because its
 Do not refactor the surrounding query builder — pre-existing tech debt is out of scope.
 ```
 
+Task 6 also adds a required `pinned: boolean` to `ReportRow`. The blast-radius grep finds `src/features/reports/__tests__/fixtures.ts`, which builds `ReportRow` literals, so Task 6 lists it too — without it the Phase 5 barrier fails typecheck in a file no task owns:
+
+```markdown
+- Modify: `src/features/reports/__tests__/fixtures.ts`
+
+**Touch only:** add `pinned: false` to each `ReportRow` fixture.
+```
+
 Because the plan is one milestone and under 10 tasks, the Step 4 review loop is skipped.
 
 #### 4.5 Spec coverage check
@@ -178,6 +186,7 @@ Plan is ready. Commit before /feature-implement to avoid dangling files.
 - **Spec Coverage is the same check run backwards.** Spec contract proves every task has a requirement; Step 4.5 proves every requirement has a task. Only the second one catches a requirement that never became a task at all — which no downstream reader can see, because the implementer gets task text and the phase reviewer gets a diff.
 - **Global Constraints and Interfaces are the anti-drift rails.** Project-wide exacts live once in the header section (every task implicitly includes them); exact signatures live in each task's Interfaces block. Task 4's hook calls `list(userId)` because Task 2's Produces line says so — an implementer who sees only their task text never guesses a name.
 - **Touch only lands wherever a task modifies an existing file.** Without it, a reviewer flags adjacent pre-existing code as a regression. Task 6 touches the list query, so it scopes the diff explicitly.
+- **Every barrier can be green.** A new required field breaks every literal and caller of the type, including files outside the task. Grepping consumers at plan time puts them in the task that caused the break, instead of leaving a red barrier for the phase reviewer to trace.
 - **Single-milestone, all-sequential is fine.** Don't split into milestones to look "complex." The milestone checkpoint at the end gives the user an exit point.
 - **The commit decision is part of the skill.** Leaving the plan uncommitted is the failure mode Step 7 exists to prevent — there's no "leave uncommitted" option offered.
 
@@ -277,6 +286,7 @@ A task in a parallel group carries an isolation note, because its implementer ru
 - Parallel groups → zero file overlap ✓
 - Every task has a Spec contract block; every `Modify:` task has Touch only ✓
 - Every task has an Interfaces block whose signatures match between producer and consumer ✓
+- Walked in execution order, every Consumes item matches an earlier Produces and nothing retired it in between ✓
 
 Passes.
 
