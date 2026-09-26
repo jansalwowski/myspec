@@ -77,6 +77,9 @@ For every task whose Files block contains a `Modify:` entry, populate the `**Tou
 **Interfaces — Consumes/Produces (REQUIRED per task):**
 Populate the `**Interfaces:**` block with exact signatures — names, parameter and return types from the tech-spec — for what this task consumes from earlier tasks and produces for later ones. A task's implementer sees only their own task text; this block is how they learn the names and types neighboring tasks use, and it is what makes parallel groups safe. A signature that differs between producer and consumer tasks is a plan bug — fix it before presenting.
 
+**Blast radius — every barrier green (REQUIRED):**
+For every Produces item that changes a signature, adds a required field or enum value, removes or renames a symbol, or adds files to an existing directory, grep the codebase for its callers and consumers — including tests and loaders that read the directory by glob or `fs` rather than import, which changed-file test runs never select. Put each hit in that task's Files (`Modify:`) and Touch only, or in a dedicated barrier step, so the barrier after it can pass typecheck and tests. A barrier that is red by design is a plan bug.
+
 ### Step 4: Review Loop (large plans only)
 
 For plans with **10+ tasks or 3+ milestones**, review in chunks before finalizing:
@@ -231,7 +234,7 @@ Before assigning files to tasks:
 ## Task Expansion Rules
 
 1. **Exact file paths** — from tech-spec file inventory
-2. **Complete code** — not "add validation", but the actual validation code
+2. **Complete code** — not "add validation", but the actual validation code. Implementers paste snippets verbatim, so each must pass the project's lint rules (e.g. rethrow with `{ cause }`) and carry no module-level side effects (resolve paths, read files, or touch globals inside functions, not at import time)
 3. **TDD sequence** — write test → run (fail) → implement → run (pass) → commit
 4. **Run commands** — exact verification commands with expected output (from `.claude/verification.json`)
 5. **Commit messages** — conventional commits: `feat({feature}): description`
@@ -295,6 +298,8 @@ Before presenting the plan:
 - [ ] Every task has a populated **Spec contract** block with verbatim quotes (not paraphrased) from spec.md / tech-spec.md
 - [ ] Every task whose Files contain `Modify:` has a populated **Touch only** line
 - [ ] Every task has an Interfaces block (Consumes/Produces, exact signatures); names and types match verbatim between producer and consumer tasks
+- [ ] Walked in execution order, every Consumes item matches an earlier task's Produces as written, and no task in between removed or renamed it (a retired field, symbol, or config key a later task still relies on)
+- [ ] Every signature-, field-, enum-, symbol-, or directory-changing Produces item has its grepped callers and consumers in that task's Files/Touch only or a barrier step
 - [ ] Within each milestone, lower-level layers (data, services) precede higher-level layers (UI, presentation) per project conventions
 - [ ] Phase numbers are globally unique across all milestones
 - [ ] Cross-milestone dependencies use `Milestone N` in the Depends On column (not individual phase numbers from other milestones)
