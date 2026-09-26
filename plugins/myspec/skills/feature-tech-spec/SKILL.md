@@ -43,6 +43,8 @@ last_updated: {TODAY}
 ---
 ```
 
+tech-spec.md describes the design as it stands: architecture, interfaces, contracts, decisions in force, edge cases, files. It is never a task log. Progress lives in `implementation-plan.md` and history in `CHANGELOG.md`; a tech-spec that tracks either grows with every iteration and drifts from the code.
+
 Required sections:
 
 ### Architecture
@@ -72,10 +74,10 @@ interface EntityOutput { ... }
 ```
 
 ### Implementation Steps
-Ordered task list:
-1. [ ] Task with dependency notes
-2. [ ] Task (depends on 1)
-3. [ ] ...
+Short ordered outline, one line per step, numbered, no checkboxes. `feature-plan` expands each step into tasks. `feature-plan`'s Spec Coverage and `feature-tech-spec-review`'s Requirement Coverage cite steps by number.
+1. Step with dependency notes
+2. Step (depends on 1)
+3. ...
 
 ### Database Changes
 ```
@@ -131,6 +133,7 @@ Document key architectural decisions as ADRs:
 - [ ] `based_on_spec_version` matches `spec_version` in spec.md
 - [ ] Every acceptance criterion from spec.md has at least one implementation step
 - [ ] All implementation steps have dependency notes where applicable
+- [ ] Implementation Steps is a numbered outline with no `[ ]`/`[x]` checkboxes
 - [ ] File Inventory table covers all files to be created/modified
 - [ ] `### Reuse audit` section present with >= 1 row; every `skip` row has a Reason (unless `reuseAudit.enabled: false`)
 - [ ] Key Interfaces / Types section defines new types introduced

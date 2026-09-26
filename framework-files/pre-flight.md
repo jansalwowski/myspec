@@ -87,7 +87,7 @@ When completing implementation of a feature or sub-feature:
   - [ ] Run tests — verify all tests pass
   - [ ] Run app if applicable — verify feature works
 - [ ] Update `${aiDir}/features/{feature}/tech-spec.md`:
-  - [ ] Mark completed implementation steps with [x]
+  - [ ] Reconcile the Implementation Steps outline with what shipped (no checkboxes: progress lives in implementation-plan.md)
   - [ ] Update File Inventory with actual files created/modified
   - [ ] Document any decisions that changed from original plan
   - [ ] Update `last_updated` date

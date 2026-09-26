@@ -50,7 +50,7 @@ Compare frontmatter fields:
 
 **C. Implementation Checkboxes**
 
-From tech-spec.md "Implementation Steps":
+Only when tech-spec.md still carries checkbox lists (the template's Implementation Steps is a numbered outline without them; `feature-complete` compacts old ones away):
 - Find all checkboxes: `- \[([ x])\] (.+)`
 - For unchecked items `[ ]`, check if described files exist
 - For checked items `[x]`, verify files still exist

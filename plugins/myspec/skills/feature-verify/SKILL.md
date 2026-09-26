@@ -78,7 +78,8 @@ If tech-spec.md has a "File Inventory" section:
 | Inventory files exist | Low | Tech-spec references files that don't exist and status = draft |
 | Code ahead of docs | Medium | Files exist in expected directories but not listed in File Inventory |
 
-If tech-spec.md has "Implementation Steps" with checkboxes:
+If tech-spec.md has checkbox task lists (the template uses a numbered outline without checkboxes):
+- Low finding: task log in tech-spec.md; the `feature-complete` compaction step removes it
 - For unchecked `[ ]` items: check if described files/components exist (code ahead of docs)
 - For checked `[x]` items: verify referenced files still exist (docs ahead of code)
 
