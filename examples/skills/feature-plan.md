@@ -127,13 +127,16 @@ Because the plan is one milestone and under 10 tasks, the Step 4 review loop is 
 
 #### 4.5 Spec coverage check
 
-Step 4.5 runs on every plan, large or small. The skill walks `spec.md` and `tech-spec.md` — not the plan — and names the task behind each requirement:
+Step 4.5 runs on every plan, large or small. The skill walks `spec.md` and `tech-spec.md` — not the plan — and names the task behind each requirement ID, acceptance criterion, and tech-spec step:
 
 ```markdown
 ## Spec Coverage
 
 | Source | Requirement (verbatim) | Tasks |
 |--------|------------------------|-------|
+| spec.md REQ-001 | "Users can favorite and unfavorite any report they can view." | T2, T4 |
+| spec.md REQ-002 | "The star control is keyboard-operable and announces its state to screen readers." | T5 |
+| … | (REQ-003 → T1, T2; REQ-004 → T6) | |
 | spec.md AC-1 | "A star control appears on every report row." | T5 |
 | spec.md AC-2 | "A user can mark a report as a favorite, and the star reflects the favorited state immediately." | T4, T5 |
 | spec.md AC-3 | "Favorites persist across sessions and devices." | T1, T2 |
@@ -143,7 +146,7 @@ Step 4.5 runs on every plan, large or small. The skill walks `spec.md` and `tech
 | … | (steps 2–6 map 1:1 to T2–T6) | |
 ```
 
-Every row lands on a task, so there is nothing to defer and the plan proceeds to Step 5.
+Every row lands on a task, so there is nothing to defer and the plan proceeds to Step 5. REQ-002 is the row an AC-only walk would miss: no acceptance criterion mentions keyboard or screen-reader behavior, so it reaches T5's Spec contract only because requirements get rows of their own.
 
 ### User confirms
 

@@ -30,7 +30,7 @@ tags: [feature, tech-spec, validation, critical-thinking, review]
    - Verify `based_on_spec_version` matches current `spec_version` in spec.md
 
 3. **Apply Review Dimensions** (Check tech-spec.md against all 10 dimensions below)
-   - Spec Alignment: Every spec.md requirement has an implementation path; no orphan tech-spec items without spec backing
+   - Spec Alignment: Every spec.md requirement ID maps to an implementation step (Requirement Coverage table); no orphan tech-spec items without spec backing
    - Feasibility: Implementation steps achievable with the project's tech stack (from `.myspec.json` or CLAUDE.md)
    - Completeness: Missing sections, empty checklists, no file inventory, no edge cases, TBD/TODO present
    - Pattern Conformance: Follows codebase patterns per backend.md, frontend.md, database.md
@@ -42,7 +42,7 @@ tags: [feature, tech-spec, validation, critical-thinking, review]
    - Scope / Size Assessment: Judgment-based split detection (see Scope Assessment section)
 
 4. **Cross-Validate Spec Alignment**
-   - Check: Every requirement in spec.md has at least one implementation step
+   - Build the Requirement Coverage table (see [Requirement Coverage](#requirement-coverage)): one row per spec.md requirement ID, mapped to implementation step(s). Every row with no step is a Critical finding
    - Check: Every acceptance criterion in spec.md is traceable to a file in the inventory or a step
    - Check: No implementation step introduces functionality not in spec.md (scope creep)
    - Check: `based_on_spec_version` matches spec.md `spec_version` — mismatch is Critical
@@ -81,7 +81,7 @@ tags: [feature, tech-spec, validation, critical-thinking, review]
 
 | Dimension | Detection Patterns | What to Check |
 |-----------|-------------------|---------------|
-| **Spec Alignment** | Compare spec.md requirements/ACs with tech-spec steps | Every requirement addressed, no orphan steps, version match |
+| **Spec Alignment** | Requirement Coverage table has an empty Steps cell; step with no spec backing | Every requirement ID maps to a step, no orphan steps, version match |
 | **Feasibility** | Unknown packages, non-existent APIs, impossible constraints | Steps achievable with the project's tech stack |
 | **Completeness** | `TBD`, `TODO`, `???`, empty sections, missing file inventory | All required sections present, all steps have detail |
 | **Pattern Conformance** | Service/GraphQL/validator/component patterns | Matches backend.md, frontend.md, database.md conventions |
@@ -109,6 +109,23 @@ When splitting is recommended:
 - Propose concrete sub-feature boundaries with names
 - Reference `/myspec:feature-decompose` skill for execution
 - Flag as High severity (tech-spec is valid but should be restructured)
+
+## Requirement Coverage
+
+Build this table by walking `spec.md`, not the tech-spec — reading the steps and asking what they cover finds only what is already there. One row per requirement, in source order, using the IDs spec.md assigns (`REQ-001`, `NFR-2`; unprefixed numbering → `R<n>`). A requirement gets its own row even when an AC restates it.
+
+```markdown
+| Requirement | Steps |
+|-------------|-------|
+| REQ-001 | 2, 5 |
+| REQ-002 | — |
+| NFR-1 | Out of scope — spec.md §Out of Scope lists offline mode |
+```
+
+- A row cites the step(s) that realize the requirement's behavior, not steps that merely share its vocabulary or files.
+- An empty (`—`) Steps cell is a **Critical** Spec Alignment finding (missing core implementation path); quote the requirement in the finding.
+- A requirement may be marked out of scope only when spec.md itself excludes it; the reason cites that passage. The reviewer never decides a requirement is out of scope.
+- Include the table in the review output so the author and `feature-plan` can check it.
 
 ## Task-Extractability
 
@@ -205,7 +222,7 @@ The `[requires confirmation]` case that recurs here is a decompose proposal:
 ## Cross-File Validation Rules
 
 ### tech-spec.md → spec.md
-- Every requirement in spec.md must have at least one implementation step
+- Every requirement ID in spec.md has a Requirement Coverage row naming at least one implementation step
 - Every acceptance criterion must be traceable to a file in the inventory or a step
 - `based_on_spec_version` must match spec.md `spec_version`
 
@@ -225,7 +242,7 @@ After running the skill:
 - [ ] Each implementation step is task-extractable (concrete enough for a plan task without interpretation)
 - [ ] Reuse-audit gate applied: section present, >= 1 row, valid Decision/Reason (or `reuseAudit.enabled: false`)
 - [ ] `based_on_spec_version` matches spec.md `spec_version`
-- [ ] Every spec.md requirement has an implementation path in tech-spec
+- [ ] Requirement Coverage table built from spec.md, one row per requirement ID; every empty Steps cell reported as Critical
 - [ ] File inventory paths follow project conventions (per `.claude/rules/` or `${aiDir}/conventions/`)
 - [ ] Models include required audit fields (if project defines them)
 - [ ] Service/component patterns match project conventions

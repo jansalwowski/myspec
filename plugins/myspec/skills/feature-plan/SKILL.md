@@ -29,7 +29,7 @@ All gates pass → proceed to Workflow Step 0.
 ### Step 1: Read Context
 
 1. Read `${aiDir}/features/{feature}/tech-spec.md` — note implementation steps, file inventory, interfaces
-2. Read `${aiDir}/features/{feature}/spec.md` — note acceptance criteria, edge cases
+2. Read `${aiDir}/features/{feature}/spec.md` — note requirement IDs, acceptance criteria, edge cases
 3. Read existing code referenced in tech-spec (patterns to follow, files to modify)
 
 While reading, collect every project-wide exact value (version floors, size/perf limits, naming rules, invariants) — these become the plan's Global Constraints section in Step 3.
@@ -102,8 +102,12 @@ became a task is a requirement nobody checks for the rest of the feature.
 Walk the two source documents, not the plan — reading the plan and asking "what
 does this cover" finds only what is already there:
 
-1. List every acceptance criterion in `spec.md` and every implementation step
-   in `tech-spec.md`, in source order.
+1. List every requirement and every acceptance criterion in `spec.md`, and
+   every implementation step in `tech-spec.md`, in source order. Requirements
+   get their own rows even when an AC seems to restate them — a requirement no
+   AC restates is exactly the one that drops out of an AC-only walk. Use the
+   IDs `spec.md` assigns (`REQ-001`, `NFR-2`); if its requirements are numbered
+   without a prefix, cite them as `R<n>`.
 2. For each, name the task ID(s) that realize it. Match on the behavior the
    requirement describes, not on shared vocabulary — a task that touches the
    same file as an AC does not thereby cover it.
@@ -278,7 +282,7 @@ so one is a session's worth of work.
 
 Before presenting the plan:
 
-- [ ] `## Spec Coverage` holds one row per spec.md acceptance criterion and per tech-spec.md implementation step, each mapped to task IDs or explicitly `DEFERRED` with a reason (Step 4.5)
+- [ ] `## Spec Coverage` holds one row per spec.md requirement ID, per spec.md acceptance criterion, and per tech-spec.md implementation step, each mapped to task IDs or explicitly `DEFERRED` with a reason (Step 4.5)
 - [ ] Header `spec` / `tech_spec` keys point at the feature's `spec.md` and `tech-spec.md`
 - [ ] `## Global Constraints` holds every project-wide exact (versions, limits, naming, invariants) verbatim with source refs; no task text re-derives one
 - [ ] Task boundaries are right-sized — each task independently rejectable by a reviewer; trivial same-shape changes batched into one task
