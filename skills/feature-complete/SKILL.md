@@ -42,8 +42,8 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 
 6. **Update Feature Manifest**
    In `${aiDir}/features/index.yaml` (or `${aiDir}/features/{feature}/index.yaml` for sub-features):
-   - Update `status` (in-progress → complete, or add note)
-   - Add/update `note:` for partial completion
+   - Update `status` (in-progress → complete)
+   - Replace `note:`, never append to it: delete it when nothing is deferred, else reduce it to a one-line deferral pointer (≤150 chars, e.g. `"CSV export deferred; see plans/2026-04-30-reports.md"`). History goes to `CHANGELOG.md` (step 7); PR state and SHAs go nowhere — they go stale on merge
    - Update `phase` if documentation phase changed
 
    **Note**: If this is a sub-feature, update the feature-level `${aiDir}/features/{parent}/index.yaml` instead of the main index.yaml.

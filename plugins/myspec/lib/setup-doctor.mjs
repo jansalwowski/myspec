@@ -94,7 +94,7 @@ const GROUPS = {
   // `.myspec.json`. The features manifest lives under ${aiDir}, so leaving it
   // in `schema` would block a stop over a settings.json edit because of a
   // months-old indent in an unrelated file.
-  features: ['features-index-unreadable'],
+  features: ['features-index-unreadable', 'note-over-cap', 'note-volatile'],
   budget: ['over-budget', 'over-budget-pinned'],
   refs: ['dead-path-ref', 'dead-skill-ref', 'topology-missing'],
 };
@@ -477,6 +477,98 @@ if (featuresIndex !== null) {
         text: 'reindent the entry to "  - name:" with 4-space fields',
       });
     }
+  });
+}
+
+// A manifest `note:` is read by every skill that loads the manifest, so it is
+// capped at one line of current state (issue #86). Left unbounded, agents
+// append to it until it is a changelog of PR states and SHAs: one consumer
+// note reached 33 KB on a single line, and most of its "not yet merged" claims
+// were false by the time anyone read them. History belongs in the feature's
+// CHANGELOG.md. Warnings, not errors: a long note costs tokens, it breaks
+// nothing.
+const NOTE_CAP = 150;
+const VOLATILE_NOTE = [
+  [/#\d+\b.*\b(draft|open|pending)\b/i, 'a PR/issue state'],
+  [/not yet merged/i, 'a merge state'],
+  // At least one digit and one a-f letter, so neither words ("defaced") nor
+  // dates ("20260927") read as a SHA.
+  [/\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b/i, 'a commit SHA'],
+];
+
+// [{ line, text, multiline }] for every `note:` field. Handles plain, quoted,
+// and block-scalar (| / >) values, including continuation lines.
+function manifestNotes(source) {
+  const lines = source.split(/\r?\n/);
+  const found = [];
+
+  lines.forEach((line, index) => {
+    const key = line.match(/^(\s*)(?:-\s+)?note:\s*(.*)$/);
+
+    if (!key) {
+      return;
+    }
+
+    const indent = key[1].length;
+    const block = /^[|>][+-]?\d*\s*$/.test(key[2]);
+    const parts = block ? [] : [key[2]];
+
+    for (let next = index + 1; next < lines.length; next += 1) {
+      const candidate = lines[next];
+
+      if (candidate.trim() === '') {
+        if (block) continue;
+        break;
+      }
+
+      if (candidate.match(/^\s*/)[0].length <= indent) break;
+      if (!block && /^\s*(-\s|[\w-]+:(\s|$))/.test(candidate)) break;
+      parts.push(candidate.trim());
+    }
+
+    let text = parts.join(' ').trim();
+    const quoted = text.match(/^(["'])([\s\S]*)\1$/);
+
+    if (quoted) {
+      text = quoted[2];
+    }
+
+    found.push({ line: index + 1, text, multiline: block || parts.length > 1 });
+  });
+
+  return found;
+}
+
+if (wants('features')) {
+  const featuresDir = join(root, aiDir, 'features');
+  const manifests = featuresIndex !== null ? [featuresIndexPath] : [];
+
+  if (existsSync(featuresDir)) {
+    readdirSync(featuresDir, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => join(featuresDir, entry.name, 'index.yaml'))
+      .filter((path) => existsSync(path))
+      .forEach((path) => manifests.push(path));
+  }
+
+  manifests.forEach((path) => {
+    manifestNotes(read(path) || '').forEach(({ line, text, multiline }) => {
+      const where = `${rel(path)}:${line}`;
+
+      if (text.length > NOTE_CAP || multiline) {
+        warn('note-over-cap', 'features', where, `${where}: note: is ${multiline ? 'multi-line, ' : ''}${text.length} chars — the cap is one line of ${NOTE_CAP}, and every skill that reads the manifest pays for the rest`, {
+          text: 'replace it with the current state in one line; move history to the feature CHANGELOG.md',
+        });
+      }
+
+      const hits = VOLATILE_NOTE.filter(([pattern]) => pattern.test(text)).map(([, label]) => label);
+
+      if (hits.length > 0) {
+        warn('note-volatile', 'features', where, `${where}: note: records ${hits.join(', ')} — volatile state that goes stale silently once the PR merges`, {
+          text: 'drop PR, branch, and SHA state from the note; git and the forge own it',
+        });
+      }
+    });
   });
 }
 

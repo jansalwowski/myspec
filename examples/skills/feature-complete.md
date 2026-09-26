@@ -59,6 +59,8 @@ The standard path: implementation finished, verify is green, the user runs compl
      depends-on: []
    ```
 
+   The in-progress `note: "Tasks 1-4 done; 5-6 pending"` is deleted, not appended to — nothing was deferred, so there is no pointer to keep. Had a task been deferred, the note would be replaced by one line such as `"CSV export deferred; see plans/2026-04-30-favorite-reports.md"`.
+
 7. **Archive implementation plan**: moves `implementation-plan.md` → `plans/2026-04-30-favorite-reports.md`. Adds `archived: 2026-04-30` to its frontmatter.
 
    Creates `CHANGELOG.md`:
