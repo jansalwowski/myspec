@@ -287,7 +287,7 @@ Before presenting the plan:
 - [ ] `## Global Constraints` holds every project-wide exact (versions, limits, naming, invariants) verbatim with source refs; no task text re-derives one
 - [ ] Task boundaries are right-sized — each task independently rejectable by a reviewer; trivial same-shape changes batched into one task
 - [ ] Every task has exact file paths matching tech-spec file inventory
-- [ ] Every task has TDD steps and a `**Verify at phase review:**` command (the implementer never runs it)
+- [ ] Every task has TDD steps and a `**Verify at phase review:**` command scoped to the task's own tests
 - [ ] Parallel groups have zero file overlap (check file lists)
 - [ ] Barriers exist after every parallel group
 - [ ] Execution order table matches task dependencies

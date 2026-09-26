@@ -112,9 +112,9 @@ Notes:
 **Depends on:** Task N-1
 
 **Verify at phase review:** `<test command from .claude/verification.json, scoped to exact/path/to/file.test.ts>`
-(The implementer does not run this — it writes the test and the code and stops. The phase
-reviewer runs every task's command once the phase is complete. Name the command here so the
-reviewer does not have to infer it.)
+(Scoped to this task's tests, never the full suite: the implementer runs it before reporting,
+and the phase reviewer runs every task's command once the phase is complete. Name the command
+here so neither has to infer it.)
 
 - [ ] **Step 1: Write the failing test**
   [test code]

@@ -11,6 +11,8 @@ PKG=$(mktemp "${TMPDIR:-/tmp}/phase-review.XXXXXX")
 
 `PHASE_BASE` is the sha recorded before the phase's first dispatch — never `HEAD~1`, which silently drops all but the last commit of a multi-commit phase.
 
+Substitute the barrier verification log (`VERIFY_LOG`, SKILL.md Step 4a) and the spec requirement IDs the phase touches as well.
+
 ```
 Task tool (general-purpose):
   description: "Phase review for Phase N: [phase name]"
@@ -31,6 +33,10 @@ Task tool (general-purpose):
 
     [Relevant acceptance criteria from spec.md for the work done in this phase]
 
+    ## Spec Requirements This Phase Touches
+
+    [Each requirement ID (R-number / AC ID) the phase's tasks implement or change, with its text verbatim]
+
     ## Diff Under Review
 
     **Base:** [PHASE_BASE sha]  **Head:** [HEAD sha]
@@ -42,12 +48,21 @@ Task tool (general-purpose):
     fetch the diff yourself: `git log --oneline`, `git diff --stat`, and
     `git diff -U10` over [PHASE_BASE sha]..[HEAD sha]. Inspect code outside
     the diff only to evaluate a concrete risk you can name — one focused
-    check per named risk — and name both the risk and what you checked in
-    your report.
+    check per named risk; each listed requirement ID counts as one — and
+    name both the risk and what you checked in your report.
+
+    ## Barrier Verification Log
+
+    **Log file:** [VERIFY_LOG path]
+
+    The controller ran the full suite once at this phase's barrier; the
+    log holds each check's command, exit code, and output. Read it — do not
+    re-run the suite. Another suite run in this worktree races the
+    controller's and produces timing flakes.
 
     Your review is read-only on this checkout, except for running the
-    verification commands named below. Never edit files or mutate the index,
-    HEAD, or branch state.
+    commands named under Test coverage. Never edit files or mutate the
+    index, HEAD, or branch state.
 
     ## You Do Not Dispatch Subagents
 
@@ -62,7 +77,7 @@ Task tool (general-purpose):
 
     Implementer agents commonly over-report completeness, miss requirements, or misinterpret specs without realizing it. Skipping independent verification is how broken phases reach holistic review.
 
-    Treat the implementers' reports as unverified claims about the code. Run type-check and tests yourself to verify they pass, and compare implementation to requirements line by line. Design rationales are claims too: "kept it simple deliberately", "left it per YAGNI", or any other justification is the implementer grading their own work. Judge the code on its merits — a stated rationale never downgrades a finding's severity.
+    Treat the implementers' reports as unverified claims about the code — including any check they say they ran. Evidence is the barrier log and the commands you run yourself; compare implementation to requirements line by line. Design rationales are claims too: "kept it simple deliberately", "left it per YAGNI", or any other justification is the implementer grading their own work. Judge the code on its merits — a stated rationale never downgrades a finding's severity.
 
     ## Your Job
 
@@ -80,17 +95,40 @@ Task tool (general-purpose):
     - Are patterns from the existing codebase followed?
     - No magic numbers, no unnecessary complexity?
 
+    **Spec requirements (whole feature):**
+    For each requirement ID listed above, check that it holds as a behavior
+    across the whole feature, not only in the task text that cites it. Look
+    for another code path, an earlier phase, or a sibling mode (single vs.
+    many, empty vs. full, create vs. update) that contradicts it. A
+    requirement the task satisfies but the feature breaks is a finding.
+
     **Test coverage:**
     - Do tests exist for new functionality?
     - Do tests verify behavior (not just that code runs)?
     - Are edge cases covered?
-    - Do all tests pass? Run each task's `Verify at phase review:` command,
-      plus the checks in `.claude/verification.json`. **This is the only
-      time they run** — the implementers were forbidden to run them, so a
-      command you skip here is a command nobody ran. Report the exact
-      command and its output for each. Where a check carries a non-empty
-      `diffCommand`, run that one instead of its `command`, with
+    - Do all tests pass? Every failure in the barrier log is attributed
+      below. Then run each task's `Verify at phase review:` command
+      yourself, plus any further check needed to prove a risk you name —
+      never the whole suite. Report the exact command and its output for
+      each. If you run a `.claude/verification.json` check whose
+      `diffCommand` is non-empty, run that instead of its `command`, with
       `MYSPEC_BASE_REF` set to `git merge-base HEAD <default branch>`.
+
+    **Test-weakening audit (mandatory):**
+    Implementers may run their own tests, so the cheapest way past a red
+    test — changing the test — was open to them. Walk every test, fixture,
+    and lint/type config change in the diff for:
+    - deleted assertions, or assertions loosened (exact → partial, truthy,
+      `any`, snapshot rewritten to match)
+    - added skips, `.only`, `todo`, `xfail`, or relaxed timeouts/thresholds
+    - lint or type-check disables (`eslint-disable`, `@ts-ignore`,
+      `@ts-expect-error`, `noqa`, `type: ignore`)
+    - `as any` / `as unknown as` casts, or types widened to make code compile
+    - fixtures whose values no longer match the production values they
+      stand for, or no longer exercise what the test title claims
+    Each unjustified hit is Important — Critical when it hides a real
+    defect. A fixture set to a non-production value can mask exactly the
+    bug the test exists to catch.
 
     **Attributing a failing check:**
     A repo can be red before this phase started. A whole-repo lint, type-check,
@@ -141,6 +179,10 @@ Task tool (general-purpose):
 
     **Per-task verdict:**
     - Task N: ✅ APPROVED | ❌ ISSUES: [specific problems with file:line references]
+
+    **Spec requirements:** one line per listed ID — holds | violated (file:line)
+
+    **Test-weakening audit:** each hit with file:line, or "none found"
 
     **Issues by severity** (each: file:line, what is wrong, why it matters, how to fix if not obvious):
     - Critical: …
