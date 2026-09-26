@@ -144,12 +144,35 @@ fi
 # wrong tree. That silent false pass is worse than no gate at all, so block.
 # The marker is deliberately left in place (the EXIT trap is registered below)
 # so the block persists until a real install exists.
-# Deliberate link: isolation.allowLinkedModules: true in .myspec.json (project-
-# wide, for repos whose worktrees share the main checkout's dependencies by
-# construction) or MYSPEC_ALLOW_LINKED_MODULES=1 in the environment.
+# Accepted without config when the link points into a checkout whose root
+# lockfiles are byte-identical to this tree (committed and uncommitted state
+# alike): both trees then resolve the same dependencies, which is exactly the
+# case worktree-provision.sh links (it skips the link when the branch changes
+# a lockfile against --base). Comparing contents rather than re-running the
+# ref diff also holds when the main checkout is not at the base ref. At least
+# one lockfile must exist; without one there is no evidence the trees match.
+# Keep this lockfile list in step with lib/worktree-provision.sh.
+# Deliberate link otherwise: isolation.allowLinkedModules: true in .myspec.json
+# (project-wide, for repos whose worktrees share the main checkout
+# dependencies by construction) or MYSPEC_ALLOW_LINKED_MODULES=1.
+linked_lockfiles_match() {
+  local target src lock seen=0
+  target=$(cd "$REPO_ROOT/node_modules" 2>/dev/null && pwd -P) || return 1
+  src=$(dirname "$target")
+  [ "$src" != "$REPO_ROOT" ] || return 1
+  for lock in package-lock.json yarn.lock pnpm-lock.yaml bun.lockb bun.lock \
+      composer.lock poetry.lock Pipfile.lock Cargo.lock Gemfile.lock go.sum; do
+    if [ -e "$REPO_ROOT/$lock" ] || [ -e "$src/$lock" ]; then
+      cmp -s "$REPO_ROOT/$lock" "$src/$lock" || return 1
+      seen=1
+    fi
+  done
+  [ "$seen" -eq 1 ]
+}
 ALLOW_LINKED=$(jq -r '.isolation.allowLinkedModules // false' "$REPO_ROOT/.myspec.json" 2>/dev/null || printf 'false')
-if [ -L "$REPO_ROOT/node_modules" ] && [ "$ALLOW_LINKED" != "true" ] && [ "${MYSPEC_ALLOW_LINKED_MODULES:-}" != "1" ]; then
-  REASON=$(printf 'node_modules in %s is a symlink, so lint, type-check and test results here describe a different checkout dependency tree. Run a real install in this worktree before reporting any result as verified (or, if this repo shares one tree by design, set isolation.allowLinkedModules: true in .myspec.json).' "$REPO_ROOT" | jq -Rs .)
+if [ -L "$REPO_ROOT/node_modules" ] && [ "$ALLOW_LINKED" != "true" ] && [ "${MYSPEC_ALLOW_LINKED_MODULES:-}" != "1" ] \
+    && ! linked_lockfiles_match; then
+  REASON=$(printf 'node_modules in %s is a symlink and the lockfiles here differ from the checkout it points into (or none exists), so lint, type-check and test results here describe a different dependency tree. Run a real install in this worktree before reporting any result as verified (or, if this repo shares one tree by design, set isolation.allowLinkedModules: true in .myspec.json).' "$REPO_ROOT" | jq -Rs .)
   echo "{\"decision\": \"block\", \"reason\": $REASON}"
   exit 0
 fi

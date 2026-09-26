@@ -158,7 +158,7 @@ An optional `isolation` block configures the work-isolation hooks; every key has
 }
 ```
 
-`allowLinkedModules` lets the Stop hook verify a worktree whose `node_modules` is a symlink; `blockInMain` adds command patterns the Bash guard blocks in the main checkout while a session works in a worktree; `provision` is what `worktree-provision.sh` links and copies into a new worktree.
+`allowLinkedModules` lets the Stop hook verify a worktree whose `node_modules` is a symlink even when its lockfiles differ from the linked checkout (a link with identical lockfiles is accepted without it); `blockInMain` adds command patterns the Bash guard blocks in the main checkout while a session works in a worktree; `provision` is what `worktree-provision.sh` links and copies into a new worktree.
 
 `frameworkVersion` is kept in lockstep across `framework-files/manifest.json`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` (with matching git `ref`), `.codex-plugin/plugin.json`, and `plugins/myspec/.codex-plugin/plugin.json`. Use `./scripts/bump-version.sh X.Y.Z` to update all five in one shot; see [RELEASING.md](RELEASING.md) for the full release workflow.
 
