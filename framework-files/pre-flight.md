@@ -94,7 +94,7 @@ When completing implementation of a feature or sub-feature:
   - [ ] If approach changed significantly, update Architecture section
 - [ ] Update `${aiDir}/features/index.yaml`:
   - [ ] Change status: `draft` → `in-progress` → `complete` (as appropriate)
-  - [ ] Add/update `note:` field for partial completion or deferred scope
+  - [ ] Replace (never append to) `note:` — one line, ≤150 chars, current state only (partial completion, deferred scope); no history, PR state, or SHAs
 - [ ] If spec changed during implementation:
   - [ ] Bump `spec_version` in spec.md
   - [ ] Update `based_on_spec_version` in tech-spec.md

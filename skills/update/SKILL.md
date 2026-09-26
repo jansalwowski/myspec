@@ -148,7 +148,7 @@ Read the result as a checklist of this run:
 - `framework-missing` / `framework-drift` → a manifest entry did not get written. Re-apply that entry, do not stamp over it. For a `marker-merge` file this covers the header above the start marker too: the framework-owned region is line 1 through the end marker.
 - `marker-missing` → a `marker-merge` file lost its `<!-- myspec:framework-start -->` / `<!-- myspec:framework-end -->` markers; restore them from the plugin copy before the next update silently skips the file forever.
 - `shipped-drift` / `shipped-missing` on `.claude/hooks/*` or `.claude/lib/*` → a hook or helper is stale or absent; these are `overwrite` entries, so re-copy.
-- Anything in the `schema` or `features` group → fix before finishing; an unparseable `.myspec.json` or `verification.json` silently disables the surfaces that read it, and an entry the features parser cannot read is invisible to every status audit.
+- Anything in the `schema` or `features` group → fix before finishing; an unparseable `.myspec.json` or `verification.json` silently disables the surfaces that read it, and an entry the features parser cannot read is invisible to every status audit. Exception: `note-over-cap` / `note-volatile` are project content, not install state — report them and leave the notes alone.
 
 Report the summary line in Step 6. `myspec-schema-stale` cannot appear here: Step 1.5 ran the schema migration first. If it does, that migration did not complete — re-run it before stamping.
 

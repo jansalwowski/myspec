@@ -291,6 +291,44 @@ expect_no_line 'hook-syntax' "a check selector excludes its group siblings"
 run_doctor --json
 if printf '%s' "$OUTPUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const j=JSON.parse(s);process.exit(j.errors.length>0 && j.errors[0].remediation && j.errors[0].group ? 0 : 1)})'; then ok; else fail "--json emits finding records with group and remediation"; fi
 
+# --- pass 2b: manifest note: cap and volatile state (issue #86) --------------
+
+build_fixture
+LONG=$(head -c 151 /dev/zero | tr '\0' 'x')
+{
+  echo 'features:'
+  echo '  - name: clean'
+  echo '    status: in-progress'
+  echo '    note: "Export deferred to v2; see spec Out of Scope, defaced 20260927"'
+  echo '  - name: long'
+  echo "    note: $LONG"
+  echo '  - name: block'
+  echo '    note: |'
+  echo '      v1 shipped'
+  echo '      v2 in progress'
+  echo '  - name: pr'
+  echo "    note: 'PR #1234 stays DRAFT until QA'"
+  echo '  - name: merge'
+  echo '    note: Not yet merged to main'
+  echo '  - name: sha'
+  echo '    note: reverted in 9a9110c'
+} > "$REPO/ai/features/index.yaml"
+mkdir -p "$REPO/ai/features/parent"
+printf 'sub-features:\n  - name: child\n    note: landed at 672f470e\n' > "$REPO/ai/features/parent/index.yaml"
+
+run_doctor features
+expect_exit 0 "note findings are warnings and never fail the run"
+expect_no_line 'index.yaml:4' "a short, current-state note is quiet (no word or date read as a SHA)"
+expect_line 'WARN +note-over-cap: ai/features/index.yaml:6' "a note over 150 chars is a warning"
+expect_line 'WARN +note-over-cap: ai/features/index.yaml:8.*multi-line' "a block-scalar note is over the one-line cap"
+expect_line 'WARN +note-volatile: ai/features/index.yaml:12.*PR/issue state' "a PR draft state is volatile"
+expect_line 'WARN +note-volatile: ai/features/index.yaml:14.*merge state' "a not-yet-merged claim is volatile"
+expect_line 'WARN +note-volatile: ai/features/index.yaml:16.*commit SHA' "a short SHA is volatile"
+expect_line 'WARN +note-volatile: ai/features/parent/index.yaml:3' "sub-feature manifests are checked too"
+
+run_doctor --quiet wiring schema
+expect_no_line 'note-' "the blocking stop-hook groups exclude note checks"
+
 # --- pass 3: severity depends on whether an update is pending ----------------
 
 build_fixture

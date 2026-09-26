@@ -98,7 +98,8 @@ is left is judgment:
 
 **F. Features tree + ideas** — `${aiDir}/features/`, `${aiDir}/ideas/` (structural pass, don't deep-read specs):
 - Run the feature-status-audit engine first: `node "${CLAUDE_PLUGIN_ROOT}/lib/feature-status-audit/audit.mjs"` — it owns manifest ↔ disk drift, orphans, status vocabulary, missing docs
-- Add only what the script doesn't cover: manifest `note:` fields carrying embedded history (belongs in CHANGELOG.md); largest-file outliers; index freshness (spot-check 3 mapped paths); ideas queue vs shipped reality
+- Tier 0 `note-over-cap` / `note-volatile` own manifest `note:` length and PR/SHA state; the fix replaces the note with one line of current state and moves history to the feature `CHANGELOG.md`
+- Add only what the scripts don't cover: notes under the cap that still narrate history; largest-file outliers; index freshness (spot-check 3 mapped paths); ideas queue vs shipped reality
 
 ### Phase 2 — Verify and rank
 
@@ -143,7 +144,7 @@ mechanical can see them.
 | Allowlist missing self | a guard hook blocks edits to its own file | judgment (surface E, behavioral run) |
 | Temporary ban outlives reality | "DO NOT implement X yet" beside shipped, working X | judgment (surface C) |
 | Frozen index | INDEX.md lists 2 of 15 features | judgment (surface C/F) |
-| History embedded in hot files | multi-KB changelog inside a manifest `note:` field | judgment (surface F) |
+| History embedded in hot files | multi-KB changelog or "PR #N still draft" inside a manifest `note:` field | tier 0 `note-over-cap` / `note-volatile`; judgment for other hot files (surface F) |
 
 ## Project extension format
 
