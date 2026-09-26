@@ -30,10 +30,10 @@ The base case: implementation is done, every acceptance criterion traces to code
 
 The skill announces: *"Reviewing implementation conformance for `${aiDir}/features/saved-searches/` against its spec and plan."* Then:
 
-1. **Load context** — reads `spec.md`, `tech-spec.md` (File Inventory + Implementation Steps), `implementation-plan.md`, `scenarios.md`, and `.claude/rules/`.
+1. **Load context** — reads `spec.md`, `tech-spec.md` (File Inventory + Implementation Steps), `implementation-plan.md`, `scenarios.md`, and `.claude/rules/`. It also finds the `holistic-review.md` that `feature-implement` wrote; `git diff --stat <head_sha> HEAD` outside `${aiDir}/` is empty, so the report is reusable.
 2. **Establish the diff** — resolves default branch `main`, `BASE_SHA = git merge-base HEAD main`, review range `BASE_SHA..HEAD`. Captures the changed-file set from `git diff BASE_SHA..HEAD --stat`.
-3. **Build the input packet** — pastes the four ACs, the planned File Inventory paths and steps, the checked-off task list, and the three scenarios (all marked runnable) inline.
-4. **Dispatch the conformance reviewer** — one fresh `premium`-tier subagent that never saw the implementation conversation. It locates code via planned paths → diff → semantic search within the changed files, builds the matrix, and runs the four checks (forward, reverse, test, behavioral).
+3. **Build the input packet** — pastes the four ACs, the planned File Inventory paths and steps, the checked-off task list, the three scenarios (all marked runnable), and the holistic report verbatim inline.
+4. **Dispatch the conformance reviewer** — one fresh `premium`-tier subagent that never saw the implementation conversation. It locates code via planned paths → diff → semantic search within the changed files, builds the matrix, and runs the four checks (forward, reverse, test, behavioral). It takes the holistic pass's integration and architecture verdicts as settled and does not re-report its findings, but still pins every AC to code and a test itself — the holistic ✅ list is a claim, not proof.
 
 The reviewer returns:
 
@@ -63,6 +63,7 @@ base_sha: a1b2c3d
 head_sha: f4e5d6c
 reviewed: 2026-05-27
 verdict: conformant
+holistic_reused: true
 ---
 ```
 

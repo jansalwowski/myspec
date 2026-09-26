@@ -10,6 +10,8 @@ Execute a feature implementation plan by dispatching subagents per task and revi
 
 **Announce at start:** "Executing feature-implement on `${aiDir}/features/{feature}/implementation-plan.md`."
 
+**Autopilot:** when the user opted in, answer this skill's gates — Step 0's "always ask" included — per [`_shared/autopilot.md`](../_shared/autopilot.md).
+
 ## Execution Model
 
 **Milestone** = a vertical slice of the feature (BE → FE → tests). Top-level execution unit. Agent checkpoints occur at milestone boundaries.
@@ -111,8 +113,6 @@ options:
 
 - Order so the recommended option is first with `(Recommended — {why})` appended
   (e.g. `(Recommended — plan has parallel groups)`).
-- Always ask, even when the recommendation is unambiguous. Confirmation is cheap;
-  silent assumption is the bug.
 
 **5. Auto-execute the choice:**
 
@@ -300,8 +300,7 @@ After all phases in a milestone complete (for the final milestone run only (b), 
 
 Mark `fresh` as `(Recommended)` when the plan has more than five tasks: a multi-milestone
 run in one session is dispatch-latency-bound and the controller's context degrades across
-milestones. One milestone per session is the default for plans that size. `continue` is
-recommended only for plans of five tasks or fewer.
+milestones.
 
 - **continue** → proceed to next milestone
 - **stop** → remove the orchestration marker, ensure all changes committed, output: "Stopped after Milestone N. Resume with `/myspec:feature-implement` — it will detect completed milestones via `[x]` checkboxes.", then exit
@@ -310,7 +309,7 @@ recommended only for plans of five tasks or fewer.
 ### Step 5: Completion
 
 1. Remove the orchestration marker (Step 2.5) so the Stop hook blocks again, then run the Final Verification section from the plan.
-2. Build the full-feature review package (same commands as Step 4b, over `BASE_SHA..HEAD`) and dispatch the holistic reviewer (`./holistic-reviewer-prompt.md`) on the `premium` tier with the package path plus the plan's Execution Log entries (deferred minors and parked findings) so it can triage which must be fixed before merge. This pass is mandatory — never skipped, never downgraded to a cheaper tier. It is the quick in-flight gate; the deeper independent conformance audit lives in `/myspec:feature-implement-review`.
+2. Build the full-feature review package (same commands as Step 4b, over `BASE_SHA..HEAD`) and dispatch the holistic reviewer (`./holistic-reviewer-prompt.md`) on the `premium` tier with the package path plus the plan's Execution Log entries (deferred minors and parked findings) so it can triage which must be fixed before merge. This pass is mandatory — never skipped, never downgraded to a cheaper tier. Write its report to `${aiDir}/features/{feature}/holistic-review.md` (frontmatter in the prompt file) and commit it: `/myspec:feature-implement-review` reads it and skips what it already covers.
 3. Print the completion report. It contains, in order: the milestone summary, with probe results and any live demo URL; the holistic verdict; **"Rulings I made"** — every `Ruling:` line from the Execution Log, in the order made, each with its cost-if-wrong ("none" if the log holds no rulings); every `Waiver:` line; and the deferred-minors triage outcome. This report is the only place the decisions taken on the user's behalf reach them.
 4. **Ask the user what to do next** via `AskUserQuestion` — do not auto-hand-off:
 
@@ -318,16 +317,15 @@ recommended only for plans of five tasks or fewer.
 question: "Implementation complete. What next?"
 header:   "Next step"
 options:
-  - "feature-implement-review" → independent audit that the code fulfills the spec and
-                                  plan (traceability + behavioral), persists a report
-                                  (Recommended for anything non-trivial)
+  - "feature-implement-review" → REQ/AC traceability, test trace, scope drift on top of
+                                  holistic-review.md; persists conformance-report.md
   - "code-review"               → quality, standards, and bug review of the changes
                                   (universal dimensions + any project rules)
   - "feature-complete"          → skip the reviews; sync docs, archive plan, merge
   - "Stop here"                 → leave the branch as-is; continue later
 ```
 
-Execute the choice: invoke `/myspec:feature-implement-review`, `/myspec:code-review`, `/myspec:feature-complete`, or stop and report the branch name. The two review passes are complementary, not exclusive (conformance vs. code quality) — after one finishes, offer this choice again so the user can run the other or proceed.
+Recommend `feature-implement-review` when the holistic verdict is not READY TO MERGE, any criterion came back ⚠/❌, a probe was waived, or the plan has 10+ tasks; otherwise `feature-complete`, since the holistic pass already checked every criterion. Execute the choice: invoke `/myspec:feature-implement-review`, `/myspec:code-review`, `/myspec:feature-complete`, or stop and report the branch name. The two review passes are complementary, not exclusive (conformance vs. code quality) — after one finishes, offer this choice again so the user can run the other or proceed.
 
 ## Model Selection
 

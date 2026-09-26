@@ -87,6 +87,7 @@ Each task carries a **Spec contract** block — verbatim quotes, not paraphrase 
 **Spec contract (verbatim quotes — do NOT paraphrase):**
 - `spec.md` AC-2: "A user can mark a report as a favorite, and the star reflects the favorited state immediately."
 - `tech-spec.md` step 2: "ReportFavoritesService exposes add / remove / list / isFavorite, backed by ReportFavoriteRepository."
+- `tech-spec.md` → `### Database Changes` (cited, not pasted — the `report_favorites` table definition, indexes, and constraints are shared by Tasks 1 and 2; `feature-implement` pastes the section into each dispatch)
 
 **Files:**
 - Create: `src/features/reports/favorites/service.ts`

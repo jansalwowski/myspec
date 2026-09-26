@@ -8,6 +8,8 @@ description: "Use when a feature has an approved spec.md and tech-spec.md and ne
 
 **Announce at start:** "I'm using the feature-plan skill to create the implementation plan for {feature}."
 
+**Autopilot:** when the user opted in, answer this skill's gates per [`_shared/autopilot.md`](../_shared/autopilot.md).
+
 ## When to Use
 
 Check these gates in order:
@@ -70,7 +72,7 @@ A task is the smallest unit that carries its own test cycle and is worth a fresh
 Populate the plan's `## Global Constraints` section with the project-wide exacts collected in Step 1 — version floors, size/perf limits, naming rules, invariants — copied verbatim from `spec.md` / `tech-spec.md` with source refs. Every task's requirements implicitly include this section; per-task text must not re-derive or paraphrase these values — re-derivation is how they drift.
 
 **Spec contract — verbatim quotes (REQUIRED per task):**
-For every task, populate the `**Spec contract:**` block with verbatim quotes from `spec.md` and/or `tech-spec.md` covering this task's behavior. Paste the sentence; do NOT paraphrase. The implementer subagent does NOT read `spec.md` or `tech-spec.md` — it receives the task text and nothing else. Any requirement that does not make the spec → task translation is invisible to it. If you find yourself rewording spec language, the original wording IS the contract — quote it. If a task has no spec/tech-spec passage that constrains it, ask whether the task should exist.
+For every task, populate the `**Spec contract:**` block with verbatim quotes from `spec.md` and/or `tech-spec.md` covering this task's behavior. Paste the sentence; do NOT paraphrase. The implementer subagent does NOT read `spec.md` or `tech-spec.md` — it receives the task text and nothing else. Any requirement that does not make the spec → task translation is invisible to it. If you find yourself rewording spec language, the original wording IS the contract — quote it. If a task has no spec/tech-spec passage that constrains it, ask whether the task should exist. Quote sentences, not sections: a longer contract several tasks share (a schema, an API shape) is cited by path and heading — `tech-spec.md` → `### API Schema` — once per task, and `feature-implement` pastes it into each dispatch; re-pasting it into every task is how plans pass a thousand lines.
 
 **Touch only (REQUIRED for tasks with `Modify:` files):**
 For every task whose Files block contains a `Modify:` entry, populate the `**Touch only:**` line specifying which lines/sections the task is allowed to alter. This pairs with the phase reviewer's diff-scope rule — without it, reviewers flag adjacent pre-existing tech debt as regressions and implementers waste retries on out-of-scope fixes.
