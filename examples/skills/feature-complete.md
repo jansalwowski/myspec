@@ -28,7 +28,7 @@ The standard path: implementation finished, verify is green, the user runs compl
 #### Phase 1 — Docs sync
 
 1. **Read current state**: loads `tech-spec.md` (v1, status: draft because it's been waiting on completion), `spec.md` (v1, approved), manifest entry (`status: in-progress, phase: 1`).
-2. **Validate Implementation Steps**: all 6 steps already `[x]` from feature-implement's phase reviews. No changes.
+2. **Validate Implementation Steps**: the 6-step outline matches what shipped (the plan's checkboxes, now all `[x]`, tracked progress). No changes.
 3. **Update File Inventory**: cross-checks planned vs. actual. One file ended up in a different sub-directory than planned (`src/features/reports/favorites/sort.ts` vs. planned `src/features/reports/sort-favorites.ts`). Skill prompts:
 
    > File Inventory drift:
@@ -74,6 +74,8 @@ The standard path: implementation finished, verify is green, the user runs compl
 8. **Cross-reference check**: `dependencies.md` has no upstream dependencies, no downstream features yet. Nothing to update.
 
 9. **Topology check**: skipped — the feature added no workspace member, package or top-level command, so the topology file cannot have gone stale from it.
+
+10. **Compact tech-spec.md**: nothing to remove. The tech-spec was written from the current template (numbered outline, no checkboxes) and step 3 already fixed the one stale inventory row.
 
 The skill reports:
 
@@ -163,8 +165,8 @@ Sometimes verify wasn't run, or it was run too early, and the completion phase e
 
 #### Phase 1 — Docs sync
 
-1. **Read current state**: tech-spec.md `based_on_spec_version: 2`, status `draft`, 11 implementation steps all `[x]`.
-2. **Validate Implementation Steps**: all 11 `[x]` ✓.
+1. **Read current state**: tech-spec.md `based_on_spec_version: 2`, status `draft`, 11 implementation steps. The file predates the outline format, so the steps are still a `[x]` checkbox list.
+2. **Validate Implementation Steps**: all 11 match what shipped ✓.
 3. **Update File Inventory**: scans planned vs. actual. Finds drift:
 
    ```
@@ -198,7 +200,7 @@ Sometimes verify wasn't run, or it was run too early, and the completion phase e
    >
    > - Adding 2 files to File Inventory (Action: Create)
    > - Updating ADR-3's "Decision" to mention the 503-retry behavior explicitly
-   > - Adding 1 implementation step (already done — will be marked [x])
+   > - Adding 1 implementation step to the outline
    > - Bumping `tech-spec.md` `last_updated`
    >
    > spec.md doesn't need a change — the user-visible behavior is the same.
@@ -226,6 +228,8 @@ Sometimes verify wasn't run, or it was run too early, and the completion phase e
 
    It reads the new package's `package.json` and entry file and adds a real entry — `purpose: 503 retry shim for the reports webhook`, `stack: [TypeScript]` — rather than a `TODO`. Re-running the audit is clean. Had the audit exited 3, or printed a NOT CHECKED block covering workspace members, the skill would say so in the completion summary instead of claiming the file is current.
 
+10. **Compact tech-spec.md**: converts the 12-item checkbox list to a numbered outline, and deletes the v1 delivery-window decision marked "superseded by ADR-3", leaving only ADR-3. Architecture, interfaces, and edge cases stay. The CHANGELOG row from step 7 now ends `Compacted tech-spec.md.`
+
 #### Phase 2 — Branch integration
 
 Standard PR flow.
@@ -234,7 +238,8 @@ Standard PR flow.
 
 - Tech-spec File Inventory updated (+2 files).
 - ADR-3 refined to capture the 503-retry behavior.
-- Plan archived; CHANGELOG row notes the late inclusion.
+- Plan archived; CHANGELOG row notes the late inclusion and the compaction.
+- tech-spec.md compacted: checkbox list became a numbered outline, superseded decision removed.
 - PR opened.
 
 The skill ends with:

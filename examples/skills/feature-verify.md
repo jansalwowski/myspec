@@ -45,7 +45,7 @@ Summary
 ✓ implementation-plan.md — archived to plans/2026-04-28-favorite-reports.md
   CHANGELOG entry present.
 ✓ File Inventory — 5 created, 2 modified, all paths exist
-✓ Implementation Steps — 6/6 [x], all referenced files present
+✓ Implementation Steps — 6-step outline, no checkboxes, all referenced files present
 ✓ Sub-features — none (single feature, n/a)
 ✓ Memory references — 1 procedural memory P016 references this feature, anchor verified
 ✓ Manifest — index.yaml shows status: complete, phase: 1, no drift
@@ -100,7 +100,6 @@ Feature Health: team-invites
   ✗ Implementation Steps: 1 unchecked [ ] step that describes work that
     appears done in the codebase ("Remove magic-link UI, endpoint, service
     method, and related tests" — files all gone, OpenAPI regenerated).
-    Should be checked.
 
 [MEDIUM]
   ⚠ scenarios.md last updated 2026-02. Bulk-invite (US7, US8) and
@@ -115,6 +114,10 @@ Feature Health: team-invites
   ⚠ index.yaml entry: phase: 2 (bumped during bulk-invite). Now that
     magic-link is also deprecated, consider phase: 3 to reflect the
     architecture changes.
+
+  ⚠ tech-spec.md still carries a checkbox task list. The template uses a
+    numbered outline; the feature-complete compaction step (step 10)
+    converts it and drops the Delete rows above.
 
 Recommended sequence
 ─────────────────────
