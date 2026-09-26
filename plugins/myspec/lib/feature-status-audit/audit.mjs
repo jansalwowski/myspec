@@ -9,7 +9,8 @@
 //   --ai-dir       reads .myspec.json { "aiDir": "..." } or falls back to "ai"
 //   --severity     critical|high|medium|low (default: low — show all)
 
-import { readFileSync, existsSync, statSync } from 'node:fs'
+import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { join, resolve, relative } from 'node:path'
 import { argv, cwd, exit, stdout } from 'node:process'
 
@@ -169,6 +170,77 @@ const EXPECTATIONS = {
   },
 }
 
+// ─────────────── checkbox + frontmatter readers ───────────────
+// Plan tasks are list items carrying `[ ]` todo, `[~]` in progress, `[x]` done
+// (feature-plan's Task Status table). Only list-item checkboxes count: table
+// cells and fenced code blocks quote the syntax without being tasks.
+
+const CHECKBOX = /^\s*(?:[-*+]|\d+[.)])\s+\[([ xX~])\]/
+const FENCE = /^\s*(```|~~~)/
+
+function countCheckboxes(text, { section = null } = {}) {
+  const counts = { checked: 0, inProgress: 0, unchecked: 0, total: 0 }
+  let fence = null
+  let inSection = section === null
+  let sectionLevel = 0
+  for (const line of text.split(/\r?\n/)) {
+    const f = FENCE.exec(line)
+    if (f) {
+      if (fence === null) { fence = f[1] } else if (f[1] === fence) { fence = null }
+      continue
+    }
+    if (fence !== null) { continue }
+    if (section !== null) {
+      const h = /^(#{1,6})\s+(.*)$/.exec(line)
+      if (h) {
+        if (section.test(h[2])) { inSection = true; sectionLevel = h[1].length; continue }
+        if (inSection && h[1].length <= sectionLevel) { inSection = false }
+      }
+      if (!inSection) { continue }
+    }
+    const m = CHECKBOX.exec(line)
+    if (!m) { continue }
+    counts.total++
+    if (m[1] === 'x' || m[1] === 'X') { counts.checked++ } else if (m[1] === '~') { counts.inProgress++ } else { counts.unchecked++ }
+  }
+  return counts
+}
+
+function readText(p) {
+  try { return readFileSync(p, 'utf8') } catch { return null }
+}
+
+function frontmatterField(text, key) {
+  if (text === null) { return null }
+  const lines = text.split(/\r?\n/)
+  if (lines[0]?.trim() !== '---') { return null }
+  for (let i = 1; i < lines.length; i++) {
+    if (lines[i].trim() === '---') { break }
+    const m = new RegExp(`^${key}:\\s*(.*)$`).exec(lines[i])
+    if (m) { return String(parseScalar(stripComment(m[1]))) }
+  }
+  return null
+}
+
+function planCounts(p) {
+  const text = readText(p)
+  return text === null ? null : countCheckboxes(text)
+}
+
+function ratio(c) { return `${c.checked}/${c.total}` }
+
+// Merged work whose feature-complete never ran usually left a commit naming
+// the feature. Best-effort: silent outside a git repo or when git is absent.
+function gitHint(name) {
+  const term = name.split('/').pop()
+  try {
+    const log = execFileSync('git', ['log', '--oneline', '-i', '-F', `--grep=${term}`, '-n', '3'], {
+      cwd: cwdAbs, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+    return log === '' ? null : log.split('\n')
+  } catch { return null }
+}
+
 const SEVERITY_ORDER = { critical: 4, high: 3, medium: 2, low: 1, info: 0 }
 
 function inspect(feature, { parent = null } = {}) {
@@ -192,6 +264,13 @@ function inspect(feature, { parent = null } = {}) {
     changelog: fileExists(join(dir, 'CHANGELOG.md')),
     subIndex: fileExists(join(dir, 'index.yaml')),
   }
+  docs.planProgress = docs.implementationPlan ? planCounts(join(dir, 'implementation-plan.md')) : null
+  docs.archivedPlans = docs.plansArchive
+    ? readdirSync(join(dir, 'plans')).filter(f => f.endsWith('.md')).sort()
+      .map(f => ({ file: `plans/${f}`, ...planCounts(join(dir, 'plans', f)) }))
+    : []
+  docs.specStatus = docs.spec ? frontmatterField(readText(join(dir, 'spec.md')), 'status') : null
+  docs.techSpecStatus = docs.techSpec ? frontmatterField(readText(join(dir, 'tech-spec.md')), 'status') : null
 
   const issues = []
   const rule = EXPECTATIONS[status]
@@ -239,9 +318,33 @@ function inspect(feature, { parent = null } = {}) {
     issues.push({ severity: 'high', message: 'subfeatures: true but no index.yaml in feature dir' })
   }
 
-  // Complete feature with an active implementation-plan.md (should be archived)
+  // Status drift: the plan's checkbox ratio and the docs' own frontmatter
+  // status disagree with the manifest. Happens whenever work merges without
+  // feature-complete.
+  const plan = docs.planProgress
+  let hint = null
   if (status === 'complete' && docs.implementationPlan) {
-    issues.push({ severity: 'low', message: 'implementation-plan.md still present though status=complete (should be archived)' })
+    if (plan && plan.total > 0 && plan.checked < plan.total) {
+      issues.push({ severity: 'medium', message: `status=complete but implementation-plan.md is ${ratio(plan)} [x] (open tasks, unarchived)` })
+    } else {
+      issues.push({ severity: 'low', message: 'implementation-plan.md still present though status=complete (should be archived)' })
+    }
+  }
+  if (['planned', 'draft', 'in-progress'].includes(status) && plan && plan.total > 0 && plan.checked === plan.total) {
+    issues.push({ severity: 'medium', message: `implementation-plan.md is ${ratio(plan)} [x] but status=${status} (merged without feature-complete?)` })
+    hint = gitHint(relDir)
+  }
+  if (status === 'complete') {
+    for (const a of docs.archivedPlans) {
+      if (a.total > 0 && a.checked === 0) {
+        issues.push({ severity: 'medium', message: `archived ${a.file} is ${ratio(a)} [x] though status=complete` })
+      }
+    }
+    for (const [file, docStatus] of [['spec.md', docs.specStatus], ['tech-spec.md', docs.techSpecStatus]]) {
+      if (docStatus === 'draft') {
+        issues.push({ severity: 'medium', message: `${file} frontmatter status: draft but manifest status=complete` })
+      }
+    }
   }
 
   return {
@@ -252,6 +355,7 @@ function inspect(feature, { parent = null } = {}) {
     subfeatures: feature.subfeatures === true,
     docs,
     issues,
+    ...(hint ? { gitHint: hint } : {}),
   }
 }
 
@@ -289,7 +393,26 @@ for (const entry of topEntries) {
       for (const sub of subs) {
         results.push(inspect(sub, { parent: entry.name }))
       }
+      checkParentAcs(r, subs, entry.name)
     }
+  }
+}
+
+// Every sub-feature complete while the parent spec still has unticked
+// acceptance criteria. Only judged when the spec ticks at least one AC:
+// a spec that never ticks its ACs uses a different convention, not drift.
+function checkParentAcs(parentResult, subs, parentName) {
+  if (subs.length === 0 || !subs.every(s => s.status === 'complete')) { return }
+  const text = readText(join(featuresDir, parentName, 'spec.md'))
+  if (text === null) { return }
+  const acs = countCheckboxes(text, { section: /acceptance criteria/i })
+  const open = acs.unchecked + acs.inProgress
+  parentResult.docs.specAcceptance = acs
+  if (acs.checked > 0 && open > 0) {
+    parentResult.issues.push({
+      severity: 'medium',
+      message: `all ${subs.length} sub-features complete but spec.md acceptance criteria are ${ratio(acs)} [x] (${open} unticked)`,
+    })
   }
 }
 
@@ -297,7 +420,6 @@ for (const entry of topEntries) {
 const topLevelListed = new Set(results.map(r => r.name.split('/')[0]))
 const orphans = []
 try {
-  const { readdirSync } = await import('node:fs')
   for (const entry of readdirSync(featuresDir, { withFileTypes: true })) {
     if (!entry.isDirectory()) { continue }
     if (!topLevelListed.has(entry.name)) { orphans.push(entry.name) }
@@ -358,6 +480,7 @@ function printReport(rs, orph) {
       for (const i of r.issues) {
         out(pad(r.name, 38) + pad(r.status, 14) + pad(i.severity.toUpperCase(), 5) + i.message)
       }
+      for (const h of r.gitHint ?? []) { out(' '.repeat(57) + `git log: ${h}`) }
     }
     out('')
   }
