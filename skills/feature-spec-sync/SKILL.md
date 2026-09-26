@@ -1,12 +1,14 @@
 ---
 name: "feature-spec-sync"
-description: "Use when feature docs have drifted from code — after refactoring, or before completing a feature. Handles spec.md and tech-spec.md drift, stale paths, version mismatches. Do NOT use for the project topology file (backbone-sync) or the feature manifest (feature-status-audit)."
+description: "Use when feature docs have drifted from code — after refactoring, or before completing a feature. Handles spec.md and tech-spec.md drift, dead repo paths in any feature doc (--paths), version mismatches. Do NOT use for the project topology file (backbone-sync) or the feature manifest (feature-status-audit)."
 tags: [documentation, maintenance, verification, sync]
 ---
 
 # Spec Sync
 
 Detect and fix discrepancies between feature documentation (spec.md, tech-spec.md) and actual code. Interactive workflow with user confirmation for all changes.
+
+**Paths mode** (`--paths`, or the user asks only about dead or stale paths): run check A without `--only` to sweep every feature, then steps 3-7 on its findings. Skip B-D and the prerequisites.
 
 ## Prerequisites
 
@@ -26,13 +28,18 @@ Read the target feature's documentation:
 
 Scan for four types of issues:
 
-**A. File Path Validation**
+**A. Dead Paths**
 
-From tech-spec.md "File Inventory" section:
-- Extract all file paths from the File Inventory section (adapt the regex below to the project's directory structure)
-- Use Glob to verify each path exists
-- For missing files, use fuzzy matching to find similar paths (e.g., `guide.ts` → `guides.ts`)
-- Categorize: EXISTS, MISSING, MOVED (similar file found)
+From the project root:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/lib/feature-spec-sync/dead-paths.mjs" --only={feature}
+```
+
+It checks every backticked repo path in the feature's live docs (spec.md, tech-spec.md, index.yaml, scenarios.md, seed.json, sub-features included) and prints `MISSING` or `MOVED <old> -> <new>` with doc:line. It skips plans/, CHANGELOG.md, placeholders, globs, URLs, fenced code and rename/history tables. Exit 0 clean, 1 findings, 3 cannot run. `--prefix=a,b` also checks extension-less paths under top-level dirs that were deleted outright; `--json` for machine output.
+
+- Drop MISSING paths the tech-spec lists as still to be created in an unimplemented feature — planned, not drift.
+- For MISSING with no candidate, Glob for near names (`guide.ts` → `guides.ts`) before offering removal.
 
 **B. Spec Version Alignment**
 
@@ -111,11 +118,6 @@ After all fixes, summarize: changes made, items skipped, files modified.
 
 Use these for scanning:
 
-**File paths in tech-spec.md** (adapt to project structure):
-```regex
-(src|apps|packages|lib)/[a-zA-Z0-9/_-]+\.(ts|tsx|vue|js|jsx|py|rb|go|prisma|graphql)
-```
-
 **Implementation checkboxes:**
 ```regex
 - \[([ x])\] (.+)
@@ -131,7 +133,7 @@ Use these for scanning:
 
 After running spec-sync:
 
-- [ ] All file paths in tech-spec.md exist (verify with Glob)
+- [ ] `dead-paths.mjs` exits 0, or every remaining finding was triaged with the user
 - [ ] `spec_version` matches `based_on_spec_version`
 - [ ] Implementation checkboxes reflect actual code state
 - [ ] Feature status in index.yaml matches completion %
