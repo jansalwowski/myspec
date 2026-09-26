@@ -23,9 +23,12 @@
 # the worktree would write through into the main checkout. Copy the single
 # generated file the linter needs instead (`copy`).
 #
-# The Stop hook refuses to verify a tree whose node_modules is a symlink unless
-# `.myspec.json` sets isolation.allowLinkedModules: true (or the session sets
-# MYSPEC_ALLOW_LINKED_MODULES=1). Recipe: skills/_shared/worktree-provisioning.md
+# The Stop hook accepts a symlinked node_modules only when the worktree root
+# lockfiles are byte-identical to the checkout the link points into (the case
+# this script links), unless `.myspec.json` sets isolation.allowLinkedModules:
+# true (or the session sets MYSPEC_ALLOW_LINKED_MODULES=1). Keep the lockfile
+# list below in step with hooks/verify-before-stop.sh.
+# Recipe: skills/_shared/worktree-provisioning.md
 
 set -euo pipefail
 

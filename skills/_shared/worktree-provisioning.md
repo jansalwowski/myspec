@@ -27,7 +27,7 @@ Rules the script enforces or the recipe relies on:
 
 - **A branch that changes a lockfile gets no `node_modules` link.** A linked tree then describes the wrong dependencies. The script detects this against `--base` and says so; run a real install in the worktree.
 - **Never symlink a build output directory** (`.nuxt`, `dist`, `.next`): a later build in the worktree writes through into the main checkout. Copy the one generated file the linter needs.
-- **The Stop hook refuses a symlinked `node_modules`** unless `.myspec.json` sets `isolation.allowLinkedModules: true`. Set it when the repo's worktrees share the main checkout's tree by construction; leave it unset for dependency work.
+- **The Stop hook refuses a symlinked `node_modules` whose lockfiles differ** from the checkout it points into (or when no lockfile exists). A link this script made with an unchanged lockfile passes as is. `isolation.allowLinkedModules: true` in `.myspec.json` accepts any link; set it only when the repo's worktrees share the main checkout's tree by construction, never for dependency work.
 - **Lint caches lie across trees.** A copied `.eslintcache` suppresses pre-existing findings the same way the main checkout does; without it a cold run flags tech debt the branch did not introduce (issue #11, gap 3).
 
 ## Verify where you ran
