@@ -47,13 +47,14 @@ Last section of the plan, written by Step 4.5 after every task exists:
 
 | Source | Requirement (verbatim) | Tasks |
 |--------|------------------------|-------|
+| spec.md REQ-003 | "Imports reject files over 10 MB before parsing" | T3 |
 | spec.md AC-1 | "Import fails with a message naming the regen command" | T4 |
 | spec.md AC-2 | "Existing callers keep working with the field omitted" | T2, T7 |
 | tech-spec.md step 17 | "Collect syntax errors before type errors" | T11 |
 | spec.md AC-6 | "Usage is reported to the billing dashboard" | DEFERRED — out of scope per tech-spec §Non-Goals; billing lands in feature `usage-metering` |
 ```
 
-One row per acceptance criterion in `spec.md` and per implementation step in `tech-spec.md` — no source line is absent from the table. The requirement column is the source's own wording, quoted, so a reader can check the mapping without opening the spec. The Tasks column holds task IDs (several where a requirement spans tasks; the same task may appear in several rows) or the single word `DEFERRED` followed by an em dash and the reason.
+One row per requirement ID and per acceptance criterion in `spec.md`, and per implementation step in `tech-spec.md` — no source line is absent from the table. The requirement column is the source's own wording, quoted, so a reader can check the mapping without opening the spec. The Tasks column holds task IDs (several where a requirement spans tasks; the same task may appear in several rows) or the single word `DEFERRED` followed by an em dash and the reason.
 
 The table lives in the plan, not beside it: the plan is what `feature-implement` and `feature-complete` read, and a coverage file kept separately drifts from the tasks it describes.
 
