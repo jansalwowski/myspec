@@ -175,7 +175,16 @@ Walk milestones in order. For each milestone, walk its DAG topologically. For ea
 
 **Before the phase's first dispatch:** refresh the orchestration marker (Step 2.5) and record `PHASE_BASE=$(git rev-parse HEAD)`. The phase review package (Step 4b) diffs `PHASE_BASE..HEAD`. Never substitute `HEAD~1` — it silently drops all but the last commit of a multi-commit phase.
 
-Implementers write code and tests and commit; they never run the test, lint, type-check, build, or install commands. The phase reviewer is the only place verification runs. An implementer that can run its own gate can also iterate against it, and the cheapest way past a failing gate is to weaken it — a loosened assertion or a lint disable reads as work in the diff and as a pass in the log.
+**Verification tiers.** Each check runs at the narrowest scope that catches what it targets:
+
+| Who | Runs | When |
+|-----|------|------|
+| Implementer | its task's `Verify at phase review` command, plus lint and typecheck scoped to the files it touched where the project's tools accept a file scope | before reporting, and after each fix |
+| Controller | the full suite: the plan's barrier commands plus the required `.claude/verification.json` checks | once per phase (4a), at each milestone checkpoint, at Final Verification |
+| Phase reviewer | each task's `Verify at phase review` command, plus any check needed to prove a risk it names | once per phase |
+| Re-reviewer | only the checks the finding touches | each fix round |
+
+Fill each implementer dispatch with its Verify command and the file-scoped lint/typecheck commands ("none" when a tool cannot take a file list). Scoped runs catch in seconds the slips that otherwise each cost a review round; the risk they add — weakening a test until it passes — is what the phase reviewer's test-weakening audit catches.
 
 **Sequential tasks** — dispatch one subagent at a time:
 
@@ -201,10 +210,9 @@ Agent calls with isolation: "worktree" in the same message → track per-task st
 
 After all tasks in a phase complete:
 
-**a) Barrier merge** (parallel tasks only):
-- Merge worktrees back to the feature branch **one at a time**.
-- On conflict: attempt resolution (auto-generated files like lockfiles, codegen output → take union). Escalate to user if truly stuck.
-- Run barrier verification commands from the plan (typecheck, tests).
+**a) Barrier merge and verification:**
+- Parallel tasks only: merge worktrees back to the feature branch **one at a time**. On conflict: attempt resolution (auto-generated files like lockfiles, codegen output → take union). Escalate to user if truly stuck.
+- Every phase: run the full suite once — the plan's barrier commands plus each required `.claude/verification.json` check (its `diffCommand` when non-empty, with `MYSPEC_BASE_REF=$(git merge-base HEAD <default branch>)`) — and capture everything to one file, each check headed by its command and exit code: `VERIFY_LOG=$(mktemp "${TMPDIR:-/tmp}/phase-verify.XXXXXX")`. A red run still goes to review, where each failure is attributed. Never two suites at once in one worktree (Constraints).
 
 **b) Build the review package, then dispatch the phase reviewer** (`./phase-reviewer-prompt.md`):
 
@@ -216,8 +224,9 @@ PKG=$(mktemp "${TMPDIR:-/tmp}/phase-review.XXXXXX")
 ```
 
 - Use the `PHASE_BASE` recorded before the phase's first dispatch — never `HEAD~1`. Never dispatch a phase reviewer without a diff file.
+- Pass `VERIFY_LOG`, and the spec requirement IDs the phase touches (from task spec citations and the plan's `## Spec Coverage` table) with their text. The reviewer checks each as behavior across the whole feature: an invariant spanning tasks otherwise surfaces only at holistic review, after later phases built on it.
 - Never pre-judge findings for the reviewer — never instruct it to ignore or not flag a specific issue. If the prompt you are writing contains "do not flag", "don't treat X as a defect", or "at most Minor" — stop: you are pre-judging, usually to spare yourself a fix loop. Let the reviewer raise it and rule on it in triage.
-- Covers ALL tasks in the phase: spec compliance, code quality, test coverage, integration, docs.
+- Covers ALL tasks in the phase: spec compliance, code quality, test coverage, test-weakening audit, integration, docs.
 - Returns: `APPROVED` or `ISSUES_FOUND` with per-finding severity (Critical / Important / Minor).
 
 **c) Triage findings** (before any fix dispatch):
@@ -230,7 +239,7 @@ PKG=$(mktemp "${TMPDIR:-/tmp}/phase-review.XXXXXX")
 
 - **Rounds 1–3 — resume the implementer that owns the finding.** Its context is intact: it knows the task, the code, and its own choices. Send the open findings verbatim, scoped to its task. If the harness cannot resume a completed subagent, dispatch a fresh implementer carrying the task text plus the findings.
 - **Rounds 4–5 — fresh implementer, one tier up.** A loop that survives three resumes usually means the implementer cannot see its own problem — fresh eyes and a capability bump in one move. Frame the dispatch: "A prior implementer attempted this fix N times; you own it now."
-- **Every round ends with a scoped re-review** (`./re-review-prompt.md`), never a full phase re-review. Record `FIX_BASE` (the HEAD the previous review saw), build a fix-diff package over `FIX_BASE..HEAD` the same way as 4b, and dispatch with the open findings list. The re-reviewer verdicts each finding ADDRESSED / NOT ADDRESSED against the fix diff only. New Critical/Important breakage in the fix diff joins the open findings; out-of-scope observations go to the Execution Log as deferred minors — they never extend the loop.
+- **Every round ends with a scoped re-review** (`./re-review-prompt.md`), never a full phase re-review. Record `FIX_BASE` (the HEAD the previous review saw), build a fix-diff package over `FIX_BASE..HEAD` the same way as 4b, and dispatch with the open findings list. The re-reviewer verdicts each finding ADDRESSED / NOT ADDRESSED against the fix diff only, running just the checks each finding touches; the next barrier or milestone checkpoint runs the full suite over the fix. New Critical/Important breakage in the fix diff joins the open findings; out-of-scope observations go to the Execution Log as deferred minors — they never extend the loop.
 - Never fix findings yourself in the controller session — your context stays clean for coordination, and controller fixes skip review.
 
 **The breaker.** When round 5's re-review still leaves findings open, stop dispatching and adjudicate each open finding yourself — you hold the plan and cross-phase context the reviewer lacks:
@@ -259,7 +268,7 @@ After all phases in a milestone complete (skip this step only for the final mile
 **a) Verify milestone completion:**
 - All task checkboxes within this milestone are `[x]` (no `[~]` or `[ ]` remaining)
 - All barrier verification commands passed
-- Run verification commands from `.claude/verification.json` (test, typecheck)
+- Run the full suite — every required check in `.claude/verification.json` — over the milestone's tree
 
 **b) Pause and ask user:**
 
@@ -330,7 +339,7 @@ Skill text uses **tier names** (`cheap` / `mid` / `premium`). Controller (main t
 | NEEDS_CONTEXT | Provide info, re-dispatch |
 | One parallel task fails | Keep other worktrees, fix failed, then barrier |
 | Merge conflict at barrier | Attempt resolution; escalate if stuck |
-| Verification fails at barrier | Identify offending task, dispatch fix agent |
+| Verification fails at barrier | Dispatch the phase reviewer with the log; it attributes each failure, and fixes go through the fix loop |
 | 3+ attempts same task | Escalate: "I've made N attempts. What I tried: [list]." |
 | Review finding conflicts with plan text | Rule on it (spec is binding), record in Execution Log, then fix or park |
 | Round 5 re-review leaves findings open | Breaker: adjudicate each finding — park with ruling or carry forward. Never a round 6 |
@@ -345,7 +354,8 @@ Skill text uses **tier names** (`cheap` / `mid` / `premium`). Controller (main t
 - Tell a reviewer what not to flag — a suppressed finding never reaches the user; adjudicate it in triage instead
 - Diff a review with `HEAD~1` — use the recorded `PHASE_BASE` / `FIX_BASE` / `BASE_SHA`
 - Fix review findings in the controller session — resume or dispatch an implementer; controller fixes skip review
-- Let an implementer run its own test, lint, build, or install commands — verification belongs to the phase reviewer, or the gate and the code have the same author
+- Let an implementer run the full suite, a build, or an install — its checks are its task's Verify command and file-scoped static checks; the suite is the barrier's
+- Run two verification suites at once in one worktree — concurrent runs share caches, build output, ports, and test databases, and the timing flakes they cause cost an investigation. The Stop hook can run the suite when your turn ends, so do not end a turn while a subagent is running checks in the same worktree
 - Skip the Step 5 holistic review, or run it below `premium` — it is the only pass that sees the whole feature
 
 ## Verification Checklist

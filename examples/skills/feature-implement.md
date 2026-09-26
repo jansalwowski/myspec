@@ -12,7 +12,7 @@ Executes an approved `implementation-plan.md` by dispatching one implementer sub
 
 ## Sequential execution
 
-The simple shape: a single-phase plan with no parallel groups. The skill first asks *where* to work, then walks tasks one at a time. Each implementer writes its task's code, tests, and commit — and nothing else: the phase review at the barrier is where verification actually runs, once for the whole phase.
+The simple shape: a single-phase plan with no parallel groups. The skill first asks *where* to work, then walks tasks one at a time. Each implementer writes its task's code and tests, runs only its own task's check plus lint and typecheck on the files it touched, and commits. The full suite runs once, at the phase barrier, and the phase review reads its log.
 
 ### Setup
 
@@ -59,22 +59,24 @@ Parses the Execution Order table: 6 sequential tasks, no barriers between them �
 For T1 (migration):
 
 1. Edits the plan file: `[ ] T1` → `[~] T1` (before dispatching).
-2. Dispatches one implementer subagent (`implementer-prompt.md`) with the task text inline — it never reads the plan file. The tier is named on the dispatch (`cheap` here: one file plus its test, fully specified in the task text). It writes the migration and its test, commits with the task block's `**Commit:**` message, self-reviews its own diff, and reports `DONE`. It does **not** run the tests — that is the phase reviewer's job, and the task block names the command under `**Verify at phase review:**`.
+2. Dispatches one implementer subagent (`implementer-prompt.md`) with the task text inline — it never reads the plan file. The tier is named on the dispatch (`cheap` here: one file plus its test, fully specified in the task text). The dispatch carries the task block's `**Verify at phase review:**` command (`pnpm test migrations/report_favorites`) and the file-scoped static checks (`pnpm eslint <touched files>`). The implementer writes the migration and its test, runs those two, commits with the task block's `**Commit:**` message, self-reviews its own diff, and reports `DONE` with each command it ran and its result. It never runs the full suite, a build, or an install.
 3. The skill leaves T1 at `[~]` — the only route to `[x]` is the phase review.
 
 Repeats for T2–T6 in order, each leaving its checkbox at `[~]`. The implementer never spawns a reviewer of its own: review is the controller's job and is already scheduled.
 
 #### Step 4 — Phase review (once, at the barrier)
 
-After all 6 implementers report `DONE`, the phase hits its barrier and the review runs **once for the whole phase**. The controller writes the package to one temp file — `git log --oneline` + `git diff --stat` + `git diff -U10` over the `PHASE_BASE` recorded before the first dispatch, never `HEAD~1` — and dispatches the phase reviewer (`phase-reviewer-prompt.md`, mid tier) with the path:
+After all 6 implementers report `DONE`, the phase hits its barrier. The controller runs the full suite once (`pnpm test`, `pnpm typecheck`, `pnpm lint` from `.claude/verification.json`) and captures it to one log file, each check headed by its command and exit code. The review then runs **once for the whole phase**. The controller writes the package to one temp file — `git log --oneline` + `git diff --stat` + `git diff -U10` over the `PHASE_BASE` recorded before the first dispatch, never `HEAD~1` — and dispatches the phase reviewer (`phase-reviewer-prompt.md`, mid tier) with the package path, the log path, and the spec requirement IDs the phase touches (AC-1, AC-2):
 
 - plan ↔ spec: the 6 tasks cover AC-1 ("favoriting persists across sessions"), AC-2 (pin-to-top) ✓
 - impl ↔ plan: each task's declared files and interfaces are present ✓
-- test coverage: each in-scope acceptance criterion has a test in the diff. The reviewer runs each task's `Verify at phase review:` command plus `.claude/verification.json` — the first and only time they run: `pnpm test` and `pnpm typecheck` green, lint clean ✓
+- spec requirements: AC-1 and AC-2 each checked as behavior across the whole feature, not only in the task that cites them — AC-2's pin-to-top also holds on the empty-favorites path ✓
+- test coverage: each in-scope acceptance criterion has a test in the diff. The reviewer reads the barrier log (all green) and reruns each task's `Verify at phase review:` command itself; the implementers' reported greens count as claims, not evidence. It never reruns the whole suite ✓
+- test-weakening audit: no deleted or loosened assertions, skips, disables, `as any`, or fixtures off their production values — "none found" ✓
 - naming, pattern conformance, maintainability ✓
 - Verdict: `APPROVED`.
 
-Had the review returned findings instead, they would be triaged, never silently dropped: **Minor** findings park in the plan's `## Execution Log` (`Deferred minor (Phase 1): …`) for the holistic reviewer to triage — they never enter a fix loop. **Critical/Important** findings enter a capped loop: rounds 1–3 resume the same implementer with the findings verbatim (its context is intact), rounds 4–5 dispatch fresh on a higher tier, and every round ends with a *scoped* re-review that verdicts each finding ADDRESSED / NOT ADDRESSED against the fix diff only — never a full phase re-review. If round 5 still leaves findings open, the Controller adjudicates each one — parked with a recorded `Ruling:` or carried into the next phase — never a round 6. And the Controller never pre-judges: a dispatch prompt containing "do not flag X" is the bug, not the finding.
+Had the review returned findings instead, they would be triaged, never silently dropped: **Minor** findings park in the plan's `## Execution Log` (`Deferred minor (Phase 1): …`) for the holistic reviewer to triage — they never enter a fix loop. **Critical/Important** findings enter a capped loop: rounds 1–3 resume the same implementer with the findings verbatim (its context is intact), rounds 4–5 dispatch fresh on a higher tier, and every round ends with a *scoped* re-review that verdicts each finding ADDRESSED / NOT ADDRESSED against the fix diff only — never a full phase re-review — running just the checks the finding touches (lint on the touched files for a lint finding, the named test for a test finding). The next barrier or milestone checkpoint runs the full suite over the fix. If round 5 still leaves findings open, the Controller adjudicates each one — parked with a recorded `Ruling:` or carried into the next phase — never a round 6. And the Controller never pre-judges: a dispatch prompt containing "do not flag X" is the bug, not the finding.
 
 #### Checkboxes close
 
@@ -117,7 +119,7 @@ User picks **feature-implement-review**. The skill invokes `/myspec:feature-impl
 ### Why this example matters
 
 - **Step 0 is blocking and always asked.** Even on a clean `main` with an obvious recommendation, the skill confirms *where* to work. Silent assumption is the bug Step 0 exists to prevent; worktrees live at `.claude/worktrees/feat-{name}`, never `/tmp`.
-- **The implementer writes; the reviewer verifies.** Code, tests, commit, self-review — then it reports. It never runs the test, lint, build, or install commands, because an implementer that can run its own gate can also weaken it, and a loosened assertion reads as work in the diff and as a pass in the log. It does not spawn a reviewer of its own either; that review is already scheduled.
+- **Each check runs at its narrowest scope.** The implementer runs its own task's check and file-scoped lint/typecheck, which catches in seconds the slips that otherwise each cost a review round. The controller runs the full suite once per phase, and the reviewer reads that log instead of repeating it. Because the implementer could see its own tests, the reviewer audits the test diff for weakening. The implementer does not spawn a reviewer of its own either; that review is already scheduled.
 - **Review is per-phase, at the barrier.** All six implementers finish, then one reviewer covers the whole phase's diff at once — spec conformance, quality, test coverage, docs — from a package file, never a pasted diff.
 - **Findings are triaged, never suppressed.** The Controller may not tell a reviewer what not to flag. Minor findings park in the plan's `## Execution Log`, plan-conflicting findings get a recorded `Ruling: <what> — <why> — <what it costs if wrong>`, and every ruling resurfaces under "Rulings I made" in the Step 5 completion report.
 - **One commit per task, staged by path.** Each implementer stages exactly its own file list and copies the plan's commit message verbatim, so the history reads cleanly and nothing outside the declared scope sneaks in.
@@ -161,11 +163,11 @@ The skill walks the DAG. **Phase 2 (`parallel:repos`)** is the showcase: T2 Sche
 2. Dispatches **two implementers in one message**, each with `isolation: "worktree"`. A child worktree is bare, so each is provisioned before work starts — real dependency install unless the branch leaves the lockfile alone, `.env`-class files symlinked, lint cache copied (`_shared/worktree-provisioning.md` is the recipe). Each implementer gets only its file list and task text inline:
    - Implementer A → `src/features/schedules/repository.ts` (+ test)
    - Implementer B → `src/features/schedules/run-repository.ts` (+ test)
-3. Both write code and tests, commit, and report `DONE` — neither runs the suite in its own worktree.
-4. **Barrier merge:** the controller merges each worktree's commit back onto `feat/scheduled-reports`, one at a time. No conflicts — the file lists were disjoint. Then it runs the barrier verification commands across the merged tree.
+3. Both write code and tests, run their own task's check plus file-scoped lint and typecheck, commit, and report `DONE`. Neither runs the full suite in its own worktree.
+4. **Barrier merge:** the controller merges each worktree's commit back onto `feat/scheduled-reports`, one at a time. No conflicts — the file lists were disjoint. Then it runs the full suite once across the merged tree, logging it for the reviewer.
 5. **Phase review** over `PHASE_BASE..HEAD` covers both tasks at once → `APPROVED`. Both checkboxes flip to `[x]`.
 
-Had the review returned Critical/Important findings, the fix loop would run: rounds 1–3 resume the implementer that owns the finding (its context is intact), rounds 4–5 dispatch fresh one tier up, and every round ends with a *scoped* re-review over `FIX_BASE..HEAD` that verdicts each finding ADDRESSED / NOT ADDRESSED — never a full phase re-review. Minor findings never enter the loop; they park in the plan's `## Execution Log` for the holistic reviewer to triage.
+Had the review returned Critical/Important findings, the fix loop would run: rounds 1–3 resume the implementer that owns the finding (its context is intact), rounds 4–5 dispatch fresh one tier up, and every round ends with a *scoped* re-review over `FIX_BASE..HEAD` that verdicts each finding ADDRESSED / NOT ADDRESSED, running only the checks that finding touches — never a full phase re-review. Minor findings never enter the loop; they park in the plan's `## Execution Log` for the holistic reviewer to triage.
 
 #### Milestone Checkpoint
 
@@ -194,7 +196,7 @@ Final Verification runs, then the controller builds the full-feature review pack
 
 - **Parallel dispatch goes out in one message.** All of a group's tasks are dispatched together, each with `isolation: "worktree"`; dispatching them one at a time serializes exactly the work the plan marked parallel.
 - **Worktrees live under `.claude/worktrees/feat-*`,** not `/tmp`, and they are bare. Provisioning them is part of the dispatch — an implementer that cannot install deps or run lint is a setup bug to fix in the dispatch, never a reason for the controller to absorb the task itself.
-- **The barrier is where isolation ends.** Merge one worktree at a time, run the barrier verification, and only then review the phase. A phase review over an unmerged tree reviews something nobody will ship.
+- **The barrier is where isolation ends.** Merge one worktree at a time, run the full suite once, and only then review the phase. Only one suite runs per worktree at a time; concurrent runs share caches and ports and cause timing flakes. A phase review over an unmerged tree reviews something nobody will ship.
 - **`PHASE_BASE`, not `HEAD~1`.** A phase with two parallel commits plus a merge is several commits deep; `HEAD~1` silently reviews the last one.
 - **Past five tasks, one milestone per session.** The checkpoint recommends `fresh` because a long multi-milestone run is dispatch-latency-bound and the controller's context degrades as it goes.
 

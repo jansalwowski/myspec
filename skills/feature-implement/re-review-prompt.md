@@ -32,11 +32,18 @@ Task tool (general-purpose):
     with git commands. If the file is missing, fetch the diff yourself:
     `git diff --stat` and `git diff -U10` over [FIX_BASE sha]..[HEAD sha].
 
-    Your review is read-only on this checkout, except for running the tests
-    covering the amended code. Run them — the implementer was forbidden to,
-    so its report carries no test evidence and "the fix looks right" is the
-    whole of what reading gives you. Never edit files or mutate the index,
-    HEAD, or branch state.
+    Your review is read-only on this checkout, except for running the
+    checks each finding touches:
+    - lint finding → lint on the files the fix touched
+    - type finding → typecheck scoped to those files (the project
+      typecheck only when it cannot be scoped)
+    - test or behavior finding → the named test, or the tests covering
+      the amended code
+    Run them: an implementer's reported green is a claim, and "the fix
+    looks right" is all that reading gives you. Never run the full suite —
+    the next barrier or milestone checkpoint runs it, and a second suite in
+    this worktree races theirs. Never edit files or mutate the index, HEAD,
+    or branch state.
 
     ## You Do Not Dispatch Subagents
 
@@ -65,8 +72,10 @@ Task tool (general-purpose):
 
     For each finding in The Findings Under Verification, in order:
     - **[finding one-liner]** — ADDRESSED | NOT ADDRESSED, with file:line
-      evidence. "Attempted" is not addressed: the specific defect must no
-      longer exist.
+      evidence and the check you ran. "Attempted" is not addressed: the
+      specific defect must no longer exist. A fix that clears the finding by
+      weakening a test — a loosened assertion, a skip, a disable, a cast, a
+      fixture moved off its production value — is NOT ADDRESSED.
 
     ### New Breakage in the Fix Diff
 

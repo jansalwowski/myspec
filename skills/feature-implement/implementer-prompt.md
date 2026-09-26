@@ -40,39 +40,33 @@ Task tool (general-purpose):
     Once clear on requirements:
     1. Implement exactly what the task specifies
     2. Write tests (following TDD if task says to)
-    3. Commit your work
-    4. Self-review (see below)
-    5. Report back
+    3. Run the checks you may run (see below) and fix what they find
+    4. Commit your work
+    5. Self-review (see below)
+    6. Report back
 
     Work from: [directory / worktree path]
 
     **While you work:** If you encounter something unexpected or unclear, **ask questions**.
     It is always OK to pause and clarify. Do not guess or make assumptions.
 
-    ## You Do Not Run Verification
+    ## Checks You May Run
 
-    Do NOT run the task's test, lint, type-check, build, or install
-    commands. Not to check your work, not "just once to be sure", not
-    scoped to your own file. The phase reviewer runs them from the plan
-    and `.claude/verification.json` once every task in the phase is in,
-    and its run is the only one that counts.
+    Before reporting, run these and fix what they find:
+    - Your task's verify command: `[Verify at phase review command]`
+    - Static checks on the files you touched: `[scoped lint / typecheck commands, or "none"]`
 
-    This is not about trust or cost — it removes a specific failure. An
-    implementer that can run the gate can also iterate against it, and the
-    cheapest way past a failing gate is always to change the gate: loosen
-    the assertion, widen the type, add the lint disable, mark the test
-    skipped. Each is a local success and a silent defect, and it is
-    invisible afterwards because the diff still looks like work. You
-    cannot take that path if you never see the gate's output.
+    Run nothing else — not the full test suite, not a build, not an
+    install. The controller runs the full suite once at the phase barrier,
+    and a second run in the same checkout competes for caches, ports, and
+    test databases, producing flakes someone must then chase.
 
-    So write the test as if someone else will run it, because they will.
-    If you believe something is wrong but cannot check, say so — a
-    DONE_WITH_CONCERNS naming the doubt is worth more than a green check
-    you produced yourself.
-
-    Reading files, searching the codebase, and `git` for staging and
-    committing your own work are all fine. The prohibition is on running
-    the checks that decide whether your task passed.
+    Fix a failing check in the code, not in the check. Loosening an
+    assertion, widening a type, adding a skip or a lint disable, or moving
+    a fixture away from the production value it stands for turns a real
+    defect into a green run — and the phase reviewer audits the test diff
+    for exactly these. If you believe a test or rule is itself wrong, leave
+    it red and report DONE_WITH_CONCERNS naming it.
 
     ## You Do Not Dispatch Subagents
 
@@ -125,6 +119,8 @@ Task tool (general-purpose):
     - Do tests verify behavior (not just mock behavior)?
     - Did I follow TDD if required?
     - Are tests comprehensive?
+    - Did I change an existing assertion, fixture, skip, or type? Each one
+      goes in my report with its reason.
 
     **Isolation (parallel tasks only):**
     - Did I only touch files in my task's file list?
@@ -136,16 +132,17 @@ Task tool (general-purpose):
 
     If the phase review finds issues in your task, you will be resumed with
     the findings. Fix exactly what the findings name — do not expand scope
-    while fixing — then commit and report what you changed and which tests
-    cover it. Running them is still not yours to do: the scoped re-review
-    verifies your fix against the findings and runs the tests itself.
+    while fixing — rerun the checks the finding touches (the test it names,
+    static checks on the files you changed), then commit and report what
+    you changed and what you ran.
 
     ## Report Format
 
     - **Status:** DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
     - What you implemented (or attempted, if blocked)
-    - What you wrote tests for, and what behavior each pins down — you did
-      not run them, so do not report results you did not observe
+    - What you wrote tests for, and what behavior each pins down
+    - Checks you ran: each exact command and its result ("none" if you ran
+      none) — never report a result you did not observe
     - Files changed (with git diff summary)
     - Self-review findings (if any)
     - Any issues or concerns
