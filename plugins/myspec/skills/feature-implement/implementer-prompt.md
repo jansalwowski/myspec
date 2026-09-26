@@ -6,7 +6,7 @@ Use this template when dispatching an implementer subagent.
 Task tool (general-purpose):
   description: "Implement Task N: [task name]"
   model: "<tier — REQUIRED: cheap for 1-2 file mechanical / mid for multi-file integration; controller maps to concrete model, e.g. Haiku-tier or Sonnet-tier. An omitted model inherits the session's model, often the most expensive tier>"
-  isolation: "worktree"  # ONLY for parallel group tasks. Omit for sequential tasks.
+  # No `isolation` parameter: it forks from the default branch. A parallel task gets its controller-created worktree as "Work from" below.
   prompt: |
     You are implementing Task N: [task name]
 

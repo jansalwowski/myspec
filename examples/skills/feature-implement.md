@@ -5,7 +5,7 @@ Executes an approved `implementation-plan.md` by dispatching one implementer sub
 **Contents**
 
 - [Sequential execution](#sequential-execution) — one task at a time, single phase, per-phase review at the barrier
-- [Parallel group with worktree dispatch](#parallel-group-with-worktree-dispatch) — concurrent implementers in `.claude/worktrees/feat-*`, barrier merge
+- [Parallel group with worktree dispatch](#parallel-group-with-worktree-dispatch) — concurrent implementers in controller-made `.claude/worktrees/*` checkouts, barrier merge
 - [Resume mid-milestone after interruption](#resume-mid-milestone-after-interruption) — `[x]`/`[~]`/`[ ]` handling and stale-worktree cleanup
 
 ---
@@ -58,7 +58,7 @@ Parses the Execution Order table: 6 sequential tasks, no barriers between them �
 
 For T1 (migration):
 
-1. Edits the plan file: `[ ] T1` → `[~] T1` (before dispatching).
+1. Flips T1 `[ ]` → `[~]` before dispatching, with `.claude/lib/plan-checkbox.sh <plan> 1 doing` — it edits only the `### Task 1:` section, never the Execution Order row or a milestone heading.
 2. Dispatches one implementer subagent (`implementer-prompt.md`) with the task text inline — it never reads the plan file. The tier is named on the dispatch (`cheap` here: one file plus its test, fully specified in the task text). The dispatch carries the task block's `**Verify at phase review:**` command (`pnpm test migrations/report_favorites`) and the file-scoped static checks (`pnpm eslint <touched files>`). The implementer writes the migration and its test, runs those two, commits with the task block's `**Commit:**` message, self-reviews its own diff, and reports `DONE` with each command it ran and its result. It never runs the full suite, a build, or an install.
 3. The skill leaves T1 at `[~]` — the only route to `[x]` is the phase review.
 
@@ -128,7 +128,7 @@ User picks **feature-implement-review**. The skill invokes `/myspec:feature-impl
 
 ## Parallel group with worktree dispatch
 
-The interesting case: a plan with parallel groups. Concurrent implementers in isolated `.claude/worktrees/feat-*` checkouts, merged back at the group's barrier before the phase review runs.
+The interesting case: a plan with parallel groups. Concurrent implementers in isolated `.claude/worktrees/*` checkouts cut from the feature HEAD, merged back at the group's barrier before the phase review runs.
 
 ### Setup
 
@@ -160,11 +160,11 @@ User picks **Worktree**. The skill creates `.claude/worktrees/feat-scheduled-rep
 The skill walks the DAG. **Phase 2 (`parallel:repos`)** is the showcase: T2 ScheduleRepository, T3 ExportRunRepository, disjoint file lists.
 
 1. Records `PHASE_BASE` (`git rev-parse HEAD`), then marks T2 and T3 both `[~]`.
-2. Dispatches **two implementers in one message**, each with `isolation: "worktree"`. A child worktree is bare, so each is provisioned before work starts — real dependency install unless the branch leaves the lockfile alone, `.env`-class files symlinked, lint cache copied (`_shared/worktree-provisioning.md` is the recipe). Each implementer gets only its file list and task text inline:
+2. Creates one worktree per task from the feature HEAD — `.claude/lib/task-worktree.sh create scheduled-reports-t2` and `create scheduled-reports-t3` — because harness `isolation: "worktree"` would fork from `main` and miss the Phase 1 migration. Each is provisioned from the controller's checkout: `node_modules` linked when the lockfile is unchanged, lint cache copied. A task that runs `prisma generate` gets `--no-link-modules` and a real install instead, so codegen cannot write through the link (`_shared/worktree-provisioning.md` is the recipe). Then it dispatches **two implementers in one message**, each told to work from its worktree path, with only its file list and task text inline:
    - Implementer A → `src/features/schedules/repository.ts` (+ test)
    - Implementer B → `src/features/schedules/run-repository.ts` (+ test)
 3. Both write code and tests, run their own task's check plus file-scoped lint and typecheck, commit, and report `DONE`. Neither runs the full suite in its own worktree.
-4. **Barrier merge:** the controller merges each worktree's commit back onto `feat/scheduled-reports`, one at a time. No conflicts — the file lists were disjoint. Then it runs the full suite once across the merged tree, logging it for the reviewer.
+4. **Barrier merge:** the controller runs `task-worktree.sh merge scheduled-reports-t2`, then `merge scheduled-reports-t3` — one at a time onto `feat/scheduled-reports`, each removing its worktree and branch. No conflicts — the file lists were disjoint. Then it runs the full suite once across the merged tree, logging it for the reviewer.
 5. **Phase review** over `PHASE_BASE..HEAD` covers both tasks at once → `APPROVED`. Both checkboxes flip to `[x]`.
 
 Had the review returned Critical/Important findings, the fix loop would run: rounds 1–3 resume the implementer that owns the finding (its context is intact), rounds 4–5 dispatch fresh one tier up, and every round ends with a *scoped* re-review over `FIX_BASE..HEAD` that verdicts each finding ADDRESSED / NOT ADDRESSED, running only the checks that finding touches — never a full phase re-review. Minor findings never enter the loop; they park in the plan's `## Execution Log` for the holistic reviewer to triage.
@@ -189,13 +189,13 @@ Final Verification runs, then the controller builds the full-feature review pack
 ### Result
 
 - All tasks `[x]`, one commit per task, parallel work merged at each barrier.
-- Parallel implementers ran in `.claude/worktrees/feat-scheduled-reports`, provisioned before dispatch.
+- Parallel implementers ran in `.claude/worktrees/scheduled-reports-t2`, `-t3`, … cut from `feat/scheduled-reports`, provisioned before dispatch.
 - Per-phase reviews plus one holistic review at the end; user-chosen completion.
 
 ### Why this example matters
 
-- **Parallel dispatch goes out in one message.** All of a group's tasks are dispatched together, each with `isolation: "worktree"`; dispatching them one at a time serializes exactly the work the plan marked parallel.
-- **Worktrees live under `.claude/worktrees/feat-*`,** not `/tmp`, and they are bare. Provisioning them is part of the dispatch — an implementer that cannot install deps or run lint is a setup bug to fix in the dispatch, never a reason for the controller to absorb the task itself.
+- **Parallel dispatch goes out in one message.** All of a group's tasks are dispatched together, each in a worktree the controller created from the feature HEAD; dispatching them one at a time serializes exactly the work the plan marked parallel. Parallelism is only worth it when each task outweighs its merge and review.
+- **Worktrees live under `.claude/worktrees/`,** not `/tmp`, and they are bare. Provisioning them is part of the dispatch — an implementer that cannot install deps or run lint is a setup bug to fix in the dispatch, never a reason for the controller to absorb the task itself.
 - **The barrier is where isolation ends.** Merge one worktree at a time, run the full suite once, and only then review the phase. Only one suite runs per worktree at a time; concurrent runs share caches and ports and cause timing flakes. A phase review over an unmerged tree reviews something nobody will ship.
 - **`PHASE_BASE`, not `HEAD~1`.** A phase with two parallel commits plus a merge is several commits deep; `HEAD~1` silently reviews the last one.
 - **Past five tasks, one milestone per session.** The checkpoint recommends `fresh` because a long multi-milestone run is dispatch-latency-bound and the controller's context degrades as it goes.
@@ -266,8 +266,8 @@ Stale child worktrees from the dead run remain under `.claude/worktrees/`:
 
 ```
 Worktrees still present (git worktree list):
-  .claude/worktrees/feat-scheduled-reports-T5   (last activity: 2 hours ago, uncommitted changes)
-  .claude/worktrees/feat-scheduled-reports-T6   (last activity: 2 hours ago, uncommitted changes)
+  .claude/worktrees/scheduled-reports-t5        (last activity: 2 hours ago, uncommitted changes)
+  .claude/worktrees/scheduled-reports-t6        (last activity: 2 hours ago, uncommitted changes)
 ```
 
 > Found two stale worktrees from the interrupted run, both with uncommitted partial work. Their `[~]` markers mean they never passed review, so the partial code isn't trustworthy.
@@ -278,21 +278,21 @@ Worktrees still present (git worktree list):
 >
 > Reply `clean` to prune and re-execute, or `inspect` to pause.
 
-User: `clean`. The skill prunes both worktrees (`git worktree remove`), leaving T5/T6 at `[~]`.
+User: `clean`. The skill prunes both worktrees (`git worktree remove --force`, then `git branch -D` on their task branches), leaving T5/T6 at `[~]`.
 
 #### Step 3 — Re-dispatch and continue
 
-T5 and T6 are re-dispatched as fresh implementers in new worktrees under `.claude/worktrees/feat-scheduled-reports`, merged at the barrier, and reviewed as one phase. Only after the phase review returns `APPROVED` do they flip `[~]` → `[x]`. Phase 4 completes, the Phase 5 barrier (T7) runs, and the Milestone 1 checkpoint is reached normally.
+T5 and T6 are re-dispatched as fresh implementers in new worktrees from `task-worktree.sh create`, merged at the barrier, and reviewed as one phase. Only after the phase review returns `APPROVED` do they flip `[~]` → `[x]`. Phase 4 completes, the Phase 5 barrier (T7) runs, and the Milestone 1 checkpoint is reached normally.
 
 ### Result
 
 - The 4 `[x]` tasks were skipped untouched; T5/T6 re-executed cleanly; the 6 `[ ]` tasks proceed in order.
-- Stale `.claude/worktrees/feat-scheduled-reports-T5/T6` pruned; only the clean re-execution's commits land.
+- Stale `.claude/worktrees/scheduled-reports-t5`/`-t6` pruned; only the clean re-execution's commits land.
 - Milestone 1 finishes, Milestone 2 begins.
 
 ### Why this example matters
 
 - **The three checkbox states are load-bearing.** `[x]` skip, `[ ]` execute, `[~]` *re-execute from scratch*. The skill reads them on startup to find the resume point — without them a crashed run couldn't tell what was finished.
 - **`[~]` never silently becomes `[x]`.** The only route to `[x]` is completing the task *and* passing review in the current run, so an interruption always re-runs the in-flight task — it never accidentally skips work.
-- **Stale worktrees are a real failure mode** and the skill checks for them at `.claude/worktrees/feat-*`. Left behind, they collide with new dispatches or leak half-finished code into the merge. Pruning before re-dispatch is the safe default.
+- **Stale worktrees are a real failure mode** and the skill checks for them under `.claude/worktrees/`. Left behind, they collide with new dispatches or leak half-finished code into the merge. Pruning before re-dispatch is the safe default.
 - **`stop` / `fresh` at a milestone checkpoint is the clean way to preempt this.** A user who expects to be interrupted can exit at a milestone boundary, leaving no `[~]` markers and a fully committed tree to resume from.

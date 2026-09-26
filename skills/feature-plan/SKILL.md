@@ -46,6 +46,7 @@ For each implementation step in the tech-spec:
 - A task that creates a shared type/config is a **barrier** — all tasks depending on it must wait
 - Tasks modifying the same file are NEVER parallel
 - When in doubt, make it sequential
+- Group tasks in parallel only when each is large enough to amortise a worktree merge and review; small tasks run faster in sequence
 
 **Milestone ordering rule:**
 - Group tasks into **milestones** — each milestone is a vertical slice delivering one coherent piece of functionality.
@@ -252,7 +253,7 @@ When handing off to `/myspec:feature-implement`:
 
 **Sequential tasks:** Standard flow — one implementer subagent at a time.
 
-**Parallel groups:** Controller dispatches multiple implementer subagents simultaneously, each with `isolation: "worktree"`. Each gets:
+**Parallel groups:** Controller dispatches multiple implementer subagents simultaneously, each in its own worktree created from the feature HEAD. Each gets:
 - Its task text (self-contained — Spec contract and Interfaces travel inside it)
 - Shared context (the plan's Global Constraints section, config from barrier task)
 - Constraint: do not modify files outside your task's file list

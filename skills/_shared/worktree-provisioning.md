@@ -28,7 +28,19 @@ Rules the script enforces or the recipe relies on:
 - **A branch that changes a lockfile gets no `node_modules` link.** A linked tree then describes the wrong dependencies. The script detects this against `--base` and says so; run a real install in the worktree.
 - **Never symlink a build output directory** (`.nuxt`, `dist`, `.next`): a later build in the worktree writes through into the main checkout. Copy the one generated file the linter needs.
 - **The Stop hook refuses a symlinked `node_modules` whose lockfiles differ** from the checkout it points into (or when no lockfile exists). A link this script made with an unchanged lockfile passes as is. `isolation.allowLinkedModules: true` in `.myspec.json` accepts any link; set it only when the repo's worktrees share the main checkout's tree by construction, never for dependency work.
+- **Codegen that writes into `node_modules` writes through a link** into the checkout it points at (`prisma generate` rewrites the main checkout's client, issue #93). Pass `--no-link-modules` and run a real install when the work regenerates; the script warns when it sees a Prisma client or a codegen script.
 - **Lint caches lie across trees.** A copied `.eslintcache` suppresses pre-existing findings the same way the main checkout does; without it a cold run flags tech debt the branch did not introduce (issue #11, gap 3).
+
+## Parallel task worktrees
+
+Harness `isolation: "worktree"` forks from the default branch, so a parallel task after the first phase cannot see the feature commits it builds on. The controller creates each task's worktree itself, from its own checkout on the feature branch, with its work committed:
+
+```bash
+.claude/lib/task-worktree.sh create <slug> [--no-link-modules]   # prints the worktree path
+.claude/lib/task-worktree.sh merge <slug>                        # at the barrier, one task at a time
+```
+
+`create` branches `<feature-branch>--<slug>` at the controller's HEAD and provisions it with the controller's checkout as the link source, whose `node_modules` already matches the feature's lockfile. `merge` merges into the controller's branch, then removes the worktree and branch; on a conflict it stops mid-merge — resolve, commit, and rerun it to clean up.
 
 ## Verify where you ran
 

@@ -36,7 +36,7 @@ Plans use three checkbox states:
 4. **If agent stops/crashes mid-task:** `[~]` remains in the file — new agent detects it during resume
 5. **Never mark `[x]` before phase review confirms the task passes**
 
-**Scope:** Task-level checkboxes (`### Task N:` steps). Barrier sub-steps use `[ ]`/`[x]` only (no `[~]`).
+**Scope:** Task-level checkboxes (`### Task N:` steps). Barrier sub-steps use `[ ]`/`[x]` only (no `[~]`). Flip a task with `.claude/lib/plan-checkbox.sh <plan> <N> doing|done`, never an ad-hoc edit script — it touches only that task's section.
 
 ## Execution Log (plan section)
 
@@ -196,22 +196,24 @@ Dispatch implementer (./implementer-prompt.md)
   → BLOCKED: assess (more context / better model / break down / escalate to user)
 ```
 
-**Parallel tasks** — dispatch ALL group tasks simultaneously in ONE message:
+**Parallel tasks** — dispatch ALL group tasks simultaneously in ONE message. Harness `isolation: "worktree"` forks from the default branch, not the feature HEAD, so create each task's worktree yourself (`.claude/lib/task-worktree.sh create <feature>-t<N>`; recipe in `_shared/worktree-provisioning.md`) and pass its path as the implementer's working directory:
 
 ```
-Validate file disjointness → dispatch Task N, Task M, Task K as separate
-Agent calls with isolation: "worktree" in the same message → track per-task status
+Validate file disjointness → task-worktree.sh create per task → dispatch Task N,
+Task M, Task K as separate Agent calls in the same message → track per-task status
 → If one fails: keep successful worktrees, fix the failed task, then barrier
 ```
 
-**Dual-stream fork** — dispatch both stream heads simultaneously with worktree isolation. Each stream proceeds independently (with its own sequential/parallel phases). Join waits for both streams.
+Parallelism pays only when each task outweighs its merge and review overhead; run small parallel groups sequentially in the controller's checkout.
+
+**Dual-stream fork** — dispatch both stream heads simultaneously, each in its own task worktree. Each stream proceeds independently (with its own sequential/parallel phases). Join waits for both streams.
 
 ### Step 4: Phase Review
 
 After all tasks in a phase complete:
 
 **a) Barrier merge and verification:**
-- Parallel tasks only: merge worktrees back to the feature branch **one at a time**. On conflict: attempt resolution (auto-generated files like lockfiles, codegen output → take union). Escalate to user if truly stuck.
+- Parallel tasks only: merge worktrees back to the feature branch **one at a time** (`task-worktree.sh merge <feature>-t<N>`). On conflict: attempt resolution (auto-generated files like lockfiles, codegen output → take union). Escalate to user if truly stuck.
 - Every phase: run the full suite once — the plan's barrier commands plus each required `.claude/verification.json` check (its `diffCommand` when non-empty, with `MYSPEC_BASE_REF=$(git merge-base HEAD <default branch>)`) — and capture everything to one file, each check headed by its command and exit code: `VERIFY_LOG=$(mktemp "${TMPDIR:-/tmp}/phase-verify.XXXXXX")`. A red run still goes to review, where each failure is attributed. Never two suites at once in one worktree (Constraints).
 
 **b) Build the review package, then dispatch the phase reviewer** (`./phase-reviewer-prompt.md`):

@@ -6,7 +6,7 @@
 # re-invented the same workaround inside its prompt).
 #
 # Usage:
-#   .claude/lib/worktree-provision.sh <worktree-path> [--base <ref>] [--main <path>]
+#   .claude/lib/worktree-provision.sh <worktree-path> [--base <ref>] [--main <path>] [--no-link-modules]
 #
 # What it does, from the MAIN checkout into the worktree:
 #   - symlinks each entry of `isolation.provision.symlink` (default:
@@ -18,6 +18,10 @@
 #   - SKIPS the node_modules symlink when the branch changes a lockfile
 #     relative to --base: a symlinked tree then describes the wrong
 #     dependencies, and the right answer is a real install
+#   - SKIPS it too under --no-link-modules: codegen that writes into
+#     node_modules (`prisma generate` and the like) would write through the
+#     link into the source checkout (issue #93). Without the flag, it warns
+#     when the source checkout shows signs of such codegen
 #
 # Never symlink a build output directory (.nuxt, dist, .next): a later build in
 # the worktree would write through into the main checkout. Copy the single
@@ -35,18 +39,20 @@ set -euo pipefail
 WORKTREE=""
 BASE=""
 MAIN=""
+NO_LINK_MODULES=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) BASE="${2:-}"; shift 2 ;;
     --main) MAIN="${2:-}"; shift 2 ;;
+    --no-link-modules) NO_LINK_MODULES=1; shift ;;
     -*) echo "worktree-provision: unknown argument '$1'" >&2; exit 1 ;;
     *) WORKTREE="$1"; shift ;;
   esac
 done
 
 if [ -z "$WORKTREE" ] || [ ! -d "$WORKTREE" ]; then
-  echo "usage: worktree-provision.sh <worktree-path> [--base <ref>] [--main <path>]" >&2
+  echo "usage: worktree-provision.sh <worktree-path> [--base <ref>] [--main <path>] [--no-link-modules]" >&2
   exit 1
 fi
 
@@ -114,7 +120,15 @@ for entry in ${SYMLINK[@]+"${SYMLINK[@]}"}; do
     echo "worktree-provision: lockfile differs from $BASE — not linking node_modules; run a real install in the worktree"
     continue
   fi
+  if [ "$entry" = "node_modules" ] && [ "$NO_LINK_MODULES" -eq 1 ]; then
+    echo "worktree-provision: --no-link-modules — not linking node_modules; run a real install in the worktree"
+    continue
+  fi
   if [ -e "$MAIN/$entry" ] && [ ! -e "$WORKTREE/$entry" ]; then
+    if [ "$entry" = "node_modules" ] && { [ -e "$MAIN/node_modules/.prisma" ] || \
+        grep -qE 'prisma generate|codegen' "$MAIN/package.json" 2>/dev/null; }; then
+      echo "worktree-provision: warning — codegen here writes into node_modules; through this link it would change $MAIN. Pass --no-link-modules and run a real install if the work regenerates."
+    fi
     mkdir -p "$(dirname "$WORKTREE/$entry")"
     ln -s "$MAIN/$entry" "$WORKTREE/$entry"
     exclude "$entry"
