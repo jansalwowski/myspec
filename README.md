@@ -101,7 +101,7 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref main
 | `/myspec:memorize <content>` | One-shot capture of an explicit user-provided fact or rule into a typed memory ([examples](examples/README.md)) |
 | `/myspec:memorify` | Scan the current conversation, surface candidates, and save approved ones as memories ([examples](examples/README.md)) |
 | `/myspec:session-start` | Start tracked work session |
-| `/myspec:session-complete` | Archive session, extract memories |
+| `/myspec:session-complete` | Archive session, extract memories, report repeated friction and whose side it is on ([docs/friction-report.md](docs/friction-report.md)) |
 | `/myspec:session-clean` | Sweep dangling auto-created sessions in `.claude/state/sessions/` — deletes empty, archives substantive, never touches the running agent's own session ([examples](examples/skills/session-clean.md)) |
 | `/myspec:memory-sanitize` | Audit the user-level auto-memory store in `~/.claude-personal/projects/`: triage entries (keep/drop/promote/merge/compress/conflict), grep for live citations before any delete, compress bloated bodies against the length budget in `.claude/rules/auto-memory-style.md`, supersede contradictions non-destructively, never auto-promote or auto-rewrite ([examples](examples/skills/memory-sanitize.md)) |
 | **Ideas Pipeline** | |
