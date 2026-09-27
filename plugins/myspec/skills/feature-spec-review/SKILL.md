@@ -6,6 +6,8 @@ tags: [feature, specification, validation, critical-thinking]
 
 # Feature Spec Review
 
+**Autopilot:** when the user opted in, answer this skill's gates per [`_shared/autopilot.md`](../_shared/autopilot.md).
+
 ## Workflow
 
 1. **Load Context**

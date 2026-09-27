@@ -21,11 +21,13 @@ Roughly two milestones of work, touches the data layer, a background job system,
 | 7 | `/myspec:feature-tech-spec` | `tech-spec.md` with file inventory | yes / changes |
 | 8 | `/myspec:feature-tech-spec-review` | Tech-spec marked approved | yes |
 | 9 | `/myspec:feature-plan` | `implementation-plan.md` with milestones + parallel groups | yes |
-| 10 | `/myspec:feature-implement` | Code + tests committed; phase reviews | per-milestone checkpoint |
+| 10 | `/myspec:feature-implement` | Code + tests committed; phase reviews; `holistic-review.md` | per-milestone checkpoint |
 | 11 | `/myspec:feature-implement-review` | `conformance-report.md`; independent trace of code vs. spec/plan | route findings |
 | 12 | `/myspec:code-review` | Findings report on code quality & standards (universal + project rules) | resolve Critical/High |
 | 13 | `/myspec:feature-verify` | Health report (drift check) | — |
 | 14 | `/myspec:feature-complete` | Status flipped, plan archived, branch merged | merge confirmation |
+
+Steps 5–10 each stop on `AskUserQuestion` gates. Saying "autopilot" (or passing `--autopilot`) lets them take each recommended option and approve reviewer-passed docs on their own, printing every choice; they still stop on Critical findings, failing checkpoint probes, and push/PR/merge/deploy (`skills/_shared/autopilot.md`).
 
 ---
 
@@ -268,7 +270,7 @@ The plan file now has every task checked, with phase-review notes inline.
 /myspec:feature-implement-review scheduled-exports
 ```
 
-A fresh reviewer (no memory of how the code got written) traces **spec/plan ↔ code** in both directions and produces `conformance-report.md`. It checks for unmet acceptance criteria, scope drift (code that does things the spec never asked for), and faked-done checkboxes. Finding:
+A fresh reviewer (no memory of how the code got written) traces **spec/plan ↔ code** in both directions and produces `conformance-report.md`. It receives the `holistic-review.md` step 10 wrote, so it leaves integration and architecture to that verdict and spends its pass on traceability and test proof. It checks for unmet acceptance criteria, scope drift (code that does things the spec never asked for), and faked-done checkboxes. Finding:
 
 > **Drift (Medium)**: `ScheduleForm` exposes a "send a test export now" button. No requirement or AC covers it — it crept in during implementation.
 

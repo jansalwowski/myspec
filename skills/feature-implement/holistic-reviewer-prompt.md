@@ -111,3 +111,20 @@ Task tool (general-purpose):
     - NEEDS FIXES — [list of blockers with file:line references]
     - NEEDS DISCUSSION — [list of architectural concerns for human review]
 ```
+
+## Persisting the Report
+
+The reviewer stays read-only; the controller writes its final message verbatim to `${aiDir}/features/{feature}/holistic-review.md`, overwriting any earlier one, under this frontmatter:
+
+```yaml
+---
+feature: {feature}
+reviewed_range: {BASE_SHA}..{HEAD}
+base_sha: {BASE_SHA}
+head_sha: {HEAD}
+reviewed: {YYYY-MM-DD}
+verdict: ready-to-merge | needs-fixes | needs-discussion
+---
+```
+
+`/myspec:feature-implement-review` reads this file and takes its integration, architecture, and deferred-minors verdicts as settled for `head_sha`, so it audits only traceability, test proof, and scope drift. A report that is missing, or whose `head_sha` is followed by code changes, gets no reuse.

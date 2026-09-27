@@ -104,6 +104,7 @@ Notes:
 **Spec contract (verbatim quotes — do NOT paraphrase):**
 - `spec.md` §X.Y: "<exact sentence from spec covering this task's behavior>"
 - `tech-spec.md` step Z: "<exact sentence from tech-spec covering this task's interface/impl detail>"
+- `tech-spec.md` → `### <Section>` (cited, not pasted: a shared schema or API shape longer than a few lines — feature-implement pastes the section into the dispatch)
 - (Add one bullet per spec/tech-spec passage that constrains this task. If the task is implementing AC #N, quote AC #N verbatim. If wording diverges from spec, the spec wording wins.)
 
 **Files:**
