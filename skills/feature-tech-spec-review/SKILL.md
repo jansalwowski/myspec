@@ -28,7 +28,7 @@ tags: [feature, tech-spec, validation, critical-thinking, review]
      - has any `skip` row with an empty / dash-only `Reason`, OR
      - has any row whose `Decision` is not exactly `reuse` or `skip`.
    - A blanket-skip audit where every row has a substantive `Reason` is allowed but warrants a High finding asking the author to re-confirm nothing is reusable.
-   - **Verification-surface gate** (skip when frontmatter has no `verification_mode`, or it is `none`). `verification_mode` must be one of `visual`, `api`, `data`, `mixed`, `none`. Otherwise the `### Test Hooks` section must exist with *Target* and *Contract surface* lines, plus *Scratch environment* when any probe will write (a demo, a real-input run, a data mutation). Each missing line is High and blocks `/myspec:feature-plan`: `feature-plan` writes checkpoint probes only against these handles. A *Contract surface* entry that reaches past the public surface — a CSS class, internal DOM structure, private state — is High, naming the unstable reference.
+   - **Verification-surface gate** (skip when frontmatter has no `verification_mode`, or it is `none`). `verification_mode` must be one of `visual`, `api`, `data`, `mixed`, `none`. Otherwise the `### Test Hooks` section must exist with *Target* and *Contract surface* lines, plus *Scratch environment* when the mode is `visual` or `mixed` (feature-plan adds a `[demo]` probe there), when *Real inputs* is named (a `[real-input]` probe follows), or when the spec's flows mutate data. Probes do not exist yet at this stage, so decide from the mode and the Test Hooks lines, not from probes. Each missing line is High and blocks `/myspec:feature-plan`: `feature-plan` writes checkpoint probes only against these handles. A *Contract surface* entry that reaches past the public surface — a style class, internal element structure, private state — is High, naming the unstable reference.
    - Validate frontmatter has `title`, `status`, `based_on_spec_version`, `created`, `last_updated`
    - Verify `based_on_spec_version` matches current `spec_version` in spec.md
 
@@ -247,7 +247,7 @@ After running the skill:
 - [ ] Each implementation step is task-extractable (concrete enough for a plan task without interpretation)
 - [ ] Reuse-audit gate applied: section present, >= 1 row, valid Decision/Reason (or `reuseAudit.enabled: false`)
 - [ ] `based_on_spec_version` matches spec.md `spec_version`
-- [ ] Verification-surface gate applied when `verification_mode` is set and not `none`: `### Test Hooks` has Target, Contract surface, and Scratch environment where probes write; no unstable references
+- [ ] Verification-surface gate applied when `verification_mode` is set and not `none`: `### Test Hooks` has Target, Contract surface, and Scratch environment for `visual` / `mixed`, *Real inputs*, or data-mutating flows; no unstable references
 - [ ] Requirement Coverage table built from spec.md, one row per requirement ID; every empty Steps cell reported as Critical; every `narrows` / `contradicts` Fidelity cell reported as High / Critical
 - [ ] File inventory paths follow project conventions (per `.claude/rules/` or `${aiDir}/conventions/`)
 - [ ] Models include required audit fields (if project defines them)

@@ -240,8 +240,8 @@ The skill reads the tech-spec and finds three parallel-safe seams:
 **Checkpoint probes:**
 - Target: `bin/serve-scratch` → API at `$SCRATCH_API_URL`, settings page at `$SCRATCH_WEB_URL/settings/schedules` (an address the everyday dev server does not use, so it cannot answer the probes)
 - Scratch env: `DATABASE_URL` → the `reports_scratch` database, `REDIS_URL` → a second Redis instance, `SMTP_HOST`/`SMTP_PORT` → a local mail catcher
-- P1 [visual]: `await page.getByTestId('schedule-form').getByRole('button', { name: 'Save' }).click(); await expect(page.getByTestId('schedule-form')).toHaveAttribute('data-state', 'saved')`
-- P2 [visual]: `await expect(page.getByTestId('schedule-row')).toHaveCount(1)`
+- P1 [visual]: `test ID schedule-form → click its Save button; data-state = "saved"`
+- P2 [visual]: `test ID schedule-row count = 1`
 - P3 [api]: `curl -s "$SCRATCH_API_URL/api/schedules" | jq '.items | length'` → `1`
 - D1 [demo]: open `/settings/schedules`; create a weekly schedule; open its run history — screenshot each step
 ```

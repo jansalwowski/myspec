@@ -47,8 +47,8 @@ Durable decisions live in the plan file, next to the checkboxes — the plan is 
 - `Ruling: <what you decided> — <why> — <what it costs if wrong>`
 - `Deferred minor (Phase N): <one-line finding> (file:line)`
 - `Parked (Phase N): <finding> — Ruling: <why the code stands>`
-- `Probe (Milestone N): P<n> <verdict> — observed: <value> — artifact: <path>` (copied from the probe executor's report)
-- `Waiver (Milestone N): P<n> — <the user's reason, in their words>`
+- `Probe (Milestone N): <P|D><n> <verdict> — observed: <value> — artifact: <path>` (copied from the probe executor's report)
+- `Waiver (Milestone N): <P|D><n> — <the user's reason, in their words>`
 
 The holistic reviewer (Step 5) reads this section to triage deferred minors, and the completion report surfaces every ruling. An entry that exists only in session context is a decision made in secret.
 
@@ -150,7 +150,7 @@ Parse milestones first, then build a DAG within each:
 - `[x]` = already done — skip entirely
 - `[~]` = was in progress when previous agent stopped — re-execute this task from scratch
 - `[ ]` = todo — execute normally
-- Find the first milestone containing any non-`[x]` task. Resume from there — unless an earlier milestone carries `**Checkpoint probes:**` with no passing `Probe` or `Waiver` Execution Log entry per probe; resume at that milestone's probe gate (Step 4b) instead.
+- Find the first milestone containing any non-`[x]` task. Resume from there — unless an earlier milestone, or any milestone when every task is `[x]`, carries `**Checkpoint probes:**` without a passing entry per probe; resume at the first such milestone's probe gate (Step 4b) instead. A passing entry is a `Probe` line with PASS (SERVED for a `D<n>` demo) or a `Waiver` line.
 
 **Validate before starting:**
 - Every task in every Execution Order table has a `### Task N:` section.
@@ -276,10 +276,10 @@ After all phases in a milestone complete (for the final milestone run only (b), 
 - All barrier verification commands passed
 - Run the full suite — every required check in `.claude/verification.json` — over the milestone's tree
 
-**b) Probe gate** — only when the milestone carries a `**Checkpoint probes:**` block. Dispatch the probe executor (`./probe-executor-prompt.md`) with that block verbatim and nothing else; one executor per medium for a `mixed` block. You never run, reword, or drop a probe yourself: the agent that did the work must not be the one that decides whether its verification ran, and tests green is not a substitute. Copy each probe line into the Execution Log. The gate passes only on `PROBES_PASSED`, with an observed value and artifact on every line. A missing report counts as BLOCKED, and FAIL or BLOCKED is a hard stop — ask the user:
+**b) Probe gate** — only when the milestone carries a `**Checkpoint probes:**` block. Dispatch the probe executor (`./probe-executor-prompt.md`) with that block verbatim and whole, and nothing else — one executor per milestone, `mixed` included, so probes run in plan order. You never run, reword, or drop a probe yourself: the agent that did the work must not be the one that decides whether its verification ran, and tests green is not a substitute. Copy each probe line into the Execution Log. The gate passes only on `PROBES_PASSED`, with an observed value and artifact on every line. A missing report counts as BLOCKED, and FAIL or BLOCKED is a hard stop — ask the user, putting each of the report's `NEED:` lines to them first:
 
-- **fix** → run the finding through the 4d fix loop, then re-dispatch the executor with the same probes
-- **waive P<n>** → log `Waiver (Milestone N): …`; the probe stays unrun, and the completion report says so
+- **fix** → run the finding through the 4d fix loop (or, for a `NEED:` line, get what it names from the user), then re-dispatch the executor with the same probes and any Target override the user gave
+- **waive <P|D><n>** → log `Waiver (Milestone N): …`; the probe stays unrun, and the completion report says so
 - **stop** → as in (c)
 
 **c) Pause and ask user:**

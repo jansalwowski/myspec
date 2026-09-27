@@ -31,7 +31,7 @@ It complements the holistic review that closes `/myspec:feature-implement`: that
 - Read `${aiDir}/features/{feature}/implementation-plan.md` if present — task list and checkbox state.
 - Read `${aiDir}/features/{feature}/scenarios.md` if present — behavioral expectations.
 - Read `.claude/rules/` convention files and `.claude/verification.json` if present.
-- Read `${aiDir}/features/{feature}/holistic-review.md` if present. It is **reusable** when `git diff --stat <its head_sha> HEAD -- . ':(exclude)${aiDir}'` is empty — no code changed since it was written. Otherwise say it is stale and audit in full.
+- Read `${aiDir}/features/{feature}/holistic-review.md` if present. It is **reusable** when `git diff --stat <its head_sha> HEAD -- . ':(exclude)${aiDir}'` exits 0 with empty output — no code changed since it was written. A non-zero exit (the sha is gone after a rebase or squash) makes it stale, even though the output is empty. Otherwise say it is stale and audit in full.
 - If a sub-feature: also read the parent `spec.md` / `tech-spec.md`.
 
 ### Step 2: Establish the Diff

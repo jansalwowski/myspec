@@ -106,9 +106,9 @@ type Entity {
 ### Test Hooks (required when `verification_mode` is set and not `none`)
 The only handles a checkpoint probe may reference. Keep the four line labels exactly — `feature-tech-spec-review` and `feature-plan` read them by name.
 - **Target:** how to serve what the probes hit — the project's own serve command on scratch config and the URL or entry point it exposes (`[scratch serve command]` → `[base URL or entry point]`; name an address the project's everyday dev server does not use)
-- **Contract surface:** stable, refactor-tolerant handles — `visual`: test IDs and reactive state attributes on the public surface (`data-testid="report-row"`, `data-state="loading"`); `api`: request/response shapes; `data`: schema expectations. Never CSS classes, internal DOM structure, or private state.
+- **Contract surface:** stable, refactor-tolerant handles — `visual`: the UI test tool's stable element identifiers and state attributes on the public surface (on the web `data-testid="report-row"`, `data-state="loading"`; in a native or terminal UI its accessibility identifiers or widget keys); `api`: request/response shapes; `data`: schema expectations. Never style classes, internal element structure, or private state.
 - **Real inputs** (optional): a real corpus the feature's engine must handle, and the invariant it must hold (`fixtures/corpus/*.pdf` — rendered output byte-identical to base). Named here, every milestone touching that path gets a real-input probe.
-- **Scratch environment** (required when a probe writes): the concrete database, bucket (every bucket variable), and queue port overrides the probes run under. The checklist they must satisfy is [`_shared/scratch-isolation.md`](../_shared/scratch-isolation.md).
+- **Scratch environment** (required when `verification_mode` is `visual` or `mixed`, when *Real inputs* is named, or when any probe will mutate data): the concrete database, bucket (every bucket variable), and queue overrides the probes run under. The checklist they must satisfy is [`_shared/scratch-isolation.md`](../_shared/scratch-isolation.md).
 
 ### Decisions
 Document key architectural decisions as ADRs:
@@ -145,7 +145,7 @@ Document key architectural decisions as ADRs:
 - [ ] `### Reuse audit` section present with >= 1 row; every `skip` row has a Reason (unless `reuseAudit.enabled: false`)
 - [ ] Key Interfaces / Types section defines new types introduced
 - [ ] Database Changes section present (or explicitly marked "None")
-- [ ] If `verification_mode` is set and not `none`: `### Test Hooks` has Target and Contract surface (plus Scratch environment when a probe writes), with no CSS-class or internal-DOM handles
+- [ ] If `verification_mode` is set and not `none`: `### Test Hooks` has Target and Contract surface (plus Scratch environment when the mode is `visual` / `mixed`, *Real inputs* is named, or a probe mutates data), with no style-class or internal-structure handles
 - [ ] Run verification checks from `.claude/verification.json` — all pass
 
 ## Integration

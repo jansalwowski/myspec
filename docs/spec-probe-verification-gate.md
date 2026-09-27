@@ -177,8 +177,12 @@ changes, each recorded rather than silently applied:
   dispatched like the other reviewers, with its no-edit rule stated in the prompt.
   Requirement 8's "tools absent, not merely discouraged" is deferred to the agent
   definition once Open Question 1 is answered.
-- *Medium-agnostic executor.* Requirement 12 is superseded (see above). `mixed` still
-  dispatches one executor per medium, each receiving only its own probes.
+- *Medium-agnostic executor.* Requirement 12 is superseded (see above). `mixed`
+  dispatches one executor per milestone with the whole block, not one per medium:
+  probes run in plan order and may depend on an earlier probe's writes (an `[api]`
+  count after a `[visual]` save), and per-medium executors each restarting the
+  target killed the demo an earlier one left running. The executor still sees no
+  build context, which is the property the per-medium split was meant to protect.
 
 Open Question 3 is resolved for Phase 1: a failing or blocked probe stops for the
 user (fix / waive / stop). A fix goes through the implementer fix loop, and the

@@ -171,13 +171,14 @@ Had the review returned Critical/Important findings, the fix loop would run: rou
 
 #### Milestone Checkpoint
 
-After every phase in Milestone 1 passes, the skill runs the milestone verification commands. The milestone carries a `**Checkpoint probes:**` block (the tech-spec sets `verification_mode: mixed`), so the controller dispatches the probe executor with that block verbatim and nothing else — no spec, no phase verdicts, no implementer reports. The executor works through the scratch-isolation checklist (separate database, a second Redis on its own port, a "before" fingerprint of the real database and queue; no bucket in this feature), runs each probe, and reports:
+After every phase in Milestone 1 passes, the skill runs the milestone verification commands. The milestone carries a `**Checkpoint probes:**` block (the tech-spec sets `verification_mode: mixed`), so the controller dispatches one probe executor with that block verbatim and whole, and nothing else — no spec, no phase verdicts, no implementer reports. The executor works through the scratch-isolation checklist (separate database, a second Redis on its own port, a "before" fingerprint of the real database and queue; no bucket in this feature), runs each probe, and reports:
 
 > P1: PASS — observed: `201`, body `{"id":"sch_1","cadence":"WEEKLY_MONDAY"}` — artifact: `…/probe-artifacts.x7Q/p1.json`
 > P2: BLOCKED — observed: `ECONNREFUSED` on the scratch `REDIS_URL` — artifact: `…/probe-artifacts.x7Q/p2.log`
+> NEED: the scratch Redis at `$REDIS_URL` running
 > Verdict: PROBES_BLOCKED
 
-The scratch Redis was never started. The controller does not rerun P2 against the default Redis, and does not count the green integration test as a substitute — it asks the user. The user starts the scratch Redis and picks **fix**; nothing in the code needs changing, so the executor is re-dispatched with the same probes, returns `PROBES_PASSED` with the post-run check showing the real database and queue untouched, and each probe line goes into the Execution Log. Then the checkpoint pauses:
+The scratch Redis was never started. The controller does not rerun P2 against the default Redis, and does not count the green integration test as a substitute — it puts the `NEED:` line to the user. The user starts the scratch Redis and picks **fix**; nothing in the code needs changing, so the executor is re-dispatched with the same probes, returns `PROBES_PASSED` with the post-run check showing the real database and queue untouched, and each probe line goes into the Execution Log. Then the checkpoint pauses:
 
 > ═══ Milestone 1 complete: Scheduled Reports core CRUD + cron infra ═══
 >
