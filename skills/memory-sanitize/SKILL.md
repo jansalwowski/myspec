@@ -73,7 +73,7 @@ Append a run summary line: `Compressed N entries, total reduction X%, store now 
 ### Phase 5 — Confirm and execute
 
 **Drops (low-risk, batch):** one confirmation for all drops.
-- Before deleting: `grep -r {filename}` across the repo, **excluding agent worktree directories** (`.claude/worktrees/`, `.git/worktrees/`) and `node_modules/`. Worktrees are throwaway shadow checkouts containing stale copies from main; they inflate citation counts and produce false-positive KEEPs. Use `grep -r {filename} ${aiDir}/ .claude/ apps/ packages/ --exclude-dir=worktrees --exclude-dir=node_modules --exclude-dir=.prisma` (adjust paths for the project layout). If any active doc/spec/rule still cites the memory, refuse the drop and reclassify as KEEP.
+- Before deleting: `grep -r {filename}` across the repo, **excluding agent worktree directories** (`.claude/worktrees/`, `.git/worktrees/`) and installed-dependency directories (`node_modules/`, `vendor/`, `.venv/`, `venv/`, …). Worktrees are throwaway shadow checkouts containing stale copies from main; they inflate citation counts and produce false-positive KEEPs. Use `grep -r {filename} ${aiDir}/ .claude/ <source dirs> --exclude-dir=worktrees --exclude-dir=node_modules --exclude-dir=vendor --exclude-dir=.venv --exclude-dir=venv` (source dirs from the project layout; add any other dependency or generated dir it has). If any active doc/spec/rule still cites the memory, refuse the drop and reclassify as KEEP.
 
 **Promotions (medium-risk):** before applying, show:
 - Source memory full text

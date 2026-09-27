@@ -19,10 +19,10 @@ Two sources, both optional — configure with `/myspec:setup mockup`:
   "mockups": {
     "extension": ".vue",
     "commands": {
-      "verify": "pnpm --filter @acme/mockups typecheck",
+      "verify": "<typecheck or lint command for the mockups>",
       "compileCheck": "curl -s \"http://localhost:{port}/@fs{absPath}\" -o /dev/null -w \"%{http_code}\"",
-      "preview": "pnpm dev:mockups",
-      "audit": "pnpm mockups:audit"
+      "preview": "<dev-server command that serves the mockups>",
+      "audit": "<shared-component reuse scan command>"
     },
     "siblingRoots": ["apps/web/src/components", "apps/web/src/pages"]
   }

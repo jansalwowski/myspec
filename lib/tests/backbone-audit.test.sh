@@ -399,6 +399,35 @@ edit_backbone '/^database:/,+2d'
 run_audit
 expect_line 'MEDIUM .*prisma/schema.prisma exists but the topology file has no database: block' "an undocumented database is reported"
 
+# One marker per ecosystem class: the hint list must not be Prisma-only.
+# Each entry is <path to create> (a trailing / makes a directory).
+for marker in db/schema.rb db/migrate/ blog/migrations/__init__.py backend/users/migrations/__init__.py alembic.ini \
+  database/migrations/ config/packages/doctrine.yaml migrations/ \
+  src/main/resources/db/migration/ liquibase.properties knexfile.js ormconfig.json .sequelizerc; do
+  build_fixture
+  case "$marker" in
+    */) mkdir -p "$REPO/$marker" ;;
+    *) mkdir -p "$REPO/$(dirname "$marker")" && touch "$REPO/$marker" ;;
+  esac
+  edit_backbone '/^database:/,+2d'
+  run_audit
+  want=${marker%/}
+  expect_line "MEDIUM .*${want//./\\.} exists but the topology file has no database: block" "database marker $marker is recognised"
+done
+
+build_fixture
+mkdir -p "$REPO/vendor/migrations" && touch "$REPO/vendor/migrations/__init__.py"
+edit_backbone '/^database:/,+2d'
+run_audit
+expect_no_line 'database-unlisted|no database: block' "a migrations dir inside a dependency tree is not a database marker"
+
+build_fixture
+mkdir -p "$REPO/migrations"
+edit_backbone '/^database:/,+2d'
+edit_backbone 's|  ignore: \[\]|  ignore:\n    - migrations|'
+run_audit
+expect_no_line 'database-unlisted|no database: block' "audit.ignore mutes a database marker that is not a database"
+
 # ═══ pass 4: liveness signals ════════════════════════════════════════════════
 
 build_fixture
