@@ -30,7 +30,7 @@ A session with nothing above threshold prints nothing. That is the normal case.
 | Owner | Means | What to do |
 |---|---|---|
 | `myspec` | A myspec hook or gate kept stopping the agent on the same thing | Likely a framework issue. Open an issue against myspec with the row and the myspec version. |
-| `setup` | Your project's myspec install drifted: a registered myspec hook is missing, or the setup conformance check failed | Run `/myspec:update`, then `/myspec:doctor` |
+| `setup` | Your project's myspec install drifted (a registered myspec hook is missing, or the setup conformance check failed), or a command a myspec hook calls, such as `jq`, is missing on this machine | For a missing hook, run `/myspec:update`, then `/myspec:doctor`. For a missing command, install it. |
 | `harness` | Claude Code itself refused, e.g. its worktree guard | Neither myspec nor your project. Report it to Claude Code if it keeps happening. |
 | `project` | Your checks failed, your own hook is missing, or a subagent needed context the spec or plan did not give | Fix it in your project: the test, the hook config, the spec |
 | `unknown` | The transcript alone cannot say whose it is | Read the Detail. `unknown` is an answer, not a gap to fill: the skill does not guess. |
@@ -44,7 +44,8 @@ Owners come from fixed rules, not from a model reading the transcript. A confide
 | Block from a myspec hook with a known message | The same message blocks 3 or more times | Per the signature table below |
 | Block from a myspec hook with an unknown message | 3 or more times | `unknown` |
 | Block from another hook | 3 or more times | `project` (or `unknown` if the hook's command is not recorded) |
-| Registered hook missing (exit 127) | Once | `setup` for a myspec hook, else `project` |
+| Registered hook missing (exit 127, and stderr names the script itself) | Once | `setup` for a myspec hook, else `project` |
+| myspec hook exits 127 because a command it calls is missing (`<script>: line 12: jq: command not found`) | Once | `setup` |
 | myspec hook crashed (other non-zero exit) | Once | `myspec` |
 | Claude Code refusal | 3 or more times | `harness` |
 | The same tool error | 3 or more times | `unknown` |
@@ -53,6 +54,10 @@ Owners come from fixed rules, not from a model reading the transcript. A confide
 | Subagent continued by the controller 3 or more times | Once | `unknown` |
 
 A single block is never reported. The isolation prompt on the first edit of every session is the hook doing its job.
+
+Counts are distinct assistant turns, not tool results. Three edits sent in parallel and denied together by the isolation hook count once.
+
+A tool result counts as a hook block only when it opens with the hook's reason. A failing test run or a `grep` that prints a hook message further down stays a tool error. Subagent verdicts count only on a line of their own, so a report mentioning an earlier `PROBES_FAILED` is not a failure.
 
 Known myspec hook messages:
 
@@ -86,16 +91,16 @@ node "${CLAUDE_PLUGIN_ROOT}/lib/friction-scan/scan.mjs" --session=<session_id>
 node "${CLAUDE_PLUGIN_ROOT}/lib/friction-scan/scan.mjs" --transcript=<path/to/session.jsonl> --json
 ```
 
-The session id is in the session log's frontmatter. `--session` looks in `$CLAUDE_CONFIG_DIR/projects/`, else `~/.claude/projects/`; `--projects-dir` overrides that. `--json` prints every finding with its first timestamp and the transcripts it came from.
+The session id is in the session log's frontmatter. The opt-out is read from `.myspec.json` at the checkout root, so running from a subdirectory still honors it. With `--json`, a turned-off scan prints `{"disabled":true,"findings":[]}`. `--session` looks in `$CLAUDE_CONFIG_DIR/projects/`, else `~/.claude/projects/`; `--projects-dir` overrides that. `--json` prints every finding with its first timestamp and the transcripts it came from.
 
 | Exit | Meaning |
 |---|---|
 | 0 | Scanned (prints nothing when nothing crosses a threshold), or turned off |
-| 1 | Usage error |
+| 1 | Usage error, including an empty `--session=` |
 | 2 | No transcript found for the session |
 | 3 | Transcript format not recognized |
 
-The report shortens home-directory paths to `~`, but Detail can still quote file names and error text from your project. Read it before pasting it into a public issue.
+The report shortens home-directory paths to `~` (only at a path boundary), but Detail can still quote file names and error text from your project. Read it before pasting it into a public issue.
 
 ## Limits
 

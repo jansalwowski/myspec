@@ -48,7 +48,7 @@ tool_err()  { printf '{"type":"user","timestamp":"%s","message":{"role":"user","
 hook_block() { printf '{"type":"attachment","timestamp":"%s","attachment":{"type":"hook_blocking_error","hookName":"%s","hookEvent":"%s","blockingError":{"blockingError":%s,"command":%s}}}\n' "$(stamp)" "$1" "${1%%:*}" "$(jq -Rs . <<<"$3")" "$(jq -n --arg c "$2" '$c')"; }
 # hook_block_str: the same, with blockingError as a JSON-encoded string
 hook_block_str() { local inner; inner=$(jq -cn --arg r "$3" --arg c "$2" '{blockingError:$r,command:$c}'); printf '{"type":"attachment","timestamp":"%s","attachment":{"type":"hook_blocking_error","hookName":"%s","blockingError":%s}}\n' "$(stamp)" "$1" "$(jq -Rs . <<<"$inner")"; }
-hook_err()  { printf '{"type":"attachment","timestamp":"%s","attachment":{"type":"hook_non_blocking_error","hookName":"%s","command":%s,"exitCode":%s,"stderr":"%s"}}\n' "$(stamp)" "$1" "$(jq -n --arg c "$2" '$c')" "$3" "${4:-}"; }
+hook_err()  { printf '{"type":"attachment","timestamp":"%s","attachment":{"type":"hook_non_blocking_error","hookName":"%s","command":%s,"exitCode":%s,"stderr":%s}}\n' "$(stamp)" "$1" "$(jq -n --arg c "$2" '$c')" "$3" "$(jq -n --arg e "${4:-}" '$e')"; }
 
 session() { printf '%s' "$PROJECTS/-enc-proj/$1.jsonl"; }
 subagent() { mkdir -p "$PROJECTS/-enc-proj/$1/subagents"; printf '%s' "$PROJECTS/-enc-proj/$1/subagents/agent-$2.jsonl"; }
@@ -111,14 +111,17 @@ expect_empty "quoted hook text and a non-error result are not events"
 S=s5-hook-errors
 {
   prompt 'go'
-  hook_err PreToolUse:Bash '.claude/hooks/guard-git-branch.sh' 127
+  hook_err PreToolUse:Bash '.claude/hooks/guard-git-branch.sh' 127 'Failed with non-blocking status code: /bin/sh: .claude/hooks/guard-git-branch.sh: No such file or directory'
   hook_err Stop '"${CLAUDE_PLUGIN_ROOT}/hooks/verify-before-stop.sh"' 1 'jq: error'
-  hook_err PreToolUse:Bash '.claude/hooks/guard-bulk-read.sh' 127
+  hook_err PreToolUse:Bash '.claude/hooks/guard-bulk-read.sh' 127 'Failed with non-blocking status code: /bin/sh: .claude/hooks/guard-bulk-read.sh: No such file or directory'
+  hook_err PostToolUse:Write '.claude/hooks/no-absolute-paths.sh' 127 '.claude/hooks/no-absolute-paths.sh: line 12: jq: command not found'
 } > "$(session $S)"
 run --session=$S
 expect_line '^\| hook not found: guard-git-branch.sh \| setup \| 1 \|' "retired myspec hook still registered: setup"
 expect_line '^\| hook failed \(exit 1\): verify-before-stop.sh \| myspec \|' "myspec hook crashing: myspec"
 expect_line '^\| hook not found: guard-bulk-read.sh \| project \|' "project's missing hook: project"
+expect_line '^\| hook failed \(exit 127\): no-absolute-paths.sh \| setup \| 1 \| hooks/no-absolute-paths.sh \| a command the hook calls is missing' "exit 127 from a command inside the hook: not 'script missing'"
+expect_no_line 'hook not found: no-absolute-paths.sh' "a missing jq is not a missing script"
 expect_line 'owner setup\): run /myspec:doctor' "setup footer"
 
 # ── 6. subagent verdicts, continuations, and harness refusals ──
@@ -156,8 +159,30 @@ expect_no_line 'Implement Task 5 \|' "harness injections are not fix rounds"
 expect_no_line 'repeated Bash error' "a one-off tool error is not reported"
 expect_line '^Slowest subagents: ' "slowest subagents listed"
 
+# ── 6b. review regressions ──
+S=s6b-regressions
+{
+  prompt 'go'
+  # A failing test run that prints a hook message is the tool's output.
+  for i in 1 2 3; do tool_use "r$i" Bash; tool_err "r$i" $'Exit code 1\nhooks/tests/x.sh: FAIL expected: no work-isolation decision recorded'; done
+  # Three parallel edits denied in one turn are one prompt, not three.
+  printf '{"type":"assistant","timestamp":"%s","message":{"id":"msg_par","role":"assistant","content":[{"type":"tool_use","id":"p1","name":"Edit","input":{}}]}}\n' "$(stamp)"
+  printf '{"type":"assistant","timestamp":"%s","message":{"id":"msg_par","role":"assistant","content":[{"type":"tool_use","id":"p2","name":"Edit","input":{}}]}}\n' "$(stamp)"
+  printf '{"type":"assistant","timestamp":"%s","message":{"id":"msg_par","role":"assistant","content":[{"type":"tool_use","id":"p3","name":"Edit","input":{}}]}}\n' "$(stamp)"
+  for i in 1 2 3; do tool_err "p$i" "PreToolUse:Edit hook error: $ISO"; done
+  # Paths under a sibling of HOME keep their full name.
+  for i in 1 2 3; do tool_use "h$i" Bash; tool_err "h$i" "cat: ${HOME}et/x: No such file"; done
+} > "$(session $S)"
+F=$(subagent $S b1); meta $S b1 'Conformance review'
+{ prompt 'review'; say $'Earlier the executor returned PROBES_FAILED; that is now fixed.\n\n**Status:** DONE, not BLOCKED'; } > "$F"
+run --session=$S
+expect_no_line 'isolation-undecided' "hook text inside a tool's output is not a hook block; parallel denials are one turn"
+expect_line "^\\| repeated Bash error \\| unknown \\| 3 \\| - \\| Exit code 1: hooks/tests/x.sh" "the failing test run stays a tool error"
+expect_line "${HOME}et/x" "HOME is only shortened at a path boundary"
+expect_no_line 'probes-failed|subagent-blocked' "verdict words mentioned in prose are not verdicts"
+
 # ── 7. JSON mode ──
-run --session=$S --json
+run --session=s6-subagents --json
 if jq -e '.findings | length == 5' >/dev/null <<<"$OUTPUT"; then ok; else fail "json: five findings"; fi
 if jq -e '.summary.subagents == 5' >/dev/null <<<"$OUTPUT"; then ok; else fail "json: subagent count"; fi
 
@@ -170,6 +195,16 @@ echo '{ "aiDir": ".ai" }' > "$WORK/.myspec.json"
 OUTPUT=$(cd "$WORK" && MYSPEC_DISABLE_FRICTION_REPORT=1 node "$SCRIPT" --projects-dir="$PROJECTS" --session=s2-repeated-block 2>&1); STATUS=$?
 expect_exit 0 "env opt-out: exit 0"
 expect_empty "env opt-out: silent"
+OUTPUT=$(cd "$WORK" && MYSPEC_DISABLE_FRICTION_REPORT=1 node "$SCRIPT" --projects-dir="$PROJECTS" --session=s2-repeated-block --json 2>&1)
+if jq -e '.disabled == true and (.findings | length == 0)' >/dev/null <<<"$OUTPUT"; then ok; else fail "opt-out in JSON mode prints parseable JSON"; fi
+# The opt-out is read from the checkout root, not the working directory.
+git -C "$WORK" init -q
+mkdir -p "$WORK/sub"
+echo '{ "aiDir": ".ai", "feedback": { "frictionReport": false } }' > "$WORK/.myspec.json"
+OUTPUT=$(cd "$WORK/sub" && node "$SCRIPT" --projects-dir="$PROJECTS" --session=s2-repeated-block 2>&1)
+expect_empty "config opt-out applies from a subdirectory"
+rm -rf "$WORK/.git" "$WORK/sub"
+echo '{ "aiDir": ".ai" }' > "$WORK/.myspec.json"
 
 # ── 9. lookup and failure modes ──
 run --transcript="$(session s2-repeated-block)"

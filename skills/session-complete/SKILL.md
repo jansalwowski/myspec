@@ -92,7 +92,7 @@ If the slug would collide with an existing archive file, append a short session_
 
 ### 7. Friction Report
 
-Run the transcript scan with the archived log's `session_id`:
+Run the transcript scan with the archived log's `session_id`. If the log has no `session_id` (manual sessions may leave it empty), skip the scan and say "Friction report skipped: the session log has no session_id".
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/lib/friction-scan/scan.mjs" --session=<session_id>
@@ -104,9 +104,9 @@ It reads the session's Claude Code transcript and its subagent transcripts, uses
 |------|----|
 | 0, empty output | Say nothing about friction |
 | 0, a table | Show the table as printed, with its footer lines. Do not re-attribute rows: `owner` comes from fixed rules (repeats, known hook messages, subagent verdicts), and `unknown` is an answer, not a gap to fill |
-| 2 (no transcript, e.g. Codex) or 3 (format not recognized) | One line: "Friction report skipped: <stderr>" |
+| 1 (usage error), 2 (no transcript, e.g. Codex) or 3 (format not recognized) | One line: "Friction report skipped: <stderr>" |
 
-Owners: `myspec` — framework-side; `setup` — this project's myspec install drifted (a registered hook is missing), fixed by `/myspec:update`; `harness` — Claude Code itself; `project` — the project's checks, spec or hooks; `unknown` — not attributable from the transcript alone.
+Owners: `myspec` — framework-side; `setup` — this project's myspec install drifted (a registered hook is missing, fixed by `/myspec:update`) or a command a hook needs is missing on this machine; `harness` — Claude Code itself; `project` — the project's checks, spec or hooks; `unknown` — not attributable from the transcript alone.
 
 Opt out per project with `"feedback": { "frictionReport": false }` in `.myspec.json`, or per shell with `MYSPEC_DISABLE_FRICTION_REPORT=1`.
 

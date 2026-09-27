@@ -26,6 +26,7 @@ import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { join, resolve, dirname, basename } from 'node:path'
 import { homedir } from 'node:os'
 import { argv, cwd, env, exit, stdout, stderr } from 'node:process'
+import { execFileSync } from 'node:child_process'
 
 // ───────────────────────── rules (data) ─────────────────────────
 // A hook block is reported only when the same signature repeats. One
@@ -50,14 +51,14 @@ export const HOOK_SIGNATURES = [
   { id: 'project-verification', match: 'Verification did not pass', hook: 'verify-before-stop.sh', owner: 'project' },
 ]
 
-// Current hook scripts plus retired names an older install may still
-// register (guard-git-branch.sh became guard-worktree-context.sh in 7bf8bf8).
 // Refusals from Claude Code itself, so they are not counted as tool errors
 // of unknown origin.
 export const HARNESS_SIGNATURES = [
   { id: 'harness-worktree-guard', match: 'is isolated in the worktree' },
 ]
 
+// Current hook scripts plus retired names an older install may still
+// register (guard-git-branch.sh became guard-worktree-context.sh in 7bf8bf8).
 export const MYSPEC_HOOKS = [
   'guard-git-branch.sh',
   'guard-worktree-context.sh',
@@ -72,11 +73,13 @@ export const MYSPEC_HOOKS = [
 // Final-message verdicts from myspec's dispatch prompts. NEEDS_CONTEXT means
 // "information not provided" (implementer-prompt.md), which usually traces to
 // the project's spec or plan, so it defaults to project.
+// Anchored to a line of its own, so a report that mentions an earlier
+// verdict ("the executor returned PROBES_FAILED, now fixed") does not count.
 const SUBAGENT_STATUS = [
-  { id: 'subagent-blocked', re: /\*\*Status:\*\*\s*BLOCKED\b/, owner: 'unknown' },
-  { id: 'subagent-needs-context', re: /\*\*Status:\*\*\s*NEEDS_CONTEXT\b/, owner: 'project' },
-  { id: 'probes-blocked', re: /\bPROBES_BLOCKED\b/, owner: 'unknown' },
-  { id: 'probes-failed', re: /\bPROBES_FAILED\b/, owner: 'project' },
+  { id: 'subagent-blocked', re: /^\s*\*\*Status:\*\*\s*BLOCKED\s*$/m, owner: 'unknown' },
+  { id: 'subagent-needs-context', re: /^\s*\*\*Status:\*\*\s*NEEDS_CONTEXT\s*$/m, owner: 'project' },
+  { id: 'probes-blocked', re: /^\s*PROBES_BLOCKED\s*$/m, owner: 'unknown' },
+  { id: 'probes-failed', re: /^\s*PROBES_FAILED\s*$/m, owner: 'project' },
 ]
 
 const OWNER_ORDER = ['myspec', 'setup', 'harness', 'unknown', 'project']
@@ -138,6 +141,28 @@ function signatureFor(message) {
   return HOOK_SIGNATURES.find((s) => message.includes(s.match)) ?? null
 }
 
+function rawFirstLine(text) {
+  return text.replace(/^\s*<tool_use_error>/, '').split('\n').find((l) => l.trim())?.trim() ?? ''
+}
+
+// A tool result is a hook's refusal only when it opens with the reason. A
+// failing test run or a grep that prints the same words further down is
+// the tool's own output.
+function leadingSignature(table, text) {
+  const line = rawFirstLine(text)
+  return table.find((s) => line.startsWith(s.match) || (/^BLOCKED: /.test(line) && line.includes(s.match)) || (table === HARNESS_SIGNATURES && line.includes(s.match))) ?? null
+}
+
+// Exit 127 means the shell could not find a command. It is the registered
+// script itself only when stderr names it ("/bin/sh: <script>: No such file
+// or directory"); "<script>: line 12: jq: command not found" is a command
+// the script calls.
+function scriptMissing(hook, stderrText) {
+  if (!hook) { return false }
+  const esc = hook.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  return new RegExp(`${esc}:\\s*(No such file or directory|(command )?not found)`).test(stderrText)
+}
+
 function ts(entry) {
   const t = Date.parse(entry?.timestamp ?? '')
   return Number.isNaN(t) ? null : t
@@ -149,14 +174,21 @@ function ts(entry) {
 export function extractEvents(entries, source) {
   const events = []
   const toolNames = new Map()
+  // Parallel tool calls in one assistant message share its message id. A
+  // hook that denies all of them fired once, as far as friction goes.
+  const toolTurns = new Map()
 
   for (const e of entries) {
     if (e.type === 'assistant') {
       for (const b of contentBlocks(e)) {
-        if (b.type === 'tool_use') { toolNames.set(b.id, b.name) }
+        if (b.type !== 'tool_use') { continue }
+        toolNames.set(b.id, b.name)
+        toolTurns.set(b.id, e.message?.id ?? e.uuid ?? b.id)
       }
     }
   }
+  let seq = 0
+  const turnOf = (toolUseId) => `${source}:${toolTurns.get(toolUseId) ?? toolUseId ?? `entry-${seq++}`}`
 
   for (const e of entries) {
     const at = e.timestamp ?? null
@@ -168,14 +200,14 @@ export function extractEvents(entries, source) {
       let be = a.blockingError
       if (typeof be === 'string') { try { be = JSON.parse(be) } catch { be = { blockingError: be } } }
       const message = textOf(be?.blockingError ?? '')
-      events.push({ kind: 'hook-block', hookName: a.hookName ?? a.hookEvent ?? '?', command: be?.command ?? a.command ?? '', message, at, source })
+      events.push({ kind: 'hook-block', hookName: a.hookName ?? a.hookEvent ?? '?', command: be?.command ?? a.command ?? '', message, at, source, turn: turnOf(a.toolUseID) })
       continue
     }
 
     // A hook that could not run. Exit 127 is "command not found".
     if (e.type === 'attachment' && e.attachment?.type === 'hook_non_blocking_error') {
       const a = e.attachment
-      events.push({ kind: 'hook-error', hookName: a.hookName ?? '?', command: a.command ?? '', exitCode: a.exitCode ?? null, message: textOf(a.stderr ?? a.content), at, source })
+      events.push({ kind: 'hook-error', hookName: a.hookName ?? '?', command: a.command ?? '', exitCode: a.exitCode ?? null, message: textOf(a.stderr ?? a.content), at, source, turn: turnOf(a.toolUseID) })
       continue
     }
 
@@ -183,15 +215,16 @@ export function extractEvents(entries, source) {
       for (const b of contentBlocks(e)) {
         if (b.type !== 'tool_result' || b.is_error !== true) { continue }
         const text = textOf(b.content)
+        const turn = turnOf(b.tool_use_id)
         // PreToolUse blocks surface as the tool's error result.
-        const pre = text.replace(/^<tool_use_error>/, '').match(/^(PreToolUse:[^\s]+) hook error: ([\s\S]*)$/)
+        const pre = text.replace(/^\s*<tool_use_error>/, '').match(/^(PreToolUse:[^\s]+) hook error: ([\s\S]*)$/)
         if (pre) {
-          events.push({ kind: 'hook-block', hookName: pre[1], command: '', message: pre[2], at, source })
-        } else if (signatureFor(text)) {
+          events.push({ kind: 'hook-block', hookName: pre[1], command: '', message: pre[2], at, source, turn })
+        } else if (leadingSignature(HOOK_SIGNATURES, text)) {
           // A PreToolUse deny can surface as the bare reason.
-          events.push({ kind: 'hook-block', hookName: 'PreToolUse', command: '', message: text, at, source })
+          events.push({ kind: 'hook-block', hookName: 'PreToolUse', command: '', message: text, at, source, turn })
         } else {
-          events.push({ kind: 'tool-error', tool: toolNames.get(b.tool_use_id) ?? '?', message: text, at, source })
+          events.push({ kind: 'tool-error', tool: toolNames.get(b.tool_use_id) ?? '?', message: text, at, source, turn })
         }
       }
     }
@@ -269,14 +302,15 @@ export function analyze(mainEntries, subagents) {
   const events = [...extractEvents(mainEntries, 'main')]
   for (const s of subagents) { events.push(...extractEvents(s.entries, `subagent:${s.id}`)) }
 
-  const findings = []
+  const findings = new Map()
   const group = (key, make) => {
-    let f = findings.find((x) => x.key === key)
-    if (!f) { f = { key, count: 0, firstAt: null, sources: new Set(), ...make() }; findings.push(f) }
-    return f
+    if (!findings.has(key)) { findings.set(key, { turns: new Set(), firstAt: null, sources: new Set(), ...make() }) }
+    return findings.get(key)
   }
+  // Count distinct turns, not events: see toolTurns in extractEvents.
+  let untracked = 0
   const bump = (f, ev) => {
-    f.count++
+    f.turns.add(ev.turn ?? `untracked-${untracked++}`)
     f.sources.add(ev.source)
     if (ev.at && (!f.firstAt || ev.at < f.firstAt)) { f.firstAt = ev.at }
   }
@@ -299,21 +333,26 @@ export function analyze(mainEntries, subagents) {
     } else if (ev.kind === 'hook-error') {
       const hook = hookScript(ev.command)
       const mine = MYSPEC_HOOKS.includes(hook)
-      const missing = ev.exitCode === 127
-      const f = group(`hook-error:${hook || ev.hookName}:${ev.exitCode}`, () => ({
+      const missing = ev.exitCode === 127 && scriptMissing(hook, ev.message)
+      // A myspec hook that exits 127 without its own script missing lacks a
+      // command it calls (jq, node): the machine's setup, not the framework.
+      const lacksCommand = ev.exitCode === 127 && !missing
+      const f = group(`hook-error:${hook || ev.hookName}:${ev.exitCode}:${missing}`, () => ({
         pattern: missing ? `hook not found: ${hook || ev.hookName}` : `hook failed (exit ${ev.exitCode}): ${hook || ev.hookName}`,
-        // A registered myspec hook that is missing or crashing means this
-        // project's install drifted; anything else is the project's own hook.
-        owner: mine ? (missing ? 'setup' : 'myspec') : 'project',
+        // A registered myspec hook that is missing means this project's
+        // install drifted; anything else is the project's own hook.
+        owner: mine ? (missing || lacksCommand ? 'setup' : 'myspec') : 'project',
         ref: mine ? `hooks/${hook}` : ev.command || '-',
         detail: missing
           ? (mine ? 'registered in settings but the script is missing: run /myspec:update' : 'registered in settings but the script is missing')
-          : firstLine(ev.message),
+          : lacksCommand
+            ? `a command the hook calls is missing: ${firstLine(ev.message) || 'no stderr'}`
+            : firstLine(ev.message),
         threshold: 1,
       }))
       bump(f, ev)
     } else if (ev.kind === 'tool-error') {
-      const harness = HARNESS_SIGNATURES.find((h) => ev.message.includes(h.match))
+      const harness = leadingSignature(HARNESS_SIGNATURES, ev.message)
       if (harness) {
         bump(group(`harness:${harness.id}`, () => ({ pattern: `harness refusal: ${harness.id}`, owner: 'harness', ref: '-', detail: firstLine(ev.message), threshold: REPEAT_THRESHOLD })), ev)
         continue
@@ -337,9 +376,10 @@ export function analyze(mainEntries, subagents) {
     }
   }
 
-  const reported = findings
+  const reported = [...findings.values()]
+    .map(({ turns, threshold, sources, ...rest }) => ({ count: turns.size, threshold, ...rest, sources: [...sources].sort() }))
     .filter((f) => f.count >= f.threshold)
-    .map(({ key, threshold, sources, ...rest }) => ({ ...rest, sources: [...sources].sort() }))
+    .map(({ threshold, ...rest }) => rest)
     .sort((a, b) => OWNER_ORDER.indexOf(a.owner) - OWNER_ORDER.indexOf(b.owner) || b.count - a.count)
 
   const summary = {
@@ -361,10 +401,12 @@ function fmtDuration(ms) {
 }
 
 // The report is meant to be pasteable, so home-directory paths are shortened.
+// Only at a path boundary: with HOME=/Users/jan, /Users/janet stays whole.
 const HOME = homedir()
+const HOME_RE = HOME && HOME !== '/' ? new RegExp(`${HOME.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?=/|$|[^\\w.-])`, 'g') : null
 function cell(s) {
   let out = String(s)
-  if (HOME && HOME !== '/') { out = out.split(HOME).join('~') }
+  if (HOME_RE) { out = out.replace(HOME_RE, '~') }
   return out.replace(/\|/g, '\\|').replace(/\n/g, ' ')
 }
 
@@ -395,6 +437,17 @@ export function renderText(sessionId, result) {
 
 // ───────────────────────── cli ─────────────────────────
 
+// .myspec.json lives at the checkout root; session-complete may run from a
+// subdirectory. Same lookup as repoRoot() in lib/memory-files.mjs, with git's
+// stderr silenced so a run outside git stays quiet and falls back to cwd.
+function projectRoot() {
+  try {
+    return execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: cwd(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+  } catch {
+    return resolve(cwd())
+  }
+}
+
 function disabled(root) {
   if (env.MYSPEC_DISABLE_FRICTION_REPORT === '1') { return true }
   const cfgPath = join(root, '.myspec.json')
@@ -419,7 +472,10 @@ function main() {
     args[i === -1 ? raw.slice(2) : raw.slice(2, i)] = i === -1 ? true : raw.slice(i + 1)
   }
 
-  if (disabled(resolve(cwd()))) { exit(0) }
+  if (disabled(projectRoot())) {
+    if (args.json === true) { stdout.write(JSON.stringify({ disabled: true, findings: [] }) + '\n') }
+    exit(0)
+  }
 
   let transcript = typeof args.transcript === 'string' ? resolve(args.transcript) : null
   let sessionId = typeof args.session === 'string' ? args.session : null
