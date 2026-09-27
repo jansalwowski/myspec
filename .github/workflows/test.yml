@@ -36,3 +36,12 @@ jobs:
             echo "::endgroup::"
           done
           exit $status
+
+  stack-agnostic:
+    name: no localhost ports in skills or examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for concrete localhost:<port> addresses
+        run: scripts/check-no-localhost-ports.sh

@@ -326,11 +326,12 @@ User runs the suggested sync, the stale scenario is updated, re-runs verify — 
 
 Phase 1 — docs sync:
 
-- Marks all tech-spec implementation steps `[x]`.
+- Confirms the tech-spec's numbered step outline matches what shipped (progress was tracked in the plan).
 - Reconciles file inventory (T11 ended up adding two more files than planned — those get added).
 - Captures one in-flight ADR ("ScheduleForm uses optimistic UI for cadence changes").
 - Flips manifest entry: `status: complete`, `phase: 2`.
 - Archives the plan: `implementation-plan.md` → `plans/2026-04-30-scheduled-exports-v1.md`.
+- Compacts `tech-spec.md`: nothing superseded to remove on a first version; the File Inventory now lists only files that exist.
 
 Phase 2 — branch integration:
 

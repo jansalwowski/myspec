@@ -165,7 +165,8 @@ When flagging:
 /\b(future[- ]proof|extensible|scalable|flexible|generic|just in case)\b/gi
 
 // Missing checklist items (Completeness)
-// Check: Implementation Steps section has at least one `- [ ]` item
+// Check: Implementation Steps section has at least one numbered step
+// Low finding: `[ ]`/`[x]` checkboxes in tech-spec.md (progress belongs in implementation-plan.md)
 
 // Spec version mismatch (Spec Alignment)
 // Compare: tech-spec frontmatter `based_on_spec_version` vs spec.md `spec_version`

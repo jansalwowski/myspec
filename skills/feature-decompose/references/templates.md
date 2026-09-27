@@ -114,7 +114,7 @@ see_also:
 
 ## Implementation Steps
 
-- [ ] [Extracted steps from parent tech-spec]
+1. [Extracted steps from parent tech-spec, renumbered, no checkboxes]
 
 ## Key Interfaces
 
