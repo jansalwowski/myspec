@@ -9,6 +9,7 @@ Wraps a tracked work session: marks the session log `completed`, reviews the log
 - [Multiple memories extracted with cross-links](#multiple-memories-extracted-with-cross-links)
 - [Nothing extractable — all in the diff](#nothing-extractable--all-in-the-diff)
 - [Multiple active sessions — confirm target first](#multiple-active-sessions--confirm-target-first)
+- [Friction report — whose side is the problem on](#friction-report--whose-side-is-the-problem-on)
 
 ---
 
@@ -239,3 +240,56 @@ Each session moves to `ai/memory/sessions/archive/2026-04/`. Index gets three ro
 - **Multi-active is normal in modern workflows.** Subagents in worktrees create sibling sessions; the orchestrator has its own. The skill doesn't panic — it confirms scope.
 - **Per-session extraction.** Each session's log is reviewed independently. The orchestrator's "phase review went well" insight is different from T2's "parameter binding gotcha" — they're genuinely separate memories.
 - **Defensive default — pick the most recent, ask before touching siblings.** If the user types `1`, the skill closes only the orchestrator. The subagent sessions stay active until explicitly closed. This prevents accidental archive of sessions other agents may still be writing to.
+
+---
+
+## Friction report — whose side is the problem on
+
+A session that felt slow. The user wants to know whether to fix something in their project or file a myspec issue. Step 7 answers from the transcripts, with no model tokens spent.
+
+### Setup
+
+A `feature-implement` run on the invoices feature took most of the afternoon. During it:
+
+- The Stop hook blocked four times on the same memory conformance error before the agent fixed the duplicate ID.
+- One implementer returned `**Status:** NEEDS_CONTEXT` because the spec did not say which role may void an invoice.
+- The project's test suite failed once and was fixed.
+- The isolation prompt fired once, on the first edit.
+
+### Skill flow
+
+#### Steps 1–6
+
+Standard. The archived log's frontmatter has `session_id: 9f3c2a71-…`.
+
+#### Step 7 — friction report
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/lib/friction-scan/scan.mjs" --session=9f3c2a71-…
+```
+
+```
+friction-scan: session 9f3c2a71, 2h05m active, 11 subagents
+
+| Pattern | Owner | Count | Ref | Detail |
+|---|---|---|---|---|
+| hook block: memory-conformance | myspec | 4 | hooks/verify-before-stop.sh | Memory conformance check failed for changes under ai/memory. Fix these before stopping (… |
+| subagent-needs-context | project | 1 | - | Implement Task 4 |
+
+Slowest subagents: Implement Task 3 (24m); Phase 2 review (11m); Implement Task 4 (9m)
+
+1 row(s) look framework-side (owner myspec).
+```
+
+The skill shows the table as printed and does not re-argue the owners.
+
+#### Step 8 — confirm
+
+> Session archived. No memories extracted. Friction: 1 myspec row (memory conformance blocked 4 times), 1 project row (Task 4 needed a spec answer).
+
+### Why this example matters
+
+- **Single events are not friction.** The one isolation prompt and the one test failure are absent: a hook doing its job once, and a project check the agent fixed, are normal. Only the repeat is reported.
+- **`NEEDS_CONTEXT` points at the project by default.** The implementer asks for context when the spec or plan did not provide it, so the fix is usually a spec edit, not a framework change.
+- **`unknown` is an answer.** A row the rules cannot attribute stays `unknown`. The skill does not guess, because a confident wrong owner sends the user to the wrong repo.
+- **Opting out** is `"feedback": { "frictionReport": false }` in `.myspec.json`.

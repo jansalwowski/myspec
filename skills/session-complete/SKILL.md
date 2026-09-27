@@ -90,11 +90,32 @@ Where slug is derived from the (refined) topic — never archive with `auto:` in
 
 If the slug would collide with an existing archive file, append a short session_id prefix: `YYYY-MM-DD-{slug}-{session_id_first8}.md`.
 
-### 7. Confirm Completion
+### 7. Friction Report
+
+Run the transcript scan with the archived log's `session_id`:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/lib/friction-scan/scan.mjs" --session=<session_id>
+```
+
+It reads the session's Claude Code transcript and its subagent transcripts, uses no model tokens, and prints nothing when no pattern crosses a threshold. It never writes files.
+
+| Exit | Do |
+|------|----|
+| 0, empty output | Say nothing about friction |
+| 0, a table | Show the table as printed, with its footer lines. Do not re-attribute rows: `owner` comes from fixed rules (repeats, known hook messages, subagent verdicts), and `unknown` is an answer, not a gap to fill |
+| 2 (no transcript, e.g. Codex) or 3 (format not recognized) | One line: "Friction report skipped: <stderr>" |
+
+Owners: `myspec` — framework-side; `setup` — this project's myspec install drifted (a registered hook is missing), fixed by `/myspec:update`; `harness` — Claude Code itself; `project` — the project's checks, spec or hooks; `unknown` — not attributable from the transcript alone.
+
+Opt out per project with `"feedback": { "frictionReport": false }` in `.myspec.json`, or per shell with `MYSPEC_DISABLE_FRICTION_REPORT=1`.
+
+### 8. Confirm Completion
 
 Report to user:
 - Number of memories created (by type)
 - Archive location
+- Friction rows by owner, if the report printed any
 
 ## When NOT to Use
 
@@ -125,3 +146,4 @@ Report to user:
 - [ ] Outcome section is filled (what worked, root cause, key insights)
 - [ ] Approved memories were created via `/myspec:memory-create` (check respective index files)
 - [ ] User was presented extraction list and confirmed selections
+- [ ] Friction scan ran with the session's `session_id`; its table (if any) was shown unedited
