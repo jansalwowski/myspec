@@ -158,7 +158,15 @@ An optional `isolation` block configures the work-isolation hooks; every key has
 }
 ```
 
-`allowLinkedModules` lets the Stop hook verify a worktree whose `node_modules` is a symlink even when its lockfiles differ from the linked checkout (a link with identical lockfiles is accepted without it); `blockInMain` adds command patterns the Bash guard blocks in the main checkout while a session works in a worktree; `provision` is what `worktree-provision.sh` links and copies into a new worktree.
+`allowLinkedModules` lets the Stop hook verify a worktree whose dependency directory is a symlink even when the lockfiles that pin it differ from the linked checkout (a link with identical lockfiles is accepted without it); `blockInMain` adds command patterns the Bash guard blocks in the main checkout while a session works in a worktree; `provision` is what `worktree-provision.sh` links and copies into a new worktree.
+
+A `symlink` entry is a path string or an object naming the lockfiles that pin it; `"lockfiles": []` marks an entry unguarded:
+
+```json
+"symlink": ["node_modules", ".env", { "path": "deps", "lockfiles": ["deps.lock"] }]
+```
+
+A string entry whose basename is a well-known dependency directory takes its lockfiles from a built-in map — `node_modules` (npm, Yarn, pnpm, Bun lockfiles), `vendor` (`composer.lock`, `Gemfile.lock`, `go.sum`), `.venv` / `venv` (`poetry.lock`, `Pipfile.lock`, `uv.lock`, `pdm.lock`, `requirements*.txt`) — matched beside the entry and at the repo root. Any other string entry is unguarded. Provisioning skips an entry whose lockfiles the branch changed against `--base`; the Stop hook blocks on a linked entry whose lockfiles differ from the checkout it points into.
 
 `frameworkVersion` is kept in lockstep across `framework-files/manifest.json`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` (with matching git `ref`), `.codex-plugin/plugin.json`, and `plugins/myspec/.codex-plugin/plugin.json`. Use `./scripts/bump-version.sh X.Y.Z` to update all five in one shot; see [RELEASING.md](RELEASING.md) for the full release workflow.
 
