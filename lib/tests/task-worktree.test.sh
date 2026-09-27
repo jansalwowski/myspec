@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Regression fixture for task-worktree.sh (and worktree-provision.sh's
-# --no-link-modules flag and codegen warning).
+# --no-symlink flag).
 #
 # Issue #93: harness worktree isolation forks from the default branch, so a
 # parallel task in any later phase could not see the feature commits it built
 # on. The properties under test: a task worktree starts at the CONTROLLER's
 # HEAD, is provisioned from the controller's checkout, merges back onto the
-# feature branch, and leaves no worktree or branch behind; a symlinked
-# node_modules can be refused for tasks whose codegen would write through it.
+# feature branch, and leaves no worktree or branch behind; every symlink entry
+# can be refused for tasks that would write through a linked directory.
 #
 # Builds a synthetic repo; no network.
 # Usage: task-worktree.test.sh [path-to-script]
@@ -115,16 +115,19 @@ git -C "$CTRL" commit -qm "merge t7" --no-edit
 "$SCRIPT" merge t7 >/dev/null 2>&1; ok "rerun after resolution exits 0" $?
 [ ! -e "$T7" ]; ok "rerun removes the resolved worktree" $?
 
-# --- --no-link-modules and the codegen warning ------------------------------------
-OUT=$("$SCRIPT" create t4 --no-link-modules 2>&1); ok "create --no-link-modules exits 0" $?
-[ ! -e "$REPO/.claude/worktrees/t4/node_modules" ]; ok "--no-link-modules leaves node_modules absent" $?
-printf '%s' "$OUT" | grep -qF "run a real install"; ok "--no-link-modules says to install" $?
-
-mkdir -p "$REPO/node_modules/.prisma"
-OUT=$("$SCRIPT" create t5 2>&1); ok "create t5 exits 0" $?
-printf '%s' "$OUT" | grep -qF "codegen here writes into node_modules"; ok "prisma client in node_modules triggers the codegen warning" $?
-OUT=$("$SCRIPT" create t8 --no-link-modules 2>&1)
-! printf '%s' "$OUT" | grep -qF "codegen here writes"; ok "no codegen warning when the link is refused" $?
+# --- --no-symlink skips every symlink entry, not just node_modules --------------
+if command -v jq >/dev/null 2>&1; then
+  printf '{"isolation":{"provision":{"symlink":["node_modules","vendor"]}}}\n' > "$CTRL/.myspec.json"
+  mkdir -p "$CTRL/vendor"
+fi
+OUT=$("$SCRIPT" create t4 --no-symlink 2>&1); ok "create --no-symlink exits 0" $?
+[ ! -e "$REPO/.claude/worktrees/t4/node_modules" ]; ok "--no-symlink leaves node_modules absent" $?
+printf '%s' "$OUT" | grep -qF "run a real install"; ok "--no-symlink says to install" $?
+if command -v jq >/dev/null 2>&1; then
+  [ ! -e "$REPO/.claude/worktrees/t4/vendor" ]; ok "--no-symlink leaves a non-node entry absent" $?
+  "$SCRIPT" create t5 >/dev/null 2>&1; ok "create t5 exits 0" $?
+  [ -L "$REPO/.claude/worktrees/t5/vendor" ]; ok "without the flag a non-node entry is linked" $?
+fi
 
 "$SCRIPT" merge t4 --keep >/dev/null 2>&1; ok "merge --keep of an empty task exits 0" $?
 [ -d "$REPO/.claude/worktrees/t4" ]; ok "--keep leaves the worktree" $?

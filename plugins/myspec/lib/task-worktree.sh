@@ -6,15 +6,17 @@
 # any phase after the first cannot see the feature commits it builds on.
 #
 # Usage (run from the controller's checkout, on the feature branch):
-#   .claude/lib/task-worktree.sh create <slug> [--no-link-modules]
+#   .claude/lib/task-worktree.sh create <slug> [--no-symlink]
 #   .claude/lib/task-worktree.sh merge  <slug> [--keep]
 #
 # create   adds <main-checkout>/.claude/worktrees/<slug> on a new branch
 #          `<feature-branch>--<slug>` at the controller's HEAD, then runs
 #          worktree-provision.sh with the controller's checkout as the link
-#          source — its node_modules already matches the feature's lockfile.
-#          --no-link-modules is passed through: use it when the task runs
-#          codegen that writes into node_modules, then install for real.
+#          source — its linked dependency directories already match the feature's
+#          lockfiles.
+#          --no-symlink is passed through: use it when the task writes into
+#          a linked directory (code generation into node_modules, vendor,
+#          .venv, ...), then install for real.
 #          Prints the worktree path as the last line.
 # merge    merges the task branch into the controller's current branch. On a
 #          conflict it stops with the merge in progress: resolve, commit, and
@@ -27,7 +29,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: task-worktree.sh create <slug> [--no-link-modules] | merge <slug> [--keep]" >&2
+  echo "usage: task-worktree.sh create <slug> [--no-symlink] | merge <slug> [--keep]" >&2
   exit 1
 }
 
@@ -44,7 +46,7 @@ NO_LINK=""
 KEEP=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --no-link-modules) NO_LINK="--no-link-modules"; shift ;;
+    --no-symlink) NO_LINK="--no-symlink"; shift ;;
     --keep) KEEP=1; shift ;;
     *) usage ;;
   esac
