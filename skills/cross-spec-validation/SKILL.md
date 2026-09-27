@@ -8,6 +8,8 @@ tags: [feature, validation, cross-cutting, specification]
 
 Detect contradictions, broken contracts, and superseded assumptions between a target feature spec and all related feature specs. Reads specs only — no code exploration.
 
+**Autopilot:** when the user opted in, answer this skill's gates per [`_shared/autopilot.md`](../_shared/autopilot.md).
+
 ## Prerequisites
 
 - Target feature must have `spec.md` in `${aiDir}/features/{feature}/`

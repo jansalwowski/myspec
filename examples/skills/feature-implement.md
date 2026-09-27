@@ -96,25 +96,25 @@ This is the only milestone, so the skill goes directly to Step 5 (no Milestone C
 #### Step 5 — Completion + review choice
 
 1. Removes the orchestration marker, so the Stop hook blocks on failures again, then runs the plan's Final Verification section.
-2. Writes the full-feature review package to one temp file (`git log --oneline` + `git diff --stat` + `git diff -U10` over `BASE_SHA..HEAD`) and dispatches the holistic reviewer with the package path plus the plan's Execution Log entries to triage. This pass is mandatory and the tier (premium) is named explicitly on the dispatch — an omitted model would silently inherit the session's model. Returns `APPROVED`, no MUST FIX triage items.
+2. Writes the full-feature review package to one temp file (`git log --oneline` + `git diff --stat` + `git diff -U10` over `BASE_SHA..HEAD`) and dispatches the holistic reviewer with the package path plus the plan's Execution Log entries to triage. This pass is mandatory and the tier (premium) is named explicitly on the dispatch — an omitted model would silently inherit the session's model. Returns `APPROVED`, no MUST FIX triage items. The controller writes the report to `${aiDir}/features/favorite-reports/holistic-review.md` (frontmatter records `head_sha` and `verdict: ready-to-merge`) and commits it.
 3. Prints the completion report — milestone summary, holistic verdict, **Rulings I made: none**, deferred-minors triage — then asks via `AskUserQuestion` — it does **not** auto-hand-off:
 
 > **Implementation complete. What next?**
 >
-> - **feature-implement-review** → independent audit that the code fulfills the spec + plan, persists a report (Recommended for anything non-trivial)
+> - **feature-complete** → skip the reviews; sync docs, archive plan, merge (Recommended)
+> - **feature-implement-review** → REQ/AC traceability, test trace, scope drift on top of holistic-review.md; persists conformance-report.md
 > - **code-review** → quality, standards, and bug review of the changes
-> - **feature-complete** → skip the reviews; sync docs, archive plan, merge
 > - **Stop here** → leave the branch as-is; continue later
 
-The two review passes are **complementary, not exclusive** (conformance vs. code quality). After whichever the user picks finishes, the skill offers this same choice again so they can run the other or proceed to `feature-complete`.
+`feature-complete` carries the recommendation because the holistic verdict is READY TO MERGE, every criterion came back ✅, no probe was waived, and the plan has fewer than 10 tasks — the conformance audit would re-walk criteria the holistic pass just checked. Any one of those failing moves the recommendation to `feature-implement-review`. The two review passes are **complementary, not exclusive** (conformance vs. code quality). After whichever the user picks finishes, the skill offers this same choice again so they can run the other or proceed to `feature-complete`.
 
-User picks **feature-implement-review**. The skill invokes `/myspec:feature-implement-review favorite-reports`.
+User picks **feature-implement-review** anyway. The skill invokes `/myspec:feature-implement-review favorite-reports`, which finds `holistic-review.md` with no code changed since its `head_sha` and spends its pass on traceability and test proof only.
 
 ### Result
 
 - All 6 tasks `[x]`, six commits on `feat/favorite-reports`, checkboxes closed after the phase passed review.
 - One phase review, not six.
-- Routed to `/myspec:feature-implement-review` by the user's Step 5 choice.
+- Routed to `/myspec:feature-implement-review` by the user's Step 5 choice, over the recommended `feature-complete`.
 
 ### Why this example matters
 
@@ -171,11 +171,19 @@ Had the review returned Critical/Important findings, the fix loop would run: rou
 
 #### Milestone Checkpoint
 
-After every phase in Milestone 1 passes, the skill runs the milestone verification commands and pauses:
+After every phase in Milestone 1 passes, the skill runs the milestone verification commands. The milestone carries a `**Checkpoint probes:**` block (the tech-spec sets `verification_mode: mixed`), so the controller dispatches one probe executor with that block verbatim and whole, and nothing else — no spec, no phase verdicts, no implementer reports. The executor works through the scratch-isolation checklist (separate database, a second Redis on its own port, a "before" fingerprint of the real database and queue; no bucket in this feature), runs each probe, and reports:
+
+> P1: PASS — observed: `201`, body `{"id":"sch_1","cadence":"WEEKLY_MONDAY"}` — artifact: `…/probe-artifacts.x7Q/p1.json`
+> P2: BLOCKED — observed: `ECONNREFUSED` on the scratch `REDIS_URL` — artifact: `…/probe-artifacts.x7Q/p2.log`
+> NEED: the scratch Redis at `$REDIS_URL` running
+> Verdict: PROBES_BLOCKED
+
+The scratch Redis was never started. The controller does not rerun P2 against the default Redis, and does not count the green integration test as a substitute — it puts the `NEED:` line to the user. The user starts the scratch Redis and picks **fix**; nothing in the code needs changing, so the executor is re-dispatched with the same probes, returns `PROBES_PASSED` with the post-run check showing the real database and queue untouched, and each probe line goes into the Execution Log. Then the checkpoint pauses:
 
 > ═══ Milestone 1 complete: Scheduled Reports core CRUD + cron infra ═══
 >
 >   Completed: T1 migration, T2 ScheduleRepository, T3 ExportRunRepository, T4 shared types, …
+>   Probes:    2 passed, 0 waived
 >   Next: Milestone 2 — UI + notifications (4 tasks)
 >
 >   continue / stop / fresh — Choice?
@@ -184,7 +192,7 @@ This plan has 12 tasks, so `fresh` carries the `(Recommended)` marker: one miles
 
 #### Step 5 — Completion
 
-Final Verification runs, then the controller builds the full-feature review package (one temp file: commit list + stat + `git diff -U10` over `BASE_SHA..HEAD`) and dispatches the holistic reviewer on the premium tier with the package path and the plan's Execution Log entries. Per-phase reviews saw one phase's diff each; this one sees the feature — no overlap, and it is never skipped. The completion report surfaces every `Ruling:` line from the Execution Log under **Rulings I made**, then offers the same 4-option choice (feature-implement-review / code-review / feature-complete / Stop here).
+Final Verification runs, then the controller builds the full-feature review package (one temp file: commit list + stat + `git diff -U10` over `BASE_SHA..HEAD`) and dispatches the holistic reviewer on the premium tier with the package path and the plan's Execution Log entries. Per-phase reviews saw one phase's diff each; this one sees the feature — no overlap, and it is never skipped. The completion report surfaces every `Ruling:` line from the Execution Log under **Rulings I made**, then offers the same 4-option choice (feature-implement-review / code-review / feature-complete / Stop here). With 12 tasks, `feature-implement-review` carries the recommendation even on a READY TO MERGE verdict.
 
 ### Result
 
@@ -199,6 +207,7 @@ Final Verification runs, then the controller builds the full-feature review pack
 - **The barrier is where isolation ends.** Merge one worktree at a time, run the full suite once, and only then review the phase. Only one suite runs per worktree at a time; concurrent runs share caches and ports and cause timing flakes. A phase review over an unmerged tree reviews something nobody will ship.
 - **`PHASE_BASE`, not `HEAD~1`.** A phase with two parallel commits plus a merge is several commits deep; `HEAD~1` silently reviews the last one.
 - **Past five tasks, one milestone per session.** The checkpoint recommends `fresh` because a long multi-milestone run is dispatch-latency-bound and the controller's context degrades as it goes.
+- **The controller does not grade its own milestone.** A blocked probe is the moment an adjacent signal ("the integration test is green") is most tempting; the probe gate only passes on the executor's evidence or a waiver the user gave by name, and the waiver reaches the completion report.
 
 ---
 

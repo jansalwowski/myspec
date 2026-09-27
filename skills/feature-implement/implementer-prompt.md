@@ -16,7 +16,7 @@ Task tool (general-purpose):
 
     ## Context
 
-    [Scene-setting: which phase this belongs to, what was completed before this, architectural context from tech-spec, any shared types or interfaces this task depends on]
+    [Scene-setting: which phase this belongs to, what was completed before this, architectural context from tech-spec, any shared types or interfaces this task depends on. For each spec/tech-spec section the task's Spec contract cites by path and heading, paste that section's text here verbatim]
 
     ## Isolation Constraint (parallel tasks only)
 

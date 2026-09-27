@@ -14,7 +14,7 @@ Independently audit whether the built code fulfills the feature's spec and plan 
 
 A reviewer that watched the code get written rationalizes its choices. The audit is therefore performed by a **fresh subagent** (the *conformance reviewer*) that receives only the artifacts and the diff — never the implementation conversation. The skill thread orchestrates inputs and routing; it does not pre-judge conformance itself.
 
-This is distinct from the in-flight holistic review inside `/myspec:feature-implement`: that is a quick gate during execution. It is a deeper, retrospective, independent audit that persists a report and routes findings with the user.
+It complements the holistic review that closes `/myspec:feature-implement`: that pass owns cross-phase integration, architecture, and deferred-minor triage, and persists `holistic-review.md`. When that report covers the current code, this audit takes those verdicts as settled and spends its pass on REQ/AC traceability, test proof, and scope drift.
 
 ## Prerequisites
 
@@ -31,6 +31,7 @@ This is distinct from the in-flight holistic review inside `/myspec:feature-impl
 - Read `${aiDir}/features/{feature}/implementation-plan.md` if present — task list and checkbox state.
 - Read `${aiDir}/features/{feature}/scenarios.md` if present — behavioral expectations.
 - Read `.claude/rules/` convention files and `.claude/verification.json` if present.
+- Read `${aiDir}/features/{feature}/holistic-review.md` if present. It is **reusable** when `git diff --stat <its head_sha> HEAD -- . ':(exclude)${aiDir}'` exits 0 with empty output — no code changed since it was written. A non-zero exit (the sha is gone after a rebase or squash) makes it stale, even though the output is empty. Otherwise say it is stale and audit in full.
 - If a sub-feature: also read the parent `spec.md` / `tech-spec.md`.
 
 ### Step 2: Establish the Diff
@@ -52,6 +53,7 @@ Assemble, to paste inline into the reviewer prompt (the subagent must not parse 
 - The plan task list with checkbox state.
 - The scenarios (if any) and which are runnable.
 - The diff range (`BASE_SHA..HEAD`) and changed-file list.
+- The reusable holistic report, verbatim, if Step 1 found one.
 
 ### Step 4: Dispatch the Conformance Reviewer
 
@@ -74,6 +76,7 @@ base_sha: {BASE_SHA}
 head_sha: {HEAD}
 reviewed: {YYYY-MM-DD}
 verdict: conformant | divergent | gaps | not-verifiable
+holistic_reused: true | false
 ---
 ```
 
@@ -160,6 +163,7 @@ Locate the code implementing each requirement in this order:
 
 - [ ] Diff range resolved against the default branch (or explicit base confirmed with user)
 - [ ] Conformance reviewer dispatched as a fresh subagent with inputs pasted inline
+- [ ] `holistic-review.md` passed to the reviewer only when no code changed since its `head_sha`
 - [ ] Bidirectional traceability matrix produced (forward + reverse)
 - [ ] Behavioral layer run where executable; `not-verifiable` reported where not — never inferred
 - [ ] `conformance-report.md` written with frontmatter recording the reviewed commit and verdict

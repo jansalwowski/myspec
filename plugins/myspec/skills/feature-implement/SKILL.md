@@ -10,13 +10,15 @@ Execute a feature implementation plan by dispatching subagents per task and revi
 
 **Announce at start:** "Executing feature-implement on `${aiDir}/features/{feature}/implementation-plan.md`."
 
+**Autopilot:** when the user opted in, answer this skill's gates — Step 0's "always ask" included — per [`_shared/autopilot.md`](../_shared/autopilot.md).
+
 ## Execution Model
 
 **Milestone** = a vertical slice of the feature (BE → FE → tests). Top-level execution unit. Agent checkpoints occur at milestone boundaries.
 **Phase** = a group of tasks within a milestone, ending at a barrier. Nothing should break when a phase completes.
 **Task** = a unit of work dispatched to a subagent. Sequential or parallel within a phase.
 **Phase review** = after each phase: spec compliance, code quality, test coverage, docs consistency.
-**Milestone checkpoint** = after all phases in a milestone: verify all tasks done, ask user to continue / stop / fresh.
+**Milestone checkpoint** = after all phases in a milestone: verify all tasks done, have a separate executor run the plan's checkpoint probes, ask user to continue / stop / fresh.
 
 ## Task Status Tracking
 
@@ -40,11 +42,13 @@ Plans use three checkbox states:
 
 ## Execution Log (plan section)
 
-Durable decisions live in the plan file, next to the checkboxes — the plan is the state that survives a crashed session, and `feature-complete` archives it. Maintain a `## Execution Log` section at the end of implementation-plan.md (create it on the first entry). Three entry shapes:
+Durable decisions live in the plan file, next to the checkboxes — the plan is the state that survives a crashed session, and `feature-complete` archives it. Maintain a `## Execution Log` section at the end of implementation-plan.md (create it on the first entry). Entry shapes:
 
 - `Ruling: <what you decided> — <why> — <what it costs if wrong>`
 - `Deferred minor (Phase N): <one-line finding> (file:line)`
 - `Parked (Phase N): <finding> — Ruling: <why the code stands>`
+- `Probe (Milestone N): <P|D><n> <verdict> — observed: <value> — artifact: <path>` (copied from the probe executor's report)
+- `Waiver (Milestone N): <P|D><n> — <the user's reason, in their words>`
 
 The holistic reviewer (Step 5) reads this section to triage deferred minors, and the completion report surfaces every ruling. An entry that exists only in session context is a decision made in secret.
 
@@ -58,6 +62,7 @@ A running plan does not wait on the user for every wrinkle. Non-catastrophic con
 - A security-sensitive change (auth, secrets, permissions)
 - A plan ↔ spec contradiction the code cannot bridge
 - Scope explosion — the fix requires work no plan task covers
+- A checkpoint probe that came back FAIL or BLOCKED — a failing probe often means the spec was misread, which a fix loop cannot see
 
 At Step 5, list every ruling in the completion report under **"Rulings I made"**, in the order made, each with its cost-if-wrong. The list is exhaustive: if the Execution Log holds a ruling, the report holds it.
 
@@ -108,8 +113,6 @@ options:
 
 - Order so the recommended option is first with `(Recommended — {why})` appended
   (e.g. `(Recommended — plan has parallel groups)`).
-- Always ask, even when the recommendation is unambiguous. Confirmation is cheap;
-  silent assumption is the bug.
 
 **5. Auto-execute the choice:**
 
@@ -146,7 +149,7 @@ Parse milestones first, then build a DAG within each:
 - `[x]` = already done — skip entirely
 - `[~]` = was in progress when previous agent stopped — re-execute this task from scratch. For a parallel task, first clear its stale worktree with `.claude/lib/task-worktree.sh discard <feature>-t<N>` (a no-op when none exists) — `create` refuses an existing slug, and the partial work never passed review
 - `[ ]` = todo — execute normally
-- Find the first milestone containing any non-`[x]` task. Resume from there.
+- Find the first milestone containing any non-`[x]` task. Resume from there — unless an earlier milestone, or any milestone when every task is `[x]`, carries `**Checkpoint probes:**` without a passing entry per probe; resume at the first such milestone's probe gate (Step 4b) instead. A passing entry is a `Probe` line with PASS (SERVED for a `D<n>` demo) or a `Waiver` line.
 
 **Validate before starting:**
 - Every task in every Execution Order table has a `### Task N:` section.
@@ -265,19 +268,26 @@ After all phases in a milestone complete → proceed to **Step 4b: Milestone Che
 
 ### Step 4b: Milestone Checkpoint
 
-After all phases in a milestone complete (skip this step only for the final milestone — go directly to Step 5):
+After all phases in a milestone complete (for the final milestone run only (b), then go to Step 5):
 
 **a) Verify milestone completion:**
 - All task checkboxes within this milestone are `[x]` (no `[~]` or `[ ]` remaining)
 - All barrier verification commands passed
 - Run the full suite — every required check in `.claude/verification.json` — over the milestone's tree
 
-**b) Pause and ask user:**
+**b) Probe gate** — only when the milestone carries a `**Checkpoint probes:**` block. Dispatch the probe executor (`./probe-executor-prompt.md`) with that block verbatim and whole, and nothing else — one executor per milestone, `mixed` included, so probes run in plan order. You never run, reword, or drop a probe yourself: the agent that did the work must not be the one that decides whether its verification ran, and tests green is not a substitute. Copy each probe line into the Execution Log. The gate passes only on `PROBES_PASSED`, with an observed value and artifact on every line. A missing report counts as BLOCKED, and FAIL or BLOCKED is a hard stop — ask the user, putting each of the report's `NEED:` lines to them first:
+
+- **fix** → run the finding through the 4d fix loop (or, for a `NEED:` line, get what it names from the user), then re-dispatch the executor with the same probes and any Target override the user gave
+- **waive <P|D><n>** → log `Waiver (Milestone N): …`; the probe stays unrun, and the completion report says so
+- **stop** → as in (c)
+
+**c) Pause and ask user:**
 
 ```
 ═══ Milestone N complete: [milestone name] ═══
 
   Completed: [list of task names]
+  Probes:    [n passed, n waived — or "none in plan"]  Demo: [URL + screenshot paths, if any]
   Next: Milestone N+1 — [milestone name] ([N tasks])
 
   continue  → proceed to Milestone N+1 in this session
@@ -289,8 +299,7 @@ After all phases in a milestone complete (skip this step only for the final mile
 
 Mark `fresh` as `(Recommended)` when the plan has more than five tasks: a multi-milestone
 run in one session is dispatch-latency-bound and the controller's context degrades across
-milestones. One milestone per session is the default for plans that size. `continue` is
-recommended only for plans of five tasks or fewer.
+milestones.
 
 - **continue** → proceed to next milestone
 - **stop** → remove the orchestration marker, ensure all changes committed, output: "Stopped after Milestone N. Resume with `/myspec:feature-implement` — it will detect completed milestones via `[x]` checkboxes.", then exit
@@ -299,24 +308,23 @@ recommended only for plans of five tasks or fewer.
 ### Step 5: Completion
 
 1. Remove the orchestration marker (Step 2.5) so the Stop hook blocks again, then run the Final Verification section from the plan.
-2. Build the full-feature review package (same commands as Step 4b, over `BASE_SHA..HEAD`) and dispatch the holistic reviewer (`./holistic-reviewer-prompt.md`) on the `premium` tier with the package path plus the plan's Execution Log entries (deferred minors and parked findings) so it can triage which must be fixed before merge. This pass is mandatory — never skipped, never downgraded to a cheaper tier. It is the quick in-flight gate; the deeper independent conformance audit lives in `/myspec:feature-implement-review`.
-3. Print the completion report. It contains, in order: the milestone summary; the holistic verdict; **"Rulings I made"** — every `Ruling:` line from the Execution Log, in the order made, each with its cost-if-wrong ("none" if the log holds no rulings); and the deferred-minors triage outcome. This report is the only place the decisions taken on the user's behalf reach them.
+2. Build the full-feature review package (same commands as Step 4b, over `BASE_SHA..HEAD`) and dispatch the holistic reviewer (`./holistic-reviewer-prompt.md`) on the `premium` tier with the package path plus the plan's Execution Log entries (deferred minors and parked findings) so it can triage which must be fixed before merge. This pass is mandatory — never skipped, never downgraded to a cheaper tier. Write its report to `${aiDir}/features/{feature}/holistic-review.md` (frontmatter in the prompt file) and commit it: `/myspec:feature-implement-review` reads it and skips what it already covers.
+3. Print the completion report. It contains, in order: the milestone summary, with probe results and any live demo URL; the holistic verdict; **"Rulings I made"** — every `Ruling:` line from the Execution Log, in the order made, each with its cost-if-wrong ("none" if the log holds no rulings); every `Waiver:` line; and the deferred-minors triage outcome. This report is the only place the decisions taken on the user's behalf reach them.
 4. **Ask the user what to do next** via `AskUserQuestion` — do not auto-hand-off:
 
 ```
 question: "Implementation complete. What next?"
 header:   "Next step"
 options:
-  - "feature-implement-review" → independent audit that the code fulfills the spec and
-                                  plan (traceability + behavioral), persists a report
-                                  (Recommended for anything non-trivial)
+  - "feature-implement-review" → REQ/AC traceability, test trace, scope drift on top of
+                                  holistic-review.md; persists conformance-report.md
   - "code-review"               → quality, standards, and bug review of the changes
                                   (universal dimensions + any project rules)
   - "feature-complete"          → skip the reviews; sync docs, archive plan, merge
   - "Stop here"                 → leave the branch as-is; continue later
 ```
 
-Execute the choice: invoke `/myspec:feature-implement-review`, `/myspec:code-review`, `/myspec:feature-complete`, or stop and report the branch name. The two review passes are complementary, not exclusive (conformance vs. code quality) — after one finishes, offer this choice again so the user can run the other or proceed.
+Recommend `feature-implement-review` when the holistic verdict is not READY TO MERGE, any criterion came back ⚠/❌, a probe was waived, or the plan has 10+ tasks; otherwise `feature-complete`, since the holistic pass already checked every criterion. Execute the choice: invoke `/myspec:feature-implement-review`, `/myspec:code-review`, `/myspec:feature-complete`, or stop and report the branch name. The two review passes are complementary, not exclusive (conformance vs. code quality) — after one finishes, offer this choice again so the user can run the other or proceed.
 
 ## Model Selection
 
@@ -327,6 +335,7 @@ Skill text uses **tier names** (`cheap` / `mid` / `premium`). Controller (main t
 | Implementer | 1-2 files, mechanical | `cheap` | e.g. Haiku-tier, GPT-5-mini-tier, or runtime's small model |
 | Implementer | Multi-file, integration | `mid` | e.g. Sonnet-tier, GPT-5-tier |
 | Phase reviewer | — | `mid` | e.g. Sonnet-tier, GPT-5-tier |
+| Probe executor | — | `mid` | e.g. Sonnet-tier, GPT-5-tier |
 | Final holistic reviewer | — | `premium` | e.g. Opus-tier |
 
 **Name the tier on every dispatch.** An omitted model inherits the session's model — often the most expensive tier — which silently defeats this table. An upstream production run put all 26 of its reviewers on the top tier exactly this way.
@@ -359,6 +368,7 @@ Skill text uses **tier names** (`cheap` / `mid` / `premium`). Controller (main t
 - Let an implementer run the full suite, a build, or an install — its checks are its task's Verify command and file-scoped static checks; the suite is the barrier's
 - Run two verification suites at once in one worktree — concurrent runs share caches, build output, ports, and test databases, and the timing flakes they cause cost an investigation. The Stop hook can run the suite when your turn ends, so do not end a turn while a subagent is running checks in the same worktree
 - Skip the Step 5 holistic review, or run it below `premium` — it is the only pass that sees the whole feature
+- Pass a milestone checkpoint whose probes lack a `PROBES_PASSED` report or a logged user waiver — the probe gate is the one check the controller does not grade
 
 ## Verification Checklist
 

@@ -40,10 +40,13 @@ status: draft
 based_on_spec_version: {spec_version from spec.md}
 created: {TODAY}
 last_updated: {TODAY}
+verification_mode: visual   # optional: visual | api | data | mixed | none
 ---
 ```
 
 tech-spec.md describes the design as it stands: architecture, interfaces, contracts, decisions in force, edge cases, files. It is never a task log. Progress lives in `implementation-plan.md` and history in `CHANGELOG.md`; a tech-spec that tracks either grows with every iteration and drifts from the code.
+
+`verification_mode` names the medium a milestone's behavior is proven in — a browser, an endpoint, a query — so `feature-plan` can write checkpoint probes a separate executor runs at each milestone. Omit it and nothing changes. Set it (anything but `none`) and the conditional `### Test Hooks` section below becomes required.
 
 Required sections:
 
@@ -102,6 +105,13 @@ type Entity {
 |--------|------|---------|
 | POST | /api/... | Description |
 
+### Test Hooks (required when `verification_mode` is set and not `none`)
+The only handles a checkpoint probe may reference. Keep the four line labels exactly — `feature-tech-spec-review` and `feature-plan` read them by name.
+- **Target:** how to serve what the probes hit — the project's own serve command on scratch config and the URL or entry point it exposes (`[scratch serve command]` → `[base URL or entry point]`; name an address the project's everyday dev server does not use)
+- **Contract surface:** stable, refactor-tolerant handles — `visual`: the UI test tool's stable element identifiers and state attributes on the public surface (on the web `data-testid="report-row"`, `data-state="loading"`; in a native or terminal UI its accessibility identifiers or widget keys); `api`: request/response shapes; `data`: schema expectations. Never style classes, internal element structure, or private state.
+- **Real inputs** (optional): a real corpus the feature's engine must handle, and the invariant it must hold (`fixtures/corpus/*.pdf` — rendered output byte-identical to base). Named here, every milestone touching that path gets a real-input probe.
+- **Scratch environment** (required when `verification_mode` is `visual` or `mixed`, when *Real inputs* is named, or when any probe will mutate data): the concrete database, bucket (every bucket variable), and queue overrides the probes run under. The checklist they must satisfy is [`_shared/scratch-isolation.md`](../_shared/scratch-isolation.md).
+
 ### Decisions
 Document key architectural decisions as ADRs:
 - **Decision**: What was decided
@@ -138,6 +148,7 @@ Document key architectural decisions as ADRs:
 - [ ] `### Reuse audit` section present with >= 1 row; every `skip` row has a Reason (unless `reuseAudit.enabled: false`)
 - [ ] Key Interfaces / Types section defines new types introduced
 - [ ] Database Changes section present (or explicitly marked "None")
+- [ ] If `verification_mode` is set and not `none`: `### Test Hooks` has Target and Contract surface (plus Scratch environment when the mode is `visual` / `mixed`, *Real inputs* is named, or a probe mutates data), with no style-class or internal-structure handles
 - [ ] Run verification checks from `.claude/verification.json` — all pass
 
 ## Integration

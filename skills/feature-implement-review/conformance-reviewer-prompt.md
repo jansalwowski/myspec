@@ -24,6 +24,16 @@ Agent tool (general-purpose):
 
     [Paste scenarios. Mark which are runnable in this environment and which are not]
 
+    ## Holistic Review Already Done (omit this section when none was provided)
+
+    [Paste holistic-review.md verbatim]
+
+    That premium pass reviewed this same code for cross-phase integration,
+    architecture, and deferred minors. Treat those verdicts as settled: do not
+    re-audit them and do not re-report its findings. Its acceptance-criteria
+    list is a claim, not proof — your forward and test traces still pin every
+    criterion to code and a test. Spend the pass on the four checks below.
+
     ## What Was Built — the Diff
 
     Review only the range [BASE_SHA]..[HEAD].

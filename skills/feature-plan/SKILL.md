@@ -8,6 +8,8 @@ description: "Use when a feature has an approved spec.md and tech-spec.md and ne
 
 **Announce at start:** "I'm using the feature-plan skill to create the implementation plan for {feature}."
 
+**Autopilot:** when the user opted in, answer this skill's gates per [`_shared/autopilot.md`](../_shared/autopilot.md).
+
 ## When to Use
 
 Check these gates in order:
@@ -70,13 +72,16 @@ A task is the smallest unit that carries its own test cycle and is worth a fresh
 Populate the plan's `## Global Constraints` section with the project-wide exacts collected in Step 1 — version floors, size/perf limits, naming rules, invariants — copied verbatim from `spec.md` / `tech-spec.md` with source refs. Every task's requirements implicitly include this section; per-task text must not re-derive or paraphrase these values — re-derivation is how they drift.
 
 **Spec contract — verbatim quotes (REQUIRED per task):**
-For every task, populate the `**Spec contract:**` block with verbatim quotes from `spec.md` and/or `tech-spec.md` covering this task's behavior. Paste the sentence; do NOT paraphrase. The implementer subagent does NOT read `spec.md` or `tech-spec.md` — it receives the task text and nothing else. Any requirement that does not make the spec → task translation is invisible to it. If you find yourself rewording spec language, the original wording IS the contract — quote it. If a task has no spec/tech-spec passage that constrains it, ask whether the task should exist.
+For every task, populate the `**Spec contract:**` block with verbatim quotes from `spec.md` and/or `tech-spec.md` covering this task's behavior. Paste the sentence; do NOT paraphrase. The implementer subagent does NOT read `spec.md` or `tech-spec.md` — it receives the task text and nothing else. Any requirement that does not make the spec → task translation is invisible to it. If you find yourself rewording spec language, the original wording IS the contract — quote it. If a task has no spec/tech-spec passage that constrains it, ask whether the task should exist. Quote sentences, not sections: a longer contract several tasks share (a schema, an API shape) is cited by path and heading — `tech-spec.md` → `### API Schema` — once per task, and `feature-implement` pastes it into each dispatch; re-pasting it into every task is how plans pass a thousand lines.
 
 **Touch only (REQUIRED for tasks with `Modify:` files):**
 For every task whose Files block contains a `Modify:` entry, populate the `**Touch only:**` line specifying which lines/sections the task is allowed to alter. This pairs with the phase reviewer's diff-scope rule — without it, reviewers flag adjacent pre-existing tech debt as regressions and implementers waste retries on out-of-scope fixes.
 
 **Interfaces — Consumes/Produces (REQUIRED per task):**
 Populate the `**Interfaces:**` block with exact signatures — names, parameter and return types from the tech-spec — for what this task consumes from earlier tasks and produces for later ones. A task's implementer sees only their own task text; this block is how they learn the names and types neighboring tasks use, and it is what makes parallel groups safe. A signature that differs between producer and consumer tasks is a plan bug — fix it before presenting.
+
+**Checkpoint probes (REQUIRED when tech-spec.md sets `verification_mode` other than `none`):**
+Give every milestone a `**Checkpoint probes:**` block (format and tags in [references/plan-templates.md](references/plan-templates.md#milestone-section)). The probes are written now, before any code exists, because a separate executor runs them at the checkpoint and the controller may not substitute its own judgment: a probe authored after the fact by the agent that built the feature proves what that agent chose to look at. Each probe is literal and references only the tech-spec's `### Test Hooks` contract surface — a CSS class or internal DOM path is a plan bug. A `verification_mode` with no `### Test Hooks` section is a tech-spec gap: say so and stop. So is a writing probe — a `[demo]`, a `[real-input]`, a data mutation — when Test Hooks has no *Scratch environment* line: the executor cannot isolate it, and it comes back BLOCKED at every checkpoint.
 
 **Blast radius — every barrier green (REQUIRED):**
 For every Produces item that changes a signature, adds a required field or enum value, removes or renames a symbol, or adds files to an existing directory, grep the codebase for its callers and consumers — including tests and loaders that read the directory by glob or `fs` rather than import, which changed-file test runs never select. Put each hit in that task's Files (`Modify:`) and Touch only, or in a dedicated barrier step, so the barrier after it can pass typecheck and tests. A barrier that is red by design is a plan bug.
@@ -305,6 +310,7 @@ Before presenting the plan:
 - [ ] Phase numbers are globally unique across all milestones
 - [ ] Cross-milestone dependencies use `Milestone N` in the Depends On column (not individual phase numbers from other milestones)
 - [ ] Each milestone is a coherent vertical slice
+- [ ] If tech-spec.md sets `verification_mode` (not `none`): every milestone has a `**Checkpoint probes:**` block of literal probes with expected values, referencing only `### Test Hooks` handles; a `[real-input]` probe on every milestone touching a named real corpus; a *Scratch environment* line in Test Hooks whenever any probe writes
 - [ ] Commit decision presented to user (Step 7); plan committed before handoff
 
 ## Red Flags

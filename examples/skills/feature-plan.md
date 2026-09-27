@@ -87,6 +87,7 @@ Each task carries a **Spec contract** block — verbatim quotes, not paraphrase 
 **Spec contract (verbatim quotes — do NOT paraphrase):**
 - `spec.md` AC-2: "A user can mark a report as a favorite, and the star reflects the favorited state immediately."
 - `tech-spec.md` step 2: "ReportFavoritesService exposes add / remove / list / isFavorite, backed by ReportFavoriteRepository."
+- `tech-spec.md` → `### Database Changes` (cited, not pasted — the `report_favorites` table definition, indexes, and constraints are shared by Tasks 1 and 2; `feature-implement` pastes the section into each dispatch)
 
 **Files:**
 - Create: `src/features/reports/favorites/service.ts`
@@ -235,7 +236,17 @@ The skill reads the tech-spec and finds three parallel-safe seams:
 |-------|-------|------|------------|
 | 6 | Task 8: SchedulesList, Task 9: ScheduleForm, Task 10: RunHistoryTable | parallel:ui | Milestone 1 |
 | 7 | Task 11: SchedulesPage wires components | sequential (barrier) | Phase 6 |
+
+**Checkpoint probes:**
+- Target: `bin/serve-scratch` → API at `$SCRATCH_API_URL`, settings page at `$SCRATCH_WEB_URL/settings/schedules` (an address the everyday dev server does not use, so it cannot answer the probes)
+- Scratch env: `DATABASE_URL` → the `reports_scratch` database, `REDIS_URL` → a second Redis instance, `SMTP_HOST`/`SMTP_PORT` → a local mail catcher
+- P1 [visual]: `test ID schedule-form → click its Save button; data-state = "saved"`
+- P2 [visual]: `test ID schedule-row count = 1`
+- P3 [api]: `curl -s "$SCRATCH_API_URL/api/schedules" | jq '.items | length'` → `1`
+- D1 [demo]: open `/settings/schedules`; create a weekly schedule; open its run history — screenshot each step
 ```
+
+The tech-spec sets `verification_mode: mixed`, so every milestone gets a `**Checkpoint probes:**` block — Milestone 1's carries only `[api]` probes, since nothing renders yet. Each probe is a literal assertion against a `### Test Hooks` handle with its expected value, written now, before the code exists.
 
 A task in a parallel group carries an isolation note, because its implementer runs in its own worktree and cannot see a sibling's files:
 
@@ -324,6 +335,7 @@ The user is already on `feat/scheduled-reports` (not the default branch), so the
 - **Interfaces are what make parallelism safe.** Task 5 and Task 6 are written simultaneously by implementers who never see each other's code; the Produces line on Task 2 is the only place they learn the signature they both call.
 - **Right-sizing cuts both ways.** Task 8 split because a reviewer could reject one half and approve the other; Task 5 stayed whole because neither half has its own test cycle.
 - **Vertical-slice milestones still hold.** Milestone 1 is a complete vertical (migration → repos → types → services → integration test) — testable end-to-end before any UI exists.
+- **Probes are written by the planner, run by someone else.** `feature-implement` hands the Checkpoint probes block to a separate executor at each milestone; the agent that built the milestone never decides whether its verification ran.
 - **Two milestones means two sessions.** Past five tasks the milestone checkpoint recommends `fresh`: a long multi-milestone run in one session is dispatch-latency-bound and the controller's context degrades as it goes.
 
 ---
