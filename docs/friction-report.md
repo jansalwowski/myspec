@@ -1,0 +1,115 @@
+# Friction report
+
+When a session is archived, `/myspec:session-complete` scans the session's Claude Code transcripts and reports friction that repeated: the same hook blocking again and again, hooks that could not run, subagents that got stuck or needed context, subagents sent back for several fix rounds. Each row names an owner, so you can tell whether to fix something in your project, refresh your myspec install, or open an issue against myspec.
+
+The scan is a deterministic script (`lib/friction-scan/scan.mjs`). It makes no model calls, adds nothing to prompts, installs no hook, and writes no files. Nothing leaves your machine.
+
+## Reading the report
+
+```
+friction-scan: session 9f3c2a71, 2h05m active, 11 subagents
+
+| Pattern | Owner | Count | Ref | Detail |
+|---|---|---|---|---|
+| hook block: memory-conformance | myspec | 4 | hooks/verify-before-stop.sh | Memory conformance check failed for changes under ai/memory. … |
+| hook not found: guard-git-branch.sh | setup | 22 | hooks/guard-git-branch.sh | registered in settings but the script is missing: run /myspec:update |
+| subagent-needs-context | project | 1 | - | Implement Task 4 |
+
+Slowest subagents: Implement Task 3 (24m); Phase 2 review (11m); Implement Task 4 (9m)
+
+1 row(s) look framework-side (owner myspec).
+1 row(s) point at this project's myspec install (owner setup): run /myspec:doctor or /myspec:update.
+```
+
+A session with nothing above threshold prints nothing. That is the normal case.
+
+"Active" time counts only gaps of up to five minutes between transcript entries, so a session resumed the next day does not read as 20 hours of work.
+
+## Owners
+
+| Owner | Means | What to do |
+|---|---|---|
+| `myspec` | A myspec hook or gate kept stopping the agent on the same thing | Likely a framework issue. Open an issue against myspec with the row and the myspec version. |
+| `setup` | Your project's myspec install drifted: a registered myspec hook is missing, or the setup conformance check failed | Run `/myspec:update`, then `/myspec:doctor` |
+| `harness` | Claude Code itself refused, e.g. its worktree guard | Neither myspec nor your project. Report it to Claude Code if it keeps happening. |
+| `project` | Your checks failed, your own hook is missing, or a subagent needed context the spec or plan did not give | Fix it in your project: the test, the hook config, the spec |
+| `unknown` | The transcript alone cannot say whose it is | Read the Detail. `unknown` is an answer, not a gap to fill: the skill does not guess. |
+
+## Rules
+
+Owners come from fixed rules, not from a model reading the transcript. A confident wrong owner would send you to the wrong repo.
+
+| Pattern | Reported when | Owner |
+|---|---|---|
+| Block from a myspec hook with a known message | The same message blocks 3 or more times | Per the signature table below |
+| Block from a myspec hook with an unknown message | 3 or more times | `unknown` |
+| Block from another hook | 3 or more times | `project` (or `unknown` if the hook's command is not recorded) |
+| Registered hook missing (exit 127) | Once | `setup` for a myspec hook, else `project` |
+| myspec hook crashed (other non-zero exit) | Once | `myspec` |
+| Claude Code refusal | 3 or more times | `harness` |
+| The same tool error | 3 or more times | `unknown` |
+| Subagent final `**Status:** BLOCKED` / `PROBES_BLOCKED` | Once | `unknown` |
+| Subagent final `**Status:** NEEDS_CONTEXT` / `PROBES_FAILED` | Once | `project` |
+| Subagent continued by the controller 3 or more times | Once | `unknown` |
+
+A single block is never reported. The isolation prompt on the first edit of every session is the hook doing its job.
+
+Known myspec hook messages:
+
+| Signature | Hook | Owner |
+|---|---|---|
+| `isolation-undecided`, `isolation-mismatch` | `require-isolation-decision.sh` | `myspec` |
+| `branch-guard` | `guard-worktree-context.sh` | `myspec` |
+| `reuse-audit` | `require-reuse-audit.sh` | `myspec` |
+| `memory-conformance`, `worktree-provisioning` | `verify-before-stop.sh` | `myspec` |
+| `setup-conformance` | `verify-before-stop.sh` | `setup` |
+| `absolute-paths` | `no-absolute-paths.sh` | `unknown` (usually the model's own write) |
+| `frontmatter` | `validate-frontmatter.sh` | `unknown` (usually the model's own write) |
+| `project-verification` | `verify-before-stop.sh` | `project` |
+
+## Turning it off
+
+Per project, in `.myspec.json`:
+
+```json
+{ "feedback": { "frictionReport": false } }
+```
+
+Per shell: `MYSPEC_DISABLE_FRICTION_REPORT=1`.
+
+It is on by default because it runs once per archived session, locally, at no token cost.
+
+## Running it by hand
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/lib/friction-scan/scan.mjs" --session=<session_id>
+node "${CLAUDE_PLUGIN_ROOT}/lib/friction-scan/scan.mjs" --transcript=<path/to/session.jsonl> --json
+```
+
+The session id is in the session log's frontmatter. `--session` looks in `$CLAUDE_CONFIG_DIR/projects/`, else `~/.claude/projects/`; `--projects-dir` overrides that. `--json` prints every finding with its first timestamp and the transcripts it came from.
+
+| Exit | Meaning |
+|---|---|
+| 0 | Scanned (prints nothing when nothing crosses a threshold), or turned off |
+| 1 | Usage error |
+| 2 | No transcript found for the session |
+| 3 | Transcript format not recognized |
+
+The report shortens home-directory paths to `~`, but Detail can still quote file names and error text from your project. Read it before pasting it into a public issue.
+
+## Limits
+
+- **Claude Code only.** Codex keeps its transcripts elsewhere in another format, so on Codex the step prints one "skipped" line.
+- **The transcript format is internal to Claude Code**, not a documented API. A shape the scanner does not recognize exits 3 instead of giving a wrong answer.
+- **Transcripts are pruned** after Claude Code's `cleanupPeriodDays` (30 by default), so a session older than that cannot be scanned.
+- **Fix rounds are a heuristic.** They count plain prompts a subagent received after its first one, skipping Claude Code's own injected messages. Resumed and background subagents have not been checked against this.
+- **What only a subagent saw** (an ambiguous instruction, a gate it could not meet) is not in the transcript as structure, so it is not reported.
+
+## For maintainers: adding a hook
+
+`lib/tests/friction-scan.test.sh` pins the scanner to the hooks:
+
+- Every script in `hooks/` must be listed in `MYSPEC_HOOKS` in `scan.mjs`. When a hook is renamed, keep the old name there too, since installs that have not updated yet still register it (as with `guard-git-branch.sh`).
+- Every `HOOK_SIGNATURES` entry must be a literal substring of its hook's source. When you change a block message, update the signature in the same PR.
+
+A new blocking hook needs a signature row to be attributed. Without one, its repeated blocks are still reported, as `unknown`.
