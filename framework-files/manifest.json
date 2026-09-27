@@ -148,6 +148,14 @@
     "promote-to-worktree.sh": {
       "type": "overwrite",
       "dest": ".claude/lib/promote-to-worktree.sh"
+    },
+    "task-worktree.sh": {
+      "type": "overwrite",
+      "dest": ".claude/lib/task-worktree.sh"
+    },
+    "plan-checkbox.sh": {
+      "type": "overwrite",
+      "dest": ".claude/lib/plan-checkbox.sh"
     }
   },
   "removed": {

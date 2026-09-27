@@ -6,7 +6,7 @@
 # re-invented the same workaround inside its prompt).
 #
 # Usage:
-#   .claude/lib/worktree-provision.sh <worktree-path> [--base <ref>] [--main <path>]
+#   .claude/lib/worktree-provision.sh <worktree-path> [--base <ref>] [--main <path>] [--no-symlink]
 #
 # What it does, from the MAIN checkout into the worktree:
 #   - symlinks each entry of `isolation.provision.symlink` (default:
@@ -22,6 +22,9 @@
 #     skips a tree that loads the project's own source from the main checkout
 #     (a Composer vendor, a .venv with an editable install): through a link,
 #     the worktree's checks would run the main checkout's code.
+#   - SKIPS every symlink entry under --no-symlink: a step that writes into
+#     a linked directory (code generation into node_modules, vendor, .venv,
+#     ...) would write through the link into the source checkout (issue #93)
 #
 # Never symlink a build output directory (.nuxt, dist, .next): a later build in
 # the worktree would write through into the main checkout. Copy the single
@@ -39,18 +42,20 @@ set -euo pipefail
 WORKTREE=""
 BASE=""
 MAIN=""
+NO_SYMLINK=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) BASE="${2:-}"; shift 2 ;;
     --main) MAIN="${2:-}"; shift 2 ;;
+    --no-symlink) NO_SYMLINK=1; shift ;;
     -*) echo "worktree-provision: unknown argument '$1'" >&2; exit 1 ;;
     *) WORKTREE="$1"; shift ;;
   esac
 done
 
 if [ -z "$WORKTREE" ] || [ ! -d "$WORKTREE" ]; then
-  echo "usage: worktree-provision.sh <worktree-path> [--base <ref>] [--main <path>]" >&2
+  echo "usage: worktree-provision.sh <worktree-path> [--base <ref>] [--main <path>] [--no-symlink]" >&2
   exit 1
 fi
 
@@ -225,6 +230,10 @@ while IFS= read -r line; do
   fi
   if tree_loads_checkout "$MAIN/$entry" "$MAIN_REAL"; then
     echo "worktree-provision: $entry loads the main checkout's own source — not linking $entry; run a real install in the worktree"
+    continue
+  fi
+  if [ "$NO_SYMLINK" -eq 1 ]; then
+    echo "worktree-provision: --no-symlink — not linking $entry; run a real install in the worktree"
     continue
   fi
   if [ -e "$MAIN/$entry" ] && [ ! -e "$WORKTREE/$entry" ]; then

@@ -28,7 +28,20 @@ Rules the script enforces or the recipe relies on:
 - **A branch that changes a lockfile gets no link for the tree it pins.** A linked tree then describes the wrong dependencies. The script checks each `symlink` entry against `--base` and says which it skipped; run a real install in the worktree. An entry is a string or `{"path": "deps", "lockfiles": ["deps.lock"]}`; a string named after a well-known dependency directory (`node_modules`, `vendor`, `vendor/bundle`, `.venv`, `venv`) takes its lockfiles from a built-in map, and any other string (an `.env` file) is unguarded. `"lockfiles": []` marks an entry unguarded on purpose.
 - **Never symlink a build output directory** (`.nuxt`, `dist`, `.next`): a later build in the worktree writes through into the main checkout. Copy the one generated file the linter needs.
 - **The Stop hook refuses a symlinked dependency directory whose lockfiles differ** from the checkout it points into (or when no lockfile exists). It checks every guarded `symlink` entry, plus any of the well-known directories at the root that the config does not list. A link this script made with an unchanged lockfile passes as is. A tree that loads the project's own source from the main checkout (a Composer `vendor`, a `.venv` with an editable install) is never linked and always blocks: the checks would run the main checkout's code. `isolation.allowLinkedModules: true` in `.myspec.json` accepts any link; set it only when the repo's worktrees share the main checkout's tree by construction, never for dependency work.
+- **A step that writes into a linked directory writes through the link** into the checkout it points at — code generation into a dependency directory (`node_modules`, `vendor`, `.venv`, …) rewrites the source checkout's copy (issue #93). Pass `--no-symlink` (skips every `isolation.provision.symlink` entry) and run a real install when the work regenerates into one.
 - **Lint caches lie across trees.** A copied `.eslintcache` suppresses pre-existing findings the same way the main checkout does; without it a cold run flags tech debt the branch did not introduce (issue #11, gap 3).
+
+## Parallel task worktrees
+
+Harness `isolation: "worktree"` forks from the default branch, so a parallel task after the first phase cannot see the feature commits it builds on. The controller creates each task's worktree itself, from its own checkout on the feature branch, with its work committed:
+
+```bash
+.claude/lib/task-worktree.sh create <slug> [--no-symlink]   # prints the worktree path
+.claude/lib/task-worktree.sh merge <slug>                   # at the barrier, one task at a time
+.claude/lib/task-worktree.sh discard <slug>                 # stale worktree from an interrupted run
+```
+
+`create` branches `<feature-branch>--<slug>` at the controller's HEAD and provisions it with the controller's checkout as the link source, whose linked dependency directories already match the feature's lockfiles. `merge` merges into the controller's branch, then removes the worktree and branch; on a conflict it stops mid-merge — resolve, commit, and rerun it to clean up. Worktrees land under `isolation.worktreeRoot` (default `.claude/worktrees`), and a `create` that fails midway removes what it made.
 
 ## Verify where you ran
 

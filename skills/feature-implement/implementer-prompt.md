@@ -6,7 +6,7 @@ Use this template when dispatching an implementer subagent.
 Task tool (general-purpose):
   description: "Implement Task N: [task name]"
   model: "<tier — REQUIRED: cheap for 1-2 file mechanical / mid for multi-file integration; controller maps to concrete model, e.g. Haiku-tier or Sonnet-tier. An omitted model inherits the session's model, often the most expensive tier>"
-  isolation: "worktree"  # ONLY for parallel group tasks. Omit for sequential tasks.
+  # No `isolation` parameter: it forks from the default branch. A parallel task gets its controller-created worktree as "Work from" below.
   prompt: |
     You are implementing Task N: [task name]
 
@@ -46,6 +46,13 @@ Task tool (general-purpose):
     6. Report back
 
     Work from: [directory / worktree path]
+
+    [Parallel task only:] Your shell starts in the controller's checkout
+    and returns there after every command — a `cd` does not persist. Use
+    absolute paths under the worktree for every file you read or edit, and
+    run every command as `cd [worktree path] && …` in one call (or
+    `git -C [worktree path] …`). A commit made from the controller's
+    checkout lands on the feature branch and bypasses the barrier merge.
 
     **While you work:** If you encounter something unexpected or unclear, **ask questions**.
     It is always OK to pause and clarify. Do not guess or make assumptions.
