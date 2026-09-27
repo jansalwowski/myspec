@@ -69,7 +69,17 @@ awk -v id="$ID" -v mark="$MARK" -v set="${STATE:+1}" -v today="$(date +%F)" '
       else if (set && line ~ /^last_updated:/) line = "last_updated: " today
       emit(line); next
     }
-    if (line ~ /^[ \t]*(```|~~~)/) { in_fence = !in_fence; emit(line); next }
+    # A fence closes only on the same character, at least as long, with
+    # nothing after it (CommonMark): a ~~~ inside ``` or ``` inside ```` is text.
+    t = line; sub(/^[ \t]*/, "", t)
+    if (in_fence) {
+      if (substr(t, 1, 1) == fch && match(t, fch == "`" ? "^`+[ \t]*$" : "^~+[ \t]*$")) {
+        run = t; sub(/[ \t]*$/, "", run)
+        if (length(run) >= flen) in_fence = 0
+      }
+      emit(line); next
+    }
+    if (match(t, "^(```+|~~~+)")) { in_fence = 1; fch = substr(t, 1, 1); flen = RLENGTH; emit(line); next }
     if (!in_fence && line ~ /^#+[ \t]/ && heading_level(line) <= 3) {
       in_task = (line ~ task_re)
       if (in_task) found++

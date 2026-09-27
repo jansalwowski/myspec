@@ -159,15 +159,15 @@ User picks **Worktree**. The skill creates `.claude/worktrees/feat-scheduled-rep
 
 The skill walks the DAG. **Phase 2 (`parallel:repos`)** is the showcase: T2 ScheduleRepository, T3 ExportRunRepository, disjoint file lists.
 
-1. Records `PHASE_BASE` (`git rev-parse HEAD`), then marks T2 and T3 both `[~]`.
-2. Creates one worktree per task from the feature HEAD — `.claude/lib/task-worktree.sh create scheduled-reports-t2` and `create scheduled-reports-t3` — because harness `isolation: "worktree"` would fork from `main` and miss the Phase 1 migration. Each is provisioned from the controller's checkout: the `isolation.provision.symlink` entries (here `node_modules`) linked when the lockfile is unchanged, lint cache copied. A task whose code generation writes into a linked directory (in this stack, `prisma generate` into `node_modules`) gets `--no-symlink` and a real install instead, so generated output cannot write through the link (`_shared/worktree-provisioning.md` is the recipe). Then it dispatches **two implementers in one message**, each told to work from its worktree path, with only its file list and task text inline:
+1. Records `PHASE_BASE` (`git rev-parse HEAD`).
+2. Creates one worktree per task from the feature HEAD — `.claude/lib/task-worktree.sh create scheduled-reports-t2` and `create scheduled-reports-t3` — because harness `isolation: "worktree"` would fork from `main` and miss the Phase 1 migration. Each is provisioned from the controller's checkout: the `isolation.provision.symlink` entries (here `node_modules`) linked when the lockfile is unchanged, lint cache copied. A task whose code generation writes into a linked directory (say, a generator writing into `node_modules`) gets `--no-symlink`, and the controller runs the install in that worktree itself before dispatch, so generated output cannot write through the link (`_shared/worktree-provisioning.md` is the recipe). Only then does it mark T2 and T3 `[~]` — after `create`, so the uncommitted plan edit doesn't trip the dirty-tree warning. Then it dispatches **two implementers in one message**, each told to work from its worktree path with absolute paths and `cd <worktree> && …` in every command (a subagent's shell returns to the controller's checkout between calls), with only its file list and task text inline:
    - Implementer A → `src/features/schedules/repository.ts` (+ test)
    - Implementer B → `src/features/schedules/run-repository.ts` (+ test)
 3. Both write code and tests, run their own task's check plus file-scoped lint and typecheck, commit, and report `DONE`. Neither runs the full suite in its own worktree.
 4. **Barrier merge:** the controller runs `task-worktree.sh merge scheduled-reports-t2`, then `merge scheduled-reports-t3` — one at a time onto `feat/scheduled-reports`, each removing its worktree and branch. No conflicts — the file lists were disjoint. Then it runs the full suite once across the merged tree, logging it for the reviewer.
 5. **Phase review** over `PHASE_BASE..HEAD` covers both tasks at once → `APPROVED`. Both checkboxes flip to `[x]`.
 
-Had the review returned Critical/Important findings, the fix loop would run: rounds 1–3 resume the implementer that owns the finding (its context is intact), rounds 4–5 dispatch fresh one tier up, and every round ends with a *scoped* re-review over `FIX_BASE..HEAD` that verdicts each finding ADDRESSED / NOT ADDRESSED, running only the checks that finding touches — never a full phase re-review. Minor findings never enter the loop; they park in the plan's `## Execution Log` for the holistic reviewer to triage.
+Had the review returned Critical/Important findings, the fix loop would run: rounds 1–3 resume the implementer that owns the finding (its context is intact; its worktree is gone after the merge, so it works from the controller's checkout now), rounds 4–5 dispatch fresh one tier up, and every round ends with a *scoped* re-review over `FIX_BASE..HEAD` that verdicts each finding ADDRESSED / NOT ADDRESSED, running only the checks that finding touches — never a full phase re-review. Minor findings never enter the loop; they park in the plan's `## Execution Log` for the holistic reviewer to triage.
 
 #### Milestone Checkpoint
 
@@ -278,7 +278,7 @@ Worktrees still present (git worktree list):
 >
 > Reply `clean` to prune and re-execute, or `inspect` to pause.
 
-User: `clean`. The skill prunes both worktrees (`git worktree remove --force`, then `git branch -D` on their task branches), leaving T5/T6 at `[~]`.
+User: `clean`. The skill runs `.claude/lib/task-worktree.sh discard scheduled-reports-t5` and `discard scheduled-reports-t6`, which force-remove each worktree and delete its task branch, leaving T5/T6 at `[~]`. Without this, `create` would refuse both slugs as already existing.
 
 #### Step 3 — Re-dispatch and continue
 

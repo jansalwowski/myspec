@@ -47,6 +47,13 @@ Task tool (general-purpose):
 
     Work from: [directory / worktree path]
 
+    [Parallel task only:] Your shell starts in the controller's checkout
+    and returns there after every command — a `cd` does not persist. Use
+    absolute paths under the worktree for every file you read or edit, and
+    run every command as `cd [worktree path] && …` in one call (or
+    `git -C [worktree path] …`). A commit made from the controller's
+    checkout lands on the feature branch and bypasses the barrier merge.
+
     **While you work:** If you encounter something unexpected or unclear, **ask questions**.
     It is always OK to pause and clarify. Do not guess or make assumptions.
 

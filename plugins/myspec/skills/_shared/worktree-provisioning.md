@@ -38,9 +38,10 @@ Harness `isolation: "worktree"` forks from the default branch, so a parallel tas
 ```bash
 .claude/lib/task-worktree.sh create <slug> [--no-symlink]   # prints the worktree path
 .claude/lib/task-worktree.sh merge <slug>                   # at the barrier, one task at a time
+.claude/lib/task-worktree.sh discard <slug>                 # stale worktree from an interrupted run
 ```
 
-`create` branches `<feature-branch>--<slug>` at the controller's HEAD and provisions it with the controller's checkout as the link source, whose linked dependency directories already match the feature's lockfiles. `merge` merges into the controller's branch, then removes the worktree and branch; on a conflict it stops mid-merge — resolve, commit, and rerun it to clean up.
+`create` branches `<feature-branch>--<slug>` at the controller's HEAD and provisions it with the controller's checkout as the link source, whose linked dependency directories already match the feature's lockfiles. `merge` merges into the controller's branch, then removes the worktree and branch; on a conflict it stops mid-merge — resolve, commit, and rerun it to clean up. Worktrees land under `isolation.worktreeRoot` (default `.claude/worktrees`), and a `create` that fails midway removes what it made.
 
 ## Verify where you ran
 
