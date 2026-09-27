@@ -82,11 +82,11 @@ Resume behavior: A new agent reads the plan, skips `[x]` tasks, re-executes `[~]
 | 3 | Task 3: [Tests] | sequential | Phase 2 |
 
 **Checkpoint probes:**
-- Target: `pnpm dev:scratch` → `http://localhost:5173/dev/reports`
-- Scratch env: `DATABASE_URL=postgres://localhost:5433/reports_scratch`, `S3_BUCKET=reports-scratch`, `S3_ENDPOINT=http://localhost:9000`, `REDIS_URL=redis://localhost:6380/0`
-- P1 [visual]: `await expect(page.getByTestId('report-row')).toHaveCount(3)`
+- Target: `[command that serves the milestone on scratch config]` → `[URL or entry point]`
+- Scratch env: `[every database, bucket, and queue override, e.g. DATABASE_URL=…/reports_scratch]`
+- P1 [visual]: `[literal assertion in the project's UI test tool on a Contract-surface handle, e.g. test ID report-row count is 3]`
 - P2 [api]: `curl -s localhost:3000/api/reports | jq '.items | length'` → `3`
-- P3 [real-input]: `node scripts/render.js fixtures/corpus/*.pdf | sha256sum` → same as base
+- P3 [real-input]: `[engine command] fixtures/corpus/*.pdf | sha256sum` → same as base
 - D1 [demo]: open `/dev/reports`; create a report; open its detail view — screenshot each step
 ```
 
