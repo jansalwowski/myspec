@@ -105,7 +105,7 @@ type Entity {
 
 ### Test Hooks (required when `verification_mode` is set and not `none`)
 The only handles a checkpoint probe may reference. Keep the four line labels exactly — `feature-tech-spec-review` and `feature-plan` read them by name.
-- **Target:** how to serve what the probes hit — the project's own serve command on scratch config and the URL or entry point it exposes (`make dev-scratch` → `http://localhost:8080/dev/reports`)
+- **Target:** how to serve what the probes hit — the project's own serve command on scratch config and the URL or entry point it exposes (`[scratch serve command]` → `[base URL or entry point]`; name an address the project's everyday dev server does not use)
 - **Contract surface:** stable, refactor-tolerant handles — `visual`: test IDs and reactive state attributes on the public surface (`data-testid="report-row"`, `data-state="loading"`); `api`: request/response shapes; `data`: schema expectations. Never CSS classes, internal DOM structure, or private state.
 - **Real inputs** (optional): a real corpus the feature's engine must handle, and the invariant it must hold (`fixtures/corpus/*.pdf` — rendered output byte-identical to base). Named here, every milestone touching that path gets a real-input probe.
 - **Scratch environment** (required when a probe writes): the concrete database, bucket (every bucket variable), and queue port overrides the probes run under. The checklist they must satisfy is [`_shared/scratch-isolation.md`](../_shared/scratch-isolation.md).

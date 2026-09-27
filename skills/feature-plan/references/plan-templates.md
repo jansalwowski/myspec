@@ -85,7 +85,7 @@ Resume behavior: A new agent reads the plan, skips `[x]` tasks, re-executes `[~]
 - Target: `[command that serves the milestone on scratch config]` → `[URL or entry point]`
 - Scratch env: `[every database, bucket, and queue override, e.g. DATABASE_URL=…/reports_scratch]`
 - P1 [visual]: `[literal assertion in the project's UI test tool on a Contract-surface handle, e.g. test ID report-row count is 3]`
-- P2 [api]: `curl -s localhost:3000/api/reports | jq '.items | length'` → `3`
+- P2 [api]: `[literal request in the project's HTTP client against the Target address, e.g. list reports and count the items]` → `3`
 - P3 [real-input]: `[engine command] fixtures/corpus/*.pdf | sha256sum` → same as base
 - D1 [demo]: open `/dev/reports`; create a report; open its detail view — screenshot each step
 ```
@@ -94,7 +94,7 @@ Notes:
 - Phase numbers must be globally unique across the entire plan (Milestone 2 starts at the next available phase number)
 - First phase of Milestone 2+ uses `Milestone N` in Depends On (not a phase number from the previous milestone)
 - Single-milestone plans omit the `### Milestone N:` heading — the Execution Order table stands alone
-- `**Checkpoint probes:**` is required on every milestone when tech-spec.md sets `verification_mode` to anything but `none`, and absent otherwise. At the milestone checkpoint `feature-implement` hands this block, verbatim and alone, to a separate probe executor — so each probe is a literal command or assertion in the medium's own language with its expected value, never a description ("check the list renders"). Probes reference only the tech-spec's `### Test Hooks` *Contract surface*; Target and Scratch env are copied from its *Target* and *Scratch environment* lines. Tags: `[visual]` / `[api]` / `[data]` pick the medium; `[real-input]` runs the *Real inputs* corpus through the real engine (required on a milestone touching that path); `[demo]` serves the milestone on scratch data for the user to click through (recommended for `visual` / `mixed`). A single-milestone plan puts the block after its Execution Order table
+- `**Checkpoint probes:**` is required on every milestone when tech-spec.md sets `verification_mode` to anything but `none`, and absent otherwise. At the milestone checkpoint `feature-implement` hands this block, verbatim and alone, to a separate probe executor — so each probe is a literal command or assertion in the medium's own language with its expected value, never a description ("check the list renders"). Probes reference only the tech-spec's `### Test Hooks` *Contract surface*; Target and Scratch env are copied from its *Target* and *Scratch environment* lines, and a probe addresses the target by the Target line's address, never a different host or port. Tags: `[visual]` / `[api]` / `[data]` pick the medium; `[real-input]` runs the *Real inputs* corpus through the real engine (required on a milestone touching that path); `[demo]` serves the milestone on scratch data for the user to click through (recommended for `visual` / `mixed`). A single-milestone plan puts the block after its Execution Order table
 
 ## Sequential Task
 

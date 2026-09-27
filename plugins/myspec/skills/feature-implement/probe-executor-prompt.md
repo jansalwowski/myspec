@@ -29,11 +29,19 @@ Task tool (general-purpose):
        one. If a probe cannot run as written — the target will not start,
        a tool is missing, a handle it names does not exist — that probe is
        BLOCKED. Report the exact command and error, and move on to the
-       next probe. Never report a verdict you did not observe.
+       next probe. Never report a verdict you did not observe. The one
+       permitted edit: if the user moves the Target to another address
+       (rule 6), use that address wherever a probe uses the Target's.
     2. Never edit, create, or delete files in the working tree, and never
        change git state. You may start the target, run the probe commands,
        and write artifacts under one temp directory:
        ART=$(mktemp -d "${TMPDIR:-/tmp}/probe-artifacts.XXXXXX").
+       Before starting the target, check that nothing already serves its
+       address. A target left by an earlier probe run serves older code:
+       stop it. Anything else there — the user's own dev server, on real
+       config — makes every probe BLOCKED until the user names another
+       address. After starting, confirm the process serving the address
+       is the one you started, and report the command and its output.
     3. Before any probe that writes (every `[demo]` and `[real-input]`
        probe, and any probe that mutates data), complete the checklist in
        [SCRATCH_CHECKLIST path], using the Scratch env line
@@ -47,11 +55,12 @@ Task tool (general-purpose):
        literal outputs; remove that worktree afterwards.
     5. `[demo]` probes: serve the target on scratch data, walk each flow
        listed, and save a screenshot per step to $ART. Leave the target
-       running and report its URL — the user clicks through it next. A
+       running and report its URL — the user clicks through it next; a later
+       executor that needs the address replaces it (rule 2). A
        demo's verdict is SERVED or BLOCKED; the user judges it, not you.
     6. Do not dispatch subagents, and do not ask the user to change the
        probes. You may ask the user a question only to unblock the
-       environment (a missing credential, which port to use).
+       environment (a missing credential, another address for the Target).
 
     ## Report
 
