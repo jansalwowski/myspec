@@ -238,11 +238,11 @@ The skill reads the tech-spec and finds three parallel-safe seams:
 | 7 | Task 11: SchedulesPage wires components | sequential (barrier) | Phase 6 |
 
 **Checkpoint probes:**
-- Target: `pnpm dev:scratch` → API on `http://localhost:4100`, settings page at `http://localhost:4173/settings/schedules` (off the everyday dev ports 3000/5173, so a running dev server cannot answer the probes)
-- Scratch env: `DATABASE_URL=postgres://localhost:5433/reports_scratch`, `REDIS_URL=redis://localhost:6380/0`, `SMTP_HOST=localhost SMTP_PORT=1025`
+- Target: `bin/serve-scratch` → API at `$SCRATCH_API_URL`, settings page at `$SCRATCH_WEB_URL/settings/schedules` (an address the everyday dev server does not use, so it cannot answer the probes)
+- Scratch env: `DATABASE_URL` → the `reports_scratch` database, `REDIS_URL` → a second Redis instance, `SMTP_HOST`/`SMTP_PORT` → a local mail catcher
 - P1 [visual]: `await page.getByTestId('schedule-form').getByRole('button', { name: 'Save' }).click(); await expect(page.getByTestId('schedule-form')).toHaveAttribute('data-state', 'saved')`
 - P2 [visual]: `await expect(page.getByTestId('schedule-row')).toHaveCount(1)`
-- P3 [api]: `curl -s localhost:4100/api/schedules | jq '.items | length'` → `1`
+- P3 [api]: `curl -s "$SCRATCH_API_URL/api/schedules" | jq '.items | length'` → `1`
 - D1 [demo]: open `/settings/schedules`; create a weekly schedule; open its run history — screenshot each step
 ```
 

@@ -160,9 +160,9 @@ The feature has an API and a settings screen, so the frontmatter sets `verificat
 ```markdown
 ### Test Hooks
 
-- **Target:** `pnpm dev:scratch` → API on `http://localhost:4100`, settings page at `http://localhost:4173/settings/schedules` (off the everyday dev ports 3000/5173, so a running dev server cannot answer the probes)
+- **Target:** `bin/serve-scratch` → API at `$SCRATCH_API_URL`, settings page at `$SCRATCH_WEB_URL/settings/schedules` (an address the everyday dev server does not use, so it cannot answer the probes)
 - **Contract surface:** `visual` — `data-testid="schedule-row"`, `data-testid="schedule-form"`, `data-state="saving|saved|error"` on the form; `api` — `GET /api/schedules` → `{ items: Schedule[] }`, `POST /api/schedules` → `201 Schedule`
-- **Scratch environment:** `DATABASE_URL=postgres://localhost:5433/reports_scratch`; `REDIS_URL=redis://localhost:6380/0` (a second Redis on its own port — bullmq ignores a changed DB index for its repeatable-job keys); `SMTP_HOST=localhost SMTP_PORT=1025` (a local mail catcher)
+- **Scratch environment:** `DATABASE_URL` → the `reports_scratch` database; `REDIS_URL` → a second Redis instance, not a changed DB index on the real one (bullmq ignores the DB index for its repeatable-job keys); `SMTP_HOST`/`SMTP_PORT` → a local mail catcher
 ```
 
 Because ADR-1 puts scheduling on the Redis the app already uses, the scratch queue is a separate port, not a different DB index — the shared checklist in `_shared/scratch-isolation.md` exists because the index alone once kept feeding the real worker.
