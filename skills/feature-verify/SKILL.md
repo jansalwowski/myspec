@@ -69,7 +69,7 @@ Checkbox-to-status heuristic (count `- [x]` vs `- [ ]` in implementation-plan.md
 ### 5. Check Implementation
 
 If tech-spec.md has a "File Inventory" section:
-- Extract file paths matching: `(apps|packages)/[a-zA-Z0-9/_.-]+\.(ts|tsx|vue|js|jsx|prisma|graphql)`
+- Extract every backticked repo-relative path that has a file extension, in any language and any layout (`src/Controller/UserController.php`, `app/models/user.py`, `internal/queue/worker.go`, `web/App.vue`). Skip URLs, globs, and placeholders (`{x}`, `<x>`, `${x}`).
 - Use Glob to verify each path exists
 
 | Check | Severity | Condition |

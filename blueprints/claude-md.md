@@ -7,7 +7,7 @@ Guide the user through creating a project-root CLAUDE.md that gives Claude Code 
 
 1. "What is the project name and a one-line description?"
 
-2. "What is the tech stack? (e.g., 'Vue 3 + TypeScript | GraphQL | Prisma | PostgreSQL')"
+2. "What is the tech stack? (e.g., 'Vue 3 + TypeScript | GraphQL | Prisma | PostgreSQL' or 'Symfony 7 | Doctrine | MySQL')"
 
 3. "What is the repository structure? Is it a monorepo? List the main directories and their purpose."
 

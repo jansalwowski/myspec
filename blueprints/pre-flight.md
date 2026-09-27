@@ -12,7 +12,7 @@ The framework section of pre-flight.md already includes universal checks:
 
 ## Discovery Questions (ask one at a time)
 
-1. "What verification commands should run before implementation? (e.g., lint, type-check, test commands — provide exact commands like `npm run lint`, `pnpm type-check`)"
+1. "What verification commands should run before implementation? (e.g., lint, type-check, test commands — provide exact commands like `npm run lint`, `vendor/bin/phpstan analyse`, `ruff check .`, `go vet ./...`)"
 
 2. "What environment checks are needed before starting work? (e.g., env vars that must be set, services that must be running, database state requirements)"
 

@@ -5,12 +5,12 @@ Guide the user through creating a project topology file (`backbone.yml`) that gi
 
 ## Discovery Questions (ask one at a time)
 
-1. "Monorepo or single-app? Which package manager? (e.g., pnpm, npm, yarn)
+1. "Monorepo or single-app? Which package manager? (e.g., pnpm, npm, composer, poetry, go modules, bundler)
    If monorepo: workspace config filename? (e.g., `pnpm-workspace.yaml`, `package.json` workspaces)"
 
 2. "List each app and package:
    - name, path, one-line purpose, tech stack
-   Example: `api | apps/api | GraphQL API | Express + Apollo + Prisma`
+   Example: `api | apps/api | GraphQL API | Express + Apollo + Prisma` or `app | . | Web app | Laravel + Eloquent`
    (For single-app: just describe the one app)"
 
 3. "For each app/package, list key source directories and their purpose. Or type 'skip' to leave as TODOs.
@@ -25,7 +25,7 @@ Guide the user through creating a project topology file (`backbone.yml`) that gi
    ```"
 
 4. "Database? Provide: ORM/client, schema path, migrations path. Or 'none' to skip.
-   Example: `Prisma | apps/api/prisma/schema.prisma | apps/api/prisma/migrations/`"
+   Example: `Prisma | apps/api/prisma/schema.prisma | apps/api/prisma/migrations/` or `ActiveRecord | db/schema.rb | db/migrate/`"
 
 5. "Key commands — provide as many as apply:
    - dev (start dev server)
@@ -35,7 +35,7 @@ Guide the user through creating a project topology file (`backbone.yml`) that gi
    - typecheck
    - any db commands (migrate, seed, generate, studio)
    - any codegen commands
-   Example: `dev: pnpm dev | test: pnpm test | lint: pnpm lint`"
+   Example: `dev: pnpm dev | test: pnpm test | lint: pnpm lint` or `test: bundle exec rspec | lint: bundle exec rubocop`"
 
 6. "Files or directories the agent should NEVER modify directly? Or 'skip'.
    Examples: migration files, .env files, generated code directories"
@@ -91,7 +91,7 @@ database:
   schema: {schema path}
   migrations: {migrations path}
   seed: # TODO: add seed file path if applicable
-  client_singleton: # TODO: add prisma/db client singleton path
+  client_singleton: # TODO: add the shared database client/connection path, if any
 
 {endif}
 # ── CROSS-APP RELATIONSHIPS ───────────────────────────────────────────────────
@@ -139,7 +139,7 @@ boundaries:
 {else:}
     - .env
     - .env.*
-    - "**/node_modules/"
+    - "**/{dependency dir}/"   # the stack's install dir: node_modules, vendor, .venv, ...
     # TODO: add migration files, generated code dirs, etc.
   generated_do_not_edit:
     # TODO: list auto-generated files/dirs (e.g., codegen output, ORM client)
@@ -151,7 +151,7 @@ conventions:
   # Examples:
   # language: TypeScript strict mode throughout
   # tests:
-  #   pattern: "*.test.ts"
+  #   pattern: "*.test.ts"   # or "*_test.go", "test_*.py", "*Test.php"
   #   placement: co-located with source
 
 # ── COMMANDS ─────────────────────────────────────────────────────────────────
@@ -168,6 +168,7 @@ root_config:
   # eslint: eslint.config.js
   # prettier: .prettierrc
   # typescript: tsconfig.json
+  # phpstan: phpstan.neon | rubocop: .rubocop.yml | ruff: pyproject.toml
 
 # ── AUDIT ────────────────────────────────────────────────────────────────────
 
