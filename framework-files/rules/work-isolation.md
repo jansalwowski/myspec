@@ -60,9 +60,9 @@ git worktree add -b <type>/<slug> "$(git rev-parse --show-toplevel)/.claude/work
 .claude/lib/set-isolation.sh <session_id> worktree --worktree-path <abs worktree path>
 ```
 
-Provisioning links `node_modules` (unless the branch changes a lockfile — then run a real install), copies the lint cache, and keeps both out of git; `.myspec.json` `isolation.provision` extends the lists. Never symlink a build output directory. Recipe and rationale: `_shared/worktree-provisioning.md` in the plugin.
+Provisioning links each `isolation.provision.symlink` entry (default `node_modules`) except one pinned by a lockfile the branch changed, which needs a real install instead; it copies the lint cache and keeps both out of git; `.myspec.json` `isolation.provision` extends the lists. Never symlink a build output directory. Recipe and rationale: `_shared/worktree-provisioning.md` in the plugin.
 
-Absolute paths and `git -C <worktree>` for every git call. Write files with the Write tool. The Stop hook refuses to verify a tree whose `node_modules` is a symlink into a checkout with different lockfiles (or none) unless `.myspec.json` sets `isolation.allowLinkedModules: true` — right for repos whose worktrees share the main checkout's dependencies by construction, wrong for dependency work.
+Absolute paths and `git -C <worktree>` for every git call. Write files with the Write tool. The Stop hook refuses to verify a tree whose dependency directory (`node_modules`, `vendor`, `.venv`, or a configured entry) is a symlink into a checkout with different lockfiles (or none) unless `.myspec.json` sets `isolation.allowLinkedModules: true` — right for repos whose worktrees share the main checkout's dependencies by construction, wrong for dependency work.
 
 `guard-worktree-context.sh` enforces the split for Bash: while this session is in worktree mode, builds, installs, e2e runs, `lint:fix`, `git push` and `git worktree prune` are blocked in the main checkout (`isolation.blockInMain` adds project patterns). Lint, dev servers, unit tests and read-only git stay allowed. When the main checkout genuinely is the right place — refreshing the symlinked `node_modules`, say — prefix the command with `MYSPEC_ALLOW_MAIN_CHECKOUT=1`.
 
