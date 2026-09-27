@@ -120,8 +120,7 @@ options:
   tool (or `git worktree add .claude/worktrees/feat-{name} -b feat/{name}`
   if EnterWorktree isn't available in this session). Then provision it —
   `.claude/lib/worktree-provision.sh <path> --base origin/<default-branch>` —
-  a bare worktree has no dependency directories (`node_modules`, `vendor`,
-  `.venv`, …) or lint cache, and the recipe in
+  a bare worktree has no dependency directories (`node_modules`, `vendor`, `.venv`, …) or lint cache, and the recipe in
   `_shared/worktree-provisioning.md` says when a real install is required.
 - **New branch:** `git checkout -b feat/{name}`. If branch exists, offer
   checkout vs. numeric suffix (`feat/{name}-2`).
@@ -148,7 +147,7 @@ Parse milestones first, then build a DAG within each:
 **Resume detection (on startup):**
 - Scan all task checkboxes in the plan file
 - `[x]` = already done — skip entirely
-- `[~]` = was in progress when previous agent stopped — re-execute this task from scratch
+- `[~]` = was in progress when previous agent stopped — re-execute this task from scratch. For a parallel task, first clear its stale worktree with `.claude/lib/task-worktree.sh discard <feature>-t<N>` (a no-op when none exists) — `create` refuses an existing slug, and the partial work never passed review
 - `[ ]` = todo — execute normally
 - Find the first milestone containing any non-`[x]` task. Resume from there — unless an earlier milestone, or any milestone when every task is `[x]`, carries `**Checkpoint probes:**` without a passing entry per probe; resume at the first such milestone's probe gate (Step 4b) instead. A passing entry is a `Probe` line with PASS (SERVED for a `D<n>` demo) or a `Waiver` line.
 
@@ -200,10 +199,10 @@ Dispatch implementer (./implementer-prompt.md)
   → BLOCKED: assess (more context / better model / break down / escalate to user)
 ```
 
-**Parallel tasks** — dispatch ALL group tasks simultaneously in ONE message. Harness `isolation: "worktree"` forks from the default branch, not the feature HEAD, so create each task's worktree yourself (`.claude/lib/task-worktree.sh create <feature>-t<N>`; recipe in `_shared/worktree-provisioning.md`) and pass its path as the implementer's working directory:
+**Parallel tasks** — dispatch ALL group tasks simultaneously in ONE message. Harness `isolation: "worktree"` forks from the default branch, not the feature HEAD, so create each task's worktree yourself (`.claude/lib/task-worktree.sh create <feature>-t<N>`; recipe in `_shared/worktree-provisioning.md`) and pass its path as the implementer's working directory. Create the worktrees before marking the tasks `[~]`, so the uncommitted plan edit does not trip `create`'s dirty-tree warning — a warning that fires every time trains you to ignore the one that matters. When a task regenerates output into a dependency directory (codegen into `node_modules`, `vendor`, `.venv`, …), pass `--no-symlink` and run the project's install in that worktree yourself before dispatch — implementers never install:
 
 ```
-Validate file disjointness → task-worktree.sh create per task → dispatch Task N,
+Validate file disjointness → task-worktree.sh create per task → mark [~] → dispatch Task N,
 Task M, Task K as separate Agent calls in the same message → track per-task status
 → If one fails: keep successful worktrees, fix the failed task, then barrier
 ```
@@ -243,7 +242,7 @@ PKG=$(mktemp "${TMPDIR:-/tmp}/phase-review.XXXXXX")
 
 **d) Fix loop** — a round is one fix dispatch plus one scoped re-review. Five rounds maximum per phase:
 
-- **Rounds 1–3 — resume the implementer that owns the finding.** Its context is intact: it knows the task, the code, and its own choices. Send the open findings verbatim, scoped to its task. If the harness cannot resume a completed subagent, dispatch a fresh implementer carrying the task text plus the findings.
+- **Rounds 1–3 — resume the implementer that owns the finding.** Its context is intact: it knows the task, the code, and its own choices. Send the open findings verbatim, scoped to its task. A parallel task's worktree was merged and removed at 4a: tell the resumed implementer to work from your checkout now, since fixes are sequential. If the harness cannot resume a completed subagent, dispatch a fresh implementer carrying the task text plus the findings.
 - **Rounds 4–5 — fresh implementer, one tier up.** A loop that survives three resumes usually means the implementer cannot see its own problem — fresh eyes and a capability bump in one move. Frame the dispatch: "A prior implementer attempted this fix N times; you own it now."
 - **Every round ends with a scoped re-review** (`./re-review-prompt.md`), never a full phase re-review. Record `FIX_BASE` (the HEAD the previous review saw), build a fix-diff package over `FIX_BASE..HEAD` the same way as 4b, and dispatch with the open findings list. The re-reviewer verdicts each finding ADDRESSED / NOT ADDRESSED against the fix diff only, running just the checks each finding touches; the next barrier or milestone checkpoint runs the full suite over the fix. New Critical/Important breakage in the fix diff joins the open findings; out-of-scope observations go to the Execution Log as deferred minors — they never extend the loop.
 - Never fix findings yourself in the controller session — your context stays clean for coordination, and controller fixes skip review.

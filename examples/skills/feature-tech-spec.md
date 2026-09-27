@@ -62,7 +62,7 @@ Sections produced:
   | `useDashboardFavorites` | app hooks | skip | dashboard-specific cache keys; new hook instead |
 
 - **Key Interfaces**: `ReportFavorite`, `FavoritesService<Report>` (extends the generic favorites contract).
-- **Implementation Steps** — 6 ordered tasks:
+- **Implementation Steps** — 6-step numbered outline, no checkboxes:
   1. Migration: `report_favorites` table.
   2. `ReportFavoritesService` with add/remove/list/isFavorite.
   3. API handlers: `POST /api/reports/:id/favorite`, `DELETE /api/reports/:id/favorite`.

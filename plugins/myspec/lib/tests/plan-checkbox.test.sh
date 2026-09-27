@@ -113,5 +113,14 @@ cp "$PLAN" "$ROOT/dup.md"
 [ $? -ne 0 ]; ok "duplicated task heading is refused" $?
 cmp -s "$ROOT/dup.md" "$PLAN"; ok "duplicate refusal leaves the plan unchanged" $?
 
+# --- a fence closes only on its own character and length -----------------------
+printf '%s\n' '### Task 1: a' '```bash' 'echo x' '~~~' '```' '- [ ] s' '### Task 2: b' '- [ ] real' > "$ROOT/tilde.md"
+"$SCRIPT" "$ROOT/tilde.md" 2 doing >/dev/null 2>&1; ok "~~~ inside a backtick fence does not close it" $?
+grep -qxF -- '- [~] real' "$ROOT/tilde.md"; ok "the real Task 2 after a mixed fence is flipped" $?
+
+printf '%s\n' '### Task 1: a' '````md' '```' '### Task 2: fake' '- [ ] fake' '```' '````' '- [ ] s' '### Task 2: b' '- [ ] real' > "$ROOT/nested.md"
+"$SCRIPT" "$ROOT/nested.md" 2 doing >/dev/null 2>&1; ok "a shorter fence nested in a longer one is text" $?
+grep -qxF -- '- [ ] fake' "$ROOT/nested.md" && grep -qxF -- '- [~] real' "$ROOT/nested.md"; ok "the nested fake heading is skipped, the real one flipped" $?
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -35,6 +35,8 @@ The repo keeps parallel trees under `plugins/myspec/` (the Codex local-source pl
 
 `examples/` is human documentation of skill behavior and drifts silently (the Reuse-audit section shipped in v1.14.0 and reached the examples only in the 2026-07 audit). When a PR changes a skill's workflow, outputs, or gates, update the matching `examples/skills/*.md` / `examples/flows/*.md` in the same PR or state in the PR body that examples were checked and unaffected.
 
+Examples are as stack-agnostic as the skills they document: a command or address copied from an example reads as the rule. Name the variable and what it must point at (`$SCRATCH_API_URL`, "`DATABASE_URL` → the scratch database"), never `localhost:<port>` — moving to a less common port is not a fix, and the common defaults are the ones a developer's own dev server holds. `scripts/check-no-localhost-ports.sh` enforces the address part in CI across skills, blueprints, framework files, templates, and examples. It is not a shipped hook, because downstream projects legitimately write their own localhost URLs. PRs #108 and #109 both shipped one ecosystem's tooling (Prisma, pnpm, bullmq, fixed ports) until review caught it.
+
 ## Skill quality
 
 When writing or editing skills, follow the principles enforced by the `skill-verify` skill (`skills/skill-verify/SKILL.md`). The two highest-impact rules:

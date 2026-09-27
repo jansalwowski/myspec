@@ -19,10 +19,9 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
    - Read `${aiDir}/features/index.yaml` entry for this feature
 
 2. **Validate Implementation Steps**
-   For each step in tech-spec.md Implementation Steps:
-   - [ ] Mark completed with [x]
-   - [ ] If skipped or deferred, add note explaining why
-   - [ ] If done differently, update description to match reality
+   Reconcile the numbered outline with what shipped. The archived plan, not the tech-spec, records progress:
+   - If done differently, rewrite the step to match reality
+   - If skipped or deferred, say so in the step with the reason
 
 3. **Update File Inventory**
    Compare planned vs. actual:
@@ -85,9 +84,18 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
    - Exit 0 with a NOT CHECKED block: the sweep that would have found a new unit
      did not run — compare the new units against the file by hand
 
+10. **Compact tech-spec.md** — the tech-spec describes the feature as it now stands; history lives in `CHANGELOG.md` and `plans/`. Skipping this lets every iteration stack another layer until the doc contradicts the code.
+    - Remove checkbox task lists (`- [ ]` / `- [x]`) anywhere in the file; a checkbox Implementation Steps list becomes the numbered outline from the `feature-tech-spec` template
+    - Delete superseded blocks: decisions, steps, or passages marked superseded or replaced, or contradicted by a later decision. Keep only the one in force
+    - Delete status banners the code has outrun (e.g. "not wired up yet" for a routed page)
+    - File Inventory lists only files that exist: drop rows for deleted files, including create-then-delete pairs
+    - Keep Architecture, Key Interfaces, contracts, decisions in force, Edge Cases
+    - If anything was removed, end the summary of the CHANGELOG row from step 7 with `Compacted tech-spec.md.` When step 7 archived no plan, prepend `| {date} | — | Compacted tech-spec.md: {what was removed} | complete |` instead, creating CHANGELOG.md with the step-7 header if missing
+
 **Phase 1 checklist:**
 
-- [ ] All implementation steps in tech-spec.md marked `[x]`
+- [ ] Implementation Steps outline matches what shipped
+- [ ] tech-spec.md compacted: no checkbox task lists, superseded blocks, or rows for deleted files (step 10)
 - [ ] File Inventory updated to match actual created/modified files
 - [ ] `status` in `${aiDir}/features/index.yaml` updated to `complete`
 - [ ] `last_updated` in tech-spec.md frontmatter updated to today
@@ -195,7 +203,7 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 
 ## Verification Checklist
 
-- [ ] Phase 1 checklist fully satisfied (docs, manifest `complete`, plan archived, CHANGELOG row)
+- [ ] Phase 1 checklist fully satisfied (docs, manifest `complete`, plan archived, CHANGELOG row, tech-spec compacted)
 - [ ] All required checks from `.claude/verification.json` passed — or failures confirmed unrelated by the user
 - [ ] Branch resolved per the user's Phase 3 choice (merged / PR created / kept / discarded after typed confirmation)
 - [ ] Worktree removed when options 1 or 4 were chosen and one existed — via the path recorded before any checkout

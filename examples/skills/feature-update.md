@@ -64,12 +64,18 @@ Existing sections (Overview, Goals) untouched.
 Edits affected sections only:
 
 - **Architecture**: appends a paragraph about the bulk endpoint and worker queue (re-uses the existing notification-system queue for throttling).
-- **Implementation Steps**: appends 5 new tasks (CSV parser, bulk endpoint, throttle middleware, results modal, e2e test). Existing tasks remain `[x]` from the original implementation.
+- **Implementation Steps**: replaces the v1 outline with 5 numbered steps for this version only (CSV parser, bulk endpoint, throttle middleware, results modal, e2e test). The v1 steps already live in the archived plan under `plans/`.
 - **Database Changes**: notes a new column on `invitations` — `source` enum (`single`, `bulk`) for analytics; not breaking.
 - **API Endpoints**: adds `POST /api/teams/:id/invites/bulk`.
 - **File Inventory**: adds 4 new files, marks 1 existing file as "Modify" (the InviteService, to factor out the per-record logic).
 - **Decisions**: appends ADR-4: *"CSV parsing client-side with server-side validation rather than upload-and-parse."* Reason: small files (200 rows), simpler error UX.
 - **Frontmatter**: `based_on_spec_version: 2`, `last_updated: 2026-04-30`, `status: draft`.
+
+Then prepends a row to `CHANGELOG.md`:
+
+```
+| 2026-04-30 | spec v2 | Added bulk CSV invites (US7-US8, AC12-AC16); replaced the v1 step outline with 5 bulk-invite steps | updated |
+```
 
 #### 5. Present diff summary
 
@@ -82,11 +88,13 @@ Edits affected sections only:
 > **tech-spec.md changes**:
 >
 > - Architecture: +bulk endpoint + queue paragraph
-> - Implementation Steps: +5 tasks (CSV parser, endpoint, throttle, results modal, e2e)
+> - Implementation Steps: replaced with 5 v2 steps (CSV parser, endpoint, throttle, results modal, e2e)
 > - Database Changes: +`source` column on invitations
 > - API Endpoints: +POST /invites/bulk
 > - File Inventory: +4 create, +1 modify
 > - Decisions: +ADR-4 (client-side parsing)
+>
+> **CHANGELOG.md**: +1 `updated` row for spec v2
 >
 > Status flipped to `draft` on both files (re-approval needed). spec_version: 1 → 2.
 >
@@ -109,13 +117,13 @@ User picks A.
 
 ### Result
 
-`spec.md` at v2, `tech-spec.md` at v2 status `draft`, both files edited (not rewritten). The five new implementation steps are appended; the original 12 stay `[x]` from the original ship.
+`spec.md` at v2, `tech-spec.md` at v2 status `draft`, both files edited (not rewritten). Implementation Steps holds the five v2 steps; the original 12 are in the archived v1 plan, and the CHANGELOG row records the swap.
 
 ### Why this example matters
 
 - **Edit, don't recreate.** A user who runs `feature-update` for a small addition shouldn't see their entire spec rewritten. The skill enforces minimal-diff edits.
 - **`spec_version` bump means re-approval.** The status flip to `draft` is non-negotiable — it's how `feature-spec-review` knows there's something to look at.
-- **Original implementation tasks stay `[x]`.** Don't unmark them. The new tasks land as `[ ]`. When `feature-plan` runs next, it produces a plan covering only the new tasks.
+- **Implementation Steps is replaced, not appended to.** `feature-plan` maps every listed step to a task, so shipped steps left in place would be planned again. The old outline is not lost: it is in the archived plan, and the CHANGELOG row says what changed.
 - **The cross-spec routing prompt at the end is the most useful thing this skill does.** Updates frequently break sibling features in subtle ways — the queue contract here is exactly that kind of change.
 
 ---
@@ -162,7 +170,7 @@ The skill explains the tombstone choice in the diff summary:
 Edits:
 
 - **Architecture**: removes the magic-link path description.
-- **Implementation Steps**: appends a new task: *"Remove magic-link UI, endpoint, service method, and related tests. Update OpenAPI spec."* (Existing magic-link `[x]` tasks are not touched — they're history.)
+- **Implementation Steps**: replaced with one step: *"Remove magic-link UI, endpoint, service method, and related tests. Update OpenAPI spec."* The v2 steps are history, and history lives in `plans/` and `CHANGELOG.md`.
 - **API Endpoints**: removes the `POST /invites/magic-link` row.
 - **File Inventory**: marks the magic-link files for **Action: Delete**.
 - **Decisions**: appends ADR-5: *"Deprecate magic-link mode."* Context: security review on 2026-04-25 flagged identity-verification bypass. Alternatives: keep + harden — rejected, complexity not worth the low usage. Consequences: any customer using magic-links must be migrated to email-based invites; outreach handled by support.
@@ -181,6 +189,8 @@ tech-spec.md changes:
   - API Endpoints: -1 row (POST /invites/magic-link)
   - File Inventory: marked 4 files for Delete
   - Decisions: +ADR-5 (deprecate magic-link, security driver)
+
+CHANGELOG.md: +1 updated row (spec v3: magic-link removed; steps replaced with the removal step)
 
 Status flipped to draft. spec_version: 2 → 3.
 

@@ -8,7 +8,7 @@ tags: [feature, specification, modification, workflow]
 
 Modify an existing feature's spec and technical design to reflect new or changed requirements.
 
-**Core principle:** Edit, don't recreate. Only the affected sections change — existing content stays intact.
+**Core principle:** Edit, don't recreate. Only the affected sections change — existing content stays intact. Within an affected section, replace what the change supersedes rather than annotating it: tech-spec.md stays current-state, and the delta goes to `CHANGELOG.md`.
 
 **Announce at start:** "I'm using the feature-update skill to modify the {feature} feature."
 
@@ -50,19 +50,22 @@ Changes to make:
 
 ### Step 4: Update `tech-spec.md`
 
-Edit only the sections affected by the change.
+Edit only the sections affected by the change. tech-spec.md describes the design in force, so a superseded decision, step, or passage is rewritten or deleted — never kept with a "superseded" note. Stacked versions are how a tech-spec grows into a log that contradicts the code.
 
 Changes to make:
 - **Update** Architecture section if the approach changes
-- **Add/modify** entries in Implementation Steps for new work
+- **Replace** Implementation Steps with the numbered outline for this version's work only, no checkboxes. The previous outline is preserved in the archived plan under `plans/`, and `feature-plan` maps every listed step to a task, so shipped steps left in place get planned again
 - **Update** Key Interfaces / Types for new or changed types
 - **Update** Database Changes if schema changes are needed
 - **Update** API Schema if the API surface changes
-- **Update** File Inventory — add new files, update actions on changed files
-- **Add** a Decisions entry (ADR format) if the change involves an architectural choice
+- **Update** File Inventory — add new files, update actions on changed files, mark files this change removes as `Delete` (`feature-complete` drops the row once the file is gone)
+- **Replace** a Decisions entry the change overturns with the decision now in force; **add** a new entry (ADR format) for a new architectural choice
 - **Update** `based_on_spec_version` to match the new `spec_version` from spec.md
 - **Update** `last_updated` to today
 - **Update** `status` to `draft` (requires review before implementation)
+
+Record the delta in `${aiDir}/features/{feature}/CHANGELOG.md` — it is where the replaced content stays findable. If the file is missing, create it with the header `feature-complete` uses (`| Date | Plan | Summary | Status |`). Prepend:
+`| {date} | spec v{new spec_version} | {requirements added/changed/removed; decisions and steps replaced, naming what they replaced} | updated |`
 
 ### Step 5: Present Diff Summary
 
@@ -70,6 +73,7 @@ Do NOT show the full documents. Show only:
 - Which sections in spec.md changed, and what changed in them (1-2 lines each)
 - Which sections in tech-spec.md changed, and what changed in them (1-2 lines each)
 - The new `spec_version` value
+- The `CHANGELOG.md` row
 
 Call `AskUserQuestion` so the choice is selectable:
 
@@ -108,6 +112,7 @@ Note: `/myspec:feature-plan` will create a new `implementation-plan.md`. The pre
 ## Rules
 
 - Never rewrite sections that aren't affected by the change
+- Replace superseded content in tech-spec.md; never annotate it "superseded" and keep both
 - Never reset requirements that are still valid
 - Always increment `spec_version` — even for small changes
 - Keep `based_on_spec_version` in sync with `spec_version` after every update
@@ -122,6 +127,8 @@ Note: `/myspec:feature-plan` will create a new `implementation-plan.md`. The pre
 - [ ] Only affected sections were modified (no unrelated changes)
 - [ ] New acceptance criteria added for any new requirements
 - [ ] File Inventory in tech-spec.md updated for new/changed files
+- [ ] Implementation Steps holds only this version's work; no `superseded` markers or checkboxes left in tech-spec.md
+- [ ] `CHANGELOG.md` has an `updated` row naming what was replaced
 - [ ] Run project documentation audit command if configured
 
 ## Integration

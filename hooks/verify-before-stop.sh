@@ -5,6 +5,9 @@
 # Outputs {"decision": "block", "reason": "..."} on failure or {"decision": "approve"} on success.
 # During feature-implement (.claude/state/implement-in-progress.json, at most
 # 8h old) check failures become a non-blocking systemMessage warning instead.
+# Before any check runs, blocks when a dependency directory (each guarded
+# isolation.provision.symlink entry, plus node_modules, vendor, .venv, venv)
+# is a symlink into a checkout whose lockfiles for it differ from this tree.
 
 set -euo pipefail
 
@@ -141,42 +144,221 @@ if [ -z "$SESSION_ID" ] || [ ! -f "$MARKER_FILE" ]; then
   exit 0
 fi
 
-# A symlinked node_modules makes every check below run against ANOTHER
-# checkout dependency tree, so the gate reports a green that describes the
-# wrong tree. That silent false pass is worse than no gate at all, so block.
-# The marker is deliberately left in place (the EXIT trap is registered below)
-# so the block persists until a real install exists.
-# Accepted without config when the link points into a checkout whose root
-# lockfiles are byte-identical to this tree (committed and uncommitted state
-# alike): both trees then resolve the same dependencies, which is exactly the
-# case worktree-provision.sh links (it skips the link when the branch changes
-# a lockfile against --base). Comparing contents rather than re-running the
-# ref diff also holds when the main checkout is not at the base ref. At least
-# one lockfile must exist; without one there is no evidence the trees match.
-# Keep this lockfile list in step with lib/worktree-provision.sh.
+# A symlinked dependency directory (node_modules, vendor, .venv, ...) makes
+# every check below run against ANOTHER checkout dependency tree, so the gate
+# reports a green that describes the wrong tree. That silent false pass is
+# worse than no gate at all, so block. The marker is deliberately left in
+# place (the EXIT trap is registered below) so the block persists until a
+# real install exists.
+# Checked: every isolation.provision.symlink entry, plus each built-in
+# dependency directory at the root (DEP_DIRS) the config does not list, so a
+# hand-made link into another checkout of this repo is caught too (one into a
+# central virtualenv store is left alone). An entry is guarded by the
+# lockfiles the map below gives it; an entry with none (an .env file) is not
+# checked. A tree that loads the project's own source from the other checkout
+# (tree_loads_checkout) blocks whatever its lockfiles say.
+# Accepted without config when the link points into a checkout whose copies of
+# those lockfiles are byte-identical to this tree (committed and uncommitted
+# state alike): both trees then resolve the same dependencies, which is
+# exactly the case worktree-provision.sh links (it skips the link when the
+# branch changes a lockfile against --base). Comparing contents rather than
+# re-running the ref diff also holds when the main checkout is not at the base
+# ref. At least one lockfile must exist; without one there is no evidence the
+# trees match.
 # Deliberate link otherwise: isolation.allowLinkedModules: true in .myspec.json
 # (project-wide, for repos whose worktrees share the main checkout
-# dependencies by construction) or MYSPEC_ALLOW_LINKED_MODULES=1.
-linked_lockfiles_match() {
-  local target src lock seen=0
-  target=$(cd "$REPO_ROOT/node_modules" 2>/dev/null && pwd -P) || return 1
-  src=$(dirname "$target")
-  [ "$src" != "$REPO_ROOT" ] || return 1
-  for lock in package-lock.json yarn.lock pnpm-lock.yaml bun.lockb bun.lock \
-      composer.lock poetry.lock Pipfile.lock Cargo.lock Gemfile.lock go.sum; do
-    if [ -e "$REPO_ROOT/$lock" ] || [ -e "$src/$lock" ]; then
-      cmp -s "$REPO_ROOT/$lock" "$src/$lock" || return 1
-      seen=1
+# dependencies by construction) or MYSPEC_ALLOW_LINKED_MODULES=1. Both cover
+# every dependency directory, not only node_modules.
+# BEGIN dependency-lockfile map
+# Byte-identical in hooks/verify-before-stop.sh and lib/worktree-provision.sh
+# (the two ship separately, so neither can source the other); a test in
+# lib/tests/worktree-provision.test.sh fails when they drift.
+#
+# An isolation.provision.symlink entry is a string ("vendor") or an object
+# ({"path": "vendor", "lockfiles": ["composer.lock"]}). An object with
+# "lockfiles" names the files that pin that tree, repo-relative, globs allowed
+# (a * stays within one directory, as in the shell); "lockfiles": [] declares
+# it unguarded. A string, or an object without a usable "lockfiles", takes the
+# lockfiles of a well-known dependency directory from dep_lockfiles below and
+# matches them both beside the project that owns the entry and at the repo
+# root (a nested apps/web/node_modules is pinned by either). Anything else (an
+# .env file, a cache) is unguarded: it pins no dependency set, and guarding it
+# would block every stop that links one.
+DEP_DIRS="node_modules vendor vendor/bundle .venv venv"
+
+# dep_lockfiles <path> -> the lockfile names that pin that directory.
+# vendor is shared by Composer, Bundler and Go modules, so it lists all three;
+# only the lockfiles that exist take part in a comparison. vendor/bundle is
+# Bundler's own install path, keyed by path because "bundle" alone is generic.
+dep_lockfiles() {
+  case "$1" in
+    vendor/bundle|*/vendor/bundle) printf '%s\n' Gemfile.lock; return ;;
+  esac
+  case "${1##*/}" in
+    node_modules) printf '%s\n' package-lock.json npm-shrinkwrap.json yarn.lock pnpm-lock.yaml bun.lockb bun.lock ;;
+    vendor) printf '%s\n' composer.lock Gemfile.lock go.sum ;;
+    .venv|venv) printf '%s\n' poetry.lock Pipfile.lock uv.lock pdm.lock 'requirements*.txt' ;;
+  esac
+}
+
+# infer_entry <path> -> "path<TAB>lockfile<TAB>..." from the built-in map.
+infer_entry() {
+  local path="$1" parent lock line
+  case "$path" in
+    vendor/bundle|*/vendor/bundle) parent=$(dirname "$(dirname "$path")") ;;
+    *) parent=$(dirname "$path") ;;
+  esac
+  line="$path"
+  while IFS= read -r lock; do
+    [ -n "$lock" ] || continue
+    [ "$parent" = "." ] || line="$line"$'\t'"$parent/$lock"
+    line="$line"$'\t'"$lock"
+  done < <(dep_lockfiles "$path")
+  printf '%s\n' "$line"
+}
+
+# symlink_entries <.myspec.json> -> one "path<TAB>lockfile<TAB>..." line per
+# configured entry; a line with no lockfile is an unguarded entry. A missing
+# config means the default ["node_modules"]; an unreadable one means none. A
+# malformed entry is dropped on its own, never taking the others with it, and
+# a "lockfiles" that is not a list falls back to the built-in map.
+symlink_entries() {
+  local raw line path mode rest
+  if [ -f "$1" ] && command -v jq >/dev/null 2>&1; then
+    raw=$(jq -r '(.isolation.provision.symlink // ["node_modules"])
+      | if type == "array" then .[] elif type == "string" then . else empty end
+      | if type == "string" then [., "-"]
+        elif type == "object" and (.path | type) == "string" then
+          (.lockfiles | if type == "array" then . elif type == "string" then [.] else null end) as $l
+          | if $l == null then [.path, "-"]
+            else [.path, "="] + [$l[] | select(type == "string" and . != "")] end
+        else empty end
+      | @tsv' "$1" 2>/dev/null) || raw=""
+  else
+    raw=$'node_modules\t-'
+  fi
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    path="${line%%$'\t'*}"
+    rest="${line#*$'\t'}"
+    mode="${rest%%$'\t'*}"
+    while [ "${path#./}" != "$path" ]; do path="${path#./}"; done
+    path="${path%/}"
+    [ -n "$path" ] || continue
+    if [ "$mode" = "-" ]; then
+      infer_entry "$path"
+    elif [ "$rest" = "=" ]; then
+      printf '%s\n' "$path"
+    else
+      printf '%s\t%s\n' "$path" "${rest#=$'\t'}"
     fi
+  done <<< "$raw"
+}
+
+# tree_loads_checkout <tree> <checkout> -> 0 when the dependency tree at
+# <tree> loads the project's OWN source from <checkout> (a physical path).
+# A link to such a tree runs that checkout's code, not this one's, however
+# identical the lockfiles are. Composer writes the root package's autoload
+# rules against $baseDir, which PHP resolves through the link; an editable
+# Python install (poetry, uv, pip -e) records its source in direct_url.json.
+tree_loads_checkout() {
+  local tree="$1" checkout="$2" f url dir
+  grep -qsF '$baseDir . ' "$tree"/composer/autoload_*.php && return 0
+  for f in "$tree"/lib/python*/site-packages/*.dist-info/direct_url.json; do
+    [ -f "$f" ] || continue
+    url=$(jq -r 'select(.dir_info.editable == true) | .url // empty' "$f" 2>/dev/null) || continue
+    case "$url" in file://*) ;; *) continue ;; esac
+    dir=$(cd "${url#file://}" 2>/dev/null && pwd -P) || continue
+    case "$dir/" in "$checkout"/*) return 0 ;; esac
+  done
+  return 1
+}
+# END dependency-lockfile map
+
+# link_source <entry> -> the checkout <entry> links into: the link target
+# with <entry> removed. Fails when the target is not <checkout>/<entry>, or is
+# this tree.
+link_source() {
+  local target src
+  target=$(cd "$REPO_ROOT/$1" 2>/dev/null && pwd -P) || return 1
+  case "$target" in
+    */"$1") src="${target%/"$1"}" ;;
+    *) return 1 ;;
+  esac
+  [ "$src" != "$REPO_ROOT" ] || return 1
+  printf '%s\n' "$src"
+}
+
+# common_dir <dir> -> the physical git common dir of the checkout at <dir>.
+common_dir() {
+  local d
+  d=$(git -C "$1" rev-parse --git-common-dir 2>/dev/null) || return 1
+  (cd "$1" && cd "$d" && pwd -P)
+}
+
+# lockfiles_match <src> <lockfile-pattern>... -> 0 when checkout <src> holds
+# byte-identical copies of every matching lockfile, and at least one exists.
+lockfiles_match() {
+  local src="$1" pat f rel seen=0
+  shift
+  for pat in "$@"; do
+    for f in "$REPO_ROOT"/$pat "$src"/$pat; do
+      [ -e "$f" ] || continue
+      case "$f" in
+        "$REPO_ROOT"/*) rel="${f#"$REPO_ROOT"/}" ;;
+        *) rel="${f#"$src"/}" ;;
+      esac
+      cmp -s "$REPO_ROOT/$rel" "$src/$rel" || return 1
+      seen=1
+    done
   done
   [ "$seen" -eq 1 ]
 }
+
+# guarded_entries -> "configured|inferred<TAB>path<TAB>lockfile..." for the
+# configured entries, then the built-in directories the config does not name.
+guarded_entries() {
+  local configured paths dir l
+  configured=$(symlink_entries "$REPO_ROOT/.myspec.json")
+  paths=$'\n'$(printf '%s\n' "$configured" | cut -f1)$'\n'
+  while IFS= read -r l; do
+    [ -n "$l" ] && printf 'configured\t%s\n' "$l"
+  done <<< "$configured"
+  for dir in $DEP_DIRS; do
+    case "$paths" in
+      *$'\n'"$dir"$'\n'*) ;;
+      *) printf 'inferred\t%s\n' "$(infer_entry "$dir")" ;;
+    esac
+  done
+}
+
 ALLOW_LINKED=$(jq -r '.isolation.allowLinkedModules // false' "$REPO_ROOT/.myspec.json" 2>/dev/null || printf 'false')
-if [ -L "$REPO_ROOT/node_modules" ] && [ "$ALLOW_LINKED" != "true" ] && [ "${MYSPEC_ALLOW_LINKED_MODULES:-}" != "1" ] \
-    && ! linked_lockfiles_match; then
-  REASON=$(printf 'node_modules in %s is a symlink and the lockfiles here differ from the checkout it points into (or none exists), so lint, type-check and test results here describe a different dependency tree. Run a real install in this worktree before reporting any result as verified (or, if this repo shares one tree by design, set isolation.allowLinkedModules: true in .myspec.json).' "$REPO_ROOT" | jq -Rs .)
-  echo "{\"decision\": \"block\", \"reason\": $REASON}"
-  exit 0
+if [ "$ALLOW_LINKED" != "true" ] && [ "${MYSPEC_ALLOW_LINKED_MODULES:-}" != "1" ]; then
+  STALE_LINKS=""
+  while IFS= read -r line; do
+    kind="${line%%$'\t'*}"
+    line="${line#*$'\t'}"
+    entry="${line%%$'\t'*}"
+    [ -n "$entry" ] && [ "$line" != "$entry" ] || continue
+    [ -L "$REPO_ROOT/$entry" ] || continue
+    src=$(link_source "$entry") || src=""
+    # An unlisted directory is only this gate's business when it links into
+    # another checkout of this repo. node_modules keeps its stricter rule.
+    if [ "$kind" = inferred ] && [ "$entry" != node_modules ] \
+        && { [ -z "$src" ] || [ "$(common_dir "$src")" != "$(common_dir "$REPO_ROOT")" ]; }; then
+      continue
+    fi
+    IFS=$'\t' read -ra LOCKS <<< "${line#*$'\t'}"
+    if [ -z "$src" ] || ! lockfiles_match "$src" "${LOCKS[@]}" \
+        || tree_loads_checkout "$REPO_ROOT/$entry" "$src"; then
+      STALE_LINKS="${STALE_LINKS:+$STALE_LINKS, }$entry"
+    fi
+  done < <(guarded_entries)
+  if [ -n "$STALE_LINKS" ]; then
+    REASON=$(printf 'Symlinked dependency directory in %s: %s. The lockfiles that pin it differ from the checkout it points into (or none exists), or the tree loads the project source from that checkout, so lint, type-check and test results here describe a different dependency tree. Run a real install in this worktree before reporting any result as verified (or, if this repo shares one tree by design, set isolation.allowLinkedModules: true in .myspec.json).' "$REPO_ROOT" "$STALE_LINKS" | jq -Rs .)
+    echo "{\"decision\": \"block\", \"reason\": $REASON}"
+    exit 0
+  fi
 fi
 
 # Clean up marker after verification runs (success or failure)

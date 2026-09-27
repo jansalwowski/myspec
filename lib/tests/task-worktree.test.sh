@@ -132,5 +132,41 @@ fi
 "$SCRIPT" merge t4 --keep >/dev/null 2>&1; ok "merge --keep of an empty task exits 0" $?
 [ -d "$REPO/.claude/worktrees/t4" ]; ok "--keep leaves the worktree" $?
 
+# --- discard: a stale worktree from an interrupted run is cleared for re-dispatch
+"$SCRIPT" create t8 >/dev/null 2>&1
+echo "partial" > "$REPO/.claude/worktrees/t8/partial.js"
+"$SCRIPT" discard t8 >/dev/null 2>&1; ok "discard exits 0 on a dirty worktree" $?
+[ ! -e "$REPO/.claude/worktrees/t8" ]; ok "discard removes the worktree" $?
+! git -C "$REPO" show-ref --verify --quiet refs/heads/feat/x--t8; ok "discard deletes the task branch" $?
+"$SCRIPT" discard t8 >/dev/null 2>&1; ok "discard of nothing is a no-op" $?
+"$SCRIPT" create t8 >/dev/null 2>&1; ok "create after discard succeeds" $?
+
+# --- a failed provision leaves nothing behind ---------------------------------
+STUB="$ROOT/stub"
+mkdir -p "$STUB"
+cp "$SCRIPT" "$STUB/task-worktree.sh"
+printf '#!/bin/sh\nexit 1\n' > "$STUB/worktree-provision.sh"
+chmod +x "$STUB"/*.sh
+"$STUB/task-worktree.sh" create t9 >/dev/null 2>&1
+[ $? -ne 0 ]; ok "create fails when provisioning fails" $?
+[ ! -e "$REPO/.claude/worktrees/t9" ]; ok "failed create removes its worktree" $?
+! git -C "$REPO" show-ref --verify --quiet refs/heads/feat/x--t9; ok "failed create deletes its branch" $?
+
+# --- uncommitted controller changes are named -----------------------------------
+echo "wip" >> "$CTRL/feature.js"
+OUT=$("$SCRIPT" create t10 2>&1)
+printf '%s' "$OUT" | grep -qF "feature.js"; ok "the dirty-tree warning lists the uncommitted file" $?
+git -C "$CTRL" checkout -q -- feature.js
+
+# --- isolation.worktreeRoot is honored ------------------------------------------
+if command -v jq >/dev/null 2>&1; then
+  printf '{"isolation":{"worktreeRoot":".wt/"}}\n' > "$REPO/.myspec.json"
+  OUT=$("$SCRIPT" create t11 2>&1)
+  [ "$(printf '%s\n' "$OUT" | tail -1)" = "$REPO/.wt/t11" ]; ok "create uses isolation.worktreeRoot (output: $OUT)" $?
+  "$SCRIPT" discard t11 >/dev/null 2>&1
+  [ ! -e "$REPO/.wt/t11" ]; ok "discard resolves the same root" $?
+  rm -f "$REPO/.myspec.json"
+fi
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
