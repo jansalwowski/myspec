@@ -48,6 +48,9 @@ build_fixture() {
   echo 'x' > app/Http/UserController.php
   echo 'x' > internal/queue/worker.go
   echo 'x' > lib/models/account.rb
+  mkdir -p docs app/billing
+  echo 'x' > docs/profile.md
+  echo 'x' > app/billing/invoice.md
   echo '# log' > .ai/features/invites/CHANGELOG.md
 
   cat > .ai/features/invites/spec.md <<'MD'
@@ -63,7 +66,7 @@ Config at `config/app.yml:12` and `./app/services/invite.ts`.
 Gone: `app/services/legacy.ts` and `app/utils/format`.
 Renamed on disk: `app/services/mailer.js` and `server/routes/relocated-handler.ts`.
 Ambiguous: `app/old/index.ts`.
-Non-JS modules: `app/models/user`, `app/Http/UserController`, `internal/queue/worker`; moved: `app/models/account`.
+Non-JS modules: `app/models/user`, `app/Http/UserController`, `internal/queue/worker`; moved: `app/models/account`; docs, not modules: `app/services/profile`, `app/billing/invoice`.
 
 Not paths: `${aiDir}/features/x/spec.md`, `{feature}/spec.md`, `<repo_root>/app/x.ts`,
 `https://example.com/app/x.ts`, `app/**/*.ts`, `/api/invites`, `@/components/Nope.vue`,
@@ -148,6 +151,8 @@ expect_line "sub/seed\.json:1  app/seed-dead\.json$" "seed.json in a sub-feature
 expect_line "sub/scenarios\.md:4  app/scenario-dead\.ts$" "scenarios.md in a sub-feature dir"
 
 expect_line "^MOVED +\.ai/features/invites/spec\.md:[0-9]+  app/models/account -> lib/models/account\.rb$" "extension-less path relocated to a non-JS module"
+expect_line "^MISSING +$S:[0-9]+  app/services/profile$" "an extension-less module does not move to a same-stem doc (docs/profile.md)"
+expect_line "^MISSING +$S:[0-9]+  app/billing/invoice$" "an extension-less module does not resolve to a sibling doc (invoice.md)"
 
 # ── resolving references are silent ──────────────────────────────────────────
 for p in 'app/models/user$' 'app/Http/UserController$' 'internal/queue/worker$' 'app/services/invite\.ts' 'app/services/mailer$' 'app/components/Modal' 'app/components/Card' 'server/routes/$' 'config/app\.yml'; do

@@ -139,7 +139,7 @@ boundaries:
 {else:}
     - .env
     - .env.*
-    - "**/{dependency dir}/"   # the stack's install dir: node_modules, vendor, .venv, ...
+    - "**/{dependency dir}/"   # the stack's in-repo install dir (node_modules, vendor, .venv); omit the line when it has none (Go)
     # TODO: add migration files, generated code dirs, etc.
   generated_do_not_edit:
     # TODO: list auto-generated files/dirs (e.g., codegen output, ORM client)

@@ -92,7 +92,7 @@ const DATABASE_MARKERS = [
   // Ruby (Rails)
   'db/schema.rb', 'db/structure.sql', 'db/migrate/',
   // Python (Django, Alembic)
-  '*/migrations/__init__.py', 'alembic.ini', 'alembic/',
+  '*/migrations/__init__.py', '*/*/migrations/__init__.py', 'alembic.ini', 'alembic/',
   // PHP (Laravel, Doctrine)
   'database/migrations/', 'config/packages/doctrine.yaml', 'config/packages/doctrine_migrations.yaml',
   // JVM (Flyway, Liquibase)
@@ -1097,7 +1097,9 @@ function findDatabaseMarker() {
       }
       current = next
     })
-    const hit = current.sort()[0]
+    // audit.ignore mutes a marker that is not a database (a root migrations/
+    // for config or search-index migrations).
+    const hit = current.filter(p => !isIgnored(p)).sort()[0]
     if (hit) { return hit }
   }
   return null

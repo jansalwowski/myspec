@@ -69,7 +69,7 @@ Checkbox-to-status heuristic (count `- [x]` vs `- [ ]` in implementation-plan.md
 ### 5. Check Implementation
 
 If tech-spec.md has a "File Inventory" section:
-- Extract every backticked repo-relative path that has a file extension, in any language and any layout (`src/Controller/UserController.php`, `app/models/user.py`, `internal/queue/worker.go`, `web/App.vue`). Skip URLs, globs, and placeholders (`{x}`, `<x>`, `${x}`).
+- Extract every repo-relative path in the section that has a file extension — backticked, in a table cell, or a bare bullet — in any language and any layout (`src/Controller/UserController.php`, `app/models/user.py`, `internal/queue/worker.go`, `web/App.vue`). Skip URLs, globs, and placeholders (`{x}`, `<x>`, `${x}`).
 - Use Glob to verify each path exists
 
 | Check | Severity | Condition |

@@ -21,14 +21,14 @@ Read the target feature's documentation:
 
 Scan spec.md for technical implementation content:
 
-**Code blocks** with a language tag naming a programming, query, or schema language — any stack (`sql`, `ts`, `php`, `python`, `go`, `ruby`, `java`, `prisma`, `graphql`, `proto`, …). Prose and diagram tags (`mermaid`, `text`, `md`, `markdown`, `plaintext`) are not violations.
+**Code blocks** with a language tag naming a programming, query, or schema language — any stack (`sql`, `ts`, `php`, `python`, `go`, `ruby`, `java`, `prisma`, `graphql`, `proto`, …). Prose, diagram, example-data, and scenario tags are not violations: `mermaid`, `plantuml`, `dot`, `text`, `txt`, `plaintext`, `md`, `markdown`, `json`, `yaml`, `yml`, `csv`, `http`, `gherkin`, `feature` — a spec may show a payload the product accepts or an acceptance scenario.
 
 **SQL/database keywords** (case-insensitive):
 - `SELECT`, `INSERT`, `UPDATE`, `DELETE`, `CREATE TABLE`, `ALTER TABLE`
 - `DROP`, `TRUNCATE`, `BEGIN`, `COMMIT`, `ROLLBACK`
 
 **ORM/database operation patterns** — take the ORM from `backbone.yml` `database:` or `${aiDir}/conventions/` and match its query and schema vocabulary. Common ones:
-- Query builders / active record: `findMany`, `findUnique`, `upsert`, `createMany` (Prisma); `where(`, `find_by`, `has_many` (ActiveRecord); `objects.filter`, `ForeignKey` (Django); `session.query`, `relationship(` (SQLAlchemy); `createQueryBuilder`, `getRepository` (Doctrine, TypeORM); `Eloquent`, `hasMany` (Laravel); `db.Where`, `gorm:` tags (GORM)
+- Query builders / active record: `findMany`, `findUnique`, `findFirst`, `upsert`, `createMany`, `updateMany`, `deleteMany` (Prisma); `where(`, `find_by`, `has_many` (ActiveRecord); `objects.filter`, `ForeignKey` (Django); `session.query`, `relationship(` (SQLAlchemy); `createQueryBuilder`, `getRepository` (Doctrine, TypeORM); `Eloquent`, `hasMany` (Laravel); `db.Where`, `gorm:` tags (GORM)
 - Schema annotations: `@@index`, `@relation` (Prisma); `#[ORM\Column]`, `@Entity`, `@Column`, `@Table` (Doctrine, JPA, TypeORM); `db_index=True` (Django)
 
 **Database index specs**:
@@ -146,20 +146,20 @@ Check that:
 Use these regex patterns for detection:
 
 **Code fences**:
-- ` ```([A-Za-z0-9_+#-]+) ` whose tag is not a prose or diagram tag (`mermaid`, `text`, `txt`, `md`, `markdown`, `plaintext`)
+- ` ```([A-Za-z0-9_+#-]+) ` whose tag is not in the step-2 allowlist
 
 **SQL keywords** (word boundaries):
 - `\b(SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP|TRUNCATE)\b`
 
 **ORM operations** — the project ORM's vocabulary (see the list in step 2), e.g.:
-- `\b(findMany|findUnique|upsert|createMany|find_by|has_many|belongs_to|objects\.filter|session\.query|createQueryBuilder|getRepository|hasMany|belongsTo)\b`
+- `\b(findMany|findUnique|findFirst|upsert|createMany|updateMany|deleteMany|find_by|has_many|belongs_to|objects\.filter|session\.query|createQueryBuilder|getRepository|hasMany|belongsTo)\b`
 
 **Database indexes**:
 - `@@index|@@unique|@@id|#\[ORM\\|@(Entity|Table|Column|Index)\b|db_index=True|add_index`
 - `\b(GIN|B-tree|BRIN|Hash|GiST|trigram|tsvector)\b`
 
 **File paths**:
-- `\b[a-zA-Z0-9_.-]+(/[a-zA-Z0-9_.-]+)+\.[a-z0-9]{1,5}\b` (a repo-relative path with an extension; skip URLs)
+- `\b[a-zA-Z0-9_-][a-zA-Z0-9_.-]*(/[a-zA-Z0-9_.-]+)+\.(ts|tsx|js|jsx|mjs|cjs|vue|svelte|php|py|rb|go|rs|java|kt|cs|swift|c|cpp|h|sql|prisma|graphql|proto)\b` (a repo-relative path with a source extension; skip URLs). Links to other feature docs (`../acl/spec.md`) belong in spec.md and are not violations.
 
 ## Verification Checklist
 

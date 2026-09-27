@@ -22,11 +22,11 @@
 // Resolution is from the repo root (cwd), then the citing doc's directory and
 // the features dir (doc cross-links like `acl/spec.md`). An extension-less path
 // is a module reference in any language: it matches a directory, or a file
-// <path>.<ext> for any known extension (`app/models/user` -> user.py,
+// <path>.<ext> for any source extension (`app/models/user` -> user.py,
 // `internal/queue/worker` -> worker.go). A path that is the tail of a real one
 // (`router/index.ts`) is package-relative shorthand and passes. An unresolved
 // path is MOVED when the git tree holds exactly one file with the same basename
-// or the same stem (any known extension for an extension-less path, the JS
+// or the same stem (any source extension for an extension-less path, the JS
 // family for a JS-family one, since foo.js -> foo.ts is one module); otherwise
 // MISSING.
 //
@@ -66,6 +66,12 @@ const LIVE_DOCS = new Set(['spec.md', 'tech-spec.md', 'index.yaml', 'scenarios.m
 const SKIP_DOC_DIRS = new Set(['plans', 'archive'])
 // Extensions one module can swap between without becoming a different file.
 const JS_FAMILY_EXTS = ['js', 'ts', 'tsx', 'jsx', 'vue', 'mjs', 'cjs']
+// What an extension-less module reference can name. Docs, data, and lockfiles
+// are not modules: `app/services/user` must not resolve to, or move to, user.md.
+const MODULE_EXTS = [
+  ...JS_FAMILY_EXTS, 'svelte', 'astro', 'py', 'rb', 'go', 'rs', 'java', 'kt', 'swift',
+  'php', 'cs', 'c', 'h', 'cpp',
+]
 const KNOWN_EXTS = new Set([
   ...JS_FAMILY_EXTS, 'svelte', 'astro', 'py', 'rb', 'go', 'rs', 'java', 'kt', 'swift',
   'php', 'cs', 'c', 'h', 'cpp', 'json', 'jsonc', 'yaml', 'yml', 'toml', 'md', 'mdx',
@@ -208,7 +214,7 @@ function resolves(p, base = root) {
   if (p.endsWith('/')) { return isDir(abs) }
   if (existsSync(abs)) { return true }
   if (extOf(p) && KNOWN_EXTS.has(extOf(p))) { return false }
-  return [...KNOWN_EXTS].some(e => isFile(`${abs}.${e}`))
+  return MODULE_EXTS.some(e => isFile(`${abs}.${e}`))
 }
 
 // Unique relocation candidate, or the candidate count when there is not exactly one.
@@ -222,7 +228,7 @@ function locate(p) {
     for (const d of treeDirs) { if (posix.basename(d) === base) { hits.add(`${d}/`) } }
   } else {
     for (const f of byBase.get(base) ?? []) { hits.add(f) }
-    const family = !ext ? [...KNOWN_EXTS] : (JS_FAMILY_EXTS.includes(ext) ? JS_FAMILY_EXTS : [])
+    const family = !ext ? MODULE_EXTS : (JS_FAMILY_EXTS.includes(ext) ? JS_FAMILY_EXTS : [])
     for (const e of family) {
       for (const f of byBase.get(`${stem}.${e}`) ?? []) { hits.add(f) }
     }
