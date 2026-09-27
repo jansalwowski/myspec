@@ -18,7 +18,10 @@
 #   - SKIPS a symlink entry when the branch changes one of the lockfiles
 #     that pin it relative to --base: a symlinked tree then describes the
 #     wrong dependencies, and the right answer is a real install. Which
-#     lockfiles pin which entry is the dependency-lockfile map below.
+#     lockfiles pin which entry is the dependency-lockfile map below. Also
+#     skips a tree that loads the project's own source from the main checkout
+#     (a Composer vendor, a .venv with an editable install): through a link,
+#     the worktree's checks would run the main checkout's code.
 #
 # Never symlink a build output directory (.nuxt, dist, .next): a later build in
 # the worktree would write through into the main checkout. Copy the single
@@ -77,20 +80,25 @@ fi
 #
 # An isolation.provision.symlink entry is a string ("vendor") or an object
 # ({"path": "vendor", "lockfiles": ["composer.lock"]}). An object with
-# "lockfiles" names the files that pin that tree, repo-relative, globs allowed;
-# "lockfiles": [] declares it unguarded. A string, or an object without
-# "lockfiles", takes the lockfiles of a well-known dependency directory from
-# dep_lockfiles below, looked up by the entry basename and matched both beside
-# the entry and at the repo root (a nested apps/web/node_modules is pinned by
-# either). Anything else (an .env file, a cache) is unguarded: it pins no
-# dependency set, and guarding it would block every stop that links one.
-DEP_DIRS="node_modules vendor .venv venv"
+# "lockfiles" names the files that pin that tree, repo-relative, globs allowed
+# (a * stays within one directory, as in the shell); "lockfiles": [] declares
+# it unguarded. A string, or an object without a usable "lockfiles", takes the
+# lockfiles of a well-known dependency directory from dep_lockfiles below and
+# matches them both beside the project that owns the entry and at the repo
+# root (a nested apps/web/node_modules is pinned by either). Anything else (an
+# .env file, a cache) is unguarded: it pins no dependency set, and guarding it
+# would block every stop that links one.
+DEP_DIRS="node_modules vendor vendor/bundle .venv venv"
 
-# dep_lockfiles <basename> -> the lockfile names that pin that directory.
+# dep_lockfiles <path> -> the lockfile names that pin that directory.
 # vendor is shared by Composer, Bundler and Go modules, so it lists all three;
-# only the lockfiles that exist take part in a comparison.
+# only the lockfiles that exist take part in a comparison. vendor/bundle is
+# Bundler's own install path, keyed by path because "bundle" alone is generic.
 dep_lockfiles() {
   case "$1" in
+    vendor/bundle|*/vendor/bundle) printf '%s\n' Gemfile.lock; return ;;
+  esac
+  case "${1##*/}" in
     node_modules) printf '%s\n' package-lock.json npm-shrinkwrap.json yarn.lock pnpm-lock.yaml bun.lockb bun.lock ;;
     vendor) printf '%s\n' composer.lock Gemfile.lock go.sum ;;
     .venv|venv) printf '%s\n' poetry.lock Pipfile.lock uv.lock pdm.lock 'requirements*.txt' ;;
@@ -100,27 +108,34 @@ dep_lockfiles() {
 # infer_entry <path> -> "path<TAB>lockfile<TAB>..." from the built-in map.
 infer_entry() {
   local path="$1" parent lock line
-  parent=$(dirname "$path")
+  case "$path" in
+    vendor/bundle|*/vendor/bundle) parent=$(dirname "$(dirname "$path")") ;;
+    *) parent=$(dirname "$path") ;;
+  esac
   line="$path"
   while IFS= read -r lock; do
     [ -n "$lock" ] || continue
     [ "$parent" = "." ] || line="$line"$'\t'"$parent/$lock"
     line="$line"$'\t'"$lock"
-  done < <(dep_lockfiles "$(basename "$path")")
+  done < <(dep_lockfiles "$path")
   printf '%s\n' "$line"
 }
 
 # symlink_entries <.myspec.json> -> one "path<TAB>lockfile<TAB>..." line per
 # configured entry; a line with no lockfile is an unguarded entry. A missing
-# config means the default ["node_modules"]; an unreadable one means none.
+# config means the default ["node_modules"]; an unreadable one means none. A
+# malformed entry is dropped on its own, never taking the others with it, and
+# a "lockfiles" that is not a list falls back to the built-in map.
 symlink_entries() {
   local raw line path mode rest
   if [ -f "$1" ] && command -v jq >/dev/null 2>&1; then
-    raw=$(jq -r '(.isolation.provision.symlink // ["node_modules"])[]
+    raw=$(jq -r '(.isolation.provision.symlink // ["node_modules"])
+      | if type == "array" then .[] elif type == "string" then . else empty end
       | if type == "string" then [., "-"]
         elif type == "object" and (.path | type) == "string" then
-          if has("lockfiles") then [.path, "="] + [(.lockfiles // [])[] | select(type == "string")]
-          else [.path, "-"] end
+          (.lockfiles | if type == "array" then . elif type == "string" then [.] else null end) as $l
+          | if $l == null then [.path, "-"]
+            else [.path, "="] + [$l[] | select(type == "string" and . != "")] end
         else empty end
       | @tsv' "$1" 2>/dev/null) || raw=""
   else
@@ -131,6 +146,7 @@ symlink_entries() {
     path="${line%%$'\t'*}"
     rest="${line#*$'\t'}"
     mode="${rest%%$'\t'*}"
+    while [ "${path#./}" != "$path" ]; do path="${path#./}"; done
     path="${path%/}"
     [ -n "$path" ] || continue
     if [ "$mode" = "-" ]; then
@@ -141,6 +157,25 @@ symlink_entries() {
       printf '%s\t%s\n' "$path" "${rest#=$'\t'}"
     fi
   done <<< "$raw"
+}
+
+# tree_loads_checkout <tree> <checkout> -> 0 when the dependency tree at
+# <tree> loads the project's OWN source from <checkout> (a physical path).
+# A link to such a tree runs that checkout's code, not this one's, however
+# identical the lockfiles are. Composer writes the root package's autoload
+# rules against $baseDir, which PHP resolves through the link; an editable
+# Python install (poetry, uv, pip -e) records its source in direct_url.json.
+tree_loads_checkout() {
+  local tree="$1" checkout="$2" f url dir
+  grep -qsF '$baseDir . ' "$tree"/composer/autoload_*.php && return 0
+  for f in "$tree"/lib/python*/site-packages/*.dist-info/direct_url.json; do
+    [ -f "$f" ] || continue
+    url=$(jq -r 'select(.dir_info.editable == true) | .url // empty' "$f" 2>/dev/null) || continue
+    case "$url" in file://*) ;; *) continue ;; esac
+    dir=$(cd "${url#file://}" 2>/dev/null && pwd -P) || continue
+    case "$dir/" in "$checkout"/*) return 0 ;; esac
+  done
+  return 1
 }
 # END dependency-lockfile map
 
@@ -171,18 +206,25 @@ fi
 
 LINKED=0
 COPIED=0
+MAIN_REAL=$(cd "$MAIN" && pwd -P)
 
 while IFS= read -r line; do
   [ -n "$line" ] || continue
   entry="${line%%$'\t'*}"
-  LOCKS=()
+  SPECS=()
   if [ "$line" != "$entry" ]; then
     IFS=$'\t' read -ra LOCKS <<< "${line#*$'\t'}"
+    # :(glob) keeps a * inside one directory, as the Stop hook's shell glob does.
+    for lock in "${LOCKS[@]}"; do SPECS+=(":(glob)$lock"); done
   fi
   # ${arr[@]+"${arr[@]}"}: an empty array is "unbound" under set -u in bash < 4.4
-  if [ "$BASE_OK" -eq 1 ] && [ "${#LOCKS[@]}" -gt 0 ] \
-      && git -C "$WORKTREE" diff --name-only "$BASE...HEAD" -- ${LOCKS[@]+"${LOCKS[@]}"} 2>/dev/null | grep -q .; then
+  if [ "$BASE_OK" -eq 1 ] && [ "${#SPECS[@]}" -gt 0 ] \
+      && git -C "$WORKTREE" diff --name-only "$BASE...HEAD" -- ${SPECS[@]+"${SPECS[@]}"} 2>/dev/null | grep -q .; then
     echo "worktree-provision: lockfile differs from $BASE — not linking $entry; run a real install in the worktree"
+    continue
+  fi
+  if tree_loads_checkout "$MAIN/$entry" "$MAIN_REAL"; then
+    echo "worktree-provision: $entry loads the main checkout's own source — not linking $entry; run a real install in the worktree"
     continue
   fi
   if [ -e "$MAIN/$entry" ] && [ ! -e "$WORKTREE/$entry" ]; then
