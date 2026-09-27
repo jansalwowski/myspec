@@ -166,5 +166,60 @@ expect approve "$(stop 70 "$WT_N")" "nested: identical apps/web/package-lock.jso
 printf 'v2\n' > "$WT_N/apps/web/package-lock.json"
 expect block "$(stop 71 "$WT_N")" "nested: a changed apps/web/package-lock.json blocks"
 
+# --- a tree that loads the project's own source blocks despite equal lockfiles
+MAIN_C=$(new_dep_repo composer vendor composer.lock '{"isolation":{"provision":{"symlink":["vendor"]}}}')
+mkdir -p "$MAIN_C/vendor/composer"
+printf "<?php\nreturn array('App\\\\\\\\' => array(\$baseDir . '/src'));\n" > "$MAIN_C/vendor/composer/autoload_psr4.php"
+WT_C="$ROOT/composer-wt"
+git -C "$MAIN_C" worktree add -q -b feat "$WT_C" main
+ln -s "$MAIN_C/vendor" "$WT_C/vendor"
+expect block "$(stop 80 "$WT_C")" "a vendor whose Composer autoload maps \$baseDir blocks"
+
+MAIN_E=$(new_dep_repo editable .venv uv.lock '{"isolation":{"provision":{"symlink":[".venv"]}}}')
+mkdir -p "$MAIN_E/.venv/lib/python3.12/site-packages/app-0.1.dist-info"
+printf '{"url":"file://%s","dir_info":{"editable":true}}\n' "$MAIN_E" \
+  > "$MAIN_E/.venv/lib/python3.12/site-packages/app-0.1.dist-info/direct_url.json"
+WT_E="$ROOT/editable-wt"
+git -C "$MAIN_E" worktree add -q -b feat "$WT_E" main
+ln -s "$MAIN_E/.venv" "$WT_E/.venv"
+expect block "$(stop 81 "$WT_E")" "a .venv with an editable install of the main checkout blocks"
+
+# --- an unlisted .venv pointing outside this repo is not the gate's business --
+MAIN_V=$(new_dep_repo central src/x poetry.lock '')
+mkdir -p "$ROOT/store/proj"
+ln -s "$ROOT/store/proj" "$MAIN_V/.venv"
+expect approve "$(stop 82 "$MAIN_V")" "a .venv linked to a central store is accepted in the main checkout"
+
+# --- ./vendor is the same entry as vendor -------------------------------------
+MAIN_D=$(new_dep_repo dotslash vendor composer.lock '{"isolation":{"provision":{"symlink":["./vendor"]}}}')
+WT_D="$ROOT/dotslash-wt"
+git -C "$MAIN_D" worktree add -q -b feat "$WT_D" main
+ln -s "$MAIN_D/vendor" "$WT_D/vendor"
+expect approve "$(stop 83 "$WT_D")" "./vendor with identical composer.lock is accepted"
+
+# --- an empty lockfile name does not abort the hook --------------------------
+MAIN_Z=$(new_dep_repo emptylock deps deps.lock '{"isolation":{"provision":{"symlink":[{"path":"deps","lockfiles":[""]}]}}}')
+WT_Z="$ROOT/emptylock-wt"
+git -C "$MAIN_Z" worktree add -q -b feat "$WT_Z" main
+ln -s "$MAIN_Z/deps" "$WT_Z/deps"
+expect approve "$(stop 84 "$WT_Z")" "lockfiles: [\"\"] is unguarded and does not abort"
+
+# --- a string lockfiles still guards; vendor/bundle is guarded by Gemfile.lock -
+MAIN_S=$(new_dep_repo strlock vendor composer.lock '{"isolation":{"provision":{"symlink":["node_modules",{"path":"vendor","lockfiles":"composer.lock"}]}}}')
+WT_S="$ROOT/strlock-wt"
+git -C "$MAIN_S" worktree add -q -b feat "$WT_S" main
+ln -s "$MAIN_S/vendor" "$WT_S/vendor"
+printf 'v2\n' > "$WT_S/composer.lock"
+expect block "$(stop 85 "$WT_S")" "\"lockfiles\": \"composer.lock\" still guards vendor"
+
+MAIN_R=$(new_dep_repo bundle vendor/bundle Gemfile.lock '{"isolation":{"provision":{"symlink":["vendor/bundle"]}}}')
+WT_R="$ROOT/bundle-wt"
+git -C "$MAIN_R" worktree add -q -b feat "$WT_R" main
+mkdir -p "$WT_R/vendor"
+ln -s "$MAIN_R/vendor/bundle" "$WT_R/vendor/bundle"
+expect approve "$(stop 86 "$WT_R")" "vendor/bundle with identical Gemfile.lock is accepted"
+printf 'v2\n' > "$WT_R/Gemfile.lock"
+expect block "$(stop 87 "$WT_R")" "vendor/bundle with a changed Gemfile.lock blocks"
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

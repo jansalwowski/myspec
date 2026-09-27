@@ -89,5 +89,57 @@ bash "$SCRIPT" "$ROOT/mixed-wt" --base main >/dev/null
 [ -L "$ROOT/mixed-wt/vendor" ] && ok || fail "mixed: vendor is linked when only package-lock.json changed"
 [ ! -e "$ROOT/mixed-wt/node_modules" ] && ok || fail "mixed: node_modules is skipped when package-lock.json changed"
 
+# new_main <name> <myspec-json> -> an empty main checkout with that config
+new_main() {
+  local main="$ROOT/$1"
+  mkdir -p "$main"
+  git init -q -b main "$main"
+  git -C "$main" config user.email t@t
+  git -C "$main" config user.name t
+  printf 'vendor\nnode_modules\n.venv\n' > "$main/.gitignore"
+  printf '%s\n' "$2" > "$main/.myspec.json"
+  printf '%s\n' "$main"
+}
+commit_all() { git -C "$1" add -A; git -C "$1" commit -q -m "$2"; }
+
+# --- one malformed entry does not drop the others ----------------------------
+M=$(new_main malformed '{"isolation":{"provision":{"symlink":["node_modules",{"path":"vendor","lockfiles":"composer.lock"},42]}}}')
+mkdir -p "$M/node_modules/pkg" "$M/vendor/pkg"; printf 'v1\n' > "$M/composer.lock"; commit_all "$M" init
+git -C "$M" worktree add -q -b bump "$ROOT/malformed-wt" main
+printf 'v2\n' > "$ROOT/malformed-wt/composer.lock"; git -C "$ROOT/malformed-wt" commit -q -am bump
+bash "$SCRIPT" "$ROOT/malformed-wt" --base main >/dev/null
+[ -L "$ROOT/malformed-wt/node_modules" ] && ok || fail "malformed: node_modules is still linked"
+[ ! -e "$ROOT/malformed-wt/vendor" ] && ok || fail "malformed: a string lockfiles still guards vendor"
+
+# --- a * in a lockfile stays in one directory, as in the Stop hook -----------
+M=$(new_main globdir '{"isolation":{"provision":{"symlink":[".venv"]}}}')
+mkdir -p "$M/.venv/lib" "$M/requirements"; printf 'v1\n' > "$M/requirements/dev.txt"
+printf 'v1\n' > "$M/poetry.lock"; commit_all "$M" init
+git -C "$M" worktree add -q -b bump "$ROOT/globdir-wt" main
+printf 'v2\n' > "$ROOT/globdir-wt/requirements/dev.txt"; git -C "$ROOT/globdir-wt" commit -q -am bump
+bash "$SCRIPT" "$ROOT/globdir-wt" --base main >/dev/null
+[ -L "$ROOT/globdir-wt/.venv" ] && ok || fail "globdir: requirements*.txt does not match requirements/dev.txt"
+
+# --- vendor/bundle is pinned by Gemfile.lock ---------------------------------
+M=$(new_main bundle '{"isolation":{"provision":{"symlink":["vendor/bundle"]}}}')
+mkdir -p "$M/vendor/bundle/gem"; printf 'v1\n' > "$M/Gemfile.lock"; commit_all "$M" init
+git -C "$M" worktree add -q -b bump "$ROOT/bundle-wt" main
+printf 'v2\n' > "$ROOT/bundle-wt/Gemfile.lock"; git -C "$ROOT/bundle-wt" commit -q -am bump
+bash "$SCRIPT" "$ROOT/bundle-wt" --base main >/dev/null
+[ ! -e "$ROOT/bundle-wt/vendor/bundle" ] && ok || fail "bundle: vendor/bundle is not linked when Gemfile.lock changed"
+
+# --- a tree that loads the main checkout's own source is never linked --------
+M=$(new_main selfsrc '{"isolation":{"provision":{"symlink":["vendor",".venv"]}}}')
+mkdir -p "$M/vendor/composer" "$M/.venv/lib/python3.12/site-packages/app-0.1.dist-info"
+printf "<?php\nreturn array('App\\\\\\\\' => array(\$baseDir . '/src'));\n" > "$M/vendor/composer/autoload_psr4.php"
+printf '{"url":"file://%s","dir_info":{"editable":true}}\n' "$M" \
+  > "$M/.venv/lib/python3.12/site-packages/app-0.1.dist-info/direct_url.json"
+printf 'v1\n' > "$M/composer.lock"; printf 'v1\n' > "$M/uv.lock"; commit_all "$M" init
+git -C "$M" worktree add -q -b same "$ROOT/selfsrc-wt" main
+out=$(bash "$SCRIPT" "$ROOT/selfsrc-wt" --base main)
+[ ! -e "$ROOT/selfsrc-wt/vendor" ] && ok || fail "selfsrc: a Composer vendor with \$baseDir rules is not linked"
+[ ! -e "$ROOT/selfsrc-wt/.venv" ] && ok || fail "selfsrc: a .venv with an editable install of main is not linked"
+printf '%s' "$out" | grep -qF "own source — not linking vendor" && ok || fail "selfsrc: output says why vendor was skipped"
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
