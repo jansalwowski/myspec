@@ -364,20 +364,52 @@ fi
 # Clean up marker after verification runs (success or failure)
 trap 'rm -f "$MARKER_FILE"' EXIT
 
-# 120s cap per check. Stock macOS has neither `timeout` nor `gtimeout` (the
-# latter needs coreutils), and the previous prefix-string form degraded to no
-# cap at all on exactly that machine — the gate then hangs on a stuck check
-# instead of failing it, which reads as a frozen agent. perl is in the macOS
-# base system; alarm(2) survives exec, so SIGALRM terminates the bash -c child
-# at the deadline (exit 142). A function, not a command prefix: the perl form
-# cannot survive the word-splitting an unquoted $TIMEOUT_CMD relies on.
+# Per-check time cap. A check that outlives it is killed and reported as
+# timed out: the result is unknown, which is not a failure, and the report must
+# say which one it is (a green suite killed at the cap once read as a red one).
+# MYSPEC_CHECK_CAP_SECONDS may lower the cap (the hook tests use it); a value
+# above the default is ignored, so it can never raise it.
+CHECK_CAP_SECONDS=120
+if [[ "${MYSPEC_CHECK_CAP_SECONDS:-}" =~ ^[1-9][0-9]*$ ]] && [ "$MYSPEC_CHECK_CAP_SECONDS" -lt "$CHECK_CAP_SECONDS" ]; then
+  CHECK_CAP_SECONDS=$MYSPEC_CHECK_CAP_SECONDS
+fi
+CAP_SENTINEL=$(mktemp "${TMPDIR:-/tmp}/.myspec-cap.XXXXXX")
+rm -f "$CAP_SENTINEL"
+
+# run_with_cap <command>: runs it under the cap and kills the whole process
+# group at the deadline. Killing only the direct child is not enough: a test
+# runner's workers inherit the output pipe, the $(...) capture waits for them,
+# and the hook then waits for the full run anyway (measured: 456 s under a
+# 120 s cap). perl is in the macOS base system and in nearly every Linux
+# image; it puts the check in its own process group, SIGTERMs the group at the
+# deadline (SIGKILL once the check exits, at most 5 s later) and touches $CAP_SENTINEL so the caller knows
+# the exit was the cap's, not the command's own. Without perl, GNU timeout
+# also signals the group; its exit 124 is ambiguous, so the caller also checks
+# the elapsed time. With neither, the check runs uncapped.
 run_with_cap() {
-  if command -v gtimeout &>/dev/null; then
-    gtimeout 120 bash -c "$1"
+  if command -v perl &>/dev/null; then
+    perl -e '
+      my ($cap, $sentinel) = (shift, shift);
+      my $pid = fork() // exit 127;
+      if ($pid == 0) { setpgrp(0, 0); exec @ARGV or exit 127 }
+      setpgrp($pid, $pid);
+      local $SIG{ALRM} = sub {
+        open(my $fh, ">", $sentinel); close($fh);
+        kill "TERM", -$pid;
+        for (1 .. 50) { last if waitpid($pid, 1) > 0; select(undef, undef, undef, 0.1) }
+        kill "KILL", -$pid; waitpid($pid, 0); exit 124;
+      };
+      alarm $cap;
+      waitpid($pid, 0);
+      alarm 0;
+      exit(($? & 127) ? 128 + ($? & 127) : $? >> 8);
+    ' "$CHECK_CAP_SECONDS" "$CAP_SENTINEL" bash -c "$1"
+  elif command -v gtimeout &>/dev/null; then
+    gtimeout "$CHECK_CAP_SECONDS" bash -c "$1"
   elif command -v timeout &>/dev/null; then
-    timeout 120 bash -c "$1"
+    timeout "$CHECK_CAP_SECONDS" bash -c "$1"
   else
-    perl -e 'alarm 120; exec @ARGV' bash -c "$1"
+    bash -c "$1"
   fi
 }
 
@@ -440,6 +472,7 @@ fi
 
 # Run each required check
 FAILED_CHECKS=()
+TIMED_OUT_CHECKS=()
 FAILED_OUTPUT=()
 
 CHECKS_COUNT=$(jq '.checks | length' "$CONFIG_FILE")
@@ -458,18 +491,48 @@ for i in $(seq 0 $((CHECKS_COUNT - 1))); do
     COMMAND="$DIFF_COMMAND"
   fi
 
+  rm -f "$CAP_SENTINEL"
+  CHECK_START=$(date +%s)
   OUTPUT=$(cd "$REPO_ROOT" && MYSPEC_STOP_HOOK_ACTIVE=1 run_with_cap "$COMMAND" 2>&1) && EXIT_CODE=0 || EXIT_CODE=$?
+  CHECK_ELAPSED=$(( $(date +%s) - CHECK_START ))
 
   if [ "$EXIT_CODE" -ne 0 ]; then
-    FAILED_CHECKS+=("$NAME")
-    # Truncate output to avoid giant JSON
-    TRUNCATED=$(echo "$OUTPUT" | tail -50 | head -c 2000)
-    FAILED_OUTPUT+=("[$NAME] $COMMAND failed:"$'\n'"$TRUNCATED")
+    # Keep the end of the output: it names the result (a summary line, the
+    # last error). The first 2000 characters of the last 50 lines cut that
+    # end off mid-line.
+    TRUNCATED=$(printf '%s\n' "$OUTPUT" | tail -50 | tail -c 2000)
+    TIMED_OUT=0
+    if [ -f "$CAP_SENTINEL" ]; then
+      TIMED_OUT=1
+    elif [ "$EXIT_CODE" -eq 124 ] && [ "$CHECK_ELAPSED" -ge "$CHECK_CAP_SECONDS" ]; then
+      TIMED_OUT=1
+    fi
+    if [ "$TIMED_OUT" -eq 1 ]; then
+      TIMED_OUT_CHECKS+=("$NAME")
+      FAILED_OUTPUT+=("[$NAME timed out after ${CHECK_CAP_SECONDS}s] $COMMAND was killed before it finished, so its result is unknown. This is not a test failure. Run the check directly and report its real exit code; if it passes but is slow, reduce its runtime (narrow what it runs). Do not raise the cap. Output so far:"$'\n'"$TRUNCATED")
+    else
+      FAILED_CHECKS+=("$NAME")
+      FAILED_OUTPUT+=("[$NAME] $COMMAND failed:"$'\n'"$TRUNCATED")
+    fi
   fi
 done
+rm -f "$CAP_SENTINEL"
 
-if [ ${#FAILED_CHECKS[@]} -gt 0 ]; then
-  NAMES=$(printf '%s, ' "${FAILED_CHECKS[@]}"); NAMES=${NAMES%, }
+if [ ${#FAILED_CHECKS[@]} -gt 0 ] || [ ${#TIMED_OUT_CHECKS[@]} -gt 0 ]; then
+  # The headline separates the two outcomes: "failed" is a result, "timed
+  # out" is the absence of one.
+  NAMES=""
+  if [ ${#FAILED_CHECKS[@]} -gt 0 ]; then
+    NAMES=$(printf '%s, ' "${FAILED_CHECKS[@]}"); NAMES="failed: ${NAMES%, }"
+  fi
+  if [ ${#TIMED_OUT_CHECKS[@]} -gt 0 ]; then
+    TIMED=$(printf '%s, ' "${TIMED_OUT_CHECKS[@]}"); TIMED="timed out after ${CHECK_CAP_SECONDS}s, result unknown: ${TIMED%, }"
+    if [ -n "$NAMES" ]; then
+      NAMES="$NAMES; $TIMED"
+    else
+      NAMES="$TIMED"
+    fi
+  fi
   # Join with real newline-delimited separators (multi-char IFS joins only
   # use the first character, so the old IFS="\n---\n" emitted literal '\')
   DETAILS=""
@@ -485,7 +548,7 @@ if [ ${#FAILED_CHECKS[@]} -gt 0 ]; then
     exit 0
   fi
   # Escape for JSON
-  REASON=$(printf "Verification failed (%s). Fix errors before completing.\n\n%s" "$NAMES" "$DETAILS" | jq -Rs .)
+  REASON=$(printf "Verification did not pass (%s). Fix failures before completing; for a timeout, get the real result first.\n\n%s" "$NAMES" "$DETAILS" | jq -Rs .)
   echo "{\"decision\": \"block\", \"reason\": $REASON}"
   exit 0
 fi
