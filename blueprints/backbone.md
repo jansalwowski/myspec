@@ -40,7 +40,10 @@ Guide the user through creating a project topology file (`backbone.yml`) that gi
 6. "Files or directories the agent should NEVER modify directly? Or 'skip'.
    Examples: migration files, .env files, generated code directories"
 
-7. "What filename? (default: `backbone.yml`)" — default to backbone.yml if user presses Enter.
+7. "Does feature work merge into a branch other than the one that ships? Name the integration branch and the release branch, or 'skip' when both are the default branch.
+   Example: `integration: develop | release: main`"
+
+8. "What filename? (default: `backbone.yml`)" — default to backbone.yml if user presses Enter.
 
 ## Output Format
 
@@ -160,6 +163,15 @@ commands:
 {for each command from Q5:}
   {name}: "{command}"
 
+# ── BRANCHES ─────────────────────────────────────────────────────────────────
+
+# Read by bootstrap (branch-lag check) and feature-plan (the base it syncs).
+# Omit the section when feature work merges straight into the default branch.
+{if Q7 provided:}
+branches:
+  integration: {integration branch from Q7}
+  release: {release branch from Q7}
+
 # ── ROOT CONFIG ───────────────────────────────────────────────────────────────
 
 root_config:
@@ -185,7 +197,7 @@ Same as monorepo but without the `packages` section, no `relationships` section,
 
 ## Output Location
 
-Write to project root as `{filename from Q7}` (default: `backbone.yml`).
+Write to project root as `{filename from Q8}` (default: `backbone.yml`).
 
 ## Post-generation
 

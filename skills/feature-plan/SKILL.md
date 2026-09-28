@@ -32,7 +32,13 @@ All gates pass → proceed to Workflow Step 0.
 
 1. Read `${aiDir}/features/{feature}/tech-spec.md` — note implementation steps, file inventory, interfaces
 2. Read `${aiDir}/features/{feature}/spec.md` — note requirement IDs, acceptance criteria, edge cases
-3. Read existing code referenced in tech-spec (patterns to follow, files to modify)
+3. **Sync the base**, so snippets match the code implementers will see. `$INTEGRATION` is the branch feature work merges into: the topology file's `branches.integration`, else the default branch ([`_shared/git-helpers.md`](../_shared/git-helpers.md)). Set `BASE=origin/$INTEGRATION` and run `git fetch origin "$INTEGRATION"` (no remote configured: `BASE=$INTEGRATION`, skip the fetch; fetch exits non-zero: stop and report). Then `git merge-base --is-ancestor "$BASE" HEAD`:
+   - exit 0 — HEAD already contains it
+   - exit 1 — HEAD lags: `git merge --no-edit "$BASE"`; if the merge exits non-zero, `git merge --abort` and stop for the user
+   - any other exit (bad ref) — stop and report; never plan against an unverified base
+
+   After the sync, record `git rev-parse HEAD` (full 40-char SHA) as the plan header's `planned_against`: it is the tree Step 4 reads snippets from, so a branch's own earlier commits are not later mistaken for drift. `feature-implement` warns when a `Modify:` file changed after it.
+4. Read existing code referenced in tech-spec (patterns to follow, files to modify) from the synced tree
 
 While reading, collect every project-wide exact value (version floors, size/perf limits, naming rules, invariants) — these become the plan's Global Constraints section in Step 3.
 
@@ -49,6 +55,8 @@ For each implementation step in the tech-spec:
 - Tasks modifying the same file are NEVER parallel
 - When in doubt, make it sequential
 - Group tasks in parallel only when each is large enough to amortise a worktree merge and review; small tasks run faster in sequence
+
+**Phase grouping rule:** every phase pays a full barrier suite and a phase review, however small it is. Grouping is the default: put consecutive sequential tasks in one phase when each is small (one module) or they touch disjoint layers. Start a new phase only after a task that publishes a contract later tasks are written against — an API response shape, an interface another layer consumes — because a rejected contract means redoing every consumer. A dependency inside the phase (a service over the migration beside it, a component using the hook beside it) does not split it: one rejection redoes one small neighbor.
 
 **Milestone ordering rule:**
 - Group tasks into **milestones** — each milestone is a vertical slice delivering one coherent piece of functionality.
@@ -67,6 +75,9 @@ For each implementation step in the tech-spec:
 
 **Task right-sizing (the step → task mapping is not 1:1):**
 A task is the smallest unit that carries its own test cycle and is worth a fresh reviewer's gate. Fold setup, configuration, scaffolding, and docs steps into the task whose deliverable needs them; split only where a reviewer could meaningfully reject one task while approving its neighbor. The inverse holds too: several trivial same-shape changes (rename sweeps, config plumbing) are ONE task listing every file + change, not N micro-tasks — N reviewer gates on one mechanical sweep is overhead, not protection.
+
+**Prototype before prescribing (REQUIRED for algorithms and relied-on library calls):**
+A call the plan never ran reaches implementers as a mandate, and its defect surfaces a fix loop later. When a task's Step 2 holds an algorithm or a third-party call whose behavior it relies on, run that code first in a scratch directory outside the tree on realistic inputs (the spec's edge cases, real data shapes), and put the command and observed result on the task's `**Prototype:**` line. For a new module, run the planned test against the planned code once: it fails without Step 2 and passes with it. A result that contradicts the tech-spec is a tech-spec defect: say so and stop.
 
 **Global Constraints (REQUIRED, once per plan):**
 Populate the plan's `## Global Constraints` section with the project-wide exacts collected in Step 1 — version floors, size/perf limits, naming rules, invariants — copied verbatim from `spec.md` / `tech-spec.md` with source refs. Every task's requirements implicitly include this section; per-task text must not re-derive or paraphrase these values — re-derivation is how they drift.
@@ -240,7 +251,7 @@ Before assigning files to tasks:
 ## Task Expansion Rules
 
 1. **Exact file paths** — from tech-spec file inventory
-2. **Complete code** — not "add validation", but the actual validation code. Implementers paste snippets verbatim, so each must pass the project's lint rules (e.g. rethrow with `{ cause }`) and carry no module-level side effects (resolve paths, read files, or touch globals inside functions, not at import time)
+2. **Complete code where it is risky** — algorithms, library calls, validation, anything a Prototype line covers: not "add validation", but the actual validation code. Mechanical parts (wiring, config plumbing, re-exports) get exact signatures and test names instead. Implementers paste snippets verbatim, so each must pass the project's lint rules (e.g. rethrow with `{ cause }`) and carry no module-level side effects (resolve paths, read files, or touch globals inside functions, not at import time)
 3. **TDD sequence** — write test → run (fail) → implement → run (pass) → commit
 4. **Run commands** — exact verification commands with expected output (from `.claude/verification.json`)
 5. **Commit messages** — conventional commits: `feat({feature}): description`
@@ -292,13 +303,15 @@ so one is a session's worth of work.
 Before presenting the plan:
 
 - [ ] `## Spec Coverage` holds one row per spec.md requirement ID, per spec.md acceptance criterion, and per tech-spec.md implementation step, each mapped to task IDs or explicitly `DEFERRED` with a reason (Step 4.5)
-- [ ] Header `spec` / `tech_spec` keys point at the feature's `spec.md` and `tech-spec.md`
+- [ ] Header `spec` / `tech_spec` keys point at the feature's `spec.md` and `tech-spec.md`; `planned_against` holds HEAD's SHA after the Step 1 sync
 - [ ] `## Global Constraints` holds every project-wide exact (versions, limits, naming, invariants) verbatim with source refs; no task text re-derives one
 - [ ] Task boundaries are right-sized — each task independently rejectable by a reviewer; trivial same-shape changes batched into one task
 - [ ] Every task has exact file paths matching tech-spec file inventory
 - [ ] Every task has TDD steps and a `**Verify at phase review:**` command scoped to the task's own tests
+- [ ] Every algorithm or relied-on library call has a `**Prototype:**` line from a scratch run
 - [ ] Parallel groups have zero file overlap (check file lists)
 - [ ] Barriers exist after every parallel group
+- [ ] Consecutive small sequential tasks share a phase; a new phase starts only after a task publishing a contract later tasks are written against
 - [ ] Execution order table matches task dependencies
 - [ ] Every `DEFERRED` row was surfaced to the user in Step 6, not decided unilaterally
 - [ ] Every task has a populated **Spec contract** block with verbatim quotes (not paraphrased) from spec.md / tech-spec.md

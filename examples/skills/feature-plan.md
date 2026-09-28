@@ -34,6 +34,8 @@ The skill reads `references/plan-templates.md` before drafting.
 
 The skill loads `tech-spec.md` (6 steps, file inventory, interfaces) and `spec.md` (5 acceptance criteria).
 
+Before reading any code it syncs the base. `backbone.yml` has no `branches` section, so the integration branch is the default branch, `main`. After `git fetch origin main`, `git merge-base --is-ancestor origin/main HEAD` exits 1: a teammate's merge changed `listReports()`, the query Task 6 modifies. The skill merges `origin/main`, reads `listReports()` from the merged tree, and records `git rev-parse HEAD` as `planned_against`.
+
 #### 2. Build dependency graph
 
 Each step depends on the previous one's output:
@@ -55,6 +57,7 @@ status: draft
 based_on_tech_spec_version: 1
 spec: ai/features/favorite-reports/spec.md
 tech_spec: ai/features/favorite-reports/tech-spec.md
+planned_against: 3f9c2a7e1b4d8c6f0a2e5b7d9c1f3a5e7b9d2c4f
 created: 2026-04-30
 ---
 
@@ -69,15 +72,14 @@ created: 2026-04-30
 
 | Phase | Mode | Tasks | Depends On |
 |-------|------|-------|------------|
-| 1 | sequential | T1: migration | — |
-| 2 | sequential | T2: ReportFavoritesService + tests | Phase 1 |
-| 3 | sequential | T3: API handlers + tests | Phase 2 |
-| 4 | sequential | T4: useReportFavorites hook + tests | Phase 3 |
-| 5 | sequential | T5: StarButton component + tests | Phase 4 |
-| 6 | sequential | T6: pin-to-top sort + integration test | Phase 5 |
+| 1 | sequential | T1: migration, T2: ReportFavoritesService + tests | — |
+| 2 | sequential | T3: API handlers + tests | Phase 1 |
+| 3 | sequential | T4: useReportFavorites hook + tests, T5: StarButton component + tests, T6: pin-to-top sort + integration test | Phase 2 |
 ```
 
 (Single-milestone, so the `### Milestone N:` heading is omitted and the Execution Order table stands alone.)
+
+Six sequential tasks, three phases. Every phase pays a full barrier suite and a phase review, so small adjacent tasks share one: the migration is a few lines and the service beside it is one module; the hook and the component that uses it are each small, and the sort query sits on another layer. The API gets a phase of its own because it publishes a contract: the hook is written against its response shape, and a rejected shape would mean redoing its consumers. The StarButton depends on the hook too, but a rejected hook redoes one small neighbor in the same phase, which is cheaper than another barrier.
 
 Each task carries a **Spec contract** block — verbatim quotes, not paraphrase — an **Interfaces** block (Consumes/Produces, exact signatures), plus a **Touch only** line whenever the Files block has a `Modify:` entry:
 
@@ -124,7 +126,7 @@ Task 6 (modifies the existing list query) gets a **Touch only** line because its
 Do not refactor the surrounding query builder — pre-existing tech debt is out of scope.
 ```
 
-Task 6 also adds a required `pinned: boolean` to `ReportRow`. The blast-radius grep finds `src/features/reports/__tests__/fixtures.ts`, which builds `ReportRow` literals, so Task 6 lists it too — without it the Phase 5 barrier fails typecheck in a file no task owns:
+Task 6 also adds a required `pinned: boolean` to `ReportRow`. The blast-radius grep finds `src/features/reports/__tests__/fixtures.ts`, which builds `ReportRow` literals, so Task 6 lists it too — without it the Phase 3 barrier fails typecheck in a file no task owns:
 
 ```markdown
 - Modify: `src/features/reports/__tests__/fixtures.ts`
@@ -188,6 +190,8 @@ Plan is ready. Commit before /feature-implement to avoid dangling files.
 - **Global Constraints and Interfaces are the anti-drift rails.** Project-wide exacts live once in the header section (every task implicitly includes them); exact signatures live in each task's Interfaces block. Task 4's hook calls `list(userId)` because Task 2's Produces line says so — an implementer who sees only their task text never guesses a name.
 - **Touch only lands wherever a task modifies an existing file.** Without it, a reviewer flags adjacent pre-existing code as a regression. Task 6 touches the list query, so it scopes the diff explicitly.
 - **Every barrier can be green.** A new required field breaks every literal and caller of the type, including files outside the task. Grepping consumers at plan time puts them in the task that caused the break, instead of leaving a red barrier for the phase reviewer to trace.
+- **Plan against the synced base.** The pre-merge `listReports()` would have given Task 6 a snippet for a query that no longer exists; `planned_against` lets `feature-implement` warn if it moves again before Task 6 runs.
+- **Phases amortise their fixed cost.** Six phases would run six full suites and six reviews for a migration, a wrapper hook and a button; three phases put a boundary only after the one task that publishes a contract.
 - **Single-milestone, all-sequential is fine.** Don't split into milestones to look "complex." The milestone checkpoint at the end gives the user an exit point.
 - **The commit decision is part of the skill.** Leaving the plan uncommitted is the failure mode Step 7 exists to prevent — there's no "leave uncommitted" option offered.
 
@@ -289,6 +293,16 @@ A task in a parallel group carries an isolation note, because its implementer ru
 
 **Task 5 (`ScheduleRunner` job)** is also big — bullmq registration, a retry/backoff state machine, and a cadence resolver — but it stays one task: splitting the retry machine from the cadence resolver would leave two half-tasks neither of which can be tested independently. Size is a signal, not a rule; the test cycle is the boundary.
 
+#### Prototype before prescribing
+
+Task 5's cadence resolver calls the project's cron library for the next run time — a relied-on library call, so the skill runs it in a scratch directory before writing the task. The tech-spec's "weekly, Monday 09:00 in the owner's timezone" crosses a DST change in the spec's own example, and the first run returns 09:00 UTC because the call defaults to UTC. Passing the timezone option fixes it, and the task prescribes that call. The skill records the passing run on the task:
+
+```markdown
+**Prototype:** `node "$SCRATCH"/next-run.mjs "0 9 * * 1" Europe/Warsaw 2026-03-27` → `2026-03-30T07:00:00Z` (09:00 local, after the DST change; without `tz` it returned 09:00Z)
+```
+
+Task 5 gets full code for the resolver. Task 6's API handlers are plumbing over the repositories, so they get exact signatures and test names, not pasted bodies.
+
 #### Step 4: Review loop (large plans only)
 
 12 tasks across 7 phases / 2 milestones (≥10 tasks → review loop applies). The skill self-reviews each milestone:
@@ -333,6 +347,7 @@ The user is already on `feat/scheduled-reports` (not the default branch), so the
 
 - **Parallel groups are a file-disjointness claim, not a wish.** Each group's tasks touch strictly separate files, and the barrier after the group is where the worktrees rejoin and verification runs. A group whose tasks share a file is a plan bug.
 - **Interfaces are what make parallelism safe.** Task 5 and Task 6 are written simultaneously by implementers who never see each other's code; the Produces line on Task 2 is the only place they learn the signature they both call.
+- **Run it before you prescribe it.** Reading the cron library's docs would have planned the UTC bug into Task 5; one scratch run moved the fix from a phase-review round to the plan.
 - **Right-sizing cuts both ways.** Task 8 split because a reviewer could reject one half and approve the other; Task 5 stayed whole because neither half has its own test cycle.
 - **Vertical-slice milestones still hold.** Milestone 1 is a complete vertical (migration → repos → types → services → integration test) — testable end-to-end before any UI exists.
 - **Probes are written by the planner, run by someone else.** `feature-implement` hands the Checkpoint probes block to a separate executor at each milestone; the agent that built the milestone never decides whether its verification ran.

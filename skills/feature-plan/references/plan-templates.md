@@ -13,12 +13,15 @@ feature: {feature-dir-name}
 based_on_spec_version: {spec_version from spec.md}
 spec: ${aiDir}/features/{feature}/spec.md
 tech_spec: ${aiDir}/features/{feature}/tech-spec.md
+planned_against: {full 40-char SHA of HEAD after the Step 1 sync}
 created: {TODAY}
 last_updated: {TODAY}
 ---
 ```
 
 `spec` / `tech_spec` are explicit pointers, not decoration: the plan argues from those two documents, so they travel with it — anyone executing or reviewing the plan reads both alongside it.
+
+`planned_against` is the commit every snippet was read from: HEAD once the integration branch is merged in, so the feature branch's own commits are part of the baseline. `feature-implement` diffs each `Modify:` file from it to the integration branch tip (`<sha>...origin/<integration>`, three dots, so only integration-branch changes since the sync count) and warns on a change; re-sync and re-record it whenever the plan is revised against newer code.
 
 Update `last_updated` whenever the plan is edited (including checkbox updates by `feature-implement`).
 
@@ -77,9 +80,8 @@ Resume behavior: A new agent reads the plan, skips `[x]` tasks, re-executes `[~]
 
 | Phase | Tasks | Mode | Depends On |
 |-------|-------|------|------------|
-| 1 | Task 1: [Backend task] | sequential | — |
-| 2 | Task 2: [Frontend task] | sequential | Phase 1 |
-| 3 | Task 3: [Tests] | sequential | Phase 2 |
+| 1 | Task 1: [Data task], Task 2: [Small service task] | sequential | — |
+| 2 | Task 3: [Frontend task that builds on the approved service] | sequential | Phase 1 |
 
 **Checkpoint probes:**
 - Target: `[command that serves the milestone on scratch config]` → `[URL or entry point]`
@@ -91,6 +93,7 @@ Resume behavior: A new agent reads the plan, skips `[x]` tasks, re-executes `[~]
 ```
 
 Notes:
+- A sequential phase may list several tasks; they run in listed order and share one barrier suite and one phase review (Step 2's phase grouping rule)
 - Phase numbers must be globally unique across the entire plan (Milestone 2 starts at the next available phase number)
 - First phase of Milestone 2+ uses `Milestone N` in Depends On (not a phase number from the previous milestone)
 - Single-milestone plans omit the `### Milestone N:` heading — the Execution Order table stands alone
@@ -121,6 +124,8 @@ Notes:
 
 **Depends on:** Task N-1
 
+**Prototype (required when Step 2 holds an algorithm or a relied-on library call):** `<scratch command>` → `<observed result>`; for a new module, "planned test fails without Step 2, passes with it"
+
 **Verify at phase review:** `<test command from .claude/verification.json, scoped to exact/path/to/file.test.ts>`
 (Scoped to this task's tests, never the full suite: the implementer runs it before reporting,
 and the phase reviewer runs every task's command once the phase is complete. Name the command
@@ -130,7 +135,7 @@ here so neither has to infer it.)
   [test code]
 
 - [ ] **Step 2: Implement**
-  [implementation code]
+  [complete code for risky logic; exact signatures for mechanical parts]
 
 - [ ] **Step 3: Commit**
   `git commit -m "feat({feature}): add component-name"`
