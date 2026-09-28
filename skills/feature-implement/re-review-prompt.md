@@ -1,6 +1,6 @@
 # Scoped Re-Review Prompt Template
 
-Dispatch after each fix round (SKILL.md Step 4d). The re-reviewer verifies the findings were addressed and checks the fix diff for new breakage. It is not a fresh phase review — the full review already happened.
+Dispatch after each fix round (SKILL.md Step 4d). The re-reviewer verifies the findings were addressed and checks the fix diff for new breakage. It is not a fresh phase review — the full review already happened. Dispatch a new re-reviewer every round, never resume the last one: a resumed reviewer carries every earlier round's transcript (one reached 251k tokens), and the rounds summary below carries all it needs from them.
 
 Build the fix-diff package first. `FIX_BASE` is the HEAD the previous review saw — never `HEAD~1`:
 
@@ -21,6 +21,13 @@ Task tool (general-purpose):
     ## The Findings Under Verification
 
     [Critical/Important findings from the previous review, copied verbatim, one per bullet]
+
+    ## Earlier Rounds
+
+    [Rounds summary — REQUIRED]
+
+    Context only: re-open a closed finding only if this fix diff breaks it
+    again.
 
     ## The Fix
 
@@ -97,6 +104,7 @@ Task tool (general-purpose):
 
 - `model` — REQUIRED tier per SKILL.md Model Selection; scoped re-reviews of small fix diffs take `cheap`-to-`mid`
 - `[Findings]` — the Critical/Important findings still open, copied verbatim from the previous review, one per bullet
+- `[Rounds summary]` — one paragraph: each earlier round's findings closed, the controller's rulings on them, and approaches already rejected; "none" in round 1
 - `[FIX_BASE sha]` — the HEAD the previous review saw (recorded by the controller before the fix dispatch)
 - `[HEAD sha]` — current commit
 - `[PKG path]` — the file the controller wrote the fix-diff package to

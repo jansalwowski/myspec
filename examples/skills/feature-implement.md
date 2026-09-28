@@ -52,6 +52,8 @@ Parses the Execution Order table: 6 sequential tasks, no barriers between them �
 
 **Resume detection:** all checkboxes `[ ]`. Fresh run.
 
+**Plan freshness:** the front-matter carries `planned_against: <sha>`, so the skill diffs the tasks' `Modify:` paths from that SHA to the integration branch tip. Exit 0 with empty output: no drift. Had a file changed, it would warn, log a `Ruling:`, and tell the affected task's implementer. Had the SHA been squashed away (`git diff` exits 128), it would warn that freshness cannot be verified rather than read the empty output as unchanged.
+
 **Setup** also writes `.claude/state/implement-in-progress.json` (`started_at` plus the feature name). Until Step 5 removes it, the Stop hook reports failing verification checks at controller turn ends as a warning rather than a block — mid-run the tree is red by design, and the controller may not fix code itself.
 
 #### Step 2–3 — Task dispatch loop
@@ -76,7 +78,7 @@ After all 6 implementers report `DONE`, the phase hits its barrier. The controll
 - naming, pattern conformance, maintainability ✓
 - Verdict: `APPROVED`.
 
-Had the review returned findings instead, they would be triaged, never silently dropped: **Minor** findings park in the plan's `## Execution Log` (`Deferred minor (Phase 1): …`) for the holistic reviewer to triage — they never enter a fix loop. **Critical/Important** findings enter a capped loop: rounds 1–3 resume the same implementer with the findings verbatim (its context is intact), rounds 4–5 dispatch fresh on a higher tier, and every round ends with a *scoped* re-review that verdicts each finding ADDRESSED / NOT ADDRESSED against the fix diff only — never a full phase re-review — running just the checks the finding touches (lint on the touched files for a lint finding, the named test for a test finding). The next barrier or milestone checkpoint runs the full suite over the fix. If round 5 still leaves findings open, the Controller adjudicates each one — parked with a recorded `Ruling:` or carried into the next phase — never a round 6. And the Controller never pre-judges: a dispatch prompt containing "do not flag X" is the bug, not the finding.
+Had the review returned findings instead, they would be triaged, never silently dropped: **Minor** findings park in the plan's `## Execution Log` (`Deferred minor (Phase 1): …`) for the holistic reviewer to triage — they never enter a fix loop. **Critical/Important** findings enter a capped loop: round 1 resumes the same implementer with the findings verbatim (its context is intact), rounds 2–5 dispatch a fresh implementer with the task text, the open findings and a one-paragraph summary of earlier rounds (rounds 4–5 one tier up), and every round ends with a *scoped* re-review — itself a fresh dispatch carrying that summary, never resumed — that verdicts each finding ADDRESSED / NOT ADDRESSED against the fix diff only — never a full phase re-review — running just the checks the finding touches (lint on the touched files for a lint finding, the named test for a test finding). The next barrier or milestone checkpoint runs the full suite over the fix. If round 5 still leaves findings open, the Controller adjudicates each one — parked with a recorded `Ruling:` or carried into the next phase — never a round 6. And the Controller never pre-judges: a dispatch prompt containing "do not flag X" is the bug, not the finding.
 
 #### Checkboxes close
 
@@ -167,7 +169,7 @@ The skill walks the DAG. **Phase 2 (`parallel:repos`)** is the showcase: T2 Sche
 4. **Barrier merge:** the controller runs `task-worktree.sh merge scheduled-reports-t2`, then `merge scheduled-reports-t3` — one at a time onto `feat/scheduled-reports`, each removing its worktree and branch. No conflicts — the file lists were disjoint. Then it runs the full suite once across the merged tree, logging it for the reviewer.
 5. **Phase review** over `PHASE_BASE..HEAD` covers both tasks at once → `APPROVED`. Both checkboxes flip to `[x]`.
 
-Had the review returned Critical/Important findings, the fix loop would run: rounds 1–3 resume the implementer that owns the finding (its context is intact; its worktree is gone after the merge, so it works from the controller's checkout now), rounds 4–5 dispatch fresh one tier up, and every round ends with a *scoped* re-review over `FIX_BASE..HEAD` that verdicts each finding ADDRESSED / NOT ADDRESSED, running only the checks that finding touches — never a full phase re-review. Minor findings never enter the loop; they park in the plan's `## Execution Log` for the holistic reviewer to triage.
+Had the review returned Critical/Important findings, the fix loop would run: round 1 resumes the implementer that owns the finding (its context is intact), rounds 2–5 dispatch fresh (rounds 4–5 one tier up) — all from the controller's checkout, since the task worktree is gone after the merge — and every round ends with a fresh *scoped* re-review over `FIX_BASE..HEAD` that verdicts each finding ADDRESSED / NOT ADDRESSED, running only the checks that finding touches — never a full phase re-review. Minor findings never enter the loop; they park in the plan's `## Execution Log` for the holistic reviewer to triage.
 
 #### Milestone Checkpoint
 

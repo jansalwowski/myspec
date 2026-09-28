@@ -157,6 +157,16 @@ Parse milestones first, then build a DAG within each:
 - Parallel tasks have zero file overlap (check file lists — if they share a file, treat as sequential).
 - Phase numbers are globally unique (no duplicates across milestones).
 
+**Plan freshness** — only when the front-matter has `planned_against: <sha>`; skip silently without it (older plans). Collect the `Modify:` paths of every task not yet `[x]`, refresh the integration branch (the branch the feature merges into; `git fetch origin <integration>` when it has a remote), and run `git diff --name-only <sha> <integration ref> -- <paths>`:
+
+| Result | Action |
+|--------|--------|
+| exits 0, empty output | Fresh — proceed |
+| exits 0, lists files | Warn with the list, log `Ruling: run despite <files> changed on <integration> since planned_against — implementers read current code — cost if wrong: a stale task snippet costs a fix round`, and tell each task that modifies a listed file that it changed after the plan was written |
+| non-zero exit (128: the SHA was rebased or squashed away) | Warn "cannot verify plan freshness — planned_against <sha> not found" — never read as unchanged — and proceed |
+
+It warns rather than blocks: implementers already work from the current code and `Touch only` scopes their edits, while the fix for real drift — re-planning — is the user's call, which the warning and the logged ruling put in front of them.
+
 ### Step 2: Setup
 
 1. Verify Step 0's chosen branch/worktree is active (`git rev-parse --abbrev-ref HEAD` matches the chosen target). If not, bail out and re-run Step 0.
@@ -242,9 +252,10 @@ PKG=$(mktemp "${TMPDIR:-/tmp}/phase-review.XXXXXX")
 
 **d) Fix loop** — a round is one fix dispatch plus one scoped re-review. Five rounds maximum per phase:
 
-- **Rounds 1–3 — resume the implementer that owns the finding.** Its context is intact: it knows the task, the code, and its own choices. Send the open findings verbatim, scoped to its task. A parallel task's worktree was merged and removed at 4a: tell the resumed implementer to work from your checkout now, since fixes are sequential. If the harness cannot resume a completed subagent, dispatch a fresh implementer carrying the task text plus the findings.
-- **Rounds 4–5 — fresh implementer, one tier up.** A loop that survives three resumes usually means the implementer cannot see its own problem — fresh eyes and a capability bump in one move. Frame the dispatch: "A prior implementer attempted this fix N times; you own it now."
-- **Every round ends with a scoped re-review** (`./re-review-prompt.md`), never a full phase re-review. Record `FIX_BASE` (the HEAD the previous review saw), build a fix-diff package over `FIX_BASE..HEAD` the same way as 4b, and dispatch with the open findings list. The re-reviewer verdicts each finding ADDRESSED / NOT ADDRESSED against the fix diff only, running just the checks each finding touches; the next barrier or milestone checkpoint runs the full suite over the fix. New Critical/Important breakage in the fix diff joins the open findings; out-of-scope observations go to the Execution Log as deferred minors — they never extend the loop.
+- **Round 1 — resume the implementer that owns the finding.** Its context is intact: it knows the task, the code, and its own choices. Send the open findings verbatim, scoped to its task. If the harness cannot resume a completed subagent, dispatch fresh as in round 2.
+- **Rounds 2–5 — fresh implementer.** A resumed context grows by a whole transcript per round and carries the last round's stale hypotheses, while each round usually chases a different root cause (one run's implementer grew from 194k to 430k tokens over three resumed rounds). Dispatch with the task text, the open findings verbatim, and the rounds summary below; it reads the current code itself. Frame it: "A prior implementer attempted this fix N times; you own it now." Rounds 4–5 go one tier up: a loop that survives three rounds usually needs more capability, not more context.
+- A parallel task's worktree was merged and removed at 4a: every fix implementer works from your checkout, since fixes are sequential.
+- **Every round ends with a scoped re-review** (`./re-review-prompt.md`) — a fresh dispatch every round, never a resumed re-reviewer and never a full phase re-review. Record `FIX_BASE` (the HEAD the previous review saw), build a fix-diff package over `FIX_BASE..HEAD` the same way as 4b, and dispatch with the open findings list and the rounds summary: one paragraph naming each earlier round's findings closed, your rulings on them, and approaches already rejected ("none" in round 1). The re-reviewer verdicts each finding ADDRESSED / NOT ADDRESSED against the fix diff only, running just the checks each finding touches; the next barrier or milestone checkpoint runs the full suite over the fix. New Critical/Important breakage in the fix diff joins the open findings; out-of-scope observations go to the Execution Log as deferred minors — they never extend the loop.
 - Never fix findings yourself in the controller session — your context stays clean for coordination, and controller fixes skip review.
 
 **The breaker.** When round 5's re-review still leaves findings open, stop dispatching and adjudicate each open finding yourself — you hold the plan and cross-phase context the reviewer lacks:
@@ -365,6 +376,7 @@ Skill text uses **tier names** (`cheap` / `mid` / `premium`). Controller (main t
 - Tell a reviewer what not to flag — a suppressed finding never reaches the user; adjudicate it in triage instead
 - Diff a review with `HEAD~1` — use the recorded `PHASE_BASE` / `FIX_BASE` / `BASE_SHA`
 - Fix review findings in the controller session — resume or dispatch an implementer; controller fixes skip review
+- `cd` into a task worktree — reach it with `git -C <path>` and absolute paths; implementers do the `cd`. Why: [`_shared/worktree-provisioning.md`](../_shared/worktree-provisioning.md) (Controller stays out)
 - Let an implementer run the full suite, a build, or an install — its checks are its task's Verify command and file-scoped static checks; the suite is the barrier's
 - Run two verification suites at once in one worktree — concurrent runs share caches, build output, ports, and test databases, and the timing flakes they cause cost an investigation. The Stop hook can run the suite when your turn ends, so do not end a turn while a subagent is running checks in the same worktree
 - Skip the Step 5 holistic review, or run it below `premium` — it is the only pass that sees the whole feature

@@ -137,7 +137,7 @@ Task tool (general-purpose):
 
     ## After Review Findings
 
-    If the phase review finds issues in your task, you will be resumed with
+    If the phase review finds issues in your task, you will receive
     the findings. Fix exactly what the findings name — do not expand scope
     while fixing — rerun the checks the finding touches (the test it names,
     static checks on the files you changed), then commit and report what
