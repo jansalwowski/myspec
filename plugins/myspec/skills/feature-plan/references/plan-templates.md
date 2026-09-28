@@ -21,7 +21,7 @@ last_updated: {TODAY}
 
 `spec` / `tech_spec` are explicit pointers, not decoration: the plan argues from those two documents, so they travel with it — anyone executing or reviewing the plan reads both alongside it.
 
-`planned_against` is the commit every snippet was read from: HEAD once the integration branch is merged in, so the feature branch's own commits are part of the baseline. `feature-implement` diffs it against HEAD for each `Modify:` file and warns on a change; re-sync and re-record it whenever the plan is revised against newer code.
+`planned_against` is the commit every snippet was read from: HEAD once the integration branch is merged in, so the feature branch's own commits are part of the baseline. `feature-implement` diffs each `Modify:` file from it to the integration branch tip (`<sha>...origin/<integration>`, three dots, so only integration-branch changes since the sync count) and warns on a change; re-sync and re-record it whenever the plan is revised against newer code.
 
 Update `last_updated` whenever the plan is edited (including checkbox updates by `feature-implement`).
 
