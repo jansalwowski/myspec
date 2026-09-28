@@ -13,7 +13,7 @@ feature: {feature-dir-name}
 based_on_spec_version: {spec_version from spec.md}
 spec: ${aiDir}/features/{feature}/spec.md
 tech_spec: ${aiDir}/features/{feature}/tech-spec.md
-planned_against: {full 40-char SHA of the integration-branch commit synced in Step 1}
+planned_against: {full 40-char SHA of HEAD after the Step 1 sync}
 created: {TODAY}
 last_updated: {TODAY}
 ---
@@ -21,7 +21,7 @@ last_updated: {TODAY}
 
 `spec` / `tech_spec` are explicit pointers, not decoration: the plan argues from those two documents, so they travel with it — anyone executing or reviewing the plan reads both alongside it.
 
-`planned_against` is the integration-branch commit every snippet was written against. `feature-implement` diffs it against HEAD for each `Modify:` file and warns on a change; re-sync and re-record it whenever the plan is revised against newer code.
+`planned_against` is the commit every snippet was read from: HEAD once the integration branch is merged in, so the feature branch's own commits are part of the baseline. `feature-implement` diffs it against HEAD for each `Modify:` file and warns on a change; re-sync and re-record it whenever the plan is revised against newer code.
 
 Update `last_updated` whenever the plan is edited (including checkbox updates by `feature-implement`).
 

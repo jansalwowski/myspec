@@ -160,7 +160,7 @@ This step is informational only — do not auto-cleanup.
 
 ### 5b. Check Integration-Branch Lag
 
-Only when CLAUDE.md or the topology file names an integration branch (`$INTEGRATION`, where feature work merges) distinct from a release branch (`$RELEASE`, what ships). A release fix merged into `$RELEASE` but not `$INTEGRATION` leaves every plan written against stale code. Otherwise omit the line.
+Only when the topology file sets `branches.integration` (`$INTEGRATION`, where feature work merges) and `branches.release` (`$RELEASE`, what ships) to different branches. A release fix merged into `$RELEASE` but not `$INTEGRATION` leaves every plan written against stale code. Otherwise omit the line.
 
 Run `git fetch --quiet origin "$RELEASE" "$INTEGRATION"`, then `git merge-base --is-ancestor "origin/$RELEASE" "origin/$INTEGRATION"`:
 - exit 0 → omit the line

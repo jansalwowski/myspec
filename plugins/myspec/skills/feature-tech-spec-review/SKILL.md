@@ -85,7 +85,7 @@ tags: [feature, tech-spec, validation, critical-thinking, review]
 | Dimension | Detection Patterns | What to Check |
 |-----------|-------------------|---------------|
 | **Spec Alignment** | Requirement Coverage table has an empty Steps cell or a `narrows`/`contradicts` Fidelity cell; step with no spec backing | Every requirement ID maps to a step, no orphan steps, version match |
-| **Feasibility** | Unknown packages, non-existent APIs, impossible constraints; a library call the design relies on, cited but never run (Medium) | Steps achievable with the project's tech stack; each relied-on library call cites a run, not only docs |
+| **Feasibility** | Unknown packages, non-existent APIs, impossible constraints | Steps achievable with the project's tech stack |
 | **Completeness** | `TBD`, `TODO`, `???`, empty sections, missing file inventory | All required sections present, all steps have detail |
 | **Pattern Conformance** | Service/GraphQL/validator/component patterns | Matches backend.md, frontend.md, database.md conventions |
 | **Step Granularity** | Steps joining unrelated work with "and", single-line steps | Each step = single responsibility, ~1–4 hours |

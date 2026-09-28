@@ -32,12 +32,12 @@ All gates pass → proceed to Workflow Step 0.
 
 1. Read `${aiDir}/features/{feature}/tech-spec.md` — note implementation steps, file inventory, interfaces
 2. Read `${aiDir}/features/{feature}/spec.md` — note requirement IDs, acceptance criteria, edge cases
-3. **Sync the base**, so snippets match the code implementers will see. `$INTEGRATION` is the branch feature work merges into: the one CLAUDE.md or the topology file names, else the default branch ([`_shared/git-helpers.md`](../_shared/git-helpers.md)). Set `BASE=origin/$INTEGRATION` and run `git fetch origin "$INTEGRATION"` (no remote configured: `BASE=$INTEGRATION`, skip the fetch; fetch exits non-zero: stop and report). Then `git merge-base --is-ancestor "$BASE" HEAD`:
+3. **Sync the base**, so snippets match the code implementers will see. `$INTEGRATION` is the branch feature work merges into: the topology file's `branches.integration`, else the default branch ([`_shared/git-helpers.md`](../_shared/git-helpers.md)). Set `BASE=origin/$INTEGRATION` and run `git fetch origin "$INTEGRATION"` (no remote configured: `BASE=$INTEGRATION`, skip the fetch; fetch exits non-zero: stop and report). Then `git merge-base --is-ancestor "$BASE" HEAD`:
    - exit 0 — HEAD already contains it
    - exit 1 — HEAD lags: `git merge --no-edit "$BASE"`; if the merge exits non-zero, `git merge --abort` and stop for the user
    - any other exit (bad ref) — stop and report; never plan against an unverified base
 
-   Record `git rev-parse "$BASE"` (full 40-char SHA) as the plan header's `planned_against`; `feature-implement` warns when a `Modify:` file changed after it.
+   After the sync, record `git rev-parse HEAD` (full 40-char SHA) as the plan header's `planned_against`: it is the tree Step 4 reads snippets from, so a branch's own earlier commits are not later mistaken for drift. `feature-implement` warns when a `Modify:` file changed after it.
 4. Read existing code referenced in tech-spec (patterns to follow, files to modify) from the synced tree
 
 While reading, collect every project-wide exact value (version floors, size/perf limits, naming rules, invariants) — these become the plan's Global Constraints section in Step 3.
@@ -303,7 +303,7 @@ so one is a session's worth of work.
 Before presenting the plan:
 
 - [ ] `## Spec Coverage` holds one row per spec.md requirement ID, per spec.md acceptance criterion, and per tech-spec.md implementation step, each mapped to task IDs or explicitly `DEFERRED` with a reason (Step 4.5)
-- [ ] Header `spec` / `tech_spec` keys point at the feature's `spec.md` and `tech-spec.md`; `planned_against` holds the synced integration SHA (Step 1)
+- [ ] Header `spec` / `tech_spec` keys point at the feature's `spec.md` and `tech-spec.md`; `planned_against` holds HEAD's SHA after the Step 1 sync
 - [ ] `## Global Constraints` holds every project-wide exact (versions, limits, naming, invariants) verbatim with source refs; no task text re-derives one
 - [ ] Task boundaries are right-sized — each task independently rejectable by a reviewer; trivial same-shape changes batched into one task
 - [ ] Every task has exact file paths matching tech-spec file inventory

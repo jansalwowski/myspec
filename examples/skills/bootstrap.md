@@ -66,7 +66,7 @@ Both doctors run and both come back clean, so neither adds a line beyond its sum
 
 `git worktree list` shows only the main checkout — worktree health clean, line omitted from the summary. `.myspec.json` `frameworkVersion` matches the plugin manifest — version line omitted too. (A stale worktree would surface a `worktree-clean` warning; a version gap would surface a `/myspec:update` prompt, and would also downgrade any framework-file drift the setup doctor found from an error to a warning, since a pending update explains it.)
 
-`backbone.yml` names `develop` as the integration branch and `main` as the release branch, so step 5b runs `git merge-base --is-ancestor origin/main origin/develop`. It exits 1: a hotfix merged into `main` last week never reached `develop`. Bootstrap reports the lag and merges nothing — a plan written now would target code without that fix.
+`backbone.yml` sets `branches.integration: develop` and `branches.release: main`, so step 5b runs `git merge-base --is-ancestor origin/main origin/develop`. It exits 1: a hotfix merged into `main` last week never reached `develop`. Bootstrap reports the lag and merges nothing — a plan written now would target code without that fix.
 
 #### 6. Reports back
 
