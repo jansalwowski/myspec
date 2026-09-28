@@ -65,9 +65,9 @@ For `lib` entries: source is `lib/{filename}`, destination is the `dest` path (e
 **Renamed entries — migrate the destination before applying.** A `files` or `rules` entry may carry `renamedFrom: "<old key>"`. It means the framework changed a file's name, and the project on disk still holds the old one. Before applying such an entry:
 
 1. If the new destination exists → nothing to migrate; apply the entry normally.
-2. If it does not exist and the old destination does → `git mv` (or plain move) the old file to the new name **and** rename its `.myspec.json` `frameworkFiles` key in place if one exists, keeping any `pinned` value. Then apply the entry to the renamed file, so a `marker-merge` merges into the project's real content instead of a fresh copy. List it under `Renamed` in the Step 6 summary.
+2. If it does not exist and the old destination does → `git mv` (or plain move) the old file to the new name **and** rename its `.myspec.json` `frameworkFiles` key in place if one exists, keeping any `pinned` value. Then apply the entry to the renamed file, so a `marker-merge` merges into the project's real content instead of a fresh copy. List it under `Renamed` in the Step 6 summary. The move and key rename stand on their own: finish and keep them even when the apply that follows cannot merge (a marker-less file goes to the marker-less choice in Step 3). Undoing the move leaves the doctor reporting `framework-renamed` forever, because that finding fires whenever the old file exists.
 3. If neither exists → create from source as usual. If `.myspec.json` still carries the **old** key (a project that renamed by hand and pinned the old name so update would stop recreating it), drop that key and report "already renamed locally".
-4. If **both** exist → the project renamed by hand before the framework carried the rename. Show the project section of each (everything after `<!-- myspec:framework-end -->`) and offer to append the old file's project section to the new file's, then delete the old file and drop its key. On decline, leave both untouched and report it; the doctor keeps naming the pair as `framework-renamed` until one goes. Never merge unasked: only the user knows which one their blueprints wrote to.
+4. If **both** exist → the project renamed by hand before the framework carried the rename. Show the project section of each (everything after `<!-- myspec:framework-end -->`) and offer to append the old file's project section to the new file's, then delete the old file and drop its key. On decline, leave both untouched and report it; the doctor keeps naming the pair as `framework-renamed` until one goes. Never merge unasked: only the user knows which one their blueprints wrote to. When the old file has no end marker it has no project section, and is usually a redirect stub left as a workaround: show its full content and offer to delete it, or to append that content to the new file's project section and then delete it. Either answer deletes the old file and drops its key.
 
 Skipping step 2 is what makes this dangerous: `overwrite`/`marker-merge` both treat a missing destination as "create from source", so the entry would land a *fresh empty-project-section* file beside the real one, and every blueprint that writes to the new name would write to the empty duplicate.
 
@@ -99,7 +99,12 @@ For each file in the manifest:
 1. Read the source file from `framework-files/{filename}` and replace `${aiDir}` placeholders
 2. Read the destination file and locate `<!-- myspec:framework-end -->`
 3. Write the source's framework-owned region (line 1 through its own end marker) followed by the destination's project section, unchanged
-4. If the destination has no end marker, stop for that file and report it (the doctor names it `marker-missing`); do not guess where the project section starts
+4. If the destination has no end marker, do not guess where the project section starts. Show its content (the size, and the first lines when long) beside the plugin copy and ask which of these to do:
+   - **Replace**: write the plugin copy over it. The existing content is lost, which suits a redirect stub.
+   - **Prepend**: write the source's framework-owned region (line 1 through its end marker), a blank line, then the whole existing file as the project section. Nothing is lost, and future updates merge normally.
+   - **Pin**: leave the file as it is and set `frameworkFiles["<manifest key>"].pinned` to the reason the user gives. Future updates skip it.
+
+   Apply the answer and list it under `Preserved` (prepend), `Updated files` (replace) or `Pinned` (pin). Any of the three clears the doctor's `marker-missing`. For a renamed entry the move is already done, so `framework-renamed` is gone too. On no answer, leave the file untouched and report it as `marker-missing`.
 
 Before 2.0 only the marked section was framework-owned, so a title or note corrected upstream never reached an existing project (#55). Owning the header is what fixes that; a project that wants its own wording pins the file.
 
@@ -146,7 +151,8 @@ Step 5 is about to stamp `frameworkVersion` to the new version, so run this **be
 Read the result as a checklist of this run:
 
 - `framework-missing` / `framework-drift` → a manifest entry did not get written. Re-apply that entry, do not stamp over it. For a `marker-merge` file this covers the header above the start marker too: the framework-owned region is line 1 through the end marker.
-- `marker-missing` → a `marker-merge` file lost its `<!-- myspec:framework-start -->` / `<!-- myspec:framework-end -->` markers; restore them from the plugin copy before the next update silently skips the file forever.
+- `marker-missing` → a `marker-merge` file has no `<!-- myspec:framework-start -->` / `<!-- myspec:framework-end -->` markers and the replace / prepend / pin choice in Step 3 was not applied. Either the question was skipped (ask it now) or the user gave no answer (report it; the file stays untouched and does not block the stamp).
+- `framework-renamed` → an old filename is still on disk. Either the Step 2 move did not happen (do it now) or both names exist and the user declined the merge (report it).
 - `shipped-drift` / `shipped-missing` on `.claude/hooks/*` or `.claude/lib/*` → a hook or helper is stale or absent; these are `overwrite` entries, so re-copy.
 - Anything in the `schema` or `features` group → fix before finishing; an unparseable `.myspec.json` or `verification.json` silently disables the surfaces that read it, and an entry the features parser cannot read is invisible to every status audit. Exception: `note-over-cap` / `note-volatile` are project content, not install state — report them and leave the notes alone.
 
@@ -255,7 +261,8 @@ After running the skill:
 - [ ] `.myspec.json` `frameworkVersion` read and compared to `manifest.json`; stopped early if already current, or with the 1.28 instruction if below 1.28.0
 - [ ] Every manifest `migrations` id not yet in `.myspec.json` run in order and recorded as it completed
 - [ ] Every `manifest.json` entry processed with its declared strategy (`overwrite` / `marker-merge`)
-- [ ] Every entry carrying `renamedFrom` checked before applying: destination migrated and its `frameworkFiles` key renamed, a dead old key dropped, or the both-exist case offered a merge
+- [ ] Every entry carrying `renamedFrom` checked before applying: destination migrated and its `frameworkFiles` key renamed (kept even when the apply could not merge), a dead old key dropped, or the both-exist case offered a merge (or deletion, for a marker-less old file)
+- [ ] Every `marker-merge` destination without an end marker offered replace / prepend / pin, and the answer applied
 - [ ] Every `removed` entry deleted (or kept when pinned) and, for hooks, unwired from `settings.json`
 - [ ] Entries pinned in `.myspec.json` skipped and listed in the summary; every pin whose plugin copy is now smaller than the local one offered the keep / take / diff choice
 - [ ] `templates/*` entries written to `{aiDir}/.templates/` (no `{aiDir}/templates/` created)
