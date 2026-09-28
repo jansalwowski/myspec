@@ -221,5 +221,47 @@ expect approve "$(stop 86 "$WT_R")" "vendor/bundle with identical Gemfile.lock i
 printf 'v2\n' > "$WT_R/Gemfile.lock"
 expect block "$(stop 87 "$WT_R")" "vendor/bundle with a changed Gemfile.lock blocks"
 
+# --- memory gate: stale-ref ID collisions warn, they do not block (#124) -----
+# S001 is added on feat/a, merged, reverted on main and reused there; feat/c
+# and feat/d both take P001 and never merge. Touching the memory tree must not
+# block the stop on either; an error the session made still does.
+MAIN_M=$(new_repo memory 0)
+LIB="$HERE/../../lib"
+mkdir -p "$MAIN_M/.claude/lib" "$MAIN_M/.ai/memory/semantic"
+cp "$LIB/memory-doctor.mjs" "$LIB/memory-files.mjs" "$LIB/memory-index.mjs" "$LIB/memory-claim-id.sh" "$MAIN_M/.claude/lib/"
+printf '{"aiDir":".ai/"}\n' > "$MAIN_M/.myspec.json"
+printf 'node_modules\n.claude/state/\n.claude/lib/\n' > "$MAIN_M/.gitignore"
+mem() {  # mem <file> <id> <hook>
+  printf -- '---\nid: %s\nhook: "%s"\n---\n\n# %s\n' "$2" "$3" "$2" > "$MAIN_M/.ai/memory/$1"
+}
+sem_index() {  # sem_index [row]
+  printf '# Index\n\n| ID | Hook | Anchor |\n|---|---|---|\n%s' "${1:+$1
+}" > "$MAIN_M/.ai/memory/semantic/index.md"
+}
+commit_m() { git -C "$MAIN_M" add -A && git -C "$MAIN_M" commit -q -m "$1"; }
+sem_index
+commit_m "memory tree"
+git -C "$MAIN_M" checkout -q -b feat/a
+mem semantic/S001-x.md S001 x
+sem_index '| [S001](S001-x.md) | x | |'
+commit_m S001-x
+git -C "$MAIN_M" checkout -q main
+git -C "$MAIN_M" merge -q --no-ff -m "merge a" feat/a
+git -C "$MAIN_M" revert --no-edit -m 1 HEAD >/dev/null
+mem semantic/S001-y.md S001 y
+sem_index '| [S001](S001-y.md) | y | |'
+commit_m S001-y
+for b in c d; do
+  git -C "$MAIN_M" checkout -q -b "feat/$b" main
+  mkdir -p "$MAIN_M/.ai/memory/procedural"
+  mem "procedural/P001-$b.md" P001 "$b"
+  commit_m "P001-$b"
+done
+git -C "$MAIN_M" checkout -q main
+printf 'edited\n' >> "$MAIN_M/.ai/memory/semantic/S001-y.md"
+expect approve "$(stop 90 "$MAIN_M")" "stale-ref duplicate IDs do not block a stop that touched memory"
+mem semantic/S002-z.md S002 ""
+expect block "$(stop 91 "$MAIN_M")" "a memory error the session made still blocks"
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

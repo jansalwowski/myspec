@@ -80,7 +80,9 @@ fi
 # memory without hook:, a duplicate ID) should surface here, in the session that
 # caused it, not in the next session's claim. Gated on uncommitted changes under
 # the memory tree: pre-existing drift the agent never touched is bootstrap's to
-# report, not a reason to block a stop.
+# report, not a reason to block a stop. Only errors block (the doctor exits 1
+# on errors alone): a duplicate ID that lives only on stale branches is a
+# warning, since no change in this session can fix it (issue #124).
 DOCTOR="$REPO_ROOT/.claude/lib/memory-doctor.mjs"
 if [ -f "$DOCTOR" ] && [ -f "$REPO_ROOT/.myspec.json" ] && command -v node >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
   # aiDir is required since 2.0; .ai is the documented default when absent,

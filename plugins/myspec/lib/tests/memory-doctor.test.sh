@@ -8,9 +8,10 @@
 # make the documented supersede pattern look like an error.
 #
 # Builds a scratch repo with: a branch that keeps a memory file the mainline
-# renamed away (duplicate visible only through refs), a linked worktree holding
-# an uncommitted memory file (duplicate visible only on disk), and one instance
+# renamed away (a tombstone, not a duplicate), a linked worktree holding an
+# uncommitted memory file (duplicate visible only on disk), and one instance
 # of every other condition. Two passes: a clean tree first, then the drift.
+# A second repo reproduces issue #124: collisions only on stale refs warn.
 #
 # Usage: memory-doctor.test.sh [path-to-script]
 
@@ -124,8 +125,8 @@ expect_line '^memory doctor: clean$' "clean project reports clean"
 
 # --- 2. drift -----------------------------------------------------------------
 
-# A branch keeps P002-old.md; the mainline renames it. The duplicate is only
-# visible through refs (and would land as a second file on merge).
+# A branch keeps P002-old.md; the mainline renames it. Merging the branch
+# deletes the old name, so it is a tombstone, not a duplicate (issue #124).
 git branch feat/keeps-old
 git mv .ai/memory/procedural/P002-old.md .ai/memory/procedural/P002-new.md
 index .ai/memory/procedural/index.md '| ID | Hook | Anchor |' \
@@ -198,7 +199,7 @@ fi
 expect_exit 1 "drifted project exits 1"
 
 # errors
-expect_line '^ERROR duplicate-id: P002: \.ai/memory/procedural/P002-new\.md, \.ai/memory/procedural/P002-old\.md \(feat/keeps-old\)$' "ref-only duplicate names the branch"
+expect_no_line 'duplicate-id: P002' "a file renamed away on the default branch is a tombstone"
 expect_line '^ERROR duplicate-id: S001: \.ai/memory/semantic/S001-main\.md, \.ai/memory/semantic/S001-side\.md \(worktree wt-side\)$' "uncommitted worktree duplicate names the worktree"
 expect_no_line '^ERROR duplicate-id: E001' "on-disk tombstone pair is not a duplicate"
 expect_no_line '^ERROR duplicate-id: E002' "superseded tombstone + branch-only file is not a duplicate"
@@ -238,7 +239,7 @@ if [ "$(printf '%s\n' "$OUTPUT" | tail -1)" = "memory doctor: $N_ERR error(s), $
 run_doctor --root "$REPO" --quiet
 expect_exit 1 "--quiet keeps the exit code"
 expect_no_line '^WARN' "--quiet hides warnings"
-expect_line '^ERROR duplicate-id: P002' "--quiet keeps errors"
+expect_line '^ERROR duplicate-id: S001' "--quiet keeps errors"
 expect_line "^memory doctor: $N_ERR error\(s\), $N_WARN warning\(s\)$" "--quiet keeps the full summary"
 
 # --json: { errors: [...], warnings: [...] } of { id, detail, path }
@@ -249,7 +250,7 @@ if printf '%s' "$OUTPUT" | jq -e '.warnings | type == "array"' >/dev/null 2>&1; 
 if [ "$(printf '%s' "$OUTPUT" | jq '.errors | length')" -eq "$N_ERR" ]; then ok; else fail "--json error count matches text output"; fi
 if [ "$(printf '%s' "$OUTPUT" | jq '.warnings | length')" -eq "$N_WARN" ]; then ok; else fail "--json warning count matches text output"; fi
 if printf '%s' "$OUTPUT" | jq -e '[.errors[], .warnings[]] | all(has("id") and has("detail") and has("path"))' >/dev/null 2>&1; then ok; else fail "--json findings carry id, detail, path"; fi
-if [ "$(printf '%s' "$OUTPUT" | jq -r '.errors[] | select(.id == "duplicate-id" and (.detail | startswith("P002"))) | .path')" = ".ai/memory/procedural/P002-new.md" ]; then ok; else fail "--json duplicate path is the on-disk file"; fi
+if [ "$(printf '%s' "$OUTPUT" | jq -r '.errors[] | select(.id == "duplicate-id" and (.detail | startswith("S001"))) | .path')" = ".ai/memory/semantic/S001-main.md" ]; then ok; else fail "--json duplicate path is the on-disk file"; fi
 if [ "$(printf '%s' "$OUTPUT" | jq -r '.warnings[] | select(.id == "state-not-ignored") | .path')" = ".claude/state/" ]; then ok; else fail "--json project-level finding carries a path"; fi
 
 # --- 3. no .claude/lib means the project opted out of tooling -----------------
@@ -257,6 +258,76 @@ if [ "$(printf '%s' "$OUTPUT" | jq -r '.warnings[] | select(.id == "state-not-ig
 rm -rf .claude/lib
 run_doctor --root "$REPO"
 expect_no_line '^ERROR tooling-missing' "no .claude/lib skips tooling-missing"
+
+# --- 4. issue #124: an ID deleted on the default branch and reused there -----
+#
+# Branch A adds S001-x.md, merges into develop, and is reverted there; develop
+# then reuses S001 as S001-y.md. feat/a, and stale-b (cut before the revert and
+# since diverged), still carry S001-x.md on the remote. A file deleted on the
+# default branch is a tombstone, so neither is a duplicate. Two unmerged
+# branches that both took P001, and one that took the ID develop holds, are
+# collisions only on stale refs: warnings, which the stop hook does not block on.
+
+R2="$ROOT/r2"
+git init -q --bare "$ROOT/r2-origin.git"
+git init -q -b develop "$R2"
+cd "$R2" || exit 1
+git config user.email t@t
+git config user.name t
+git remote add origin "$ROOT/r2-origin.git"
+printf '{ "aiDir": ".ai/" }\n' > .myspec.json
+printf '.claude/state/\n' > .gitignore
+mkdir -p .ai/memory/semantic .ai/memory/procedural
+index .ai/memory/semantic/index.md '| ID | Hook | Anchor |'
+index .ai/memory/procedural/index.md '| ID | Hook | Anchor |'
+git add -A && git commit -qm base
+
+git checkout -q -b feat/a
+memory .ai/memory/semantic/S001-x.md S001 "x fact"
+index .ai/memory/semantic/index.md '| ID | Hook | Anchor |' '| [S001](S001-x.md) | x fact | |'
+git add -A && git commit -qm "S001-x"
+git checkout -q develop
+git merge -q --no-ff -m "merge a" feat/a
+git checkout -q -b stale-b
+printf 'x\n' > unrelated.txt
+git add -A && git commit -qm "stale-b diverges"
+git checkout -q develop
+git revert --no-edit -m 1 HEAD >/dev/null
+memory .ai/memory/semantic/S001-y.md S001 "y fact"
+index .ai/memory/semantic/index.md '| ID | Hook | Anchor |' '| [S001](S001-y.md) | y fact | |'
+git add -A && git commit -qm "S001-y reuses the ID"
+
+git checkout -q -b feat/c
+memory .ai/memory/procedural/P001-c.md P001 "c"
+git add -A && git commit -qm "P001-c"
+git checkout -q develop
+git checkout -q -b feat/d
+memory .ai/memory/procedural/P001-d.md P001 "d"
+git add -A && git commit -qm "P001-d"
+git checkout -q develop
+git checkout -q -b feat/e
+memory .ai/memory/semantic/S001-e.md S001 "e"
+git add -A && git commit -qm "S001-e"
+git checkout -q develop
+
+git push -q origin develop feat/a stale-b feat/c feat/d feat/e 2>/dev/null
+git remote set-head origin develop >/dev/null
+git fetch -q origin
+
+run_doctor --root "$R2"
+[ -n "${DEBUG_DOCTOR:-}" ] && printf '%s\n' "$OUTPUT" >&2
+expect_exit 0 "issue #124: stale-ref collisions do not make the doctor fail"
+expect_no_line '^ERROR duplicate-id' "issue #124: no duplicate-id error"
+expect_no_line 'S001-x\.md' "issue #124: a file deleted on the default branch is a tombstone"
+expect_line '^WARN duplicate-id: P001: \.ai/memory/procedural/P001-c\.md \(feat/c, origin/feat/c\), \.ai/memory/procedural/P001-d\.md \(feat/d, origin/feat/d\)' "collision between two stale branches is a warning"
+expect_line '^WARN duplicate-id: S001: \.ai/memory/semantic/S001-y\.md, \.ai/memory/semantic/S001-e\.md \(feat/e, origin/feat/e\) — only on stale branches' "stale branch vs the default branch is a warning"
+
+# The same collision is an error once it reaches the default branch tip.
+git merge -q -m "land c" feat/c
+git merge -q -m "land d" feat/d
+run_doctor --root "$R2"
+expect_exit 1 "a collision at the default branch tip still fails"
+expect_line '^ERROR duplicate-id: P001: \.ai/memory/procedural/P001-c\.md, \.ai/memory/procedural/P001-d\.md$' "collision at the default branch tip is an error"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
