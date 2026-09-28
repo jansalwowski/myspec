@@ -293,6 +293,16 @@ A task in a parallel group carries an isolation note, because its implementer ru
 
 **Task 5 (`ScheduleRunner` job)** is also big — bullmq registration, a retry/backoff state machine, and a cadence resolver — but it stays one task: splitting the retry machine from the cadence resolver would leave two half-tasks neither of which can be tested independently. Size is a signal, not a rule; the test cycle is the boundary.
 
+#### Prototype before prescribing
+
+Task 5's cadence resolver calls the project's cron library for the next run time — a relied-on library call, so the skill runs it in a scratch directory before writing the task. The tech-spec's "weekly, Monday 09:00 in the owner's timezone" crosses a DST change in the spec's own example, and the first run returns 09:00 UTC because the call defaults to UTC. Passing the timezone option fixes it, and the task prescribes that call. The skill records the passing run on the task:
+
+```markdown
+**Prototype:** `node "$SCRATCH"/next-run.mjs "0 9 * * 1" Europe/Warsaw 2026-03-27` → `2026-03-30T07:00:00Z` (09:00 local, after the DST change; without `tz` it returned 09:00Z)
+```
+
+Task 5 gets full code for the resolver. Task 6's API handlers are plumbing over the repositories, so they get exact signatures and test names, not pasted bodies.
+
 #### Step 4: Review loop (large plans only)
 
 12 tasks across 7 phases / 2 milestones (≥10 tasks → review loop applies). The skill self-reviews each milestone:
@@ -337,6 +347,7 @@ The user is already on `feat/scheduled-reports` (not the default branch), so the
 
 - **Parallel groups are a file-disjointness claim, not a wish.** Each group's tasks touch strictly separate files, and the barrier after the group is where the worktrees rejoin and verification runs. A group whose tasks share a file is a plan bug.
 - **Interfaces are what make parallelism safe.** Task 5 and Task 6 are written simultaneously by implementers who never see each other's code; the Produces line on Task 2 is the only place they learn the signature they both call.
+- **Run it before you prescribe it.** Reading the cron library's docs would have planned the UTC bug into Task 5; one scratch run moved the fix from a phase-review round to the plan.
 - **Right-sizing cuts both ways.** Task 8 split because a reviewer could reject one half and approve the other; Task 5 stayed whole because neither half has its own test cycle.
 - **Vertical-slice milestones still hold.** Milestone 1 is a complete vertical (migration → repos → types → services → integration test) — testable end-to-end before any UI exists.
 - **Probes are written by the planner, run by someone else.** `feature-implement` hands the Checkpoint probes block to a separate executor at each milestone; the agent that built the milestone never decides whether its verification ran.

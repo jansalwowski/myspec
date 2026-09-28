@@ -124,6 +124,8 @@ Notes:
 
 **Depends on:** Task N-1
 
+**Prototype (required when Step 2 holds an algorithm or a relied-on library call):** `<scratch command>` → `<observed result>`; for a new module, "planned test fails without Step 2, passes with it"
+
 **Verify at phase review:** `<test command from .claude/verification.json, scoped to exact/path/to/file.test.ts>`
 (Scoped to this task's tests, never the full suite: the implementer runs it before reporting,
 and the phase reviewer runs every task's command once the phase is complete. Name the command
@@ -133,7 +135,7 @@ here so neither has to infer it.)
   [test code]
 
 - [ ] **Step 2: Implement**
-  [implementation code]
+  [complete code for risky logic; exact signatures for mechanical parts]
 
 - [ ] **Step 3: Commit**
   `git commit -m "feat({feature}): add component-name"`

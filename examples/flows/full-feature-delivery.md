@@ -227,7 +227,7 @@ The agent groups the 14 tech-spec steps into milestones and parallel groups, lan
 | 9 | parallel:tests | T13: e2e happy-path test, T14: e2e failure-retry test | 8 |
 ```
 
-Each task expands into TDD steps with exact code, file paths, a `Verify at phase review:` command, conventional-commit messages, and an Interfaces (Consumes/Produces) block with exact signatures; the plan header points at `spec.md` + `tech-spec.md` and carries a Global Constraints section every task implicitly includes. The plan has 14 tasks across 9 phases / 2 milestones — within the 20-task ceiling.
+Each task expands into TDD steps with complete code for risky logic (signatures for plumbing), a `Prototype:` run for each relied-on library call, file paths, a `Verify at phase review:` command, conventional-commit messages, and an Interfaces (Consumes/Produces) block with exact signatures; the plan header points at `spec.md` + `tech-spec.md` and carries a Global Constraints section every task implicitly includes. The plan has 14 tasks across 9 phases / 2 milestones — within the 20-task ceiling.
 
 **User approves the plan.**
 

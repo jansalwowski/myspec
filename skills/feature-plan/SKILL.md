@@ -74,6 +74,9 @@ For each implementation step in the tech-spec:
 **Task right-sizing (the step → task mapping is not 1:1):**
 A task is the smallest unit that carries its own test cycle and is worth a fresh reviewer's gate. Fold setup, configuration, scaffolding, and docs steps into the task whose deliverable needs them; split only where a reviewer could meaningfully reject one task while approving its neighbor. The inverse holds too: several trivial same-shape changes (rename sweeps, config plumbing) are ONE task listing every file + change, not N micro-tasks — N reviewer gates on one mechanical sweep is overhead, not protection.
 
+**Prototype before prescribing (REQUIRED for algorithms and relied-on library calls):**
+For every task whose Step 2 contains an algorithm, or a third-party library call whose behavior the task relies on, run that code in a scratch directory outside the tree against realistic inputs — the spec's edge cases, real data shapes — before writing the task. Record it in the task's `**Prototype:**` line: the command and the observed result. For a new module, run the planned test against the planned code once: it must fail without Step 2 and pass with it. A prescribed call the plan never ran reaches implementers as a mandate, and the phase reviewer finds the defect a fix loop later. A result that contradicts the tech-spec is a tech-spec defect: say so and stop.
+
 **Global Constraints (REQUIRED, once per plan):**
 Populate the plan's `## Global Constraints` section with the project-wide exacts collected in Step 1 — version floors, size/perf limits, naming rules, invariants — copied verbatim from `spec.md` / `tech-spec.md` with source refs. Every task's requirements implicitly include this section; per-task text must not re-derive or paraphrase these values — re-derivation is how they drift.
 
@@ -246,7 +249,7 @@ Before assigning files to tasks:
 ## Task Expansion Rules
 
 1. **Exact file paths** — from tech-spec file inventory
-2. **Complete code** — not "add validation", but the actual validation code. Implementers paste snippets verbatim, so each must pass the project's lint rules (e.g. rethrow with `{ cause }`) and carry no module-level side effects (resolve paths, read files, or touch globals inside functions, not at import time)
+2. **Complete code where it is risky** — algorithms, library calls, validation, anything a Prototype line covers: not "add validation", but the actual validation code. Mechanical parts (wiring, config plumbing, re-exports) get exact signatures and test names instead; full code there only lengthens the plan. Implementers paste snippets verbatim, so each must pass the project's lint rules (e.g. rethrow with `{ cause }`) and carry no module-level side effects (resolve paths, read files, or touch globals inside functions, not at import time)
 3. **TDD sequence** — write test → run (fail) → implement → run (pass) → commit
 4. **Run commands** — exact verification commands with expected output (from `.claude/verification.json`)
 5. **Commit messages** — conventional commits: `feat({feature}): description`
@@ -303,6 +306,7 @@ Before presenting the plan:
 - [ ] Task boundaries are right-sized — each task independently rejectable by a reviewer; trivial same-shape changes batched into one task
 - [ ] Every task has exact file paths matching tech-spec file inventory
 - [ ] Every task has TDD steps and a `**Verify at phase review:**` command scoped to the task's own tests
+- [ ] Every task with an algorithm or relied-on library call has a `**Prototype:**` line (command + observed result) from a scratch run; full code only where it is risky
 - [ ] Parallel groups have zero file overlap (check file lists)
 - [ ] Barriers exist after every parallel group
 - [ ] Execution order table matches task dependencies
