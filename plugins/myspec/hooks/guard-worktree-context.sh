@@ -230,7 +230,9 @@ if ! printf '%s' "$COMMAND" | grep -qE '(^|[[:space:]])MYSPEC_ALLOW_BRANCH_OPS=1
           printf 'BLOCKED: git branch delete names a branch the guard cannot resolve (%s): a quoted name, variable, glob or @{-N}. Write the branch name literally so the guard can confirm no worktree has it checked out. Blocked: %s' "$word" "$(printf '%s' "$segment" | head -c 200)"
           return 0
         fi
-        if printf '%s\n' "$checked_out" | grep -qxF -- "$word"; then
+        # -i: on a case-insensitive filesystem (macOS default) git resolves
+        # WT-A to the ref file of wt-a, so a case-variant name deletes it too.
+        if printf '%s\n' "$checked_out" | grep -qixF -- "$word"; then
           printf 'BLOCKED: branch %s is checked out in a worktree (see `git worktree list`), and deleting it would leave that working tree on a missing branch. Remove the worktree first, or clean up with .claude/lib/branch-cleanup.sh. Blocked: %s' "$word" "$(printf '%s' "$segment" | head -c 200)"
           return 0
         fi
