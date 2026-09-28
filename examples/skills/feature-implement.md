@@ -52,7 +52,7 @@ Parses the Execution Order table: 6 sequential tasks, no barriers between them �
 
 **Resume detection:** all checkboxes `[ ]`. Fresh run.
 
-**Plan freshness:** the front-matter carries `planned_against: <sha>`, so the skill fetches the integration branch and diffs the tasks' `Modify:` paths from that SHA to `origin/<integration>` — never the local branch, which can lag the remote and diff empty. Exit 0 with empty output: no drift. Had a file changed, it would warn, log a `Ruling:`, and tell the affected task's implementer. Had the SHA been squashed away (`git diff` exits 128), it would warn that freshness cannot be verified rather than read the empty output as unchanged — and the same if the fetch itself had failed.
+**Plan freshness:** the front-matter carries `planned_against: <sha>`, so the skill fetches the integration branch and diffs the tasks' `Modify:` paths from that SHA to `origin/<integration>` (three-dot, so the branch's own commits are not drift) — never the local branch, which can lag the remote and diff empty. Exit 0 with empty output: no drift. Had a file changed, it would warn, log a `Ruling:`, and tell the affected task's implementer. Had the SHA been squashed away (`git diff` exits 128), it would warn that freshness cannot be verified rather than read the empty output as unchanged — and the same if the fetch itself had failed.
 
 **Setup** also writes `.claude/state/implement-in-progress.json` (`started_at` plus the feature name). Until Step 5 removes it, the Stop hook reports failing verification checks at controller turn ends as a warning rather than a block — mid-run the tree is red by design, and the controller may not fix code itself.
 
