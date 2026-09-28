@@ -218,9 +218,10 @@ cp "$ROOT/settings-projectdir.json" "$REPO/.claude/settings.json"
 # The template wires mark-code-changed.sh under PostToolUse twice, once per
 # matcher. Keying the comparison on (event, script) alone let either entry
 # stand in for the other, so a project missing the Bash one reported clean and
-# update never added it. A matcher is an alternation of tool names, so the
-# comparison is on the set of names: order and grouping do not matter, and a
-# matcher that is absent, empty or "*" covers every tool.
+# update never added it. Claude Code reads a matcher as a regex, so each
+# template tool name is tested against the project's matchers: order, grouping
+# and anchors do not matter, a matcher that is absent, empty or "*" covers
+# every tool, and the warning names only the tools left uncovered.
 set_json .claude/settings.json 'd.hooks.PostToolUse = d.hooks.PostToolUse.filter(e => e.matcher !== "Bash")'
 
 run_doctor wiring
@@ -230,7 +231,7 @@ expect_no_line 'validate-frontmatter.sh is not wired' "the hooks wired under the
 set_json .claude/settings.json 'd.hooks.PostToolUse[0].matcher = "Write|Edit"'
 
 run_doctor wiring
-expect_line 'mark-code-changed.sh is not wired under PostToolUse for matcher Write\|Edit\|MultiEdit\|NotebookEdit' "a narrower matcher does not cover the template's"
+expect_line 'mark-code-changed.sh is not wired under PostToolUse for matcher MultiEdit\|NotebookEdit —' "a narrower matcher names only the tools it leaves uncovered"
 
 set_json .claude/settings.json 'd.hooks.PostToolUse[0].matcher = "NotebookEdit|Edit|Bash|MultiEdit|Write"'
 
@@ -246,6 +247,29 @@ set_json .claude/settings.json 'd.hooks.PostToolUse[0].matcher = "*"'
 
 run_doctor wiring
 expect_no_line 'wiring-incomplete' "a \"*\" matcher covers every template matcher"
+
+set_json .claude/settings.json 'd.hooks.PostToolUse[0].matcher = ".*"'
+
+run_doctor wiring
+expect_no_line 'wiring-incomplete' "a regex matcher is compiled, not split on |"
+
+cp "$ROOT/settings-projectdir.json" "$REPO/.claude/settings.json"
+set_json .claude/settings.json 'd.hooks.PostToolUse.forEach(e => { e.matcher = e.matcher === "Bash" ? "^Bash$" : "(" + e.matcher + ")" })'
+
+run_doctor wiring
+expect_no_line 'wiring-incomplete' "anchored and grouped matchers cover the names they match"
+
+cp "$ROOT/settings-projectdir.json" "$REPO/.claude/settings.json"
+set_json .claude/settings.json 'd.hooks.Stop[0].matcher = "Bash"'
+
+run_doctor wiring
+expect_no_line 'wiring-incomplete' "a matcher on an event the template wires with none does not unwire it"
+
+cp "$ROOT/settings-projectdir.json" "$REPO/.claude/settings.json"
+set_json .claude/settings.json 'd.hooks.PostToolUse.find(e => e.matcher === "Bash").matcher = ["Bash"]'
+
+run_doctor wiring
+expect_line 'mark-code-changed.sh is not wired under PostToolUse for matcher Bash' "a matcher that is not a string covers nothing"
 
 cp "$ROOT/settings-projectdir.json" "$REPO/.claude/settings.json"
 

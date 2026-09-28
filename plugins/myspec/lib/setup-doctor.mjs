@@ -940,23 +940,50 @@ function hookPairKey(command) {
   return [rel(script.path), ...script.args].join(' ');
 }
 
-// The tool names a matcher alternates over, or null when it matches every tool
-// (absent, empty or "*"). Compared as a set so that `Edit|Write` and
-// `Write|Edit` are one matcher; anything fancier than a plain alternation is
-// taken as a literal name, which at worst asks update for an entry it has.
-function matcherNames(matcher) {
+// A settings matcher as a test on a tool name. Claude Code reads a matcher as a
+// regex, so `.*`, `^Bash$` and `(Write|Edit)` are compiled rather than split on
+// `|`. Absent, empty or "*" matches every tool. A matcher that is present but
+// not a string, or not a valid regex, matches none: the doctor cannot tell what
+// the harness makes of it, so it certifies no coverage from it.
+function matcherTest(matcher) {
+  if (matcher === undefined || matcher === null) {
+    return () => true;
+  }
+
+  if (typeof matcher !== 'string') {
+    return () => false;
+  }
+
+  const source = matcher.trim();
+
+  if (source === '' || source === '*') {
+    return () => true;
+  }
+
+  try {
+    const pattern = new RegExp(`^(?:${source})$`);
+
+    return (name) => pattern.test(name);
+  } catch {
+    return () => false;
+  }
+}
+
+// The tool names a template matcher alternates over, or null when it has none.
+// The template spells its matchers as plain alternations, so a split is exact.
+function templateNames(matcher) {
   if (typeof matcher !== 'string' || matcher.trim() === '' || matcher.trim() === '*') {
     return null;
   }
 
-  return new Set(matcher.split('|').map((name) => name.trim()).filter(Boolean));
+  return matcher.split('|').map((name) => name.trim()).filter(Boolean);
 }
 
 // Every (event, matcher, script) triple a settings file wires, so a hook wired
 // under the wrong event reads as missing rather than as present. The matcher is
-// part of the key: the template wires one script under one event with two
-// matchers, and keying on (event, script) alone let either entry stand in for
-// the other.
+// part of the comparison: the template wires one script under one event with
+// two matchers, and keying on (event, script) alone let either entry stand in
+// for the other.
 function hookEntries(value) {
   const entries = [];
   const hooks = value && value.hooks && typeof value.hooks === 'object' ? value.hooks : {};
@@ -966,7 +993,9 @@ function hookEntries(value) {
       const matcher = group && typeof group === 'object' ? group.matcher : undefined;
 
       hookCommands(group).forEach((command) => {
-        entries.push({ event, matcher: typeof matcher === 'string' ? matcher : '', key: `${event} ${hookPairKey(command)}` });
+        const hook = hookPairKey(command);
+
+        entries.push({ event, hook, matcher, key: `${event} ${hook}` });
       });
     });
   });
@@ -974,41 +1003,16 @@ function hookEntries(value) {
   return entries;
 }
 
-// Per event + script, the union of the tool names it is wired for, so a
-// template matcher split across several entries still reads as covered.
+// Per event + script, the matcher tests it is wired under, so a template
+// matcher split across several entries still reads as covered.
 function hookCoverage(entries) {
   const coverage = new Map();
 
   entries.forEach(({ key, matcher }) => {
-    const names = matcherNames(matcher);
-    const seen = coverage.get(key) ?? { all: false, names: new Set() };
-
-    if (names === null) {
-      seen.all = true;
-    } else {
-      names.forEach((name) => seen.names.add(name));
-    }
-
-    coverage.set(key, seen);
+    coverage.set(key, [...(coverage.get(key) ?? []), matcherTest(matcher)]);
   });
 
   return coverage;
-}
-
-function covers(coverage, { key, matcher }) {
-  const seen = coverage.get(key);
-
-  if (!seen) {
-    return false;
-  }
-
-  if (seen.all) {
-    return true;
-  }
-
-  const wanted = matcherNames(matcher);
-
-  return wanted !== null && [...wanted].every((name) => seen.names.has(name));
 }
 
 const settingsPath = join(root, '.claude', 'settings.json');
@@ -1115,16 +1119,35 @@ if (pluginRoot && projectSettings.value && existsSync(hooksDir)) {
       ...hookEntries(localSettings.value),
     ]);
 
-    hookEntries(template.value)
-      .filter((entry) => !covers(have, entry))
-      .forEach(({ event, matcher, key }) => {
-        const hook = key.slice(event.length + 1);
-        const under = matcher ? `${event} for matcher ${matcher}` : event;
-
+    hookEntries(template.value).forEach(({ event, hook, key, matcher }) => {
+      const tests = have.get(key) ?? [];
+      const wanted = templateNames(matcher);
+      const incomplete = (under) => {
         warn('wiring-incomplete', 'wiring', '.claude/settings.json', `.claude/settings.json: ${hook} is not wired under ${under} — the plugin template registers it there`, {
           commands: ['/myspec:update'],
         });
-      });
+      };
+
+      // A template entry with no matcher sits on an event that does not filter
+      // by tool (Stop), where the harness ignores any matcher a project gives
+      // it, so any entry for the script covers it.
+      if (wanted === null) {
+        if (tests.length === 0) {
+          incomplete(event);
+        }
+
+        return;
+      }
+
+      // Name only the tools left uncovered, so update adds exactly the gap
+      // instead of a second full-matcher group that runs the covered tools'
+      // hooks twice.
+      const missing = wanted.filter((name) => !tests.some((test) => test(name)));
+
+      if (missing.length > 0) {
+        incomplete(`${event} for matcher ${missing.join('|')}`);
+      }
+    });
   }
 }
 
