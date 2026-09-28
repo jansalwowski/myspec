@@ -18,6 +18,12 @@ Task tool (general-purpose):
 
     [Scene-setting: which phase this belongs to, what was completed before this, architectural context from tech-spec, any shared types or interfaces this task depends on. For each spec/tech-spec section the task's Spec contract cites by path and heading, paste that section's text here verbatim]
 
+    ## Plan Drift (only when Step 1's freshness check listed a file this task modifies)
+
+    [Files this task modifies that changed on the integration branch after
+    the plan was written. The task text's snippets for them may be stale:
+    read the current code and follow it where the two disagree]
+
     ## Isolation Constraint (parallel tasks only)
 
     You are working in an isolated worktree. Your task's file list is:
@@ -135,9 +141,23 @@ Task tool (general-purpose):
 
     Fix any issues found during self-review before reporting.
 
+    ## Open Findings (fix dispatches only — rounds 2–5 of Step 4d)
+
+    [Critical/Important findings still open, copied verbatim, one per bullet]
+
+    ## Earlier Rounds (fix dispatches only)
+
+    [Rounds summary: each earlier round's findings closed, the controller's
+    rulings on them, and approaches already rejected. Do not retry a
+    rejected approach]
+
+    A prior implementer attempted this fix [N] times; you own it now. Read
+    the current code — your job is the Open Findings above, not the whole
+    task again.
+
     ## After Review Findings
 
-    If the phase review finds issues in your task, you will be resumed with
+    If the phase review finds issues in your task, you will receive
     the findings. Fix exactly what the findings name — do not expand scope
     while fixing — rerun the checks the finding touches (the test it names,
     static checks on the files you changed), then commit and report what
@@ -159,3 +179,10 @@ Task tool (general-purpose):
     Use NEEDS_CONTEXT if you need information not provided.
     Never silently produce work you are unsure about.
 ```
+
+## Optional sections
+
+Omit each one, heading included, when it does not apply:
+
+- `## Plan Drift` — only for a task that modifies a file Step 1's plan-freshness check listed
+- `## Open Findings`, `## Earlier Rounds`, and the framing line after them — only for a fresh fix dispatch in rounds 2–5 of Step 4d (or round 1 when the harness cannot resume); `[Rounds summary]` is the same paragraph `re-review-prompt.md` receives

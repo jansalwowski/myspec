@@ -43,6 +43,10 @@ Harness `isolation: "worktree"` forks from the default branch, so a parallel tas
 
 `create` branches `<feature-branch>--<slug>` at the controller's HEAD and provisions it with the controller's checkout as the link source, whose linked dependency directories already match the feature's lockfiles. `merge` merges into the controller's branch, then removes the worktree and branch; on a conflict it stops mid-merge — resolve, commit, and rerun it to clean up. Worktrees land under `isolation.worktreeRoot` (default `.claude/worktrees`), and a `create` that fails midway removes what it made.
 
+## Controller stays out
+
+A controller never `cd`s into a task worktree, not even to inspect state: it uses `git -C <worktree>` and absolute paths, and runs any command there in a subshell, `(cd <worktree> && …)`, so its shell does not move. Moving the session's working directory into a worktree makes Claude Code load that worktree's `CLAUDE.md` and `.claude/rules/*.md` into context again — about 15k tokens per worktree entered (issue #123) — and a shell left there commits to the wrong branch. The implementer that owns the worktree is the one that runs `cd <worktree> && …`.
+
 ## Verify where you ran
 
 Before reporting a result from a worktree as verified, confirm the command ran in the worktree (`git -C <worktree> status`), that the dependency directory there is what the branch needs, and that the Stop hook ran against that tree. A green result from the wrong tree is worse than no result.
