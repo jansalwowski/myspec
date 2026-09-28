@@ -72,15 +72,14 @@ created: 2026-04-30
 
 | Phase | Mode | Tasks | Depends On |
 |-------|------|-------|------------|
-| 1 | sequential | T1: migration | — |
-| 2 | sequential | T2: ReportFavoritesService + tests | Phase 1 |
-| 3 | sequential | T3: API handlers + tests | Phase 2 |
-| 4 | sequential | T4: useReportFavorites hook + tests | Phase 3 |
-| 5 | sequential | T5: StarButton component + tests | Phase 4 |
-| 6 | sequential | T6: pin-to-top sort + integration test | Phase 5 |
+| 1 | sequential | T1: migration, T2: ReportFavoritesService + tests | — |
+| 2 | sequential | T3: API handlers + tests | Phase 1 |
+| 3 | sequential | T4: useReportFavorites hook + tests, T5: StarButton component + tests, T6: pin-to-top sort + integration test | Phase 2 |
 ```
 
 (Single-milestone, so the `### Milestone N:` heading is omitted and the Execution Order table stands alone.)
+
+Six sequential tasks, three phases. Every phase pays a full barrier suite and a phase review, so small adjacent tasks share one: the migration is a few lines and the service beside it is one module; the hook, the component and the sort query touch disjoint layers. The API gets a phase of its own because the hook is written against its response shape, and a rejected shape would mean redoing the hook.
 
 Each task carries a **Spec contract** block — verbatim quotes, not paraphrase — an **Interfaces** block (Consumes/Produces, exact signatures), plus a **Touch only** line whenever the Files block has a `Modify:` entry:
 
@@ -127,7 +126,7 @@ Task 6 (modifies the existing list query) gets a **Touch only** line because its
 Do not refactor the surrounding query builder — pre-existing tech debt is out of scope.
 ```
 
-Task 6 also adds a required `pinned: boolean` to `ReportRow`. The blast-radius grep finds `src/features/reports/__tests__/fixtures.ts`, which builds `ReportRow` literals, so Task 6 lists it too — without it the Phase 5 barrier fails typecheck in a file no task owns:
+Task 6 also adds a required `pinned: boolean` to `ReportRow`. The blast-radius grep finds `src/features/reports/__tests__/fixtures.ts`, which builds `ReportRow` literals, so Task 6 lists it too — without it the Phase 3 barrier fails typecheck in a file no task owns:
 
 ```markdown
 - Modify: `src/features/reports/__tests__/fixtures.ts`
@@ -192,6 +191,7 @@ Plan is ready. Commit before /feature-implement to avoid dangling files.
 - **Touch only lands wherever a task modifies an existing file.** Without it, a reviewer flags adjacent pre-existing code as a regression. Task 6 touches the list query, so it scopes the diff explicitly.
 - **Every barrier can be green.** A new required field breaks every literal and caller of the type, including files outside the task. Grepping consumers at plan time puts them in the task that caused the break, instead of leaving a red barrier for the phase reviewer to trace.
 - **Plan against the synced base.** The pre-merge `listReports()` would have given Task 6 a snippet for a query that no longer exists; `planned_against` lets `feature-implement` warn if it moves again before Task 6 runs.
+- **Phases amortise their fixed cost.** Six phases would run six full suites and six reviews for a migration, a wrapper hook and a button; three phases put a boundary only where later work builds on an approved shape.
 - **Single-milestone, all-sequential is fine.** Don't split into milestones to look "complex." The milestone checkpoint at the end gives the user an exit point.
 - **The commit decision is part of the skill.** Leaving the plan uncommitted is the failure mode Step 7 exists to prevent — there's no "leave uncommitted" option offered.
 

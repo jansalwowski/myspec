@@ -80,9 +80,8 @@ Resume behavior: A new agent reads the plan, skips `[x]` tasks, re-executes `[~]
 
 | Phase | Tasks | Mode | Depends On |
 |-------|-------|------|------------|
-| 1 | Task 1: [Backend task] | sequential | — |
-| 2 | Task 2: [Frontend task] | sequential | Phase 1 |
-| 3 | Task 3: [Tests] | sequential | Phase 2 |
+| 1 | Task 1: [Data task], Task 2: [Small service task] | sequential | — |
+| 2 | Task 3: [Frontend task that builds on the approved service] | sequential | Phase 1 |
 
 **Checkpoint probes:**
 - Target: `[command that serves the milestone on scratch config]` → `[URL or entry point]`
@@ -94,6 +93,7 @@ Resume behavior: A new agent reads the plan, skips `[x]` tasks, re-executes `[~]
 ```
 
 Notes:
+- A sequential phase may list several tasks; they run in listed order and share one barrier suite and one phase review (Step 2's phase grouping rule)
 - Phase numbers must be globally unique across the entire plan (Milestone 2 starts at the next available phase number)
 - First phase of Milestone 2+ uses `Milestone N` in Depends On (not a phase number from the previous milestone)
 - Single-milestone plans omit the `### Milestone N:` heading — the Execution Order table stands alone

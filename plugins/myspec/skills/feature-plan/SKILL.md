@@ -56,6 +56,8 @@ For each implementation step in the tech-spec:
 - When in doubt, make it sequential
 - Group tasks in parallel only when each is large enough to amortise a worktree merge and review; small tasks run faster in sequence
 
+**Phase grouping rule:** every phase pays a full barrier suite and a phase review, however small it is. Put consecutive sequential tasks in one phase when each is small (one module, no barrier artifact a later task needs approved first) or they touch disjoint layers. Start a new phase only where a reviewer could reject one task while approving the other and the next task must build on the approved one.
+
 **Milestone ordering rule:**
 - Group tasks into **milestones** — each milestone is a vertical slice delivering one coherent piece of functionality.
 - Classify every task within a milestone as `backend` or `frontend`:
@@ -309,6 +311,7 @@ Before presenting the plan:
 - [ ] Every task with an algorithm or relied-on library call has a `**Prototype:**` line (command + observed result) from a scratch run; full code only where it is risky
 - [ ] Parallel groups have zero file overlap (check file lists)
 - [ ] Barriers exist after every parallel group
+- [ ] No phase boundary between consecutive small sequential tasks unless the next task must build on the approved one
 - [ ] Execution order table matches task dependencies
 - [ ] Every `DEFERRED` row was surfaced to the user in Step 6, not decided unilaterally
 - [ ] Every task has a populated **Spec contract** block with verbatim quotes (not paraphrased) from spec.md / tech-spec.md
