@@ -874,8 +874,6 @@ function hookCommands(value) {
   return found;
 }
 
-// Every event -> command pair, so a hook wired under the wrong event reads as
-// missing rather than as present.
 // A hook command may quote its script and name the project root as
 // $CLAUDE_PROJECT_DIR — the form Claude Code recommends, because a bare
 // relative command resolves against the session's cwd rather than the project
@@ -942,15 +940,75 @@ function hookPairKey(command) {
   return [rel(script.path), ...script.args].join(' ');
 }
 
-function hookPairs(value) {
-  const pairs = new Set();
+// The tool names a matcher alternates over, or null when it matches every tool
+// (absent, empty or "*"). Compared as a set so that `Edit|Write` and
+// `Write|Edit` are one matcher; anything fancier than a plain alternation is
+// taken as a literal name, which at worst asks update for an entry it has.
+function matcherNames(matcher) {
+  if (typeof matcher !== 'string' || matcher.trim() === '' || matcher.trim() === '*') {
+    return null;
+  }
+
+  return new Set(matcher.split('|').map((name) => name.trim()).filter(Boolean));
+}
+
+// Every (event, matcher, script) triple a settings file wires, so a hook wired
+// under the wrong event reads as missing rather than as present. The matcher is
+// part of the key: the template wires one script under one event with two
+// matchers, and keying on (event, script) alone let either entry stand in for
+// the other.
+function hookEntries(value) {
+  const entries = [];
   const hooks = value && value.hooks && typeof value.hooks === 'object' ? value.hooks : {};
 
-  Object.entries(hooks).forEach(([event, entries]) => {
-    hookCommands(entries).forEach((command) => pairs.add(`${event} ${hookPairKey(command)}`));
+  Object.entries(hooks).forEach(([event, groups]) => {
+    (Array.isArray(groups) ? groups : [groups]).forEach((group) => {
+      const matcher = group && typeof group === 'object' ? group.matcher : undefined;
+
+      hookCommands(group).forEach((command) => {
+        entries.push({ event, matcher: typeof matcher === 'string' ? matcher : '', key: `${event} ${hookPairKey(command)}` });
+      });
+    });
   });
 
-  return pairs;
+  return entries;
+}
+
+// Per event + script, the union of the tool names it is wired for, so a
+// template matcher split across several entries still reads as covered.
+function hookCoverage(entries) {
+  const coverage = new Map();
+
+  entries.forEach(({ key, matcher }) => {
+    const names = matcherNames(matcher);
+    const seen = coverage.get(key) ?? { all: false, names: new Set() };
+
+    if (names === null) {
+      seen.all = true;
+    } else {
+      names.forEach((name) => seen.names.add(name));
+    }
+
+    coverage.set(key, seen);
+  });
+
+  return coverage;
+}
+
+function covers(coverage, { key, matcher }) {
+  const seen = coverage.get(key);
+
+  if (!seen) {
+    return false;
+  }
+
+  if (seen.all) {
+    return true;
+  }
+
+  const wanted = matcherNames(matcher);
+
+  return wanted !== null && [...wanted].every((name) => seen.names.has(name));
 }
 
 const settingsPath = join(root, '.claude', 'settings.json');
@@ -1052,15 +1110,18 @@ if (pluginRoot && projectSettings.value && existsSync(hooksDir)) {
   const template = readJson(join(pluginRoot, 'templates', 'settings-hooks.json'));
 
   if (template.value) {
-    const have = hookPairs(projectSettings.value);
-    const localHave = hookPairs(localSettings.value);
+    const have = hookCoverage([
+      ...hookEntries(projectSettings.value),
+      ...hookEntries(localSettings.value),
+    ]);
 
-    [...hookPairs(template.value)]
-      .filter((pair) => !have.has(pair) && !localHave.has(pair))
-      .forEach((pair) => {
-        const [event, ...rest] = pair.split(' ');
+    hookEntries(template.value)
+      .filter((entry) => !covers(have, entry))
+      .forEach(({ event, matcher, key }) => {
+        const hook = key.slice(event.length + 1);
+        const under = matcher ? `${event} for matcher ${matcher}` : event;
 
-        warn('wiring-incomplete', 'wiring', '.claude/settings.json', `.claude/settings.json: ${rest.join(' ')} is not wired under ${event} — the plugin template registers it there`, {
+        warn('wiring-incomplete', 'wiring', '.claude/settings.json', `.claude/settings.json: ${hook} is not wired under ${under} — the plugin template registers it there`, {
           commands: ['/myspec:update'],
         });
       });

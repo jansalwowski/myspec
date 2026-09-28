@@ -213,6 +213,42 @@ expect_line 'ERROR hook-missing: .claude/hooks/ghost.sh' "a missing hook is stil
 
 cp "$ROOT/settings-projectdir.json" "$REPO/.claude/settings.json"
 
+# --- pass 1c: the matcher is part of the wiring (issue #125) ------------------
+
+# The template wires mark-code-changed.sh under PostToolUse twice, once per
+# matcher. Keying the comparison on (event, script) alone let either entry
+# stand in for the other, so a project missing the Bash one reported clean and
+# update never added it. A matcher is an alternation of tool names, so the
+# comparison is on the set of names: order and grouping do not matter, and a
+# matcher that is absent, empty or "*" covers every tool.
+set_json .claude/settings.json 'd.hooks.PostToolUse = d.hooks.PostToolUse.filter(e => e.matcher !== "Bash")'
+
+run_doctor wiring
+expect_line 'WARN +wiring-incomplete: .claude/settings.json: .claude/hooks/mark-code-changed.sh is not wired under PostToolUse for matcher Bash' "a hook wired under only one of its template matchers is incomplete"
+expect_no_line 'validate-frontmatter.sh is not wired' "the hooks wired under their template matcher stay quiet"
+
+set_json .claude/settings.json 'd.hooks.PostToolUse[0].matcher = "Write|Edit"'
+
+run_doctor wiring
+expect_line 'mark-code-changed.sh is not wired under PostToolUse for matcher Write\|Edit\|MultiEdit\|NotebookEdit' "a narrower matcher does not cover the template's"
+
+set_json .claude/settings.json 'd.hooks.PostToolUse[0].matcher = "NotebookEdit|Edit|Bash|MultiEdit|Write"'
+
+run_doctor wiring
+expect_no_line 'wiring-incomplete' "one entry whose alternation covers both template matchers, in any order, is wired"
+
+set_json .claude/settings.json 'delete d.hooks.PostToolUse[0].matcher'
+
+run_doctor wiring
+expect_no_line 'wiring-incomplete' "an entry with no matcher covers every template matcher"
+
+set_json .claude/settings.json 'd.hooks.PostToolUse[0].matcher = "*"'
+
+run_doctor wiring
+expect_no_line 'wiring-incomplete' "a \"*\" matcher covers every template matcher"
+
+cp "$ROOT/settings-projectdir.json" "$REPO/.claude/settings.json"
+
 # --- pass 2: one break per check ---------------------------------------------
 
 printf '\n# hand edit\n' >> "$REPO/.claude/rules/paths.md"
