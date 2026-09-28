@@ -138,14 +138,14 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 
    **Option 1 — Merge locally:**
 
-   The `guard-worktree-context.sh` hook (if installed) blocks branch mutations on the main checkout; the `MYSPEC_ALLOW_BRANCH_OPS=1` prefix marks this as a user-confirmed integration flow and is required for these commands to pass:
+   The `guard-worktree-context.sh` hook (if installed) blocks checkout and merge on the main checkout; the `MYSPEC_ALLOW_BRANCH_OPS=1` prefix marks this as a user-confirmed integration flow and is required for those commands to pass. `git branch -d` needs no prefix: the hook allows deleting a branch that no worktree has checked out, and blocks it (as git does) while one still does:
 
    ```bash
    MYSPEC_ALLOW_BRANCH_OPS=1 git checkout <base-branch>
    git pull
    MYSPEC_ALLOW_BRANCH_OPS=1 git merge <feature-branch>
    # Run verification again on merged result
-   MYSPEC_ALLOW_BRANCH_OPS=1 git branch -d <feature-branch>
+   git branch -d <feature-branch>
    ```
 
    **Option 2 — Push and create PR:**
@@ -172,10 +172,10 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 
    Type 'discard' to confirm.
    ```
-   Wait for exact `discard` input, then (prefix required — see Option 1):
+   Wait for exact `discard` input, then (checkout prefix required — see Option 1):
    ```bash
    MYSPEC_ALLOW_BRANCH_OPS=1 git checkout <base-branch>
-   MYSPEC_ALLOW_BRANCH_OPS=1 git branch -D <feature-branch>
+   git branch -D <feature-branch>
    ```
 
    **Option 5 — Promote develop-mode work:** the session answered `develop` (see `.claude/rules/work-isolation.md`), so the work is an uncommitted diff in the main checkout and no feature branch exists yet. Scope it to the files this feature touched and let the script do the rest — it never changes the main checkout's branch:
@@ -208,7 +208,7 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 - [ ] Branch resolved per the user's Phase 3 choice (merged / PR created / kept / discarded after typed confirmation)
 - [ ] Worktree removed when options 1 or 4 were chosen and one existed — via the path recorded before any checkout
 - [ ] No `git worktree remove --force` and no `rm -rf`: a refused removal was surfaced with its file list and resolved by user choice
-- [ ] No branch mutation ran without the `MYSPEC_ALLOW_BRANCH_OPS=1` prefix when the guard hook is installed
+- [ ] No checkout or merge ran without the `MYSPEC_ALLOW_BRANCH_OPS=1` prefix when the guard hook is installed
 
 ## Integration
 
