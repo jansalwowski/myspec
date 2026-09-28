@@ -712,8 +712,15 @@ if (manifest.value && wants('install')) {
         ? destFor(block, entry.renamedFrom, { ...entry, dest: undefined })
         : null;
 
+      // A marker-less old file (a redirect stub is the common case) has no
+      // project section to carry; update moves it and then asks how to seed
+      // the framework region, so the finding must not promise a carry-over.
       if (previous && existsSync(join(root, previous))) {
-        warn('framework-renamed', 'install', previous, `${previous}: the framework renamed this to ${dest}; update moves it and carries the project section across. Until then every blueprint writing to ${dest} writes to a file nothing reads`, {
+        const carries = entry.type !== 'marker-merge' || markerRegion(read(join(root, previous)) || '') !== null
+          ? 'update moves it and carries the project section across'
+          : 'it has no framework markers, so update moves it and then asks whether to replace it with the plugin copy, prepend the framework region above it, or pin it';
+
+        warn('framework-renamed', 'install', previous, `${previous}: the framework renamed this to ${dest}; ${carries}. Until then every blueprint writing to ${dest} writes to a file nothing reads`, {
           commands: ['/myspec:update'],
         });
 
@@ -732,8 +739,12 @@ if (manifest.value && wants('install')) {
       const previous = destFor(block, entry.renamedFrom, { ...entry, dest: undefined });
 
       if (previous && existsSync(join(root, previous))) {
+        const oldMarkerless = entry.type === 'marker-merge' && markerRegion(read(join(root, previous)) || '') === null;
+
         warn('framework-renamed', 'install', previous, `${previous} and ${dest} both exist — the framework renamed the first to the second, so one of them is a stale duplicate that no skill updates`, {
-          text: 'keep whichever holds the project content and delete the other — update offers to merge the two project sections'
+          text: oldMarkerless
+            ? `${previous} has no framework markers, so it holds no project section (usually a redirect stub) — delete it, or move anything worth keeping below the end marker of ${dest}; update offers both`
+            : 'keep whichever holds the project content and delete the other — update offers to merge the two project sections',
         });
       }
     }
@@ -743,8 +754,10 @@ if (manifest.value && wants('install')) {
       const shippedRegion = markerRegion(shipped);
 
       if (installedRegion === null) {
-        error('marker-missing', 'install', dest, `${dest}: no ${MARKER_START} / ${MARKER_END} markers — the next update cannot merge into it and will leave it stale forever`, {
-          text: `wrap the framework section in ${MARKER_START} … ${MARKER_END}, using the plugin copy as the reference`,
+        // update asks: replace with the plugin copy, prepend the framework
+        // region above the content, or pin. A pinned file never reaches here.
+        error('marker-missing', 'install', dest, `${dest}: no ${MARKER_START} / ${MARKER_END} markers — update asks whether to replace it with the plugin copy, prepend the framework region above its content, or pin it; until then it stays stale`, {
+          commands: ['/myspec:update'],
         });
 
         return;

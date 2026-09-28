@@ -368,6 +368,70 @@ expect_line 'WARN +framework-renamed: ai/memory-index.md' "both names present is
 expect_line 'both exist' "the both-present finding says so"
 expect_exit 0 "both names present does not fail the run"
 
+# --- pass 3b-ii: the renamed file has no framework markers (#127) ------------
+#
+# A project that replaced memory-index.md with a redirect stub holds a
+# marker-less old file. update moves it, then asks how to seed the framework
+# region (replace / prepend / pin) instead of stopping. The doctor must not
+# promise a project section it cannot find, and once the move is done the
+# rename must be settled whichever answer the user gave.
+
+STUB='# Moved
+
+The anti-pattern index now lives in anti-patterns.md.
+'
+
+build_fixture
+rm "$REPO/ai/anti-patterns.md"
+printf '%s' "$STUB" > "$REPO/ai/memory-index.md"
+
+run_doctor install
+expect_line 'WARN +framework-renamed: ai/memory-index.md: .*no framework markers' "a marker-less old file is named as such"
+expect_line 'run: /myspec:update' "the marker-less rename still points at update"
+expect_no_line 'carries the project section across' "a marker-less old file is not promised a project-section carry-over"
+expect_exit 0 "a pending marker-less rename does not fail the run"
+
+# Both names present and the old one is the marker-less stub: there is no
+# project section to merge, so the fix is deleting the stub.
+sed 's/\${aiDir}/ai/g' "$PLUGIN/framework-files/anti-patterns.md" > "$REPO/ai/anti-patterns.md"
+
+run_doctor install
+expect_line 'WARN +framework-renamed: ai/memory-index.md and ai/anti-patterns.md both exist' "stub beside the new file is reported"
+expect_line 'fix: .*ai/memory-index.md has no framework markers' "the both-exist fix names the marker-less stub"
+
+# The move done, the stub is now the new file and still has no markers. The
+# finding is marker-missing, not the rename, and update is the fix.
+rm "$REPO/ai/anti-patterns.md"
+mv "$REPO/ai/memory-index.md" "$REPO/ai/anti-patterns.md"
+
+run_doctor install
+expect_no_line 'framework-renamed' "a completed move ends the rename finding"
+expect_line 'ERROR marker-missing: ai/anti-patterns.md' "the moved marker-less file is marker-missing"
+expect_line 'run: /myspec:update' "marker-missing points at update, which now offers the choices"
+
+# Answer "prepend": plugin framework-owned region above the stub. Clean.
+node -e '
+const fs=require("fs");
+const src=fs.readFileSync(process.argv[1],"utf8").split("${aiDir}").join("ai");
+const end="<!-- myspec:framework-end -->";
+const region=src.slice(0, src.indexOf(end)+end.length);
+fs.writeFileSync(process.argv[2], region+"\n\n"+fs.readFileSync(process.argv[2],"utf8"));
+' "$PLUGIN/framework-files/anti-patterns.md" "$REPO/ai/anti-patterns.md"
+
+run_doctor install
+expect_no_line 'marker-missing' "prepending the framework region resolves marker-missing"
+expect_no_line 'framework-renamed' "prepending leaves no rename finding"
+expect_no_line 'framework-drift: ai/anti-patterns.md' "the prepended region matches the plugin copy"
+
+# Answer "pin": the stub stays as it is, pinned under the new key. Clean.
+rm "$REPO/ai/anti-patterns.md"
+printf '%s' "$STUB" > "$REPO/ai/anti-patterns.md"
+set_json .myspec.json 'd.frameworkFiles = { "anti-patterns.md": { pinned: "redirect stub, kept by choice" } }'
+
+run_doctor install
+expect_no_line 'marker-missing' "a pinned marker-less file is not marker-missing"
+expect_no_line 'framework-renamed' "a pinned moved file leaves no rename finding"
+
 # --- pass 3c: a file the framework retired ----------------------------------
 #
 # The manifest's removed block is how a deletion travels; the real manifest
