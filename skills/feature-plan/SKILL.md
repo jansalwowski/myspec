@@ -56,7 +56,7 @@ For each implementation step in the tech-spec:
 - When in doubt, make it sequential
 - Group tasks in parallel only when each is large enough to amortise a worktree merge and review; small tasks run faster in sequence
 
-**Phase grouping rule:** every phase pays a full barrier suite and a phase review, however small it is. Put consecutive sequential tasks in one phase when each is small (one module, no barrier artifact a later task needs approved first) or they touch disjoint layers. Start a new phase only where a reviewer could reject one task while approving the other and the next task must build on the approved one.
+**Phase grouping rule:** every phase pays a full barrier suite and a phase review, however small it is. Grouping is the default: put consecutive sequential tasks in one phase when each is small (one module) or they touch disjoint layers. Start a new phase only after a task that publishes a contract later tasks are written against — an API response shape, an interface another layer consumes — because a rejected contract means redoing every consumer. A dependency inside the phase (a service over the migration beside it, a component using the hook beside it) does not split it: one rejection redoes one small neighbor.
 
 **Milestone ordering rule:**
 - Group tasks into **milestones** — each milestone is a vertical slice delivering one coherent piece of functionality.
@@ -311,7 +311,7 @@ Before presenting the plan:
 - [ ] Every algorithm or relied-on library call has a `**Prototype:**` line from a scratch run
 - [ ] Parallel groups have zero file overlap (check file lists)
 - [ ] Barriers exist after every parallel group
-- [ ] Consecutive small sequential tasks share a phase unless the next must build on the approved one
+- [ ] Consecutive small sequential tasks share a phase; a new phase starts only after a task publishing a contract later tasks are written against
 - [ ] Execution order table matches task dependencies
 - [ ] Every `DEFERRED` row was surfaced to the user in Step 6, not decided unilaterally
 - [ ] Every task has a populated **Spec contract** block with verbatim quotes (not paraphrased) from spec.md / tech-spec.md

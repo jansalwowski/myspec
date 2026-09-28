@@ -79,7 +79,7 @@ created: 2026-04-30
 
 (Single-milestone, so the `### Milestone N:` heading is omitted and the Execution Order table stands alone.)
 
-Six sequential tasks, three phases. Every phase pays a full barrier suite and a phase review, so small adjacent tasks share one: the migration is a few lines and the service beside it is one module; the hook, the component and the sort query touch disjoint layers. The API gets a phase of its own because the hook is written against its response shape, and a rejected shape would mean redoing the hook.
+Six sequential tasks, three phases. Every phase pays a full barrier suite and a phase review, so small adjacent tasks share one: the migration is a few lines and the service beside it is one module; the hook and the component that uses it are each small, and the sort query sits on another layer. The API gets a phase of its own because it publishes a contract: the hook is written against its response shape, and a rejected shape would mean redoing its consumers. The StarButton depends on the hook too, but a rejected hook redoes one small neighbor in the same phase, which is cheaper than another barrier.
 
 Each task carries a **Spec contract** block — verbatim quotes, not paraphrase — an **Interfaces** block (Consumes/Produces, exact signatures), plus a **Touch only** line whenever the Files block has a `Modify:` entry:
 
@@ -191,7 +191,7 @@ Plan is ready. Commit before /feature-implement to avoid dangling files.
 - **Touch only lands wherever a task modifies an existing file.** Without it, a reviewer flags adjacent pre-existing code as a regression. Task 6 touches the list query, so it scopes the diff explicitly.
 - **Every barrier can be green.** A new required field breaks every literal and caller of the type, including files outside the task. Grepping consumers at plan time puts them in the task that caused the break, instead of leaving a red barrier for the phase reviewer to trace.
 - **Plan against the synced base.** The pre-merge `listReports()` would have given Task 6 a snippet for a query that no longer exists; `planned_against` lets `feature-implement` warn if it moves again before Task 6 runs.
-- **Phases amortise their fixed cost.** Six phases would run six full suites and six reviews for a migration, a wrapper hook and a button; three phases put a boundary only where later work builds on an approved shape.
+- **Phases amortise their fixed cost.** Six phases would run six full suites and six reviews for a migration, a wrapper hook and a button; three phases put a boundary only after the one task that publishes a contract.
 - **Single-milestone, all-sequential is fine.** Don't split into milestones to look "complex." The milestone checkpoint at the end gives the user an exit point.
 - **The commit decision is part of the skill.** Leaving the plan uncommitted is the failure mode Step 7 exists to prevent — there's no "leave uncommitted" option offered.
 
