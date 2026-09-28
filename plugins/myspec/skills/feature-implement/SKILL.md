@@ -157,13 +157,14 @@ Parse milestones first, then build a DAG within each:
 - Parallel tasks have zero file overlap (check file lists — if they share a file, treat as sequential).
 - Phase numbers are globally unique (no duplicates across milestones).
 
-**Plan freshness** — only when the front-matter has `planned_against: <sha>`; skip silently without it (older plans). Collect the `Modify:` paths of every task not yet `[x]`, refresh the integration branch (the branch the feature merges into; `git fetch origin <integration>` when it has a remote), and run `git diff --name-only <sha> <integration ref> -- <paths>`:
+**Plan freshness** — only when the front-matter has `planned_against: <sha>`; skip silently without it (older plans). Collect the `Modify:` paths of every task not yet `[x]`. `$INTEGRATION` is the branch feature work merges into: the one CLAUDE.md or the topology file names, else the default branch ([`_shared/git-helpers.md`](../_shared/git-helpers.md)) — the same resolution `feature-plan` used to record the SHA. Set `BASE=origin/$INTEGRATION` and run `git fetch origin "$INTEGRATION"` (no remote configured: `BASE=$INTEGRATION`, skip the fetch). A local branch name is never the ref when a remote exists: the fetch moves only `origin/$INTEGRATION`, so the local branch can lag and diff empty. Then run `git diff --name-only <sha> "$BASE" -- <paths>`:
 
 | Result | Action |
 |--------|--------|
 | exits 0, empty output | Fresh — proceed |
-| exits 0, lists files | Warn with the list, log `Ruling: run despite <files> changed on <integration> since planned_against — implementers read current code — cost if wrong: a stale task snippet costs a fix round`, and tell each task that modifies a listed file that it changed after the plan was written |
+| exits 0, lists files | Warn with the list, log `Ruling: run despite <files> changed on $INTEGRATION since planned_against — implementers read current code — cost if wrong: a stale task snippet costs a fix round`, and tell each task that modifies a listed file that it changed after the plan was written |
 | non-zero exit (128: the SHA was rebased or squashed away) | Warn "cannot verify plan freshness — planned_against <sha> not found" — never read as unchanged — and proceed |
+| the fetch exits non-zero | Warn "cannot verify plan freshness — fetch of $INTEGRATION failed" and proceed without running the diff — a diff against the unfetched ref is never read as unchanged |
 
 It warns rather than blocks: implementers already work from the current code and `Touch only` scopes their edits, while the fix for real drift — re-planning — is the user's call, which the warning and the logged ruling put in front of them.
 
