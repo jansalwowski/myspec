@@ -5,9 +5,15 @@
 # approved: worktrees have .git as a FILE, the main checkout as a DIRECTORY):
 #
 #   A. Branch mutations are blocked always. `git checkout`, `switch`, `merge`,
-#      `rebase`, and `branch -d/-D/-m/-c` on the main checkout are how a
-#      parallel agent knocks the user's working tree out from under them.
+#      `rebase`, and `branch -m/-c` on the main checkout are how a parallel
+#      agent knocks the user's working tree out from under them.
 #      (`git checkout -- <file>` is blocked too; use `git restore <file>`.)
+#      `branch -d/-D` is blocked only when a named branch is checked out in
+#      some worktree (`git worktree list --porcelain`): deleting one no tree
+#      has checked out, or a remote-tracking ref (`-dr`), disturbs no working
+#      tree. A name the hook cannot resolve (quoted, `$VAR`, `@{-1}`) blocks.
+#      Blocking those deletes unconditionally only taught agents to reach for
+#      the bypass (issue #126).
 #   B. When the session has chosen WORKTREE isolation, tree-specific commands
 #      are blocked as well: builds, installs, e2e runs, `lint:fix`, `git push`
 #      and `git worktree prune` silently target the wrong tree and are noticed
@@ -156,7 +162,7 @@ if ! printf '%s' "$COMMAND" | grep -qE '(^|[[:space:]])MYSPEC_ALLOW_BRANCH_OPS=1
     '^git[[:space:]]+switch([[:space:]]|$)'
     '^git[[:space:]]+merge([[:space:]]|$)'
     '^git[[:space:]]+rebase([[:space:]]|$)'
-    '^git[[:space:]]+branch[[:space:]]+(-[mMdDcC]|--move|--delete|--copy|--set-upstream)'
+    '^git[[:space:]]+branch[[:space:]]+(-[mMcC]|--move|--copy|--set-upstream)'
   )
 
   BLOCKED_CMD=$(find_matching_segment "$COMMAND" "${BRANCH_PATTERNS[@]}")
@@ -164,6 +170,80 @@ if ! printf '%s' "$COMMAND" | grep -qE '(^|[[:space:]])MYSPEC_ALLOW_BRANCH_OPS=1
   if [ -n "$BLOCKED_CMD" ]; then
     block "BLOCKED: Branch-mutating git commands are not allowed on the main checkout. Do the work in a linked worktree (see .claude/rules/work-isolation.md) or pass isolation: \"worktree\" in your Agent tool call. If you need to restore a file, use \`git restore <file>\` not \`git checkout\`. Blocked: $(printf '%s' "$BLOCKED_CMD" | head -c 200)"
   fi
+
+  # Branch deletion: checks every `git branch` segment that carries a delete
+  # flag, and echoes the block reason for the first one that must stop; empty
+  # output = allowed. Short flags may be clustered (-dr, -Df); any flag outside
+  # the known set blocks, so an unrecognised combination fails closed.
+  branch_delete_verdict() {
+    local segment checked_out word flags ch is_delete is_remote unknown end_opts
+    local -a words names
+
+    checked_out=$(git -C "$REPO_ROOT" worktree list --porcelain 2>/dev/null \
+      | awk '/^branch refs\/heads\//{sub(/^branch refs\/heads\//, ""); print}')
+
+    while IFS= read -r segment; do
+      segment=$(strip_command_prefix "$segment")
+      [[ "$segment" =~ ^git[[:space:]]+branch[[:space:]]+(.*)$ ]] || continue
+      read -r -a words <<< "${BASH_REMATCH[1]}"
+
+      is_delete=0 is_remote=0 unknown="" end_opts=0
+      names=()
+      for word in ${words[@]+"${words[@]}"}; do
+        if [ "$end_opts" = 1 ]; then names+=("$word"); continue; fi
+        case "$word" in
+          --) end_opts=1 ;;
+          --delete) is_delete=1 ;;
+          --remotes) is_remote=1 ;;
+          --force|--quiet) ;;
+          --*) unknown="$word" ;;
+          -?*)
+            flags="${word#-}"
+            while [ -n "$flags" ]; do
+              ch="${flags:0:1}"
+              flags="${flags:1}"
+              case "$ch" in
+                d|D) is_delete=1 ;;
+                r) is_remote=1 ;;
+                f|q) ;;
+                *) unknown="$word" ;;
+              esac
+            done
+            ;;
+          *) names+=("$word") ;;
+        esac
+      done
+
+      [ "$is_delete" = 1 ] || continue
+
+      if [ -n "$unknown" ]; then
+        printf 'BLOCKED: git branch delete combined with an unrecognised flag (%s) on the main checkout. Run the delete on its own. Blocked: %s' "$unknown" "$(printf '%s' "$segment" | head -c 200)"
+        return 0
+      fi
+
+      # Remote-tracking refs are never checked out in any working tree.
+      [ "$is_remote" = 1 ] && continue
+
+      for word in ${names[@]+"${names[@]}"}; do
+        # Q is the scanner placeholder for a quoted span.
+        if [ "$word" = Q ] || [ "$word" = - ] || [[ "$word" == *[\$@*?[]* ]]; then
+          printf 'BLOCKED: git branch delete names a branch the guard cannot resolve (%s): a quoted name, variable, glob or @{-N}. Write the branch name literally so the guard can confirm no worktree has it checked out. Blocked: %s' "$word" "$(printf '%s' "$segment" | head -c 200)"
+          return 0
+        fi
+        # -i: on a case-insensitive filesystem (macOS default) git resolves
+        # WT-A to the ref file of wt-a, so a case-variant name deletes it too.
+        if printf '%s\n' "$checked_out" | grep -qixF -- "$word"; then
+          printf 'BLOCKED: branch %s is checked out in a worktree (see `git worktree list`), and deleting it would leave that working tree on a missing branch. Remove the worktree first, or clean up with .claude/lib/branch-cleanup.sh. Blocked: %s' "$word" "$(printf '%s' "$segment" | head -c 200)"
+          return 0
+        fi
+      done
+    done <<EOF
+$(printf '%s' "$COMMAND" | sanitize_command | tr '|&;(){}`' '\n\n\n\n\n\n\n\n')
+EOF
+  }
+
+  DELETE_VERDICT=$(branch_delete_verdict)
+  [ -z "$DELETE_VERDICT" ] || block "$DELETE_VERDICT"
 fi
 
 # --- Gate B: tree-specific commands while the session is in worktree mode ----
