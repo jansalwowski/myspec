@@ -34,6 +34,8 @@ The skill reads `references/plan-templates.md` before drafting.
 
 The skill loads `tech-spec.md` (6 steps, file inventory, interfaces) and `spec.md` (5 acceptance criteria).
 
+Before reading any code it syncs the base. The project names no integration branch, so it is the default branch, `main`. After `git fetch origin main`, `git merge-base --is-ancestor origin/main HEAD` exits 1: a teammate's merge changed `listReports()`, the query Task 6 modifies. The skill merges `origin/main`, reads `listReports()` from the merged tree, and records `git rev-parse origin/main` as `planned_against`.
+
 #### 2. Build dependency graph
 
 Each step depends on the previous one's output:
@@ -55,6 +57,7 @@ status: draft
 based_on_tech_spec_version: 1
 spec: ai/features/favorite-reports/spec.md
 tech_spec: ai/features/favorite-reports/tech-spec.md
+planned_against: 3f9c2a7e1b4d8c6f0a2e5b7d9c1f3a5e7b9d2c4f
 created: 2026-04-30
 ---
 
@@ -188,6 +191,7 @@ Plan is ready. Commit before /feature-implement to avoid dangling files.
 - **Global Constraints and Interfaces are the anti-drift rails.** Project-wide exacts live once in the header section (every task implicitly includes them); exact signatures live in each task's Interfaces block. Task 4's hook calls `list(userId)` because Task 2's Produces line says so — an implementer who sees only their task text never guesses a name.
 - **Touch only lands wherever a task modifies an existing file.** Without it, a reviewer flags adjacent pre-existing code as a regression. Task 6 touches the list query, so it scopes the diff explicitly.
 - **Every barrier can be green.** A new required field breaks every literal and caller of the type, including files outside the task. Grepping consumers at plan time puts them in the task that caused the break, instead of leaving a red barrier for the phase reviewer to trace.
+- **Plan against the synced base.** The pre-merge `listReports()` would have given Task 6 a snippet for a query that no longer exists; `planned_against` lets `feature-implement` warn if it moves again before Task 6 runs.
 - **Single-milestone, all-sequential is fine.** Don't split into milestones to look "complex." The milestone checkpoint at the end gives the user an exit point.
 - **The commit decision is part of the skill.** Leaving the plan uncommitted is the failure mode Step 7 exists to prevent — there's no "leave uncommitted" option offered.
 

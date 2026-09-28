@@ -158,6 +158,17 @@ Run `git worktree prune --dry-run` to detect pruneable references.
 
 This step is informational only — do not auto-cleanup.
 
+### 5b. Check Integration-Branch Lag
+
+Only when CLAUDE.md or the topology file names an integration branch (`$INTEGRATION`, where feature work merges) distinct from a release branch (`$RELEASE`, what ships). A release fix merged into `$RELEASE` but not `$INTEGRATION` leaves every plan written against stale code. Otherwise omit the line.
+
+Run `git fetch --quiet origin "$RELEASE" "$INTEGRATION"`, then `git merge-base --is-ancestor "origin/$RELEASE" "origin/$INTEGRATION"`:
+- exit 0 → omit the line
+- exit 1 → `**Branch lag**: {integration} is missing {N} commit(s) from {release} — merge {release} into {integration} before planning`, N from `git rev-list --count "origin/$INTEGRATION..origin/$RELEASE"`
+- fetch or check exits otherwise → `**Branch lag**: not checked — {command} exited {code}`
+
+Informational only — never merge here.
+
 ### 6. Check Framework Version
 
 Compare `frameworkVersion` from `.myspec.json` (read in step 1) against `frameworkVersion` from the plugin's `framework-files/manifest.json`.
@@ -196,6 +207,7 @@ Output a brief structured summary so the user can confirm the agent is properly 
 **Auto-archived**: [M orphaned sessions / 0 (omit line if 0)]
 **Dangling**: [M sessions 1–6h stale — run /myspec:session-clean (omit line if 0)]
 **Worktree health**: [clean (N active) / WARNING — N stale/orphaned. Use the `worktree-clean` skill]
+**Branch lag**: [omit unless step 5b found a lag or could not check]
 **myspec version**: [omit if versions match / plugin v{plugin} ahead of project v{project} — run /myspec:update / plugin v{plugin} behind project v{project} — update your plugin / project on v{project}, plugin has v{plugin} (non-semver)]
 **Boundaries**: [any never_modify paths relevant to task, or "none relevant"]
 ```
@@ -211,6 +223,7 @@ Output a brief structured summary so the user can confirm the agent is properly 
 - [ ] Setup doctor run (or its absence reported); summary line in the output, nothing fixed
 - [ ] `.claude/state/sessions/` was listed and orphans (> 6h) auto-archived; 1–6h only reported
 - [ ] Worktree health was checked (or omitted if no worktrees)
+- [ ] Integration-branch lag was checked by exit status when the project names distinct integration and release branches
 - [ ] Framework version was compared (or omitted silently if unreadable)
 - [ ] Orientation summary was printed with all required fields populated
 - [ ] No session was created (bootstrap orients only — sessions auto-create on first code edit)
