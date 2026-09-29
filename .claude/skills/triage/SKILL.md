@@ -54,20 +54,38 @@ Run `git fetch origin`, then `git worktree add --detach <scratchpad>/triage-main
 
 Record one row per issue. The row holds type, areas, priority, status, the files the fix would touch, one line of evidence, and the proposed actions.
 
-1. **Bundle.** Does the body hold two or more problems that would land as separate PRs, such as numbered findings with disjoint files or unrelated symptoms? If so, it gets `status:needs-split`. Draft one child issue per problem. Each child gets a component-prefixed title and its own repro, copied verbatim from the parent. The parent stays open as a tracker. Assess each child through items 2 to 6, not the parent.
-2. **Duplicate or recurrence.** Compare with the comparison set by component and symptom, not by title wording. A duplicate of an open issue is closed with `--duplicate-of`, keeping the issue with the better repro. An item of a bundle that repeats another open issue becomes that issue, not a new child. A closed issue whose fix has regressed, or whose fix was partial, is a recurrence: link it in the comment and keep this one open.
-3. **Already fixed.** Look for a merged PR after `createdAt` whose files overlap the named files or whose closing references include the issue. If you find one, rerun the repro to confirm, then propose closing as completed, citing the PR.
+1. **Bundle.** Does the body hold two or more problems that would land as separate PRs, such as numbered findings with disjoint files or unrelated symptoms? If so, draft one child issue per problem. Each child gets a component-prefixed title, and its section of the parent copied verbatim, repro included. Assess each child through items 2 to 6, not the parent. Each item of the bundle ends up in one of three places:
+   - a new child issue
+   - an existing issue, when the item repeats one (item 2); comment on that issue with the item's evidence
+   - the parent's comment, when the item is already fixed (item 3) or needs no change
+
+   The parent stays open as a tracker: `status:blocked` on its children, its highest child's priority, and a comment that maps every section to where it went. `status:needs-split` is only for a bundle the user did not approve splitting.
+2. **Duplicate or recurrence.** Compare with the comparison set by component and symptom, not by title wording. Two bundles from different sessions often report the same defect in different words. A duplicate of an open issue is closed with `--duplicate-of`, keeping the issue with the better repro. A closed issue whose fix has regressed, or whose fix was partial, is a recurrence: link it in the comment and keep this one open.
+3. **Already fixed.** Look for a merged PR after `createdAt` whose files overlap the named files or whose closing references include the issue. When the report names the version it was found on (a downstream doctor run), `git tag --contains <merge sha>` shows whether that version had the fix. If you find a fix, rerun the repro to confirm, then propose closing as completed, citing the PR and the first tag that contains it.
 4. **Reproduce.** For a bug:
    - If the body gives a command or fixture, run it in the scratch tree. Record the command and whether it reproduced or not.
    - If there is no repro, try the behaviour the body describes, such as piping the named input into the named hook or running the named lib script.
    - If you cannot reproduce it, it gets `status:needs-repro`.
    - If it needs a consumer project, Docker or a live session, it gets `status:needs-repro` with the missing ingredient named. Don't guess.
 
-   For an enhancement, check the premise instead: grep origin/main to confirm that what the issue calls missing is missing. Run only commands that stay inside the scratch tree or `$TMPDIR`. Never run a repro that pushes, deletes branches or writes outside them.
+   For an enhancement, check the premise instead: grep origin/main to confirm that what the issue calls missing is missing. Where the body misstates the code (a wrong line, a wrong command, a behaviour that is partly there), put the correction in the triage comment, because whoever fixes the issue trusts the body. Run only commands that stay inside the scratch tree or `$TMPDIR`. Never run a repro that pushes, deletes branches or writes outside them. Build fixture repos under `$(cd "$TMPDIR" && pwd -P)`. On macOS `$TMPDIR` sits under a `/var` symlink, and hooks that compare paths against the repo root then treat every file as outside the repo and approve it. That is a false "not reproduced".
 5. **Conflict.** Does the issue pull against another open issue, the next major's milestone plan, or a recently merged PR? Examples are removing a skill that a merged PR just fixed, or two issues editing the same rule in opposite directions. If so, it gets `status:blocked` on a decision, and the comment names both sides.
 6. **Classify.** Set type, the areas from the table, priority from the `P1`–`P3` descriptions, and status. `status:ready` requires a reproduced bug or a confirmed premise. If breaking, add `breaking` and the next major's milestone (`gh api repos/{owner}/{repo}/milestones`), per RELEASING.md "Tracking".
 
-With more than five issues in scope, dispatch one read-only subagent per issue for items 3 and 4. Give each the scratch tree path, the issue body and the comparison set. A subagent cannot reach the user. It returns `REPRO: <reproduced|not-reproduced|not-runnable> <command> — <one-line result>`, `FIXED-BY: #<pr>` when it finds a fix, and `NEED: <what would unblock>` for anything it could not settle. Items 1, 2, 5 and 6 stay with you, because they compare issues with each other.
+With more than five issues or bundle items in scope, split items 1 and 2 first, then dispatch read-only subagents for items 3 and 4. Group the items by the files they name, one subagent per group, keeping to about six. Issues are the wrong unit: one bundle can hold ten items, and an item from one issue often shares a hook with an item from another.
+
+Give each subagent:
+- the scratch tree path
+- the claims, quoted with their item ids
+- the fixture-path rule from item 4
+
+A subagent cannot reach the user. For each item it returns:
+- `REPRO: <reproduced|not-reproduced|partial|not-runnable> <command> — <one-line result>`
+- `FILES: <files the fix would touch, tests included>`, which the work batches need
+- `FIXED-BY: #<pr>`, when it finds a fix
+- `NEED: <what would unblock>`, for anything it could not settle
+
+Items 1, 2, 5 and 6 stay with you, because they compare issues with each other.
 
 ### Step 4: Report and approve
 
@@ -83,14 +101,15 @@ Call `AskUserQuestion` with three options: apply everything, apply a subset (the
 For each approved row, check that each command exits 0 and report any that fail:
 
 - Labels: `gh issue edit N --add-label a,b --remove-label status:needs-triage`. Add `--milestone <name>` for breaking issues. When the title lacks a component prefix and one clearly applies, add `--title`.
-- Splits: `gh issue create --title … --body … --label … --parent N` for each child, then comment on the parent listing the children.
+- Splits: `gh issue create --title … --body-file … --label … --parent N` for each child, with its final labels including a `status:*` one. The `issue-triage` workflow then adds no `status:needs-triage`, so it doesn't re-queue the child. Write each body to a file first: a verbatim section full of backticks and quotes doesn't survive `--body "…"`. Comment on the parent only after every child exists, because the comment cites their numbers.
+- Items folded into an existing issue: comment on that issue with the item's section and evidence.
 - Duplicates: `gh issue close N --duplicate-of M --comment "<evidence>"`.
 - Already fixed: `gh issue close N --reason completed --comment "Fixed by #<pr>; <repro command> no longer reproduces on <origin/main short sha>."`
-- Comment only where a label alone does not explain the decision: needs-repro (what was tried), blocked (on what), and any close. Put the evidence line in the comment.
+- Comment only where a label alone does not explain the decision: needs-repro (what was tried), blocked (on what), a folded item, a corrected body, and any close. Put the evidence line in the comment.
 
 ### Step 6: Verify and clean up
 
-- Re-list the triaged issues. Each has exactly one `status:*` label, one `type:*` label and one priority, and none still carries `status:needs-triage` unless the user skipped it.
+- Re-list the triaged issues and the new children. Each has exactly one `status:*` label, one `type:*` label and one priority, and none still carries `status:needs-triage` unless the user skipped it. `gh run list --workflow issue-triage.yml` shows a successful run for each child.
 - `git worktree remove --force <scratchpad>/triage-main`, then `git worktree prune`.
 
 ## Rules
