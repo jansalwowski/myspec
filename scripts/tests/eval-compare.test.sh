@@ -7,8 +7,12 @@
 #                   and a haiku model only in old. Diffs +.3 +.2 +.2 +.1 +.1 +.1
 #                   0 0 -.1 +.2: mean +0.11, sign test +7/-1 (2 ties).
 #   passk-old/new   scores barely move but three cases start failing a run:
-#                   pass^3 0.90 -> 0.70 while the CI straddles 0.
+#                   pass^3 0.90 -> 0.70 while the CI straddles 0 (noise).
 #   k5-c3, k5-c1    one case, 5 runs, 3 (resp. 1) passing.
+#   stable-old      10 cases passing every run; broken1-new / broken2-new make
+#                   1 / 2 of them fail every run.
+#   drift-old/new   8 of 10 never-passing cases lose 0.1 each (CI + sign test).
+#   drop-old/new    2 of 10 cases fall from 0.9 to 0.2 (per-case score drop).
 #
 # Usage: scripts/tests/eval-compare.test.sh
 
@@ -111,25 +115,59 @@ else
 fi
 
 echo "# verdict branches"
-cmp_json reversed "$FX/worked-new" "$FX/worked-old"
-expect_eq "regressed when the CI lies below 0: exit 1" "$RC" 1
-expect_eq "regressed verdict and CI" "$(jf "$TMP/reversed.json" '[d.verdict, d.models.sonnet.ci]')" '["regressed",[-0.18,-0.04]]'
-expect_has "reason names the CI" "$(jf "$TMP/reversed.json" 'd.models.sonnet.reasons[0]')" "lies entirely below 0"
+cmp_json broken2 "$FX/stable-old" "$FX/broken2-new"
+expect_eq "2 stable cases now failing every run: regressed, exit 1" "$RC $(jf "$TMP/broken2.json" d.verdict)" "1 regressed"
+expect_eq "the regressed cases are named" "$(jf "$TMP/broken2.json" d.models.sonnet.regressed_cases)" '["case-01","case-02"]'
+expect_eq "per-case flag says what changed" "$(jf "$TMP/broken2.json" d.models.sonnet.cases[0].flag)" "was PPP, now FFF"
+expect_eq "CI upper bound exactly 0 (the rest tied) is not 'below 0'" \
+  "$(jf "$TMP/broken2.json" '[d.models.sonnet.ci[1], d.models.sonnet.reasons.length, d.models.sonnet.reasons[0].startsWith("2 case(s) regressed")]')" '[0,1,true]'
+
+cmp_json broken1 "$FX/stable-old" "$FX/broken1-new"
+expect_eq "1 regressed case: no-change with a warning, exit 0" \
+  "$RC $(jf "$TMP/broken1.json" '[d.verdict, d.models.sonnet.warnings.length]')" '0 ["no-change",1]'
 
 cmp_json passk "$FX/passk-old" "$FX/passk-new"
-expect_eq "regressed on a pass^k drop beyond the margin: exit 1" "$RC" 1
-expect_eq "CI straddles 0, pass^3 drops 0.9 -> 0.7" \
-  "$(jf "$TMP/passk.json" '[d.verdict, d.models.sonnet.ci[0] < 0 && d.models.sonnet.ci[1] > 0, d.models.sonnet.old.pass_hat_k, d.models.sonnet.new.pass_hat_k]')" \
-  '["regressed",true,0.9,0.7]'
-expect_has "reason names pass^3" "$(jf "$TMP/passk.json" 'd.models.sonnet.reasons.join()')" "pass^3 dropped 0.90 -> 0.70"
+expect_eq "3 cases each losing 1 of 3 runs is noise: no-change, exit 0" \
+  "$RC $(jf "$TMP/passk.json" '[d.verdict, d.models.sonnet.old.pass_hat_k, d.models.sonnet.new.pass_hat_k]')" '0 ["no-change",0.9,0.7]'
 expect_eq "sign test p with 1 up, 3 down" "$(jf "$TMP/passk.json" d.models.sonnet.sign.p)" 0.625
 
-cmp_json passk-wide "$FX/passk-old" "$FX/passk-new" --pass-k-margin 0.25
-expect_eq "a wider margin tolerates the drop: no-change, exit 0" "$RC $(jf "$TMP/passk-wide.json" d.verdict)" "0 no-change"
+cmp_json drift "$FX/drift-old" "$FX/drift-new"
+expect_eq "broad drift: CI below 0 and sign test p <= 0.05: regressed" \
+  "$RC $(jf "$TMP/drift.json" '[d.verdict, d.models.sonnet.ci[1] < 0, d.models.sonnet.sign.p, d.models.sonnet.regressed_cases]')" '1 ["regressed",true,0.0078,[]]'
+expect_has "reason names the CI and the sign test" "$(jf "$TMP/drift.json" 'd.models.sonnet.reasons[0]')" "lies entirely below 0 and the sign test agrees"
+cmp_json drift-strict "$FX/drift-old" "$FX/drift-new" --sign-alpha 0.005
+expect_eq "CI below 0 but the sign test not significant: no-change" "$RC $(jf "$TMP/drift-strict.json" d.verdict)" "0 no-change"
+
+cmp_json reversed "$FX/worked-new" "$FX/worked-old"
+expect_eq "CI below 0 with sign p 0.07 and no regressed case: no-change" \
+  "$RC $(jf "$TMP/reversed.json" '[d.verdict, d.models.sonnet.ci]')" '0 ["no-change",[-0.18,-0.04]]'
+
+cmp_json drop "$FX/drop-old" "$FX/drop-new"
+expect_eq "mean score falling by >= 0.67 in 2 cases: regressed" \
+  "$RC $(jf "$TMP/drop.json" '[d.verdict, d.models.sonnet.regressed_cases, d.models.sonnet.cases[0].flag]')" '1 ["regressed",["case-01","case-02"],"mean score 0.90 -> 0.20"]'
 
 cmp_json same "$FX/worked-new" "$FX/worked-new"
 expect_eq "identical sets: no-change, CI [0,0], p=1" \
   "$RC $(jf "$TMP/same.json" '[d.verdict, d.models.sonnet.ci, d.models.sonnet.sign.p]')" '0 ["no-change",[0,0],1]'
+
+cmp_json single "$FX/k5-c3" "$FX/k5-c1"
+expect_eq "1 paired case: insufficient-data, exit 0, however it moved" \
+  "$RC $(jf "$TMP/single.json" '[d.verdict, d.models.sonnet.verdict]')" '0 ["insufficient-data","insufficient-data"]'
+cmp_json four "$FX/stable-old" "$FX/broken2-new" --case 'case-0[1-4]'
+expect_eq "4 paired cases, 2 broken: still insufficient-data (minimum 5)" "$RC $(jf "$TMP/four.json" d.verdict)" "0 insufficient-data"
+
+echo "# calibration (Monte Carlo, seeded; RELEASING.md records the numbers)"
+CAL=$(node "$SRC_ROOT/scripts/evals/calibrate.mjs" --trials 1000 --json)
+echo "     $CAL"
+cal() { node -e 'const d = JSON.parse(process.argv[1]); console.log(d[process.argv[2]])' "$CAL" "$1"; }
+le() { node -e 'process.exit(Number(process.argv[1]) <= Number(process.argv[2]) ? 0 : 1)' "$1" "$2"; }
+for s in "sonnet A/A" "sonnet-flaky3 A/A" "haiku A/A" "haiku-low A/A"; do
+  if le "$(cal "$s")" 5; then ok "A/A false alarms <= 5%: $s ($(cal "$s")%)"; else nok "A/A false alarms <= 5%: $s" "$(cal "$s")%"; fi
+done
+for pair in "sonnet break 2:80" "sonnet break 3:95" "haiku break 2:25" "haiku break 3:40"; do
+  s="${pair%:*}" min="${pair##*:}"
+  if le "$min" "$(cal "$s")"; then ok "detects $s >= $min% ($(cal "$s")%)"; else nok "detects $s >= $min%" "$(cal "$s")%"; fi
+done
 
 echo "# pass@k and pass^k estimators"
 cmp_json k5c3 "$FX/k5-c3" "$FX/k5-c3" --k 3
@@ -159,8 +197,14 @@ cmp_json glob3 "$FX/worked-old" "$FX/worked-new" --case 'zzz*'
 expect_eq "--case matching nothing: exit 2" "$RC" 2
 
 echo "# baseline files"
+EV="$TMP/evals"
+mkdir -p "$EV/_fixtures" "$EV/results/old"
+echo "lib" > "$EV/_fixtures/lib.sh"
+for c in case-01 case-02 case-03 case-04 case-05 case-06 case-07 case-08 case-09 case-10 gone added; do
+  mkdir -p "$EV/$c" && echo "prompt $c" > "$EV/$c/prompt.md"
+done
 node "$BASE" write "$FX/worked-old" --out "$TMP/q/baselines/v1.0.0.json" --version 1.0.0 --commit abc \
-  --model-id sonnet=claude-sonnet-x --model-id haiku=claude-haiku-y
+  --evals-dir "$EV" --model-id sonnet=claude-sonnet-x --model-id haiku=claude-haiku-y
 B1="$TMP/q/baselines/v1.0.0.json"
 expect_eq "baseline records version, tag, source, Claude Code, runs" \
   "$(jf "$B1" '[d.version, d.tag, d.source, d.claude_code, d.runs, d.judge_model]')" '["1.0.0","v1.0.0","release","2.1.284",3,"sonnet"]'
@@ -169,36 +213,67 @@ expect_eq "baseline records per-case run scores and passes" "$(jf "$B1" 'd.model
   '{"scores":[1,0.7,1],"passed":[true,false,true],"cost_usd":0.33,"duration_s":30}'
 expect_eq "baseline records model cost and duration" "$(jf "$B1" '[d.models.sonnet.cost_usd, d.models.sonnet.duration_s]')" "[3.63,60]"
 expect_eq "one line per case (11 sonnet + 1 haiku)" "$(grep -c '": {"scores"' "$B1")" 12
+expect_eq "baseline hashes the cases it ran and _fixtures/" \
+  "$(jf "$B1" '[Object.keys(d.evals.cases).length, "added" in d.evals.cases, /^[0-9a-f]{16}$/.test(d.evals.fixtures)]')" '[11,false,true]'
+
+node "$BASE" write "$FX/worked-old" --out "$TMP/noid.json" --version 1.0.0 --evals-dir "$EV" --model-id 'sonnet=!probe failed: offline'
+expect_eq "an unresolved model id is stored with its reason, never as null" \
+  "$(jf "$TMP/noid.json" '["model_id" in d.models.sonnet, d.models.sonnet.model_id_unresolved, d.models.haiku.model_id_unresolved]')" \
+  '[false,"probe failed: offline","no --model-id given"]'
 
 node "$CMP" "$B1" "$FX/worked-new" --json > "$TMP/from-baseline.json"
 expect_eq "a stored baseline compares exactly like the raw results" \
   "$(jf "$TMP/from-baseline.json" 'JSON.stringify(d.models)')" "$(jf "$W" 'JSON.stringify(d.models)')"
 
-node "$BASE" write "$FX/worked-new" --out "$TMP/head.json" --version 1.1.0 --model-id sonnet=claude-sonnet-x
-node "$BASE" write "$FX/passk-new" --out "$TMP/head-patch.json" --version 1.1.0 --model-id sonnet=claude-sonnet-x
-node "$BASE" write "$FX/worked-new" --out "$TMP/head-newid.json" --version 1.1.0 --model-id sonnet=claude-sonnet-z
-node "$BASE" write "$FX/worked-new" --out "$TMP/head-noid.json" --version 1.1.0
+hw() { node "$BASE" write "$1" --out "$2" --version 1.1.0 --evals-dir "$EV" "${@:3}"; }
+hw "$FX/worked-new" "$TMP/head.json" --model-id sonnet=claude-sonnet-x
+hw "$FX/passk-new" "$TMP/head-patch.json" --model-id sonnet=claude-sonnet-x
+hw "$FX/worked-new" "$TMP/head-newid.json" --model-id sonnet=claude-sonnet-z
+hw "$FX/worked-new" "$TMP/head-noid.json" --model-id 'sonnet=!probe failed: offline'
 sed 's/"claude_code": "2.1.284"/"claude_code": "2.2.0"/' "$TMP/head.json" > "$TMP/head-minor.json"
+chk() { node "$BASE" check "$1" "$2" --evals-dir "$EV" "${@:3}"; }
 
 echo "# reuse or rerun"
-expect_eq "matching baseline: reuse" "$(node "$BASE" check "$B1" "$TMP/head.json" --models sonnet | cut -d' ' -f1,2)" "REUSE sonnet"
-expect_eq "patch-level Claude Code change: reuse" "$(node "$BASE" check "$B1" "$TMP/head-patch.json" --models sonnet | cut -d' ' -f1,2)" "REUSE sonnet"
-expect_has "minor Claude Code change: rerun, with the reason" "$(node "$BASE" check "$B1" "$TMP/head-minor.json" --models sonnet)" \
+expect_eq "matching baseline: reuse, only the case missing from it re-runs" \
+  "$(chk "$B1" "$TMP/head.json" --models sonnet | cut -d' ' -f1,2 | tr '\n' '|')" "REUSE sonnet|RERUN-CASE added|"
+expect_has "patch-level Claude Code change: rerun by default" "$(chk "$B1" "$TMP/head-patch.json" --models sonnet)" \
+  "RERUN sonnet Claude Code 2.1.284 -> 2.1.290"
+expect_eq "--cc-match minor: a patch change reuses" "$(chk "$B1" "$TMP/head-patch.json" --models sonnet --cc-match minor | head -1 | cut -d' ' -f1,2)" "REUSE sonnet"
+expect_has "--cc-match minor: a minor change reruns" "$(chk "$B1" "$TMP/head-minor.json" --models sonnet --cc-match minor)" \
   "RERUN sonnet Claude Code 2.1.284 -> 2.2.0 (major.minor changed)"
-expect_has "resolved model id changed: rerun" "$(node "$BASE" check "$B1" "$TMP/head-newid.json" --models sonnet)" \
+expect_has "resolved model id changed: rerun" "$(chk "$B1" "$TMP/head-newid.json" --models sonnet)" \
   "RERUN sonnet resolved model claude-sonnet-x -> claude-sonnet-z"
-expect_has "unknown model id: reuse, noted" "$(node "$BASE" check "$B1" "$TMP/head-noid.json" --models sonnet)" \
-  "REUSE sonnet Claude Code 2.1.284 ~ 2.1.284; model id unknown, assumed unchanged"
-expect_has "no baseline file: rerun" "$(node "$BASE" check "$TMP/q/baselines/v0.9.0.json" "$TMP/head.json" --models sonnet)" \
+expect_has "model id not resolved now: rerun, with the reason" "$(chk "$B1" "$TMP/head-noid.json" --models sonnet)" \
+  "RERUN sonnet model id not resolved now (probe failed: offline)"
+expect_has "model id not resolved in the baseline: rerun" "$(chk "$TMP/noid.json" "$TMP/head.json" --models sonnet)" \
+  "RERUN sonnet baseline model id was not resolved (probe failed: offline)"
+expect_has "no baseline file: rerun" "$(chk "$TMP/q/baselines/v0.9.0.json" "$TMP/head.json" --models sonnet)" \
   "RERUN sonnet no stored baseline (v0.9.0.json)"
-node "$BASE" write "$FX/k5-c3" --out "$TMP/sonnet-only.json" --version 1.0.0
+node "$BASE" write "$FX/k5-c3" --out "$TMP/sonnet-only.json" --version 1.0.0 --evals-dir "$EV" --model-id sonnet=claude-sonnet-x
 expect_has "model missing from the baseline: rerun that model only" \
-  "$(node "$BASE" check "$TMP/sonnet-only.json" "$B1" --models sonnet,haiku)" "RERUN haiku baseline has no haiku results"
+  "$(chk "$TMP/sonnet-only.json" "$B1" --models sonnet,haiku)" "RERUN haiku baseline has no haiku results"
+
+echo "prompt case-03, reworded" > "$EV/case-03/prompt.md"
+expect_eq "a changed case directory re-runs that case" \
+  "$(chk "$B1" "$TMP/head.json" --models sonnet | grep RERUN-CASE | tr '\n' '|')" \
+  "RERUN-CASE added not in the baseline|RERUN-CASE case-03 evals/case-03/ changed since the baseline|"
+expect_eq "--case limits the case reruns" "$(chk "$B1" "$TMP/head.json" --models sonnet --case 'case-0*' | grep -c RERUN-CASE)" 1
+echo "lib v2" > "$EV/_fixtures/lib.sh"
+expect_eq "a _fixtures/ change re-runs everything" "$(chk "$B1" "$TMP/head.json" --models sonnet,haiku | tr '\n' '|')" \
+  "RERUN sonnet evals/_fixtures/ changed since the baseline|RERUN haiku evals/_fixtures/ changed since the baseline|"
+echo "results are ignored" > "$EV/results/old/x.json"
+echo "lib" > "$EV/_fixtures/lib.sh"
+expect_eq "evals/results/ is not hashed" "$(chk "$B1" "$TMP/head.json" --models sonnet | grep -c RERUN-CASE)" 2
 
 echo "# merge a partial rerun"
-node "$BASE" write "$FX/k5-c3" --out "$TMP/merged.json" --version 1.0.0 --source rerun --merge-into "$B1"
-expect_eq "rerun model replaces, other models kept" \
+node "$BASE" write "$FX/k5-c3" --out "$TMP/merged.json" --version 1.0.0 --source rerun --evals-dir "$EV" \
+  --merge-into "$B1" --replace-models sonnet
+expect_eq "a replaced model loses its old cases, other models kept" \
   "$(jf "$TMP/merged.json" '[d.source, Object.keys(d.models.sonnet.cases).length, Object.keys(d.models.haiku.cases).length]')" '["rerun",1,1]'
+node "$BASE" write "$FX/k5-c3" --out "$TMP/merged2.json" --version 1.0.0 --source rerun --evals-dir "$EV" --merge-into "$B1"
+expect_eq "a case rerun merges into the model's stored cases" \
+  "$(jf "$TMP/merged2.json" '[Object.keys(d.models.sonnet.cases).length, d.models.sonnet.cases["case-06"].scores]')" \
+  '[12,[1,0.7,1]]'
 
 echo "# trend line"
 node "$CMP" "$B1" "$TMP/head.json" --json --old-label "v1.0.0 (stored baseline)" > "$TMP/c.json"
@@ -212,7 +287,7 @@ expect_eq "trend: per-model stats" \
   "$(jf "$TMP/line.json" '(({cases, pass_rate, k, mean_score, cost_usd, duration_s, flaky}) => ({cases, pass_rate, "pass^k": d.models.sonnet["pass^k"], k, mean_score, cost_usd, duration_s, flaky}))(d.models.sonnet)')" \
   '{"cases":11,"pass_rate":0.4545,"pass^k":0.3636,"k":3,"mean_score":0.9091,"cost_usd":3.63,"duration_s":60,"flaky":["case-09","case-10"]}'
 expect_eq "trend: paired delta vs the previous release" "$(jf "$TMP/line.json" d.models.sonnet.paired_delta_vs_prev)" \
-  '{"mean":0.11,"ci":[0.04,0.18],"sign_p":0.0703,"n":10,"verdict":"improved"}'
+  '{"mean":0.11,"ci":[0.04,0.18],"sign_p":0.0703,"n":10,"regressed_cases":[],"verdict":"improved"}'
 node "$BASE" trend --head "$TMP/head.json" --compare "$TMP/c.json" --gate false --out "$T"
 expect_eq "re-recording a version replaces its line" "$(wc -l < "$T" | tr -d ' ')" 1
 node "$BASE" skip --version 1.2.0 --reason "usage limit reached" --out "$T"

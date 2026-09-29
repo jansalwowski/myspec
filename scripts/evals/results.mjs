@@ -13,11 +13,46 @@
 //
 // A run passes when every scored grader passed (graders with scored: false are
 // plugin-fired indicators under --ablation with-without and do not count).
+// A run that ended in an error other than the max_turns cap is left out, as
+// summary.mjs does: it was graded on an empty or truncated transcript.
+//
+// Baselines also carry content hashes of evals/ (evalsHashes), so a stored
+// baseline is not reused for a case whose prompt, fixture or graders changed.
 
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
 export const SCHEMA = 1;
+const BENIGN_ERROR_RE = /maximum number of turns/i;
+
+// sha256 (first 16 hex) over every file below dir: relative path and content.
+function hashDir(dir) {
+  const h = crypto.createHash('sha256');
+  const walk = (d, rel) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const p = path.join(d, e.name);
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.name === '.DS_Store') continue;
+      if (e.isDirectory()) walk(p, r);
+      else if (e.isFile()) h.update(`${r}\0`).update(fs.readFileSync(p)).update('\0');
+    }
+  };
+  walk(dir, '');
+  return h.digest('hex').slice(0, 16);
+}
+
+// { fixtures: <hash of _fixtures/>, cases: { <case>: <hash of evals/<case>/> } }
+export function evalsHashes(evalsDir) {
+  const cases = {};
+  for (const e of fs.readdirSync(evalsDir, { withFileTypes: true })) {
+    if (!e.isDirectory() || e.name.startsWith('_') || e.name === 'results') continue;
+    const d = path.join(evalsDir, e.name);
+    if (fs.existsSync(path.join(d, 'prompt.md')) || fs.existsSync(path.join(d, 'case.yaml'))) cases[e.name] = hashDir(d);
+  }
+  const fx = path.join(evalsDir, '_fixtures');
+  return { fixtures: fs.existsSync(fx) ? hashDir(fx) : null, cases };
+}
 
 function findAggregates(dir) {
   const out = [];
@@ -47,12 +82,12 @@ function addAggregate(set, file) {
   }
   if (doc.partial) throw new Error(`${file} is partial (${doc.partialReason ?? 'unknown reason'})`);
   const alias = doc.suite?.modelOverride ?? path.basename(path.dirname(file));
-  const m = (set.models[alias] ??= { model_id: null, cost_usd: 0, duration_s: 0, cases: {} });
+  const m = (set.models[alias] ??= { cost_usd: 0, duration_s: 0, cases: {} });
   m.duration_s += doc.durationSeconds ?? 0;
   if (doc.claudeVersion) set.claude_code ??= doc.claudeVersion;
   if (doc.suite?.judgeModel) set.judge_model ??= doc.suite.judgeModel;
   for (const c of doc.cases ?? []) {
-    const runs = c.arms?.with ?? [];
+    const runs = (c.arms?.with ?? []).filter((r) => !r.error || BENIGN_ERROR_RE.test(String(r.error)));
     const entry = (m.cases[c.name] ??= { scores: [], passed: [], cost_usd: 0, duration_s: 0 });
     for (const r of runs) {
       entry.scores.push(round(r.score ?? 0));
@@ -131,7 +166,8 @@ export function formatBaseline(set) {
   const models = Object.entries(set.models);
   models.forEach(([alias, m], i) => {
     lines.push(`    ${JSON.stringify(alias)}: {`);
-    lines.push(`      "model_id": ${JSON.stringify(m.model_id ?? null)},`);
+    if (m.model_id) lines.push(`      "model_id": ${JSON.stringify(m.model_id)},`);
+    else lines.push(`      "model_id_unresolved": ${JSON.stringify(m.model_id_unresolved ?? 'not recorded')},`);
     lines.push(`      "cost_usd": ${JSON.stringify(round(m.cost_usd, 4))},`);
     lines.push(`      "duration_s": ${JSON.stringify(m.duration_s)},`);
     lines.push('      "cases": {');

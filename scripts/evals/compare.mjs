@@ -3,8 +3,8 @@
 //
 // Usage:
 //   node scripts/evals/compare.mjs <old> <new> [--json] [--k N] [--seed N]
-//        [--resamples N] [--pass-k-margin X] [--case <glob>]
-//        [--old-label L] [--new-label L]
+//        [--resamples N] [--min-paired N] [--min-flagged N] [--case-drop X]
+//        [--sign-alpha X] [--case <glob>] [--old-label L] [--new-label L]
 //
 // <old> and <new> are each a run.sh results directory or a baseline file
 // (quality/baselines/v<X.Y.Z>.json); see results.mjs. Per model present in
@@ -18,27 +18,38 @@
 //   sign test: exact two-sided binomial p over non-tied differences
 //   pass@k = 1 - C(n-c,k)/C(n,k) and pass^k = C(c,k)/C(n,k) per case, averaged
 //     over paired cases; n runs, c passing runs (every scored grader passed),
-//     k = --k or the fewest runs any paired case has
+//     k = --k or the fewest runs any paired case has (reported, not a verdict input)
 //   flaky cases: mixed pass/fail across runs
 //   cases in only one set: listed, excluded from every paired statistic
 //
-// Verdict per model:
-//   regressed  CI upper bound < 0, or pass^k dropped by more than
-//              --pass-k-margin (default 0.10: with 15 cases one case losing
-//              pass^k is 0.067 and tolerated, two are 0.133 and are not)
-//   improved   CI lower bound > 0 and not regressed
-//   no-change  otherwise
-// Overall verdict: regressed if any model regressed, else improved if any
-// improved, else no-change.
+// A case REGRESSED when either
+//   - it passed every run in the baseline (at least 2 runs) and now passes
+//     none of at least 2 runs, or
+//   - its mean score fell by at least --case-drop (default 0.67).
 //
-// Exit status: 0 improved or no-change · 1 regressed · 2 bad input
-// (unreadable set, no model or no case in common, --k above the run count).
+// Verdict per model:
+//   insufficient-data  fewer than --min-paired paired cases (default 5)
+//   regressed          at least --min-flagged cases regressed (default 2), or the
+//                      CI lies entirely below 0 AND the sign test p <= --sign-alpha
+//                      (default 0.05). A CI whose upper bound is exactly 0 (every
+//                      moved case moved down, the rest tied) is not "below 0";
+//                      the per-case rule covers those drops.
+//   improved           CI lies entirely above 0 and no case regressed
+//   no-change          otherwise; a single regressed case is printed as a warning
+// Calibration (scripts/evals/calibrate.mjs, RELEASING.md): the A/A false-alarm
+// rate stays at or below 5% on Sonnet- and Haiku-like suites.
+// Overall verdict: regressed if any model regressed, insufficient-data if every
+// model is, else improved if any improved, else no-change.
+//
+// Exit status: 0 improved, no-change or insufficient-data · 1 regressed ·
+// 2 bad input (unreadable set, no model or no case in common, --k above the
+// run count).
 
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { filterCases, loadSet } from './results.mjs';
 
-export const DEFAULTS = { seed: 42, resamples: 10000, passKMargin: 0.1 };
+export const DEFAULTS = { seed: 42, resamples: 10000, minPaired: 5, minFlagged: 2, caseDrop: 0.67, signAlpha: 0.05, stablePassMax: 0 };
 
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -132,27 +143,59 @@ export function compareModel(oldM, newM, opts) {
   const oldS = summarize(pick(oldM), k);
   const newS = summarize(pick(newM), k);
 
-  const reasons = [];
-  let verdict = 'no-change';
-  if (ci[1] < -EPS) reasons.push(`paired-delta 95% CI [${fmt(ci[0])}, ${fmt(ci[1])}] lies entirely below 0`);
-  const drop = oldS.pass_hat_k - newS.pass_hat_k;
-  if (drop > opts.passKMargin + EPS) {
-    reasons.push(`pass^${k} dropped ${oldS.pass_hat_k.toFixed(2)} -> ${newS.pass_hat_k.toFixed(2)}, more than the ${opts.passKMargin} margin`);
+  // Per-case regression flags. A case counts when it was stable in the
+  // baseline (every run passed, at least 2 runs) and now fails at least 2
+  // more runs, or when its mean score fell by at least caseDrop.
+  const flagged = [];
+  for (const c of cases) {
+    const no = c.old_passed.length;
+    const nn = c.new_passed.length;
+    const co = c.old_passed.filter(Boolean).length;
+    const cn = c.new_passed.filter(Boolean).length;
+    if (no >= 2 && nn >= 2 && co === no && cn / nn <= opts.stablePassMax + EPS) {
+      c.flag = `was ${pf(c.old_passed)}, now ${pf(c.new_passed)}`;
+    } else if (-c.diff >= opts.caseDrop - EPS) {
+      c.flag = `mean score ${c.old_mean.toFixed(2)} -> ${c.new_mean.toFixed(2)}`;
+    }
+    if (c.flag) flagged.push(c.name);
   }
-  if (reasons.length) verdict = 'regressed';
-  else if (ci[0] > EPS) {
-    verdict = 'improved';
-    reasons.push(`paired-delta 95% CI [${fmt(ci[0])}, ${fmt(ci[1])}] lies entirely above 0`);
+  const sign = signTest(diffs);
+
+  const reasons = [];
+  const warnings = [];
+  let verdict = 'no-change';
+  if (paired.length < opts.minPaired) {
+    verdict = 'insufficient-data';
+    reasons.push(`${paired.length} paired case(s), fewer than ${opts.minPaired}: no verdict`);
+  } else {
+    if (flagged.length >= opts.minFlagged) {
+      reasons.push(`${flagged.length} case(s) regressed (at least ${opts.minFlagged}): ${flagged.join(', ')}`);
+    } else if (flagged.length) {
+      warnings.push(`1 case regressed, below the ${opts.minFlagged}-case threshold: ${flagged[0]}`);
+    }
+    // A CI touching 0 (upper bound exactly 0) happens when every moved case
+    // moved down and the rest tied; it is not "entirely below 0". Those
+    // drops are what the per-case rule is for.
+    if (ci[1] < -EPS && sign.p <= opts.signAlpha) {
+      reasons.push(`paired-delta 95% CI [${fmt(ci[0])}, ${fmt(ci[1])}] lies entirely below 0 and the sign test agrees (p=${r4(sign.p)})`);
+    }
+    if (reasons.length) verdict = 'regressed';
+    else if (ci[0] > EPS && flagged.length === 0) {
+      verdict = 'improved';
+      reasons.push(`paired-delta 95% CI [${fmt(ci[0])}, ${fmt(ci[1])}] lies entirely above 0`);
+    }
   }
 
   return {
     verdict,
     reasons,
+    warnings,
+    regressed_cases: flagged,
     k,
     n_paired: paired.length,
     mean_delta: r4(mean(diffs)),
     ci: [r4(ci[0]), r4(ci[1])],
-    sign: (({ pos, neg, ties, p }) => ({ pos, neg, ties, p: r4(p) }))(signTest(diffs)),
+    sign: { ...sign, p: r4(sign.p) },
     old: oldS,
     new: newS,
     only_old: onlyOld,
@@ -176,12 +219,18 @@ export function compare(oldSet, newSet, options = {}) {
     }
   }
   const verdicts = Object.values(models).map((r) => r.verdict);
-  const verdict = verdicts.includes('regressed') ? 'regressed' : verdicts.includes('improved') ? 'improved' : 'no-change';
+  const verdict = verdicts.includes('regressed')
+    ? 'regressed'
+    : verdicts.every((v) => v === 'insufficient-data')
+      ? 'insufficient-data'
+      : verdicts.includes('improved')
+        ? 'improved'
+        : 'no-change';
   return {
     verdict,
     seed: opts.seed,
     resamples: opts.resamples,
-    pass_k_margin: opts.passKMargin,
+    rule: { min_paired: opts.minPaired, min_flagged: opts.minFlagged, case_drop: opts.caseDrop, sign_alpha: opts.signAlpha },
     old: { label: opts.oldLabel ?? null, claude_code: oldSet.claude_code ?? null },
     new: { label: opts.newLabel ?? null, claude_code: newSet.claude_code ?? null },
     only_old_models: oldModels.filter((m) => !newModels.includes(m)),
@@ -200,11 +249,12 @@ export function formatText(res) {
   const out = [];
   const side = (s) => `${s.label ?? '?'}${s.claude_code ? ` (Claude Code ${s.claude_code})` : ''}`;
   out.push(`Eval comparison: ${side(res.old)} -> ${side(res.new)}`);
-  out.push(`paired bootstrap ${res.resamples} resamples, seed ${res.seed} · pass^k margin ${res.pass_k_margin}`);
+  const u = res.rule;
+  out.push(`paired bootstrap ${res.resamples} resamples, seed ${res.seed} · regressed = >=${u.min_flagged} regressed cases, or CI < 0 with sign p <= ${u.sign_alpha} · min ${u.min_paired} paired cases`);
   for (const [model, r] of Object.entries(res.models)) {
     out.push('', `== ${model}: ${r.verdict} ==`);
-    const rows = [['CASE', 'OLD', 'NEW', 'DIFF', 'OLD RUNS', 'NEW RUNS']];
-    for (const c of r.cases) rows.push([c.name, c.old_mean.toFixed(2), c.new_mean.toFixed(2), fmt(c.diff, 2), pf(c.old_passed), pf(c.new_passed)]);
+    const rows = [['CASE', 'OLD', 'NEW', 'DIFF', 'OLD RUNS', 'NEW RUNS', 'REGRESSED']];
+    for (const c of r.cases) rows.push([c.name, c.old_mean.toFixed(2), c.new_mean.toFixed(2), fmt(c.diff, 2), pf(c.old_passed), pf(c.new_passed), c.flag ?? '']);
     const w = rows[0].map((_, i) => Math.max(...rows.map((row) => row[i].length)));
     for (const row of rows) out.push(row.map((v, i) => v.padEnd(w[i])).join('  ').trimEnd());
     out.push(
@@ -219,6 +269,7 @@ export function formatText(res) {
     if (r.only_old.length) out.push(`only in old (excluded): ${r.only_old.join(', ')}`);
     if (r.only_new.length) out.push(`only in new (excluded): ${r.only_new.join(', ')}`);
     for (const reason of r.reasons) out.push(`  ${reason}`);
+    for (const w of r.warnings) out.push(`  warning: ${w}`);
   }
   if (res.only_old_models.length) out.push('', `models only in old (not compared): ${res.only_old_models.join(', ')}`);
   if (res.only_new_models.length) out.push('', `models only in new (not compared): ${res.only_new_models.join(', ')}`);
@@ -244,14 +295,17 @@ function parseArgs(argv) {
     else if (a === '--k') o.k = num();
     else if (a === '--seed') o.seed = num();
     else if (a === '--resamples') o.resamples = num();
-    else if (a === '--pass-k-margin') o.passKMargin = num();
+    else if (a === '--min-paired') o.minPaired = num();
+    else if (a === '--min-flagged') o.minFlagged = num();
+    else if (a === '--case-drop') o.caseDrop = num();
+    else if (a === '--sign-alpha') o.signAlpha = num();
     else if (a === '--case') o.caseGlob = val();
     else if (a === '--old-label') o.oldLabel = val();
     else if (a === '--new-label') o.newLabel = val();
     else if (a.startsWith('--')) throw new Error(`unknown option ${a}`);
     else pos.push(a);
   }
-  if (pos.length !== 2) throw new Error('usage: compare.mjs <old> <new> [--json] [--k N] [--seed N] [--resamples N] [--pass-k-margin X] [--case glob]');
+  if (pos.length !== 2) throw new Error('usage: compare.mjs <old> <new> [--json] [--k N] [--seed N] [--resamples N] [--min-paired N] [--min-flagged N] [--case-drop X] [--sign-alpha X] [--case glob]');
   return { pos, o };
 }
 

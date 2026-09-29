@@ -1,6 +1,5 @@
 {
   "gate": false,
-  "pass_k_margin": 0.1,
   "seed": 42,
   "resamples": 10000
 }
