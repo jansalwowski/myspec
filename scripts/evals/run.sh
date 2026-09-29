@@ -15,6 +15,8 @@
 #                   Results land in <out>/<model>/ (full) or
 #                   <out>/<model>/<case>/ (changed: one invocation per case).
 #   --case          shell glob on case names, applied after selection.
+#   --plugin-dir    plugin under test, default: this repo. Its evals/ must hold
+#                   the same cases (release-check.sh copies them in).
 #
 # Environment:
 #   MYSPEC_EVALS_STRICT=1          exit 1 when a case scores below threshold (default: report only)
@@ -40,9 +42,9 @@ EVALS_DIR="$REPO_ROOT/evals"
 SCRIPT_DIR="$REPO_ROOT/scripts/evals"
 
 die() { echo "evals: $*" >&2; exit 2; }
-usage() { sed -n '2,35p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,37p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
-MODE="" BASE="" OUT="" RUNS="" MODELS="" CASE_GLOB=""
+MODE="" BASE="" OUT="" RUNS="" MODELS="" CASE_GLOB="" PLUGIN_DIR="$REPO_ROOT"
 while [ $# -gt 0 ]; do
   case "$1" in
     --mode) MODE="${2:-}"; shift 2 ;;
@@ -51,6 +53,7 @@ while [ $# -gt 0 ]; do
     --runs) RUNS="${2:-}"; shift 2 ;;
     --models) MODELS="${2:-}"; shift 2 ;;
     --case) CASE_GLOB="${2:-}"; shift 2 ;;
+    --plugin-dir) PLUGIN_DIR="${2:-}"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "evals: unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -221,7 +224,7 @@ spent_usd() {
 run_eval() {
   local outdir="$1" model="$2" cost="$3"; shift 3
   mkdir -p "$outdir"
-  local cmd=("$CLAUDE_BIN" plugin eval "$REPO_ROOT"
+  local cmd=("$CLAUDE_BIN" plugin eval "$PLUGIN_DIR"
     --trust-plugin --scaffold --no-publish
     --model "$model" --judge-model sonnet
     --runs "$RUNS" --ablation "$ABLATION" --threshold "$THRESHOLD"

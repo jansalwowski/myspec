@@ -20,7 +20,7 @@ Cut a myspec release from `main`. Repo-local maintainer skill — lives in `.cla
 
 Run all checks; any failure → report it and stop (fix first, never release around a failure):
 
-1. On `main` (`git rev-parse --abbrev-ref HEAD`), clean tree (`git status --porcelain` empty), synced (`git pull` reports up to date).
+1. On `main` (`git rev-parse --abbrev-ref HEAD`), clean tree (`git status --porcelain` empty), synced (`git pull` reports up to date), and not ahead: `git status -sb` must not say `ahead`. `git pull` reports "Already up to date" even when a local commit, such as a `chore(quality)` commit left by an aborted release, sits unpushed; show `git log --oneline origin/main..HEAD` and resolve it (Step 3's Abort) first.
 2. Mirror parity — the same diffs CI runs: `diff -r skills plugins/myspec/skills`, `diff -r hooks plugins/myspec/hooks`, `diff hooks.json plugins/myspec/hooks.json`, `diff -r lib plugins/myspec/lib`, `diff -r .codex-plugin plugins/myspec/.codex-plugin`.
 3. Hooks parse: `bash -n` every `hooks/*.sh`.
 4. Latest CI run on main succeeded: `gh run list --branch main --limit 1`. If not green, show the failure and ask for explicit confirmation before continuing.
@@ -32,18 +32,45 @@ Run all checks; any failure → report it and stop (fix first, never release aro
 3. Suggest a bump from the RELEASING.md semver table: breaking `.myspec.json` schema change, removed/renamed skill, or migration-requiring workflow → **major**; new skills, new framework files, new manifest entries, or any change under `framework-files/` → **minor**; body-only bug fixes → **patch**.
 4. Call `AskUserQuestion` with the suggested version first, marked `(Recommended)`, plus the other two bump levels. Wait for the choice.
 
-### Step 3: Bump, Commit, Tag, Push
+### Step 3: Eval Comparison
+
+`scripts/evals/release-check.sh` runs the full eval suite on HEAD (3 runs, Sonnet and Haiku agents, Sonnet judge) and compares it case by case with the previous release. Every run is a real model call on the maintainer's login, so state the cost before starting:
+
+| Situation | Spend | Time |
+|---|---|---|
+| Stored baseline for the previous tag is reused (the usual case) | about $8 (Sonnet ≈ $5.8, Haiku ≈ $2.0) | about 7 min |
+| The previous tag's whole suite is re-run too | about $16 | about 15 min |
+
+The script prints which applies (`baseline REUSE …`, `RERUN <model> <reason>`, `RERUN-CASE <case> <reason>`). RELEASING.md lists the rules: any Claude Code version change, a changed or unresolved model id, or changed `evals/_fixtures/` re-runs the suite; a changed case re-runs only that case. The check writes nothing to `quality/`; it stages files in its output directory.
+
+1. Tell the maintainer the estimate. If they choose to skip (quota, outage, docs-only release), run `scripts/evals/release-check.sh --version {X.Y.Z} --skip "<reason>"`, which records the reason in `quality/trend.jsonl`, and go to item 5.
+2. Run `scripts/evals/release-check.sh --version {X.Y.Z}` in the background: it can outlast a 10-minute tool timeout. Wait for it to exit, then show the comparison report and note the output directory it printed (`release-check: output in <out>`).
+3. Act on the exit status, not on the output alone:
+   - **0, verdict improved, no-change or insufficient-data:** go to item 4. Show any `warning:` line (a single regressed case).
+   - **0 with `REGRESSED; report-only`:** show the regressed models, their reasons, and the REGRESSED column. Call `AskUserQuestion`: continue the release, or stop to investigate. On stop, go to Abort.
+   - **1** (regressed and `"gate": true` in `quality/release-check.json`): stop and go to Abort. The release does not go out on a regressed verdict while the gate is on.
+   - **2** (infrastructure error: usage limit, logged out, run failed, interrupted): show the last lines it printed. Call `AskUserQuestion`: retry, skip with a reason (item 1), or stop. When HEAD's run finished, retry with `--head-results <out>/head` so it is not paid for twice.
+4. On a go: `scripts/evals/release-check.sh --record <out>` copies the staged baselines and trend line into `quality/`.
+5. Commit them before the bump: `git add quality && git commit -m "chore(quality): record v{X.Y.Z} eval baseline"`. This keeps the bump diff to version files only.
+
+**Abort**, whenever the release stops after this step:
+
+- Before `--record`, `quality/` is untouched and there is nothing to undo.
+- Recorded but not committed: `git checkout -- quality && git clean -fd quality`.
+- Committed: the commit is local and ahead of `origin/main`. Show `git log --oneline origin/main..HEAD`. If it lists only the `chore(quality)` commit, run `git reset --hard origin/main`. Otherwise stop and ask.
+
+### Step 4: Bump, Commit, Tag, Push
 
 1. `./scripts/bump-version.sh {X.Y.Z}`
 2. Show `git diff` — the only changes must be version fields (and the marketplace `ref`) in the five files. Anything else → stop and investigate.
 3. `git add -A && git commit -m "chore: bump to v{X.Y.Z}"`
 4. `git tag v{X.Y.Z}` then `git push && git push --tags`
 
-### Step 4: Release Notes
+### Step 5: Release Notes
 
 Pushing the tag **auto-publishes** the release — the workflow runs `gh release create --generate-notes` with no `--draft`. It is public within about a minute, titled with the bare tag and carrying only PR titles. `gh release create` then fails with HTTP 422 because the release already exists.
 
-**Write the notes before Step 3 pushes the tag.** Every minute between the push and the edit is a live release that says nothing.
+**Write the notes before Step 4 pushes the tag.** Every minute between the push and the edit is a live release that says nothing.
 
 1. Draft highlights from the commits/PRs since the previous tag — group by fixes / features / docs. If anything under `framework-files/`, `hooks/`, or `lib/` changed, include an **Upgrading** section telling consumers to run `/myspec:update`.
 2. Show the notes; accept-or-edit **before** the tag is pushed.
@@ -57,7 +84,7 @@ Pushing the tag **auto-publishes** the release — the workflow runs `gh release
    Keep the "What's Changed" PR links and "Full Changelog" line at the bottom — they are the only per-PR attribution the release carries.
 5. If no release object appears after ~30s the workflow failed: check its run, then `gh release create v{X.Y.Z} --notes-file /tmp/final.md` by hand.
 
-### Step 5: Verify
+### Step 6: Verify
 
 - `gh release view v{X.Y.Z}` shows the enriched notes.
 - All five version files report `{X.Y.Z}`: `grep -r '"version"\|frameworkVersion\|"ref"' framework-files/manifest.json .claude-plugin/plugin.json .claude-plugin/marketplace.json .codex-plugin/plugin.json plugins/myspec/.codex-plugin/plugin.json`.
@@ -68,12 +95,14 @@ Pushing the tag **auto-publishes** the release — the workflow runs `gh release
 - Never release from a branch other than `main`, or with a dirty tree — the tag must point at exactly what CI validated.
 - Never hand-edit the five version files; only `scripts/bump-version.sh` writes them.
 - Show the bump diff and the notes draft before committing/publishing — no silent releases.
+- Never release on a regressed or failed eval check without the user's explicit go-ahead, and never on a regressed verdict while the gate is on.
 - The Upgrading note is required whenever `framework-files/` changed since the last tag: that is what gates `/myspec:update` for every consumer.
 
 ## Verification Checklist
 
-- [ ] Preflight fully passed (main, clean, synced, mirrors identical, hooks parse, CI green or explicitly overridden)
+- [ ] Preflight fully passed (main, clean, synced, not ahead of origin, mirrors identical, hooks parse, CI green or explicitly overridden)
 - [ ] Version confirmed by the user against the semver table
+- [ ] Eval comparison ran or a skip was recorded with its reason; a regressed or failed run was confirmed by the user before `--record`; `quality/` committed as `chore(quality): record v{X.Y.Z} eval baseline` before the bump
 - [ ] Bump diff contained only the five version files; committed as `chore: bump to v{X.Y.Z}`
 - [ ] Notes written and approved **before** the tag was pushed
 - [ ] Notes landed via `gh release edit` (the tag auto-publishes; `create` only as a fallback if the workflow failed)
