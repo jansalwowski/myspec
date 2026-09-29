@@ -33,13 +33,15 @@ It:
 ## Release workflow
 
 1. Land all changes for the release on `main`
-2. From a clean working tree: `./scripts/bump-version.sh X.Y.Z`
-3. `git diff` — review the version bumps
-4. `git add -A && git commit -m "chore: bump to vX.Y.Z"`
-5. **Write the release notes now**, before the tag exists — see step 8 for why. Draft from the PRs since the previous tag, and include an **Upgrading** section whenever anything under `framework-files/`, `hooks/`, or `lib/` changed.
-6. `git tag vX.Y.Z`
-7. `git push && git push --tags`
-8. Pushing the tag **auto-publishes the GitHub release** — `.github/workflows/release.yml` runs `gh release create "$TAG" --title "$TAG" --generate-notes`, with no `--draft`. The release is public within about a minute of the tag landing, titled with the bare tag and carrying nothing but a list of PR titles.
+2. Run the eval comparison (next section): `scripts/evals/release-check.sh --version X.Y.Z`. Read the report; on a regressed verdict or a failed run, decide whether to go on. Then commit what it wrote on its own, before the bump, so the bump diff stays version files only:
+   `git add quality && git commit -m "chore(quality): record vX.Y.Z eval baseline"`
+3. From a clean working tree: `./scripts/bump-version.sh X.Y.Z`
+4. `git diff` — review the version bumps
+5. `git add -A && git commit -m "chore: bump to vX.Y.Z"`
+6. **Write the release notes now**, before the tag exists — see step 9 for why. Draft from the PRs since the previous tag, and include an **Upgrading** section whenever anything under `framework-files/`, `hooks/`, or `lib/` changed.
+7. `git tag vX.Y.Z`
+8. `git push && git push --tags`
+9. Pushing the tag **auto-publishes the GitHub release** — `.github/workflows/release.yml` runs `gh release create "$TAG" --title "$TAG" --generate-notes`, with no `--draft`. The release is public within about a minute of the tag landing, titled with the bare tag and carrying nothing but a list of PR titles.
 
    **So have the notes written before you push the tag.** Between the push and your edit there is a live release that says nothing useful; for a patch that is noise, and for a major it is the version most people will read on the day.
 
@@ -54,6 +56,32 @@ It:
    Keep the generated "What's Changed" and "Full Changelog" lines at the bottom — they are the only per-PR attribution the release carries. If no release object exists after ~30s the workflow failed: check its run, then `gh release create vX.Y.Z --notes-file /tmp/final.md` by hand.
 
    To close the live window instead of racing it, add `--draft` to the workflow's `gh release create` and publish with `gh release edit --draft=false` once the notes are in. That trades a public gap for a release that does not exist until someone finishes it.
+
+## Eval comparison
+
+`scripts/evals/release-check.sh --version X.Y.Z` answers "did this release make the plugin worse than the last one?" It runs locally on the maintainer's Claude Code login (see `evals/README.md`); there is no CI job.
+
+1. Runs the full eval suite on HEAD: every case, 3 runs, Sonnet and Haiku agents, Sonnet judge (`run.sh --mode full`).
+2. Resolves each model alias to the model id it maps to today, with one tiny `claude -p` call per model (about $0.03 in total).
+3. Gets the previous release's scores. It reuses `quality/baselines/v<prev>.json` unless the file is missing, the Claude Code major.minor version differs, or a model's resolved id differs. Otherwise it re-runs the previous tag, only for the affected models, in a temporary `git worktree` of the tag with HEAD's `evals/` copied in (same cases, old plugin). The worktree is removed on every exit path.
+4. Compares the two, case by case (`scripts/evals/compare.mjs`): the mean paired score delta with a paired-bootstrap 95% CI (seeded, 10,000 resamples), a sign test, pass@k and pass^k, flaky cases, and the cases present in only one set (listed, left out of the statistics).
+5. Writes `quality/baselines/vX.Y.Z.json` (per-case run scores, model ids, Claude Code version, cost, duration), refreshes `quality/baselines/v<prev>.json` if it re-ran the previous tag, and appends a line to `quality/trend.jsonl`.
+
+**Verdict**, per model: `regressed` when the CI lies entirely below 0, or when pass^k drops by more than `pass_k_margin` (0.10: with 15 cases one case losing pass^3 is tolerated, two are not). `improved` when the CI lies entirely above 0. `no-change` otherwise. The release verdict is the worst model's.
+
+**Cost.** HEAD's full run is about $8 and 7 minutes (Sonnet ≈ $5.8, Haiku ≈ $2.0 at 3 runs; at 1 run the Sonnet suite measured $1.94 and 109 s). When the previous tag must be re-run as well, double it. The first release after this lands has no stored baseline, so it pays the double once. `--head-results <dir>` reuses a finished HEAD run on a retry.
+
+**Skip.** `release-check.sh --version X.Y.Z --skip "<reason>"` runs nothing and records `{"version", "date", "skipped": "<reason>"}` in the trend log. Commit it the same way.
+
+**Exit status:** 0 done, 1 regressed with the gate on, 2 infrastructure error (usage limit, logged out, eval run failed). An exit 2 says nothing about the plugin.
+
+**The gate.** The check is report-only: a regressed verdict prints the report and exits 0, and the maintainer decides. Once a few releases of baselines exist, make it a hard gate by changing one line in `quality/release-check.json`:
+
+```json
+  "gate": true,
+```
+
+The same file holds `pass_k_margin`, `seed` and `resamples`.
 
 ## Versioning rules (semver)
 
