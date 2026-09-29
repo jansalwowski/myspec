@@ -27,6 +27,19 @@ The same hook scripts are now portable:
 
 Both runtimes share the same project-level verification config at `.claude/verification.json` when it exists. A repo whose lint or type-check is already red on the default branch gives that check a `diffCommand`: the gate runs it in place of `command`, with `$MYSPEC_BASE_REF` exported as the merge base with the default branch, so the check covers what the branch changed instead of blocking on pre-existing debt.
 
+Each check runs under a 120 s cap. At the cap the gate kills the check's process group on this machine, and nothing else. Work a check runs in a container or on another host (`docker exec`, `docker compose exec`, `kubectl exec`, `ssh`) keeps running after its client dies, and the next stop starts another run on top of it (issue #147). Give such a check a `cleanup` command. The gate runs it after a timeout, under its own 30 s cap, with the same `$MYSPEC_CHECK_RUN_ID` the check saw:
+
+```json
+{
+  "name": "Test",
+  "command": "docker compose exec -T -e MYSPEC_CHECK_RUN_ID <service> sh -c 'echo $$ > \"/tmp/$MYSPEC_CHECK_RUN_ID.pid\"; exec <test command>'",
+  "cleanup": "docker compose exec -T -e MYSPEC_CHECK_RUN_ID <service> sh -c 'kill -TERM -\"$(cat \"/tmp/$MYSPEC_CHECK_RUN_ID.pid\")\"'",
+  "required": true
+}
+```
+
+The exec'd shell leads its own process group in the container, so `kill -TERM -<pid>` also stops the runner's workers. Write it without `--`, which BusyBox `kill` rejects.
+
 ### Add the marketplace (once per machine)
 
 ```
