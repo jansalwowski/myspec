@@ -21,7 +21,13 @@ set -uo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 SCRIPT="${1:-$HERE/../delivery-metrics/metrics.mjs}"
+# The skill whose report lookup command the fixture runs (override: $2).
+SKILL_MD="${2:-$HERE/../../skills/feature-implement-review/SKILL.md}"
 
+if [ ! -f "$SKILL_MD" ]; then
+  echo "FATAL: skill not found: $SKILL_MD" >&2
+  exit 1
+fi
 if [ ! -f "$SCRIPT" ]; then
   echo "FATAL: script not found: $SCRIPT" >&2
   exit 1
@@ -392,6 +398,27 @@ MD
   conformance_hist hist-unrecorded complete conformant
   commit 2025-05-10 "docs(hist-unrecorded): conformance history"
 
+  # a pre-section report is committed, `git rm`ed and committed, then the
+  # report is regenerated. The skill's own lookup command (read from its
+  # SKILL.md) must find the pre-deletion version, which has no history
+  # section, so the new history is partial.
+  mkdir -p "$F/hist-deleted"; conformance hist-deleted conformant
+  commit 2025-05-11 "docs(hist-deleted): conformance conformant"
+  local before; before=$(cd "$REPO" && git rev-parse HEAD)
+  at 2025-05-12 rm -q ai/features/hist-deleted/conformance-report.md
+  commit 2025-05-12 "docs(hist-deleted): drop the report"
+  local lookup found shown
+  lookup=$(grep -o 'git log -1 [^`]*-- <report path>' "$SKILL_MD" | head -n 1)
+  lookup=${lookup//<report path>/ai\/features\/hist-deleted\/conformance-report.md}
+  LOOKUP_CMD="$lookup"
+  found=$(cd "$REPO" && eval "$lookup" 2>/dev/null); LOOKUP_STATUS=$?
+  LOOKUP_FOUND_PRE_DELETION=$([ "$found" = "$before" ] && echo yes || echo "no ($found)")
+  shown=$(cd "$REPO" && git show "$found:ai/features/hist-deleted/conformance-report.md" 2>/dev/null); SHOW_STATUS=$?
+  LOOKUP_HAS_SECTION=$(grep -q 'Verdict history' <<<"$shown" && echo yes || echo no)
+  # regenerated as "complete" anyway: the metric must still see the past
+  conformance_hist hist-deleted complete conformant
+  commit 2025-05-13 "docs(hist-deleted): conformance regenerated"
+
   # a later regression the history records is not a first-time failure
   conformance_hist hist-regress complete conformant
   commit 2025-05-08 "docs(hist-regress): conformance"
@@ -452,7 +479,7 @@ MD
   commit 2025-05-10 "docs: formatted and conflicted conformance histories"
 
   # never-committed and two long ids: only in the working tree
-  manifest "$M"'  - name: café-export\n    status: complete\n  - name: never-committed\n    status: draft\n  - name: a-very-long-feature-identifier-number-one\n    status: draft\n  - name: a-very-long-feature-identifier-number-two\n    status: draft\n'"$(printf '  - name: %s\\n    status: in-progress\\n' hist-fail-pass hist-pass hist-merged hist-squash hist-partial hist-bad-verdict hist-bad-row hist-stashed hist-unrecorded hist-regress hist-formatted hist-bad-gap hist-conflict)"
+  manifest "$M"'  - name: café-export\n    status: complete\n  - name: never-committed\n    status: draft\n  - name: a-very-long-feature-identifier-number-one\n    status: draft\n  - name: a-very-long-feature-identifier-number-two\n    status: draft\n'"$(printf '  - name: %s\\n    status: in-progress\\n' hist-fail-pass hist-pass hist-merged hist-squash hist-partial hist-bad-verdict hist-bad-row hist-stashed hist-unrecorded hist-deleted hist-regress hist-formatted hist-bad-gap hist-conflict)"
   spec never-committed 1
 }
 
@@ -512,6 +539,9 @@ expect_eq 'f("hist-bad-verdict").firstTimePass.value === null && f("hist-bad-ver
 expect_eq 'f("hist-bad-row").firstTimePass.value === null && f("hist-bad-row").firstTimePass.reason' 'the committed verdict history is unreadable: row 2 has 2 cells, the header 7' "a short row makes the history unreadable, not skipped"
 expect_eq 'f("hist-stashed").firstTimePass.value + "|" + f("hist-stashed").firstTimePass.committedVerdicts.join(",")' 'false|gaps,conformant' "a committed FAIL wins over a complete history that lacks it"
 expect_eq 'f("hist-unrecorded").firstTimePass.value' 'false' "a committed FAIL the history has no row for wins"
+if [ "$LOOKUP_STATUS" -eq 0 ] && [ "$LOOKUP_FOUND_PRE_DELETION" = yes ]; then ok; else fail "the skill's report lookup finds the version before a committed deletion (exit $LOOKUP_STATUS, $LOOKUP_FOUND_PRE_DELETION; command: $LOOKUP_CMD)"; fi
+if [ "$SHOW_STATUS" -eq 0 ] && [ "$LOOKUP_HAS_SECTION" = no ]; then ok; else fail "git show reads the pre-deletion report, which predates the section (exit $SHOW_STATUS, section: $LOOKUP_HAS_SECTION)"; fi
+expect_eq 'f("hist-deleted").firstTimePass.partial + "|" + f("hist-deleted").firstTimePass.basis + "|" + f("hist-deleted").firstTimePass.committedVersions' 'true|committed-versions|2' "a history regenerated after a git rm is partial, whatever its flag says"
 expect_eq 'f("hist-regress").firstTimePass.value + "|" + f("hist-regress").firstTimePass.verdicts.join(",")' 'true|conformant,gaps,conformant' "a committed FAIL the history records after a PASS is a regression, not a first-time failure"
 expect_eq 'f("hist-formatted").firstTimePass.value + "|" + f("hist-formatted").firstTimePass.verdicts.join(",")' 'false|gaps,divergent,conformant' "a deeper heading, a bold header, emphasis, symbols and backticks are read through"
 expect_eq 'f("hist-bad-gap").firstTimePass.value === null && f("hist-bad-gap").firstTimePass.reason' 'the committed verdict history is unreadable: row 1 verdict "✗ gap" is not one of conformant, divergent, gaps, not-verifiable' "stripping formatting does not widen the verdict words"
@@ -529,9 +559,9 @@ expect_eq '[d.aggregate.leadTime.median, d.aggregate.leadTime.p85, d.aggregate.l
 expect_eq 'd.aggregate.leadTime.firstSeenComplete' '1' "aggregate counts the first-seen-complete exclusions"
 expect_eq 'd.aggregate.stageDwell.draft.median + "," + d.aggregate.stageDwell["in-progress"].median + "," + d.aggregate.stageDwell.planned.median' '3,4,5' "median dwell per status"
 expect_eq 'd.aggregate.deferralRate.value + "," + d.aggregate.deferralRate.openOnComplete' '0.5556,1' "pooled deferral rate and open tasks on complete features"
-expect_eq '[d.aggregate.firstTimePass.passed, d.aggregate.firstTimePass.n].join("/")' '2/10' "first-time pass counts only non-null features"
-expect_eq '[d.aggregate.firstTimePass.fromHistory, d.aggregate.firstTimePass.fromCommittedVersions].join(",")' '8,2' "aggregate counts values per basis"
-expect_eq 'd.aggregate.firstTimePass.basis' '2 of 10 from committed report versions only, a lower bound on failures for those' "only the committed-version values are labelled a lower bound"
+expect_eq '[d.aggregate.firstTimePass.passed, d.aggregate.firstTimePass.n].join("/")' '3/11' "first-time pass counts only non-null features"
+expect_eq '[d.aggregate.firstTimePass.fromHistory, d.aggregate.firstTimePass.fromCommittedVersions].join(",")' '8,3' "aggregate counts values per basis"
+expect_eq 'd.aggregate.firstTimePass.basis' '3 of 11 from committed report versions only, a lower bound on failures for those' "only the committed-version values are labelled a lower bound"
 expect_eq '[d.aggregate.reworkRate.fix, d.aggregate.reworkRate.total].join("/")' '2/3' "pooled rework"
 expect_eq '[d.aggregate.specChurn.bumps, d.aggregate.specChurn.featuresWithBumps, d.aggregate.specChurn.n].join(",")' '2,2,7' "spec churn aggregate"
 expect_eq 'Object.keys(d.definitions).sort().join(",")' 'deferralRate,firstTimePass,landed,leadTime,reworkRate,specChurn,stageDwell' "json carries a definitions block"
@@ -544,7 +574,7 @@ expect_status 0 "text run exits 0"
 expect_line '^invoice-export +complete +10 +5/9 56% +1 +no +2/3 67% +1$' "text table row carries every metric, open tasks included"
 expect_line '^a-very-long-feature-identifier-number-one +draft ' "long ids are not truncated (one)"
 expect_line '^a-very-long-feature-identifier-number-two +draft ' "long ids are not truncated (two)"
-expect_line '^  first-time pass: +20% \(2/10\) — 2 of 10 from committed report versions only, a lower bound on failures for those$' "text names the lower-bound share of first-time pass"
+expect_line '^  first-time pass: +27% \(3/11\) — 3 of 11 from committed report versions only, a lower bound on failures for those$' "text names the lower-bound share of first-time pass"
 expect_line '^hist-pass +in-progress .* yes ' "text table shows a first-time pass from the history"
 expect_line '^  lead time: .*1 first seen already complete, excluded' "text names the lead-time exclusions"
 expect_line '^  invoice-export: draft 3 -> in-progress 7 -> complete \(since 2025-01-11\)$' "stage dwell line"

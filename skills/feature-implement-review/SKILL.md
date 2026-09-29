@@ -81,7 +81,14 @@ verdict_history: complete | partial
 ---
 ```
 
-The previous report is the working-tree `conformance-report.md`. If the working tree has none, use the newest committed version, when `git log -1 --format=%H -- <report path>` exits 0 with a sha (`git show <sha>:<report path>`): a report stashed or deleted before this run still has a past. Overwrite the previous report (the frontmatter records which commit was reviewed), except for its `## Verdict history`. That section is the report's last and records every run:
+The previous report is the working-tree `conformance-report.md`. If the working tree has none, look in git, because a report that was stashed, deleted or `git rm`ed before this run still has a past:
+
+- `git log -1 --diff-filter=AMR --format=%H -- <report path>` names the newest commit that wrote the report. The filter skips a commit that deleted it, since the report does not exist in that commit.
+- It exits 0 with empty output: there is no previous report.
+- It exits 0 with a sha: `git show <sha>:<report path>` is the previous report, and it must exit 0 too.
+- Either command exits non-zero: the lookup failed. That does not mean there is no past, so stop and tell the user instead of marking the history `complete`.
+
+Overwrite the previous report (the frontmatter records which commit was reviewed), except for its `## Verdict history`. That section is the report's last and records every run:
 
 ```markdown
 ## Verdict history
