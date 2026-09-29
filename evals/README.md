@@ -79,6 +79,7 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 | `trigger-new-feature` | trigger | "start a new feature … write the requirements" → feature-spec, spec.md written |
 | `route-spec-review` | trigger, near-miss | "before the technical design, check the requirements doc" → feature-spec-review, not tech-spec-review or code-review |
 | `trigger-memorize` | trigger | a named fact to keep → memorize, not memorify or session-complete |
+| `nearmiss-personal-preference` | near-miss | "remember that I prefer short answers" → auto-memory, not memorize or memorify |
 | `trigger-memorify` | trigger | "anything from this debugging worth keeping?" → memorify |
 | `trigger-memory-lookup` | trigger, near-miss | "have we run into this before?" → memory-lookup, not a capture skill |
 | `trigger-session-complete` | trigger | "that's it for today, wrap up the session" → session-complete, not memorify |
@@ -92,7 +93,7 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 | `code-review-planted-bug` | planted flaw | code-review (Python fixture) finds an off-by-one that drops the first line item and does not approve |
 | `feature-spec-contract` | artifact contract | feature-spec writes spec.md with every section and frontmatter key feature-spec-review checks, plus dependencies.md and a manifest entry |
 
-The two `capability` cases fail for reasons the plugin has not fixed yet. In `trigger-memorize`, Claude Code's built-in auto-memory takes "remember this" prompts before memorize can. In `code-review-planted-bug`, Sonnet runs `git diff` and reviews the change itself without invoking code-review. Both runs still save or find the right thing, so only the skill-fired and verdict-format graders fail.
+`code-review-planted-bug` is a `capability` case because it fails for a reason the plugin has not fixed yet: Sonnet runs `git diff` and reviews the change itself without invoking code-review. The run still finds the bug, so only the skill-fired and verdict-format graders fail. `nearmiss-personal-preference` stays `capability` until it has been run across releases. `trigger-memorize` was `capability` while Claude Code's built-in auto-memory took "remember this" prompts (0 of 7 runs fired); since memorize's description claims project facts over auto-memory it fired in 10 of 10.
 
 ## Adding a case
 
@@ -166,6 +167,7 @@ A grader that cannot fail is worthless, and a case that passes whether or not th
 
 ## Known gotchas
 
+- **Project instructions don't load.** The scaffold writes `CLAUDE.md` and `.claude/rules/`, but the sandbox keeps them out of context: a canary codeword in each was invisible to the model (2026-09-29). A change to an always-loaded rule cannot be measured here, so routing an eval must see goes in the skill description as well.
 - **Hooks don't load.** The eval sandbox never loads myspec's hooks (the plugin's root `hooks.json` isn't on Claude Code's plugin-hook path, and projects get hooks from `init`). The scaffold therefore installs no `.claude/hooks/` or `.claude/settings.json`. Hook behaviour stays with `hooks/tests/`.
 - **Two-arm mode hides the skill signal.** Under `--ablation with-without`, `tool_used: Skill` graders become unscored "plugin-fired indicators", so a case can score 1.0 while its skill never fired. `run.sh` defaults to `--ablation none`, where they count, and its `FIRED` column reads them either way. Sibling graders carry `arm: both` so they are scored in both modes.
 - **Haiku as judge gives false negatives.** The judge is pinned to Sonnet. Prefer a regex for long outputs.
