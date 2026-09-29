@@ -27,6 +27,7 @@ unset MYSPEC_DISABLE_METRICS DO_NOT_TRACK MYSPEC_METRICS_CAP_SECONDS
 
 mkdir -p "$REPO/.claude/hooks" "$REPO/.claude/lib/friction-scan"
 git -C "$REPO" init -q -b main
+echo '.claude/state/' > "$REPO/.gitignore"
 echo '{ "aiDir": ".ai", "frameworkVersion": "9.9.9" }' > "$REPO/.myspec.json"
 cp "$HOOK_SRC" "$REPO/.claude/hooks/record-session-metrics.sh"
 chmod +x "$REPO/.claude/hooks/record-session-metrics.sh"
@@ -118,11 +119,17 @@ quiet_fast "node missing"
 # ── 4. the cap bounds a scan that hangs ──
 SHIM="$ROOT/bin-slow"
 mkdir -p "$SHIM"
-printf '#!/bin/sh\necho $$ > "%s"\nexec sleep 30\n' "$SHIM_PID" > "$SHIM/node"
+# The shim records its process group before its pid, so both exist once the
+# pid file does.
+printf '#!/bin/sh\nps -o pgid= -p $$ | tr -d " " > "%s"\necho $$ > "%s"\nexec sleep 30\n' "$ROOT/shim.pgid" "$SHIM_PID" > "$SHIM/node"
 chmod +x "$SHIM/node"
 run_hook "$(payload slow)" PATH="$SHIM:$PATH" MYSPEC_METRICS_CAP_SECONDS=1
 quiet_fast "hanging scan"
 wait_for "$SHIM_PID" 5 || fail "the slow scan was started"
+# Detached: the scan leads its own session (setsid), so a terminal closing
+# with Claude Code does not take it down. Without setsid it would share the
+# hook's process group and its pgid would not be its own pid.
+[ "$(cat "$ROOT/shim.pgid" 2>/dev/null)" = "$(cat "$SHIM_PID")" ] && ok || fail "the scan runs in its own session (pgid $(cat "$ROOT/shim.pgid" 2>/dev/null), pid $(cat "$SHIM_PID"))"
 sleep 3
 if [ -f "$SHIM_PID" ] && kill -0 "$(cat "$SHIM_PID")" 2>/dev/null; then
   fail "a scan that outlives the cap is killed"

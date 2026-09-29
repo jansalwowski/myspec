@@ -4,7 +4,7 @@ When a Claude Code session ends, myspec records how the session went: one JSON l
 
 ## Where it lives
 
-`.claude/state/metrics/runs.jsonl` in the main checkout. A session that ran in a linked worktree records there too. `.claude/state/` is gitignored per-checkout state (`init` adds it to `.gitignore`), so the file is never committed.
+`.claude/state/metrics/runs.jsonl` in the main checkout. A session that ran in a linked worktree records there too. `.claude/state/` is gitignored per-checkout state: `init` and `update` add the line to `.gitignore`. As a second guard, the scan asks `git check-ignore` before it writes, and refuses with one stderr line when the file would be tracked.
 
 The `record-session-metrics.sh` hook writes it. The hook is registered under `SessionEnd` by `init`, and `update` wires it into existing projects. The hook starts `friction-scan --emit` in the background and returns straight away, so session exit does not wait. The scan runs under a 30-second cap. If it fails or is killed, it records nothing and prints nothing. It writes all its lines in a single append, so it never leaves half a record.
 
@@ -46,7 +46,7 @@ Hook blocks: isolation-undecided 14, reuse-audit 5
 | `start`, `end`, `active_ms` | both | Window bounds (ISO) and active time |
 | `skill`, `trigger` | skill | Skill name as the harness recorded it; `user-slash`, `model`, `nested` or `subagent` |
 | `feature` | skill | The skill's first argument, only when it names an existing `${aiDir}/features/<slug>/` directory; else `null` |
-| `turns` | both | Prompts the user typed or queued inside the window |
+| `turns` | both | Prompts the user typed or queued inside the window. Background-task notifications, the compaction summary, and messages from other agents are not turns |
 | `tools` | both | Tool calls by tool name; MCP tools by server (`mcp__<server>`) |
 | `subagents` | both | Subagents dispatched (Agent/Task calls, and Skill calls run as a forked agent); for a session, subagent transcripts |
 | `tokens` | both | `{in, out, cache_read, cache_write}` from `message.usage`, counted once per message id, including dispatched subagents |
@@ -58,6 +58,7 @@ Hook blocks: isolation-undecided 14, reuse-audit 5
 - A `Skill` call inside an open window counts as `nested` when the user has not typed since that window opened. A nested skill closes only the nested skill before it, so the parent's counts include its nested skills.
 - A skill the model starts after the user has typed is top-level (`model`), and it closes the window before it.
 - Conversation between skills belongs to the window before it. `turns` shows how much there was.
+- Only the user's own turns end a nested run. A background job finishing, auto-compaction, and a message from another agent do not.
 
 **Idempotency.** A record is skipped when a record with the same `id` and `end` is already in the file. Running the scan twice on the same session adds nothing. A resumed session that grew adds newer records for the windows that changed, and `stats.mjs` keeps only the latest record for each `id`.
 
@@ -71,7 +72,7 @@ Recording is on by default. Any one of these turns it off:
 | Per shell | `MYSPEC_DISABLE_METRICS=1` |
 | Per shell, cross-tool | `DO_NOT_TRACK=1` (any value but empty or `0`) |
 
-`"frictionReport": false` is a separate switch. It turns off the friction report, not recording. To remove what has been recorded, delete `.claude/state/metrics/`.
+A `.myspec.json` that does not parse also counts as opted out, so a hand-edited `"metrics": false` with a syntax error still holds. `"frictionReport": false` is a separate switch. It turns off the friction report, not recording. To remove what has been recorded, delete `.claude/state/metrics/`.
 
 **Why on by default.** The records never leave the machine, hold no content, and cost no tokens. The hook adds nothing to session exit because the scan runs in the background. Opt-in field data stays close to empty, and an empty file cannot tell anyone which skill is slow. The upload-style telemetry this is often compared to (OpenSpec, Homebrew, Next.js) is opt-out with an environment kill switch. myspec is stricter than that: it never uploads, and it honours `DO_NOT_TRACK`.
 
@@ -88,7 +89,7 @@ node "${CLAUDE_PLUGIN_ROOT}/lib/friction-scan/scan.mjs" --transcript=<path/to/se
 
 - **Claude Code only.** The transcript format is internal to Claude Code and is not a documented API. An unrecognized transcript is skipped rather than guessed at. Codex keeps its transcripts elsewhere in another format, so the plugin's Codex `hooks.json` does not register the hook.
 - **Window boundaries are a heuristic.** See *Skill windows* above.
-- **A transcript over 256 MB is skipped.**
+- **A transcript over 256 MB is skipped.** Smaller ones are streamed line by line, and each entry is cut down to the fields a record needs, so memory does not grow with the size of file contents in the transcript.
 - **Transcripts are pruned** after Claude Code's `cleanupPeriodDays`, so a session older than that cannot be recorded later by hand.
 - **The file grows without limit.** Each record is about 0.5 KB. Delete the file whenever you like.
 

@@ -146,6 +146,12 @@ echo '{ "aiDir": ".ai", "frameworkVersion": "9.9.9" }' > "$REPO/.myspec.json"
 git -C "$REPO" add .myspec.json
 git -C "$REPO" commit -q -m init
 git -C "$REPO" worktree add -q "$ROOT/linked" -b metrics-linked 2>/dev/null
+# Not gitignored: refused, so one commit cannot publish every session's metrics.
+EMIT_CWD="$ROOT/linked" emit --session=$S --emit
+[ "$STATUS" -eq 0 ] && ok || fail "not gitignored: exit 0"
+[ ! -e "$REPO/.claude/state/metrics/runs.jsonl" ] && ok || fail "not gitignored: nothing written"
+grep -q 'is not gitignored' <<<"$ERR" && [ "$(printf '%s\n' "$ERR" | grep -c .)" -eq 1 ] && ok || fail "not gitignored: one stderr line saying so (got: $ERR)"
+echo '.claude/state/' > "$REPO/.gitignore"
 EMIT_CWD="$ROOT/linked" emit --session=$S --emit
 [ "$STATUS" -eq 0 ] && ok || fail "bare --emit exits 0"
 [ "$(lines "$REPO/.claude/state/metrics/runs.jsonl")" -ge 4 ] && ok || fail "bare --emit writes to the main checkout's .claude/state/metrics/runs.jsonl"
@@ -174,6 +180,13 @@ OUTPUT=$(cd "$WORK" && DO_NOT_TRACK=1 node "$SCRIPT" --projects-dir="$PROJECTS" 
 [ "$STATUS" -eq 0 ] && [ ! -e "$OPT" ] && [ -z "$OUTPUT" ] && ok || fail "DO_NOT_TRACK=1: silent, nothing written"
 OUTPUT=$(cd "$WORK" && DO_NOT_TRACK=0 node "$SCRIPT" --projects-dir="$PROJECTS" --session=$S --emit="$OPT" 2>&1)
 [ "$(lines "$OPT")" -gt 0 ] && ok || fail "DO_NOT_TRACK=0 does not opt out"
+# A hand-edited opt-out with a syntax error still opts out.
+rm -f "$OPT"
+printf '{ "aiDir": ".ai", "feedback": { "metrics": false, } }\n' > "$WORK/.myspec.json"
+emit --session=$S --emit="$OPT" --json
+check '.disabled == true' "$OUTPUT" "unparseable .myspec.json: treated as opted out"
+[ ! -e "$OPT" ] && ok || fail "unparseable .myspec.json: nothing written"
+echo '{ "aiDir": ".ai" }' > "$WORK/.myspec.json"
 
 # ── 6. fail-open ──
 one_line_exit0() { if [ "$STATUS" -eq 0 ] && [ "$(printf '%s\n' "$ERR" | grep -c .)" -eq 1 ] && ! grep -q '    at ' <<<"$ERR"; then ok; else fail "$1 (exit $STATUS, stderr: $ERR)"; fi; }
@@ -193,6 +206,73 @@ printf '{"schema":1,"kind":"skill","id":"x:1","end":"2026-01-01T00:00:00.000Z","
 emit --session=$S --emit="$TORN"
 [ "$(grep -c . "$TORN")" -eq 5 ] && ok || fail "torn line stays one line, four records follow (got $(grep -c . "$TORN") lines)"
 [ "$(tail -n +2 "$TORN" | jq -c . 2>/dev/null | wc -l | tr -d ' ')" -eq 4 ] && ok || fail "every new line parses after a torn one"
+
+# ── 7. things that are not the user taking a turn ──
+# Background jobs finishing (queued task notifications), auto-compaction's
+# summary, and messages from other agents must not end the running skill: the
+# model's next Skill call stays nested, and turns stay at the real prompts.
+S=emit-not-turns
+{
+  slash myspec:feature-implement ''
+  skill_body
+  amsg n1 10 "$(tool a1 Agent '{"description":"bg"}')"
+  printf '{"type":"attachment","timestamp":"%s","attachment":{"type":"queued_command","commandMode":"task-notification","prompt":"<task-notification>done</task-notification>"}}\n' "$(stamp)"
+  printf '{"type":"user","isCompactSummary":true,"isVisibleInTranscriptOnly":true,"timestamp":"%s","message":{"role":"user","content":"This session is being continued from a previous conversation."}}\n' "$(stamp)"
+  printf '{"type":"user","origin":{"kind":"peer"},"timestamp":"%s","message":{"role":"user","content":"Another session says hello"}}\n' "$(stamp)"
+  amsg n2 20 "$(tool s1 Skill '{"skill":"myspec:memory-preflight"}')"
+  result s1
+  # Positive control: a prompt the user queued is a turn and ends the parent.
+  printf '{"type":"attachment","timestamp":"%s","attachment":{"type":"queued_command","commandMode":"prompt","prompt":"also do X"}}\n' "$(stamp)"
+  amsg n3 30 "$(tool s2 Skill '{"skill":"myspec:code-review"}')"
+  result s2
+} > "$PROJECTS/-enc-proj/$S.jsonl"
+mkdir -p "$PROJECTS/-enc-proj/$S/subagents"
+{
+  prompt 'Task SECRET-PROMPT'
+  amsg sa1 1 '[{"type":"text","text":"working"}]'
+  printf '{"type":"user","isMeta":true,"timestamp":"%s","message":{"role":"user","content":"(No effort level given, reusing high)"}}\n' "$(stamp)"
+  printf '{"type":"user","isCompactSummary":true,"isVisibleInTranscriptOnly":true,"timestamp":"%s","message":{"role":"user","content":"This session is being continued from a previous conversation."}}\n' "$(stamp)"
+  printf '{"type":"user","isMeta":true,"origin":{"kind":"coordinator"},"timestamp":"%s","message":{"role":"user","content":"The coordinator sent a message: fix finding 1"}}\n' "$(stamp)"
+  amsg sa2 1 '[{"type":"text","text":"**Status:** DONE"}]'
+} > "$PROJECTS/-enc-proj/$S/subagents/agent-bg1.jsonl"
+NT="$ROOT/metrics-not-turns.jsonl"
+emit --session=$S --emit="$NT"
+check '.trigger == "nested"' "$(record '.skill == "myspec:memory-preflight"' "$NT")" "a Skill call after a task notification, compaction summary or peer message stays nested"
+check '.turns == 1 and .tokens.out == 30' "$(record '.skill == "myspec:feature-implement"' "$NT")" "the parent keeps its work until the user's queued prompt"
+check '.trigger == "model"' "$(record '.skill == "myspec:code-review"' "$NT")" "positive control: a queued user prompt makes the next Skill call top-level"
+check '.turns == 2 and .fix_rounds == 1' "$(record '.kind == "session"' "$NT")" "session: two real turns; one fix round (coordinator), not the injected body or the summary"
+
+# ── 8. feature directory that exists only in the linked worktree ──
+S=emit-wt-feature
+mkdir -p "$ROOT/linked/.ai/features/wt-only"
+{
+  slash myspec:feature-spec 'wt-only'
+  skill_body
+  amsg w1 1 '[{"type":"text","text":"ok"}]'
+} > "$PROJECTS/-enc-proj/$S.jsonl"
+EMIT_CWD="$ROOT/linked" emit --session=$S --emit="$ROOT/metrics-wt.jsonl"
+check '.feature == "wt-only"' "$(record '.kind == "skill"' "$ROOT/metrics-wt.jsonl")" "feature found in the session's own checkout"
+
+# ── 9. memory stays bounded on a large transcript ──
+# Lines carrying megabytes of file content are streamed and cut down one at a
+# time; reading the whole file first peaked at about 5x its size.
+S=emit-big
+node -e '
+  const fs = require("fs"); const fd = fs.openSync(process.argv[1], "w");
+  const big = "x".repeat(1024 * 1024);
+  fs.writeSync(fd, JSON.stringify({ type: "user", timestamp: "2026-09-27T10:00:00.000Z", message: { role: "user", content: "go" } }) + "\n");
+  for (let i = 0; i < 40; i++) {
+    const ts = new Date(Date.parse("2026-09-27T10:00:00Z") + i * 1000).toISOString();
+    fs.writeSync(fd, JSON.stringify({ type: "assistant", timestamp: ts, message: { id: "b" + i, role: "assistant", content: [{ type: "tool_use", id: "t" + i, name: "Read", input: {} }], usage: { input_tokens: 1, output_tokens: 1 } } }) + "\n");
+    fs.writeSync(fd, JSON.stringify({ type: "user", timestamp: ts, message: { role: "user", content: [{ type: "tool_result", tool_use_id: "t" + i, content: big }] }, toolUseResult: { file: { content: big } } }) + "\n");
+  }
+  fs.closeSync(fd);' "$PROJECTS/-enc-proj/$S.jsonl"
+RSS_MB=$(cd "$WORK" && node -e '
+  process.on("exit", () => console.error("RSS " + Math.round(process.resourceUsage().maxRSS / 1024)));
+  process.argv = [process.argv[0], process.argv[1], "--transcript=" + process.argv[2], "--emit=" + process.argv[3]];
+  import(process.argv[1]);' "$SCRIPT" "$PROJECTS/-enc-proj/$S.jsonl" "$ROOT/metrics-big.jsonl" 2>&1 | sed -n 's/^RSS //p')
+[ "$(lines "$ROOT/metrics-big.jsonl")" -eq 1 ] && ok || fail "large transcript recorded"
+[ -n "$RSS_MB" ] && [ "$RSS_MB" -lt 250 ] && ok || fail "peak memory on an 80 MB transcript stays under 250 MB (got ${RSS_MB:-?} MB)"
 
 printf 'friction-scan-emit: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
