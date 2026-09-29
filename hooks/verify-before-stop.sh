@@ -3,6 +3,9 @@
 # Stop hook — runs verification checks before agent completes.
 # Reads commands from .claude/verification.json (requires jq).
 # Outputs {"decision": "block", "reason": "..."} on failure or {"decision": "approve"} on success.
+# The checks run in each checkout the session's log lists under `## Files
+# touched` (a linked worktree edited from a main-checkout cwd included), or in
+# the cwd's checkout when there is no log.
 # During feature-implement (.claude/state/implement-in-progress.json, at most
 # 8h old) check failures become a non-blocking systemMessage warning instead.
 # Before any check runs, blocks when a dependency directory (each guarded
@@ -145,6 +148,54 @@ if [ -z "$SESSION_ID" ] || [ ! -f "$MARKER_FILE" ]; then
   echo '{"decision": "approve"}'
   exit 0
 fi
+
+# Which checkout(s) to verify. The harness cwd is not necessarily where the
+# session's edits are: a session whose cwd is the main checkout can edit files
+# in a linked worktree (absolute paths, `cd <worktree> && ...`), and verifying
+# the untouched main checkout then reports a green that describes the wrong
+# tree. The session log (mark-code-changed.sh, `## Files touched`, in the main
+# checkout's .claude/state/sessions/) names every file the session edited, so
+# each distinct checkout those files live in is verified, once. Only checkouts
+# of this repository count (same git common dir). No log, or no usable path in
+# it, falls back to the cwd checkout, which was the only behaviour before.
+ORIG_ROOT="$REPO_ROOT"
+VERIFY_ROOTS=()
+
+# physical_common_dir <dir> -> the physical git common dir of the checkout.
+physical_common_dir() {
+  local d
+  d=$(git -C "$1" rev-parse --git-common-dir 2>/dev/null) || return 1
+  (cd "$1" && cd "$d" && pwd -P)
+}
+
+add_verify_root() {
+  local r
+  for r in ${VERIFY_ROOTS[@]+"${VERIFY_ROOTS[@]}"}; do
+    [ "$r" = "$1" ] && return 0
+  done
+  VERIFY_ROOTS+=("$1")
+}
+
+if ORIG_COMMON=$(physical_common_dir "$ORIG_ROOT"); then
+  SESSION_LOG="$(dirname "$ORIG_COMMON")/.claude/state/sessions/${SESSION_ID}.md"
+  if [ -f "$SESSION_LOG" ]; then
+    while IFS= read -r touched; do
+      [ -n "$touched" ] || continue
+      case "$touched" in
+        /*) ;;
+        *) touched="$(dirname "$ORIG_COMMON")/$touched" ;;
+      esac
+      touched_dir=$(dirname "$touched")
+      while [ -n "$touched_dir" ] && [ "$touched_dir" != "/" ] && [ ! -d "$touched_dir" ]; do
+        touched_dir=$(dirname "$touched_dir")
+      done
+      touched_root=$(git -C "$touched_dir" rev-parse --show-toplevel 2>/dev/null) || continue
+      [ "$(physical_common_dir "$touched_root" 2>/dev/null || printf '')" = "$ORIG_COMMON" ] || continue
+      add_verify_root "$touched_root"
+    done < <(awk '/^## Files touched/{p=1; next} /^## /{p=0} p && /^- `.*`$/{sub(/^- `/, ""); sub(/`$/, ""); print}' "$SESSION_LOG")
+  fi
+fi
+[ "${#VERIFY_ROOTS[@]}" -gt 0 ] || VERIFY_ROOTS=("$ORIG_ROOT")
 
 # A symlinked dependency directory (node_modules, vendor, .venv, ...) makes
 # every check below run against ANOTHER checkout dependency tree, so the gate
@@ -334,6 +385,7 @@ guarded_entries() {
   done
 }
 
+for REPO_ROOT in "${VERIFY_ROOTS[@]}"; do
 ALLOW_LINKED=$(jq -r '.isolation.allowLinkedModules // false' "$REPO_ROOT/.myspec.json" 2>/dev/null || printf 'false')
 if [ "$ALLOW_LINKED" != "true" ] && [ "${MYSPEC_ALLOW_LINKED_MODULES:-}" != "1" ]; then
   STALE_LINKS=""
@@ -362,6 +414,7 @@ if [ "$ALLOW_LINKED" != "true" ] && [ "${MYSPEC_ALLOW_LINKED_MODULES:-}" != "1" 
     exit 0
   fi
 fi
+done
 
 # Clean up marker after verification runs (success or failure)
 trap 'rm -f "$MARKER_FILE"' EXIT
@@ -478,6 +531,22 @@ run_capped() {
   CHECK_LOG=""
 }
 
+# Run each required check, once per checkout to verify.
+FAILED_CHECKS=()
+TIMED_OUT_CHECKS=()
+FAILED_OUTPUT=()
+# A failure blocks unless every checkout that failed carries a live
+# feature-implement marker (below).
+BLOCKING_FAILURE=0
+
+for REPO_ROOT in "${VERIFY_ROOTS[@]}"; do
+ROOT_CONFIG="$REPO_ROOT/.claude/verification.json"
+[ -f "$ROOT_CONFIG" ] || ROOT_CONFIG="$CONFIG_FILE"
+# Names a check by its checkout when that is not the cwd checkout.
+ROOT_LABEL=""
+[ "$REPO_ROOT" = "$ORIG_ROOT" ] || ROOT_LABEL=" [in $REPO_ROOT]"
+ROOT_FAILURES=${#FAILED_OUTPUT[@]}
+
 # Base ref for diff-scoped checks. A repo whose lint or type-check is already
 # red on the default branch cannot use a whole-repo command as a gate — it
 # blocks every stop over debt this session did not create, and the block is
@@ -535,23 +604,18 @@ if [ -f "$IMPLEMENT_MARKER" ]; then
   fi
 fi
 
-# Run each required check
-FAILED_CHECKS=()
-TIMED_OUT_CHECKS=()
-FAILED_OUTPUT=()
-
-CHECKS_COUNT=$(jq '.checks | length' "$CONFIG_FILE")
+CHECKS_COUNT=$(jq '.checks | length' "$ROOT_CONFIG")
 
 for i in $(seq 0 $((CHECKS_COUNT - 1))); do
-  REQUIRED=$(jq -r ".checks[$i].required" "$CONFIG_FILE")
+  REQUIRED=$(jq -r ".checks[$i].required" "$ROOT_CONFIG")
   if [ "$REQUIRED" != "true" ]; then
     continue
   fi
 
-  NAME=$(jq -r ".checks[$i].name" "$CONFIG_FILE")
-  COMMAND=$(jq -r ".checks[$i].command" "$CONFIG_FILE")
-  DIFF_COMMAND=$(jq -r ".checks[$i].diffCommand // \"\"" "$CONFIG_FILE")
-  CLEANUP=$(jq -r ".checks[$i].cleanup // \"\"" "$CONFIG_FILE")
+  NAME=$(jq -r ".checks[$i].name" "$ROOT_CONFIG")$ROOT_LABEL
+  COMMAND=$(jq -r ".checks[$i].command" "$ROOT_CONFIG")
+  DIFF_COMMAND=$(jq -r ".checks[$i].diffCommand // \"\"" "$ROOT_CONFIG")
+  CLEANUP=$(jq -r ".checks[$i].cleanup // \"\"" "$ROOT_CONFIG")
 
   if [ -n "${DIFF_COMMAND// /}" ] && [ -n "$MYSPEC_BASE_REF" ]; then
     COMMAND="$DIFF_COMMAND"
@@ -592,6 +656,10 @@ for i in $(seq 0 $((CHECKS_COUNT - 1))); do
     fi
   fi
 done
+if [ "${#FAILED_OUTPUT[@]}" -gt "$ROOT_FAILURES" ] && [ "$IMPLEMENT_ACTIVE" -eq 0 ]; then
+  BLOCKING_FAILURE=1
+fi
+done
 rm -f "$CAP_SENTINEL"
 
 if [ ${#FAILED_CHECKS[@]} -gt 0 ] || [ ${#TIMED_OUT_CHECKS[@]} -gt 0 ]; then
@@ -616,7 +684,7 @@ if [ ${#FAILED_CHECKS[@]} -gt 0 ] || [ ${#TIMED_OUT_CHECKS[@]} -gt 0 ]; then
     DETAILS+="${ENTRY}"$'\n---\n'
   done
   DETAILS=${DETAILS%$'\n---\n'}
-  if [ "$IMPLEMENT_ACTIVE" -eq 1 ]; then
+  if [ "$BLOCKING_FAILURE" -eq 0 ]; then
     # Non-blocking: no decision block, so the stop proceeds; systemMessage
     # surfaces the failure to the user.
     MESSAGE=$(printf "Verification failing (%s) during feature-implement orchestration; not blocking (marker %s). The final verification step still gates.\n\n%s" "$NAMES" ".claude/state/implement-in-progress.json" "$DETAILS" | jq -Rs .)

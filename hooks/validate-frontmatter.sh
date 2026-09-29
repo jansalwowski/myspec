@@ -134,12 +134,23 @@ ISSUES=()
 # Check frontmatter block exists. Read the file directly — echoing the content
 # into grep -q/awk SIGPIPEs the echo once the file exceeds the 64 KiB pipe
 # buffer, and under pipefail that reads as "no frontmatter" (issue #33).
+# Frontmatter is a `---` fence on LINE 1 closed by the next `---` line. Taking
+# the first `---` anywhere let a doc with body text first and a later `---`
+# block (a horizontal rule, a pasted example) pass as if it had frontmatter.
+FIRST_LINE=$(head -n 1 "$FILE_PATH" | tr -d '\r')
 if ! grep -qE "^---" "$FILE_PATH"; then
   ISSUES+=("missing frontmatter block entirely")
+elif ! [[ "$FIRST_LINE" =~ ^---[[:space:]]*$ ]]; then
+  ISSUES+=("frontmatter must start on line 1 with '---' (a '---' block further down is not frontmatter)")
 else
   # || true: an empty frontmatter block leaves grep -v with no output (exit 1),
   # which under set -e would kill the hook before it can report the real issue
-  FRONTMATTER=$(awk '/^---/{p++; if(p==2) exit} p' "$FILE_PATH" | grep -v "^---" || true)
+  FM_CLOSED=1
+  FRONTMATTER=$(awk 'NR == 1 { next } /^---[ \t\r]*$/ { closed = 1; exit } { print } END { if (!closed) exit 3 }' "$FILE_PATH") || FM_CLOSED=0
+
+  if [ "$FM_CLOSED" = 0 ]; then
+    ISSUES+=("frontmatter opened on line 1 is never closed with '---'")
+  fi
 
   # Check an identity field (matches every framework template:
   # docs use title, skills use name, sessions use topic, memories use id,

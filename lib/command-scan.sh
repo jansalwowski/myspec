@@ -10,6 +10,9 @@
 #
 # Public API:
 #   sanitize_command <<< "$cmd"        # blanks quoted spans + heredoc bodies
+#   sanitize_command keep <<< "$cmd"   # same shape, quoted text kept (encoded)
+#   split_segments                     # one "<sep><TAB><segment>" line each
+#   decode_word "$word"                # undoes the keep-mode encoding
 #   strip_command_prefix "$segment"    # drops then/do/else, FOO=bar, sudo
 #   find_matching_segment "$cmd" pattern...   # echoes offending segment, if any
 #
@@ -25,8 +28,29 @@
 # spans, double-quoted spans, escaped characters, and heredoc bodies. Each
 # becomes a placeholder token, so separators inside them (`;`, `&&`) cannot
 # split a segment open and expose their text as a command position.
+#
+# `keep` mode is for reading ARGUMENTS (a `cd` target, a `bash -c` payload),
+# never for matching verbs. It keeps each quoted span's text instead of the Q
+# placeholder, but encodes whitespace and separator characters inside it as
+# control bytes and prefixes the span with \035. Both modes therefore split
+# into the same segments and the same words, so word N of a segment in one
+# stream is word N in the other; decode_word turns an encoded word back into
+# its text.
 sanitize_command() {
-  awk '
+  awk -v keep="${1:-}" '
+    function enc(ch) {
+      if (ch == " " || ch == "\t") return "\037"
+      if (ch == "\n") return "\036"
+      if (ch == "|") return "\021"
+      if (ch == "&") return "\022"
+      if (ch == ";") return "\023"
+      if (ch == "(") return "\024"
+      if (ch == ")") return "\025"
+      if (ch == "{") return "\026"
+      if (ch == "}") return "\027"
+      if (ch == "`") return "\030"
+      return ch
+    }
     { buf = buf $0 "\n" }
     END {
       n = length(buf)
@@ -39,20 +63,23 @@ sanitize_command() {
 
         if (c == "'"'"'") {
           i++
-          while (i <= n && substr(buf, i, 1) != "'"'"'") { i++ }
+          span = ""
+          while (i <= n && substr(buf, i, 1) != "'"'"'") { span = span enc(substr(buf, i, 1)); i++ }
           i++
-          out = out "Q"
+          if (keep != "") { out = out "\035" span } else { out = out "Q" }
           continue
         }
 
         if (c == "\"") {
           i++
+          span = ""
           while (i <= n && substr(buf, i, 1) != "\"") {
             if (substr(buf, i, 1) == "\\") { i++ }
+            span = span enc(substr(buf, i, 1))
             i++
           }
           i++
-          out = out "Q"
+          if (keep != "") { out = out "\035" span } else { out = out "Q" }
           continue
         }
 
@@ -95,6 +122,39 @@ sanitize_command() {
       print out
     }
   '
+}
+
+# Reads sanitized text on stdin and prints one line per command segment:
+# the separator that opened it, a TAB, then the segment. The separator is `(`
+# or `)` for a subshell boundary (a caller tracking `cd` scopes pushes and pops
+# on them), `^` for the first segment, and `|` for every other separator
+# (`|`, `&`, `;`, `{`, `}`, backtick, newline). Splits exactly where
+# find_matching_segment's `tr` does, so both see the same segments.
+split_segments() {
+  awk '
+    { buf = buf $0 "\n" }
+    END {
+      n = length(buf)
+      sep = "^"
+      cur = ""
+      for (i = 1; i <= n; i++) {
+        c = substr(buf, i, 1)
+        if (index("|&;(){}`\n", c) > 0) {
+          print sep "\t" cur
+          cur = ""
+          if (c == "(" || c == ")") { sep = c } else { sep = "|" }
+          continue
+        }
+        cur = cur c
+      }
+      print sep "\t" cur
+    }
+  '
+}
+
+# decode_word <word> — the text of a word from `sanitize_command keep`.
+decode_word() {
+  printf '%s' "$1" | tr '\037\036\021\022\023\024\025\026\027\030' ' \n|&;(){}`' | tr -d '\035'
 }
 
 # Strips whatever can precede a command name without changing which command

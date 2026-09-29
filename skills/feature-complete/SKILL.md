@@ -140,11 +140,11 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 
    **Option 1 — Merge locally:**
 
-   The `guard-worktree-context.sh` hook (if installed) blocks checkout and merge on the main checkout; the `MYSPEC_ALLOW_BRANCH_OPS=1` prefix marks this as a user-confirmed integration flow and is required for those commands to pass. `git branch -d` needs no prefix: the hook allows deleting a branch that no worktree has checked out, and blocks it (as git does) while one still does:
+   The `guard-worktree-context.sh` hook (if installed) blocks checkout, merge and pull on the main checkout; the `MYSPEC_ALLOW_BRANCH_OPS=1` prefix marks this as a user-confirmed integration flow and is required for those commands to pass. `git branch -d` needs no prefix: the hook allows deleting a branch that no worktree has checked out, and blocks it (as git does) while one still does:
 
    ```bash
    MYSPEC_ALLOW_BRANCH_OPS=1 git checkout <base-branch>
-   git pull
+   MYSPEC_ALLOW_BRANCH_OPS=1 git pull
    MYSPEC_ALLOW_BRANCH_OPS=1 git merge <feature-branch>
    # Run verification again on merged result
    git branch -d <feature-branch>
