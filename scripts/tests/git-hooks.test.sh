@@ -80,9 +80,38 @@ in_repo scripts/install-git-hooks.sh --uninstall
 expect_line "is \.husky, not \.githooks; left unchanged" "uninstall leaves a foreign hooksPath"
 in_repo scripts/install-git-hooks.sh --force
 expect_line "replaced \.husky" "--force replaces and says what it replaced"
+in_repo scripts/install-git-hooks.sh --uninstall
+expect_line "restored core.hooksPath=\.husky" "uninstall after --force says it restored the replaced value"
+[ "$(hooks_path)" = ".husky" ] && ok || fail "uninstall after --force restores the replaced hooksPath"
+git config --local --get myspec.previousHooksPath >/dev/null && fail "the restore clears its record" || ok
+
+# The default hooks dir, absolute or relative, is not a custom setup: no --force needed.
+for v in "$REPO/.git/hooks" ".git/hooks"; do
+  git config --local core.hooksPath "$v"
+  in_repo scripts/install-git-hooks.sh
+  expect_exit 0 "install replaces hooksPath=$v (the default dir) without --force"
+  [ "$(hooks_path)" = ".githooks" ] && ok || fail "install over hooksPath=$v sets .githooks"
+  in_repo scripts/install-git-hooks.sh --uninstall
+  [ "$(hooks_path)" = "$v" ] && ok || fail "uninstall restores hooksPath=$v"
+done
+mkdir -p "$TMP/other/.git/hooks"
+git config --local core.hooksPath "$TMP/other/.git/hooks"
+in_repo scripts/install-git-hooks.sh
+expect_exit 1 "another repo's .git/hooks is a custom path and still needs --force"
+
+# A live hook in .git/hooks silently stops running once hooksPath moves: say so.
+git config --local --unset core.hooksPath
+printf '#!/bin/sh\nexit 0\n' > .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+in_repo scripts/install-git-hooks.sh
+expect_line "warning: these hooks in .* no longer run" "install warns about hooks it disables"
+expect_line "^    pre-commit$" "the disabled hook is named"
+expect_no_line "\.sample" "sample hooks are not reported"
+rm .git/hooks/pre-commit
+in_repo scripts/install-git-hooks.sh --uninstall
+expect_line "unset core.hooksPath" "uninstall with nothing recorded unsets"
 
 printf '[core]\n\thooksPath = /elsewhere\n' > "$TMP/global.cfg"
-git config --local --unset core.hooksPath
 OUTPUT=$(cd "$REPO" && GIT_CONFIG_GLOBAL="$TMP/global.cfg" scripts/install-git-hooks.sh 2>&1); STATUS=$?
 expect_exit 0 "install over a global hooksPath exits 0"
 expect_line "overrides your global core.hooksPath \(/elsewhere\)" "install notes the global it overrides"
@@ -133,14 +162,48 @@ git rm -q skills/fine/SKILL.md
 in_repo git commit -qm "delete a skill"
 expect_exit 0 "a staged deletion passes"
 
-good_skill skills/gone/SKILL.md gone
-git add skills/gone/SKILL.md
+# The staged blob is what gets committed, so that is what is linted.
 bad_skill skills/gone/SKILL.md gone
 git add skills/gone/SKILL.md
 rm skills/gone/SKILL.md
 in_repo git commit -qm "staged then removed from disk"
-expect_exit 0 "a staged file missing from the working tree is skipped, not an error"
-expect_no_line "no such file" "the linter is not handed a missing path"
+expect_exit 1 "a bad staged file missing from the working tree still blocks"
+expect_line "skills/gone/SKILL\.md:3: DESC-USE-WHEN" "the staged blob of a removed file is linted"
+git rm -q --cached skills/gone/SKILL.md
+
+good_skill skills/sneaky/SKILL.md other-name
+git add skills/sneaky/SKILL.md
+good_skill skills/sneaky/SKILL.md sneaky
+in_repo git commit -qm "bad staged, clean on disk"
+expect_exit 1 "a bad staged blob is blocked even when the disk copy is clean"
+expect_line "skills/sneaky/SKILL\.md:2: NAME-MISMATCH" "the staged name is the one checked"
+git add skills/sneaky/SKILL.md
+bad_skill skills/sneaky/SKILL.md sneaky
+in_repo git commit -qm "clean staged, bad on disk"
+expect_exit 0 "a clean staged blob passes even when the disk copy is bad"
+git checkout -q -- skills/sneaky/SKILL.md
+
+bad_skill skills/partial/SKILL.md partial
+git add skills/partial/SKILL.md && git commit -q --no-verify -m "seed partial"
+good_skill skills/partial/SKILL.md partial
+in_repo git commit -qm "fix via -a" -a
+expect_exit 0 "commit -a lints the index git builds for it (fixed file passes)"
+bad_skill skills/partial/SKILL.md partial
+in_repo git commit -qm "break via path" skills/partial/SKILL.md
+expect_exit 1 "commit <path> lints the temporary index for that path"
+git checkout -q -- skills/partial/SKILL.md
+
+# A link to a file only in the working tree is dead in the commit.
+good_skill skills/linker/SKILL.md linker
+printf '\n[ref](references/local.md)\n' >> skills/linker/SKILL.md
+mkdir -p skills/linker/references && echo x > skills/linker/references/local.md
+git add skills/linker/SKILL.md
+in_repo git commit -qm "link to an untracked file"
+expect_exit 1 "a link to an unstaged file is dead in the committed tree"
+expect_line "LINK-DEAD .*references/local\.md" "the unstaged link target is reported"
+git add skills/linker/references/local.md
+in_repo git commit -qm "link with its target"
+expect_exit 0 "staging the link target clears it"
 
 mkdir -p plugins/myspec/skills/bad2
 bad_skill plugins/myspec/skills/bad2/SKILL.md bad2

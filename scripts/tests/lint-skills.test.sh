@@ -73,12 +73,18 @@ fresh
 run
 expect_line "FM-MISSING .*never closed" "unclosed frontmatter is FM-MISSING"
 
+fresh
+{ printf -- '\xef\xbb\xbf---  \nname: demo\n%s\n--- \t\n' "$GOOD"; body; } | skill demo
+run
+expect_exit 0 "a BOM and trailing whitespace on the --- fences are tolerated"
+expect_no_line "FM-" "BOM / fence whitespace raise no frontmatter finding"
+
 # ── FM-UNKNOWN-KEY (ced9dba, 4f189a8) ───────────────────────────────────────
 fresh
 { printf -- '---\nname: demo\n%s\nload_when: [path_matches]\nupdated: 2026-01-01\nfoo: bar\n---\n' "$GOOD"; body; } | skill demo
 run
 expect_exit 1 "unknown keys exit 1"
-expect_line "SKILL\.md:4: FM-UNKNOWN-KEY .*load_when.*ced9dba" "load_when is rejected with its history"
+expect_line "SKILL\.md:4: FM-UNKNOWN-KEY .*load_when.*paths:" "load_when is rejected and points at paths:"
 expect_line "SKILL\.md:5: FM-UNKNOWN-KEY .*updated" "updated is rejected"
 expect_line "SKILL\.md:6: FM-UNKNOWN-KEY .*foo.*allowlist" "an arbitrary key is rejected"
 
@@ -205,6 +211,16 @@ fresh
 run
 expect_exit 0 "a Do-NOT clause naming every sibling passes"
 
+fresh
+{ printf -- '---\nname: feature-spec\ndescription: "Use when starting a feature. Do not use for tech design (feature-tech-spec)."\n---\n'; body; } | skill feature-spec
+run
+expect_exit 0 "a lower-case \"Do not use\" clause naming the sibling passes"
+
+fresh
+{ printf -- '---\nname: feature-spec\ndescription: "Use when starting a feature. Do not use for tech design."\n---\n'; body; } | skill feature-spec
+run
+expect_line "DESC-DO-NOT .*no longer names .*feature-tech-spec" "a lower-case clause still has to name the sibling"
+
 # ── DEP-PLUGIN-PATH (AGENTS.md, v1.20.0) ────────────────────────────────────
 fresh
 mkdir -p "$FIX/skills/demo/references" "$FIX/src"
@@ -278,6 +294,24 @@ run
 expect_exit 0 "pointers resolving to headings, sub-steps, numbered items, or unchecked contexts pass"
 expect_no_line "STEP-REF" "no STEP-REF on bare mentions, other skills' steps, inline code, or fenced code"
 
+fresh
+{ printf -- '---\nname: demo\n%s\n---\n' "$GOOD"; cat <<'MD'
+
+# Demo
+
+### Step 1: Only step
+
+For the fields, see Step 4 of /myspec:memory-create.
+Then proceed to Step 3 in feature-implement, or return to step 3 of the installer wizard.
+Sub-steps too: see Step 4.5 of the plan template, and go to Step 7b from the other doc.
+But see Step 9. and skip to Step 12 — these are ours and missing.
+MD
+} | skill demo
+run
+expect_no_line "STEP-REF .*Step (4|3|4\.5|7b)\"" "pointers qualified with of/in/from another document are not checked"
+expect_line "SKILL\.md:13: STEP-REF .*see Step 9\"" "an unqualified pointer on the same text is still checked"
+expect_line "SKILL\.md:13: STEP-REF .*skip to Step 12\"" "a multi-digit pointer is checked whole"
+
 # ── LINK-DEAD / LINK-ANCHOR ─────────────────────────────────────────────────
 fresh
 mkdir -p "$FIX/skills/_shared" "$FIX/skills/demo/references"
@@ -302,6 +336,29 @@ MD
 run
 expect_exit 0 "resolving, placeholder, external and fenced links pass"
 expect_no_line "LINK-" "no LINK finding on valid or skipped links"
+
+# Anchors are GitHub slugs of the raw heading: inline code keeps its text.
+fresh
+mkdir -p "$FIX/skills/demo/references"
+printf '# Ref\n\n## Using `plan.md` templates\n' > "$FIX/skills/demo/references/ref.md"
+{ printf -- '---\nname: demo\n%s\n---\n' "$GOOD"; cat <<'MD'
+
+# Demo
+
+### Step 3: Update `spec.md`
+## _Draft_ rules
+## Café au lait
+## Repeat
+## Repeat
+## snake_case_name
+
+Links: [a](#step-3-update-specmd) [b](#_draft_-rules) [c](#draft-rules) [d](#caf%C3%A9-au-lait)
+[e](#repeat-1) [f](#snake_case_name) [g](references/ref.md#using-planmd-templates)
+MD
+} | skill demo
+run
+expect_exit 0 "anchors to headings with inline code, emphasis, accents, duplicates and underscores pass"
+expect_no_line "LINK-ANCHOR" "no LINK-ANCHOR false positive on GitHub-slugged headings"
 
 fresh
 mkdir -p "$FIX/skills/_shared"

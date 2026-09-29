@@ -2,8 +2,9 @@
 // Deterministic static lint for skills/*/SKILL.md. Maintainer tooling: runs in
 // CI and in .githooks/pre-commit, never shipped with the plugin.
 //
-// Every rule exists because a past commit fixed the defect it catches by hand;
-// the commit is named next to the rule. A rule that cannot be checked without
+// Each rule encodes a repo convention (skill-optimization.md, skill-verify,
+// AGENTS.md); where a past commit fixed that class of defect by hand, it is
+// cited, and a citation means the rule reports it on that commit's parent. A rule that cannot be checked without
 // false positives is left out rather than softened: this runs on every commit,
 // and a hook that cries wolf teaches `--no-verify`.
 //
@@ -23,8 +24,9 @@ import { fileURLToPath } from 'node:url';
 
 // Frontmatter keys, from the tier table in framework-files/rules/skill-optimization.md
 // (spec, Claude Code + Copilot, Claude Code only, convention). Anything else is a
-// typo or an invented mechanism: `load_when` gated nothing and loaded 3.2k tokens
-// every session (ced9dba); `updated` was a field no skill reads (4f189a8).
+// typo or an invented mechanism. `load_when` is named explicitly because the
+// framework rules shipped it once (ced9dba, in framework-files/rules/, which this
+// linter does not read): it gated nothing and loaded 3.2k tokens every session.
 const ALLOWED_KEYS = new Set([
   'name', 'description', 'license', 'compatibility', 'metadata', 'allowed-tools',
   'disable-model-invocation', 'user-invocable',
@@ -33,10 +35,7 @@ const ALLOWED_KEYS = new Set([
   'tags', 'triggers', 'dependencies',
 ]);
 const KNOWN_BAD_KEYS = {
-  load_when: 'not a harness mechanism; it gates nothing (ced9dba). Use `paths:`',
-  updated: 'no reader exists for it (4f189a8)',
-  last_updated: 'no reader exists for it in a SKILL.md',
-  version: 'skills are versioned with the plugin, not per file',
+  load_when: 'not a harness mechanism; it gates nothing. Use `paths:`',
 };
 
 // Confusable siblings each description's "Do NOT" clause must keep naming.
@@ -219,28 +218,42 @@ function parseBlock(block) {
   return map;
 }
 
-// GitHub heading anchors: rendered text, lowercased, punctuation dropped,
-// spaces to hyphens, duplicates suffixed -1, -2, …
+// GitHub heading anchors (github-slugger over the heading text): lowercase,
+// drop punctuation except `-` and `_`, spaces to hyphens, duplicates suffixed
+// -1, -2, … Built from the raw heading, so inline code keeps its text. Whether
+// `_x_` keeps its underscores depends on how the renderer reads it, so both
+// spellings count: a missed dead anchor is cheaper than a false alarm.
+function slugify(s) {
+  return s.toLowerCase().replace(/[^\p{L}\p{M}\p{N}\p{Pc}\s-]/gu, '').replace(/ /g, '-');
+}
 function headingSlugs(lines) {
-  const seen = new Map();
+  const variants = [
+    (h) => h.replace(/[`*~]/g, ''),
+    (h) => h.replace(/[`*~_]/g, ''),
+  ];
   const slugs = new Set();
-  for (const { text } of lines) {
-    const m = text.match(/^#{1,6}\s+(.*?)\s*#*\s*$/);
-    if (!m) continue;
-    const plain = m[1]
-      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-      .replace(/[`*_~]/g, (c) => (c === '_' ? '_' : ''));
-    let slug = plain.toLowerCase().replace(/[^\p{L}\p{N}\s_-]/gu, '').replace(/ /g, '-');
-    const n = seen.get(slug) ?? 0;
-    seen.set(slug, n + 1);
-    if (n > 0) slug = `${slug}-${n}`;
-    slugs.add(slug);
+  for (const v of variants) {
+    const seen = new Map();
+    for (const { text } of lines) {
+      const m = text.match(/^ {0,3}#{1,6}\s+(.*?)(?:\s+#+)?\s*$/);
+      if (!m) continue;
+      let slug = slugify(v(m[1].replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')));
+      const n = seen.get(slug) ?? 0;
+      seen.set(slug, n + 1);
+      if (n > 0) slug = `${slug}-${n}`;
+      slugs.add(slug);
+    }
   }
   return slugs;
 }
+function hasAnchor(slugs, anchor) {
+  let a = anchor;
+  try { a = decodeURIComponent(anchor); } catch { /* keep raw */ }
+  return slugs.has(a) || slugs.has(a.toLowerCase());
+}
 
-// Body lines outside fenced code blocks, with inline code spans blanked.
-function proseLines(bodyLines) {
+// Body lines outside fenced code blocks, raw.
+function unfencedLines(bodyLines) {
   const out = [];
   let fence = null;
   for (const l of bodyLines) {
@@ -250,9 +263,14 @@ function proseLines(bodyLines) {
       continue;
     }
     if (f) { fence = f[1]; continue; }
-    out.push({ text: l.text.replace(/(`+)[^`]*?\1/g, (s) => ' '.repeat(s.length)), line: l.line });
+    out.push(l);
   }
   return out;
+}
+
+// The same, with inline code spans blanked: prose a reader acts on.
+function proseLines(bodyLines) {
+  return unfencedLines(bodyLines).map((l) => ({ text: l.text.replace(/(`+)[^`]*?\1/g, (s) => ' '.repeat(s.length)), line: l.line }));
 }
 
 // ── rules ────────────────────────────────────────────────────────────────────
@@ -260,16 +278,17 @@ function proseLines(bodyLines) {
 function lintFile(absPath, ctx) {
   const findings = [];
   const add = (line, rule, message, severity = 'error') => findings.push({ line, rule, message, severity });
-  const text = fs.readFileSync(absPath, 'utf8');
+  const text = fs.readFileSync(absPath, 'utf8').replace(/^\uFEFF/, '');
   const all = text.split(/\r?\n/);
+  const isFence = (l) => l.trimEnd() === '---';
   const dirName = path.basename(path.dirname(absPath));
 
   // FM-MISSING — frontmatter present and closed.
-  if (all[0] !== '---') {
+  if (!isFence(all[0])) {
     add(1, 'FM-MISSING', 'SKILL.md must start with a `---` YAML frontmatter block');
     return findings;
   }
-  const close = all.indexOf('---', 1);
+  const close = all.findIndex((l, k) => k > 0 && isFence(l));
   if (close < 0) {
     add(1, 'FM-MISSING', 'frontmatter block is never closed with `---`');
     return findings;
@@ -314,14 +333,14 @@ function lintFile(absPath, ctx) {
       if (!/^Use when\b/.test(d)) add(desc.line, 'DESC-USE-WHEN', 'a model-invocable description must start with "Use when" (skill-optimization.md; d60997b)');
       if (WORKFLOW_RE.test(d)) add(desc.line, 'DESC-WORKFLOW', 'description reads as a workflow summary (verb … then/next/after); the model follows it instead of the body (886a3ab)', 'warning');
       const siblings = SIBLINGS[dirName] ?? [];
-      const idx = d.indexOf('Do NOT');
+      const idx = d.search(/\bdo not\b/i);
       if (idx < 0) {
         add(desc.line, 'DESC-DO-NOT', siblings.length
           ? `description has no "Do NOT use …" clause; it must name ${siblings.join(', ')} (d60997b)`
           : 'description has no "Do NOT use …" clause (skill-optimization.md: end with the exclusions)');
       } else {
         const tail = d.slice(idx);
-        const missing = siblings.filter((s) => !new RegExp(`(^|[^a-z0-9-])${s.replace(/[-]/g, '\\-')}([^a-z0-9-]|$)`).test(tail));
+        const missing = siblings.filter((s) => !new RegExp(`(^|[^a-z0-9-])${s.replace(/[-]/g, '\\-')}([^a-z0-9-]|$)`, 'i').test(tail));
         if (missing.length) add(desc.line, 'DESC-DO-NOT', `the "Do NOT" clause no longer names its confusable sibling(s): ${missing.join(', ')} (d60997b; SIBLINGS in scripts/lint-skills.mjs)`);
       }
     }
@@ -346,10 +365,11 @@ function lintFile(absPath, ctx) {
 
   // STEP-REF — a navigation pointer ("skip to step 8", "go to Step 5",
   // "proceed to Workflow Step 0", "see Step 4") must name a step this file
-  // defines (a3562ed). Bare mentions ("the Step 2 answers") are not checked:
-  // they often mean another document's steps.
+  // defines — the class of bug a3562ed fixed. Pointers qualified with another
+  // document ("Step 4 of memory-create", "Step 3 in feature-implement") and
+  // bare mentions ("the Step 2 answers") are not checked.
   const defined = new Set();
-  for (const { text: t } of prose) {
+  for (const { text: t } of unfencedLines(body)) {
     const h = t.match(/^#{1,6}\s+(.*)$/);
     if (h) {
       for (const s of h[1].matchAll(/\bStep\s+(\d+(?:\.\d+)?[a-z]?)\b/gi)) defined.add(s[1].toLowerCase());
@@ -361,7 +381,7 @@ function lintFile(absPath, ctx) {
     const bold = t.match(/^\s*(?:[-*]\s+)?\*\*Step\s+(\d+(?:\.\d+)?[a-z]?)\b/i);
     if (bold) defined.add(bold[1].toLowerCase());
   }
-  const POINTER_RE = /\b(?:(?:skip|go|jump|return|proceed|continue|move|loop|resume|restart)(?:s|ing|ed)?\s+(?:back\s+)?(?:to|at)|see)\s+(?:the\s+)?(?:Workflow\s+)?Step\s+(\d+(?:\.\d+)?[a-z]?)\b/gi;
+  const POINTER_RE = /\b(?:(?:skip|go|jump|return|proceed|continue|move|loop|resume|restart)(?:s|ing|ed)?\s+(?:back\s+)?(?:to|at)|see)\s+(?:the\s+)?(?:Workflow\s+)?Step\s+(\d+(?:\.\d+)?[a-z]?)(?!\w|\.\d)(?!\s+(?:of|in|from)\b)/gi;
   for (const { text: t, line } of prose) {
     for (const m of t.matchAll(POINTER_RE)) {
       const n = m[1].toLowerCase();
@@ -372,14 +392,14 @@ function lintFile(absPath, ctx) {
   // LINK-DEAD / LINK-ANCHOR — relative links resolve on disk; #anchors resolve
   // to a heading. Placeholder targets ({feature}, <x>, $VAR, …) are template
   // content, not references, and are skipped.
-  const ownSlugs = headingSlugs(prose);
+  const ownSlugs = headingSlugs(unfencedLines(body));
   for (const { text: t, line } of prose) {
     for (const m of t.matchAll(/!?\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)) {
       const target = m[1];
       if (/^[a-z][a-z0-9+.-]*:/i.test(target) || target.startsWith('/') || /[{}<>$…*]/.test(target)) continue;
       const [file, anchor] = target.split('#');
       if (!file) {
-        if (anchor && !ownSlugs.has(anchor)) add(line, 'LINK-ANCHOR', `\`#${anchor}\` matches no heading in this file`);
+        if (anchor && !hasAnchor(ownSlugs, anchor)) add(line, 'LINK-ANCHOR', `\`#${anchor}\` matches no heading in this file`);
         continue;
       }
       let decoded;
@@ -391,7 +411,7 @@ function lintFile(absPath, ctx) {
       }
       if (anchor && /\.md$/i.test(abs) && fs.statSync(abs).isFile()) {
         const tl = fs.readFileSync(abs, 'utf8').split(/\r?\n/).map((x, k) => ({ text: x, line: k + 1 }));
-        if (!headingSlugs(proseLines(tl)).has(anchor)) add(line, 'LINK-ANCHOR', `\`${target}\`: no heading with that anchor in the target`);
+        if (!hasAnchor(headingSlugs(unfencedLines(tl)), anchor)) add(line, 'LINK-ANCHOR', `\`${target}\`: no heading with that anchor in the target`);
       }
     }
   }
