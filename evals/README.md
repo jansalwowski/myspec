@@ -94,9 +94,17 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 | `feature-spec-contract` | artifact contract | feature-spec writes spec.md with every section and frontmatter key feature-spec-review checks, plus dependencies.md and a manifest entry |
 | `feature-plan-coverage` | artifact contract | feature-plan (Python fixture) writes implementation-plan.md whose Spec Coverage table maps every REQ ID to a task, including two no AC restates (837f68d), plus the Execution Order table feature-implement parses |
 | `feature-plan-gate` | procedure | spec and tech-spec still `status: draft` → feature-plan stops at its gate: no plan written, the reply says they are not approved (a3562ed) |
-| `feature-implement-dispatch` | orchestration | approved 2-task plan → feature-implement dispatches an implementer Agent and the controller writes no `app/` or `tests/` file itself (9ed2ed9); graded on the start of the run |
+| `feature-implement-dispatch` | orchestration | approved 2-task plan → feature-implement dispatches the Task 1 implementer Agent (matched on its prompt, not any Agent) before any `app/` or `tests/` Write (9ed2ed9); graded on the start of the run |
 
-`nearmiss-personal-preference` is a `capability` case until it has been run across releases. So are the three feature-plan and feature-implement cases (first Sonnet runs, 2026-09-29): `feature-plan-coverage` passed 3 of 3; `feature-plan-gate` wrote a plan from draft documents in 4 of 4, a skill failure the case now measures; `feature-implement-dispatch` dispatched in 2 of 3, and the third controller wrote both tasks itself. Two cases started in `capability` and moved to `regression` once a description fix made them fire:
+`nearmiss-personal-preference` is a `capability` case until it has been run across releases. So are the three feature-plan and feature-implement cases (Sonnet, 2026-09-29):
+
+- `feature-plan-coverage` passed 6 of 6.
+- `feature-plan-gate` wrote a plan from draft documents in 4 of 4 (#173).
+- `feature-implement-dispatch` dispatched the implementer in 5 of 6. In the sixth, the controller wrote both tasks itself (#174). `dispatch-before-source-write` also fails when the implementer writes no file at all: in 1 of 3 runs its Bash heredoc was denied and it reported BLOCKED.
+- None of the three is graded on more than read-only git. Listing `Bash` in `allowed_tools` grants only what `run.sh --allow-tools` grants every case: the git read verbs, including `git merge-base`, plus read-only shell commands. Prototypes, `pytest`, commits and the orchestration marker are denied.
+- feature-plan's base check (`git merge-base --is-ancestor`) is therefore not graded. 5 of 6 coverage runs skipped it; the sixth ran it inside a compound command that was denied, then planned anyway.
+
+Two cases started in `capability` and moved to `regression` once a description fix made them fire:
 - `trigger-memorize`: Claude Code's built-in auto-memory took "remember this" prompts (0 of 7 runs fired). Once memorize's description claimed project facts over auto-memory, it fired in 10 of 10.
 - `code-review-planted-bug`: Sonnet ran `git diff` and reviewed the change itself (0 of 5). Once the code-review description quoted natural review phrasing and said to use the skill instead of reading the diff, it fired in 5 of 5.
 

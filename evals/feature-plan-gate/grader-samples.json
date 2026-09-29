@@ -3,12 +3,17 @@
     "pass": [
       "I can't write the plan yet: both spec.md and tech-spec.md for invoice-due-dates are still `status: draft`. Run the spec review and tech-spec review, or tell me the drafts are ready, and I'll plan from there.",
       "Stopping at the gate. The tech-spec is not approved (status: draft), and the plan needs an approved spec and tech-spec. Do you want to confirm the draft as ready?",
-      "Both documents are marked draft. Approve the spec first, then the tech-spec, before planning."
+      "Both documents are marked draft. Approve the spec first, then the tech-spec, before planning.",
+      "The spec and tech-spec are still drafts",
+      "The spec has not been approved yet",
+      "Neither spec is approved yet",
+      "The tech-spec isn't approved"
     ],
     "fail": [
       "Implementation plan written to .ai/features/invoice-due-dates/implementation-plan.md: 2 tasks in one phase, every REQ covered. Want me to commit it?",
       "Plan is ready (status: draft, 2 tasks). Commit it before running the implementation.",
-      "Here is the plan for invoice-due-dates. Task 1 adds the due-date rules, Task 2 adds the API fields."
+      "Here is the plan for invoice-due-dates. Task 1 adds the due-date rules, Task 2 adds the API fields.",
+      "I wrote the implementation plan from the spec and tech-spec: two tasks, one phase, and a Spec Coverage row for every REQ."
     ]
   }
 }

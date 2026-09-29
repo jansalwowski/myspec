@@ -3,7 +3,7 @@ description: "invoice-due-dates has a spec and tech-spec that are both still sta
 tags: [skill:feature-plan, skill:feature-implement, trigger, capability]
 max_turns: 14
 timeout_seconds: 300
-allowed_tools: [Read, Glob, Grep, Skill, Write, Edit]
+allowed_tools: [Read, Glob, Grep, Skill, Write, Edit, Bash]
 ---
 
 Next step for invoice-due-dates: turn the spec and tech-spec into an implementation plan.
