@@ -39,7 +39,7 @@ Tie-breakers:
 
 ### 2. Identify Missing Fields (ask only what you need)
 
-Inspect the input against the type's required fields (see Step 4). If all required fields are derivable, **skip asking** and move on. Otherwise ask short, plain-language questions — one batch, no jargon. Examples:
+Inspect the input against the type's required fields (see memory-create Step 4). If all required fields are derivable, **skip asking** and move on. Otherwise ask short, plain-language questions — one batch, no jargon. Examples:
 
 - Procedural without a clear trigger: "When should I apply this — what symptoms or task should trigger it?"
 - Procedural without exclusions: "Is there a case where this rule should NOT be applied?"

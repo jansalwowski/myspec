@@ -1,7 +1,7 @@
 ---
 name: feature-implement-review
 tags: [feature, implementation, validation, conformance, critical-thinking, review]
-description: "Use when an implementation is done or paused and needs an independent check that the code fulfills the spec and plan. Keywords: conformance check, traceability, scope drift, acceptance verification. Produces conformance-report.md; never edits code."
+description: "Use when an implementation is done or paused and needs an independent check that the code fulfills the spec and plan. Keywords: conformance check, traceability, scope drift, acceptance verification. Produces conformance-report.md; never edits code. Do NOT use for code quality (code-review) or doc health (feature-verify)."
 ---
 
 # Feature Implement Review
