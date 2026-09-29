@@ -93,7 +93,9 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 | `code-review-planted-bug` | planted flaw | code-review (Python fixture) finds an off-by-one that drops the first line item and does not approve |
 | `feature-spec-contract` | artifact contract | feature-spec writes spec.md with every section and frontmatter key feature-spec-review checks, plus dependencies.md and a manifest entry |
 
-`code-review-planted-bug` is a `capability` case because it fails for a reason the plugin has not fixed yet: Sonnet runs `git diff` and reviews the change itself without invoking code-review. The run still finds the bug, so only the skill-fired and verdict-format graders fail. `nearmiss-personal-preference` stays `capability` until it has been run across releases. `trigger-memorize` was `capability` while Claude Code's built-in auto-memory took "remember this" prompts (0 of 7 runs fired); since memorize's description claims project facts over auto-memory it fired in 10 of 10.
+`nearmiss-personal-preference` is a `capability` case until it has been run across releases. Two cases started in `capability` and moved to `regression` once a description fix made them fire:
+- `trigger-memorize`: Claude Code's built-in auto-memory took "remember this" prompts (0 of 7 runs fired). Once memorize's description claimed project facts over auto-memory, it fired in 10 of 10.
+- `code-review-planted-bug`: Sonnet ran `git diff` and reviewed the change itself (0 of 5). Once the code-review description quoted natural review phrasing and said to use the skill instead of reading the diff, it fired in 5 of 5.
 
 ## Adding a case
 
@@ -167,8 +169,8 @@ A grader that cannot fail is worthless, and a case that passes whether or not th
 
 ## Known gotchas
 
-- **Project instructions don't load.** The scaffold writes `CLAUDE.md` and `.claude/rules/`, but the sandbox keeps them out of context: a canary codeword in each was invisible to the model (2026-09-29). A change to an always-loaded rule cannot be measured here, so routing an eval must see goes in the skill description as well.
 - **Hooks don't load.** The eval sandbox never loads myspec's hooks (the plugin's root `hooks.json` isn't on Claude Code's plugin-hook path, and projects get hooks from `init`). The scaffold therefore installs no `.claude/hooks/` or `.claude/settings.json`. Hook behaviour stays with `hooks/tests/`.
+- **Project instructions don't load either.** The scaffold writes `CLAUDE.md` and `.claude/rules/`, but the run never sees them: a canary rule in both was absent from the model's context (2026-09-29). A routing change in `framework-files/rules/` cannot be measured here; only skill descriptions and bodies can. Routing an eval must see goes in the skill description as well.
 - **Two-arm mode hides the skill signal.** Under `--ablation with-without`, `tool_used: Skill` graders become unscored "plugin-fired indicators", so a case can score 1.0 while its skill never fired. `run.sh` defaults to `--ablation none`, where they count, and its `FIRED` column reads them either way. Sibling graders carry `arm: both` so they are scored in both modes.
 - **Haiku as judge gives false negatives.** The judge is pinned to Sonnet. Prefer a regex for long outputs.
 - **Turns.** A run that hits `max_turns` is recorded with an error but still graded on what it produced. Trigger cases set a low cap on purpose: the Skill call happens in the first turns, and the rest of the skill's work costs money without informing the grade.
