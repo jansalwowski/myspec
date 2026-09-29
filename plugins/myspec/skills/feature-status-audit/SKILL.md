@@ -77,6 +77,9 @@ It computes, per feature and in aggregate, from git history plus the feature doc
 When presenting:
 - Quote the definitions line for any metric you discuss, and report `null` reasons as they are; never estimate a missing value.
 - Rework counts a commit as a fix when its subject matches the printed fix pattern (Conventional Commits `fix:` plus common free-form prefixes). If the project's commits follow another convention, say so and re-run with `--fix-pattern=<regex>`.
+- First-time pass reads committed verdict history only, so it is a lower bound on failures. `/myspec:feature-implement-review` overwrites `conformance-report.md` without committing, and squash merges drop earlier versions. A failure that was overwritten leaves no trace, so a high pass rate does not show that reviews pass first time.
+- Lead time excludes features first seen already `complete` (retroactive docs, decomposed sub-features, whole flows landed in one squash commit); the aggregate line gives how many. A manifest rename it cannot link on its own needs `renamedFrom: <old name>` on the entry.
+- `Open` counts plan tasks on complete features that are neither ticked nor marked deferred. They are outside the deferral rate, and they are usually unmarked scope cuts.
 - With fewer than about five features in an aggregate (`n`), call it anecdotal.
 
 ## Status → expected docs matrix
