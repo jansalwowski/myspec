@@ -228,7 +228,7 @@ After all tasks in a phase complete:
 
 **a) Barrier merge and verification:**
 - Parallel tasks only: merge worktrees back to the feature branch **one at a time** (`task-worktree.sh merge <feature>-t<N>`). On conflict: attempt resolution (auto-generated files like lockfiles, codegen output → take union). Escalate to user if truly stuck.
-- Every phase: run the full suite once — the plan's barrier commands plus each required `.claude/verification.json` check (its `diffCommand` when non-empty, with `MYSPEC_BASE_REF=$(git merge-base HEAD <default branch>)`) — and capture everything to one file, each check headed by its command and exit code: `VERIFY_LOG=$(mktemp "${TMPDIR:-/tmp}/phase-verify.XXXXXX")`. A red run still goes to review, where each failure is attributed. Never two suites at once in one worktree (Constraints).
+- Every phase: run the full suite once — the plan's barrier commands plus each required `.claude/verification.json` check (its `diffCommand` when non-empty, with `MYSPEC_BASE_REF=$(git merge-base HEAD <default branch>)`) — and capture everything to one file, each check headed by its command and exit code: `VERIFY_LOG=$(mktemp "${TMPDIR:-/tmp}/phase-verify.XXXXXX")`. A red run still goes to review, where each failure is attributed. Never two suites at once in one worktree (Constraints). Export a fresh `MYSPEC_CHECK_RUN_ID` per check. A check that is killed or times out keeps running wherever its client sent it (a container, another host), so run its `cleanup` with the same `MYSPEC_CHECK_RUN_ID` before the next run.
 
 **b) Build the review package, then dispatch the phase reviewer** (`./phase-reviewer-prompt.md`):
 
