@@ -44,6 +44,8 @@ gh issue list --state open --limit 200 --json number,title,labels,body,createdAt
 
 It must exit 0. A non-zero exit is a failed step, never "nothing to triage". Filter with `jq`. With zero issues in scope, say so and stop.
 
+A tracker whose last sub-issue closed comes back with `status:needs-triage` and an *All sub-issues are closed* comment from the workflow (`scripts/triage/tracker-check.sh`). Read its mapping comment and skip Step 3 for it. If every section went to a closed child, an existing issue, or "already fixed", propose closing it as completed. Otherwise the leftover sections go through Step 3 like a new bundle.
+
 Also load the comparison set for duplicate checks: issues of either state updated in the last 90 days (`--state all --search "updated:>=<date>"`), and merged PRs created since the oldest in-scope issue (`gh pr list --state merged --limit 100 --json number,title,mergedAt,files,closingIssuesReferences`).
 
 ### Step 2: Scratch checkout of main

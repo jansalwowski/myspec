@@ -93,5 +93,52 @@ expect_eq "$STATUS" "1" "a failed gh call exits 1"
 FAKE_LABELS="" sync --bogus
 expect_eq "$STATUS" "2" "unknown flag is a usage error"
 
+# ── tracker-check.sh ─────────────────────────────────────────────────────────
+
+TRACK="$REPO_ROOT/scripts/triage/tracker-check.sh"
+cat > "$BIN/gh" <<'SH'
+#!/usr/bin/env bash
+case "$*" in
+  "api repos/o/r/issues/"*"/parent")
+    [ -n "${FAKE_PARENT:-}" ] || { echo "gh: Not Found (HTTP 404)" >&2; exit 1; }
+    [ "$FAKE_PARENT" != "error" ] || { echo "gh: Server Error (HTTP 500)" >&2; exit 1; }
+    printf '%s\n' "$FAKE_PARENT" ;;
+  *"/sub_issues"*) printf '%b' "${FAKE_SUBS:-}" ;;
+  *"/labels --jq"*) printf '%b' "${FAKE_PLABELS:-}" ;;
+  *) printf '%s\n' "$*" >> "$GH_LOG" ;;
+esac
+SH
+chmod +x "$BIN/gh"
+track() { : > "$TMP/gh.log"; OUTPUT=$(PATH="$BIN:$PATH" GH_LOG="$TMP/gh.log" bash "$TRACK" "$@" --repo o/r 2>&1); STATUS=$?; LOG=$(cat "$TMP/gh.log"); }
+OPENP='{"number":152,"state":"open"}'
+
+FAKE_PARENT="" track 158
+expect_eq "$STATUS" "0" "no parent (404) exits 0"
+expect_eq "$LOG" "" "no parent writes nothing"
+
+FAKE_PARENT=error track 158
+expect_eq "$STATUS" "1" "a non-404 parent lookup failure exits 1"
+
+FAKE_PARENT="$OPENP" FAKE_SUBS='158 closed\n159 open\n' track 158
+expect_eq "$LOG" "" "an open sibling leaves the parent alone"
+
+FAKE_PARENT='{"number":152,"state":"closed"}' FAKE_SUBS='158 closed\n' track 158
+expect_eq "$LOG" "" "a closed parent is left alone"
+
+FAKE_PARENT="$OPENP" FAKE_SUBS='158 closed\n159 closed\n' FAKE_PLABELS='type:bug\nstatus:blocked\nP1\n' track 159
+expect_eq "$STATUS" "0" "re-queue exits 0"
+grep -q '^issue comment 152 --repo o/r --body All sub-issues are closed (#158 #159)' <<<"$LOG" && ok || fail "re-queue comments on the parent with the closed children"
+grep -q '^issue edit 152 --repo o/r --add-label status:needs-triage --remove-label status:blocked$' <<<"$LOG" && ok || fail "re-queue swaps status:blocked for status:needs-triage"
+grep -q 'issue close' <<<"$LOG" && fail "tracker-check must never close the parent" || ok
+
+FAKE_PARENT="$OPENP" FAKE_SUBS='158 closed\n' FAKE_PLABELS='status:ready\n' track 158
+grep -q -- '--remove-label status:ready$' <<<"$LOG" && ok || fail "any other status label is swapped out too"
+
+FAKE_PARENT="$OPENP" FAKE_SUBS='158 closed\n' FAKE_PLABELS='status:needs-triage\n' track 158
+expect_eq "$LOG" "" "an already queued parent gets no second comment"
+
+track
+expect_eq "$STATUS" "2" "missing issue number is a usage error"
+
 printf 'triage: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

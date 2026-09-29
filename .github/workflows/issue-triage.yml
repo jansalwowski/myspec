@@ -1,13 +1,15 @@
 name: Issue triage
 
 # Deterministic first pass on every new issue: area labels from the title's
-# component prefix, plus status:needs-triage. No model call, so no API spend.
+# component prefix, plus status:needs-triage. On close, a parent tracker whose
+# sub-issues are all closed goes back to status:needs-triage. No model call,
+# so no API spend.
 # The judgement (repro on main, duplicates, splits, priority) is the repo-local
 # /triage skill, run by the maintainer.
 
 on:
   issues:
-    types: [opened]
+    types: [opened, closed]
 
 permissions:
   issues: write
@@ -15,6 +17,7 @@ permissions:
 
 jobs:
   label:
+    if: github.event.action == 'opened'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,3 +36,15 @@ jobs:
           labels=$(node scripts/triage/area-labels.mjs --existing "$EXISTING" "$TITLE" | paste -sd, -)
           echo "labels: ${labels:-<none>}"
           [ -z "$labels" ] || gh issue edit "$NUMBER" --repo "$GITHUB_REPOSITORY" --add-label "$labels"
+
+  tracker:
+    if: github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Re-queue a parent whose sub-issues are all closed
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUMBER: ${{ github.event.issue.number }}
+        run: scripts/triage/tracker-check.sh "$NUMBER" --repo "$GITHUB_REPOSITORY"
