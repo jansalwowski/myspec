@@ -1,6 +1,8 @@
 ## Why
 
-<!-- The problem this solves; the diff shows the what. Link the issue. -->
+<!-- The problem this solves; the diff shows the what. -->
+
+Fixes #<!-- one `Fixes #N` line per issue this closes; a sub-issue closing re-queues its tracker -->
 
 ## Checks
 
