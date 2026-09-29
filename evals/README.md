@@ -106,13 +106,27 @@ evals/_fixtures/project-instructions.sh            # rewrite the generated block
 evals/_fixtures/project-instructions.sh --check    # exit 1 naming each stale case; the test suite runs this
 ```
 
-- For each case the script runs `fixture.sh` in a scratch workspace, then renders `CLAUDE.md` and every `.claude/rules/**/*.md` without a `paths:` key, sorted, under the headers Claude Code gives project instructions. The text is the actual scaffolded files, which `myspec_init` copies from `framework-files/`, so it matches what `init` installs.
-- The block sits between `# BEGIN project-instructions` and `# END project-instructions` at the end of `case.yaml`. Don't edit it. Put other `execution:` keys in `prompt.md` frontmatter; the script refuses a `case.yaml` with its own `execution:` block.
+- For each case the script runs `fixture.sh` in a scratch workspace. It then renders `CLAUDE.md` and every always-loaded `.claude/rules/**/*.md` the way Claude Code 2.1.284 shows them to the model (`_fixtures/project-instructions.pl`):
+  - It removes the YAML frontmatter and block-level `<!-- … -->` comments, and keeps inline and fenced comments.
+  - It trims each file and puts it under Claude Code's `Contents of … (project instructions, checked into the codebase):` header, after its preamble.
+  - A rule counts as always loaded when it has no `paths:`, or when every glob in it is `**` (Claude Code drops a trailing `/**` first).
+  - The text comes from the actual scaffolded files, which `myspec_init` copies from `framework-files/`, so it matches what `init` installs.
+  - A live `claude -p` session echoed the same text for a probe workspace. The test keeps that workspace and its output.
+- The block sits between `# BEGIN project-instructions` and `# END project-instructions` at the end of `case.yaml`. Don't edit it. Put other `execution:` keys in `prompt.md` frontmatter; the script refuses a `case.yaml` with its own `execution:` block. It also refuses `append_system_prompt` in `prompt.md`, because the harness would let that key replace the block.
 - **Re-run the script** after adding a case, or after changing a fixture, `_fixtures/lib.sh`, or anything in `framework-files/rules/`. `scripts/tests/eval-project-instructions.test.sh` fails in CI while any block is stale or missing, and checks each block against an independent rendering.
 - **Default: on.** Every case scaffolds an initialised project, and every initialised project loads these files, so a score without them describes a setup no user has. A description change is measured with the rules loaded too, because that is what it ships into.
-- **Opt out** with the tag `description-only` in `prompt.md`, then re-run the script to drop the block. Use it only for a case that models a project where `init` never ran (plugin installed, no rules), so only skill descriptions and bodies decide. No current case opts out.
+- **Opt out** with the tag `description-only` in `prompt.md`, then re-run the script to drop the block. The tag can be in any YAML list form (quoted or not, inline or block). Use it only for a case that models a project where `init` never ran (plugin installed, no rules), so only skill descriptions and bodies decide. No current case opts out.
 
-Limits: the text goes into the system prompt, while Claude Code puts `CLAUDE.md` in the first user turn. A `paths:` rule, which a real session loads once the agent reads a matching file, never loads here. A canary codeword in `CLAUDE.md` and in the last-sorted rule was quoted back in 3 of 3 Sonnet runs, and absent in 3 of 3 under `description-only`; a codeword in a `paths:` rule stayed absent (2026-09-29).
+Limits:
+- The text goes into the system prompt, while Claude Code puts `CLAUDE.md` in the first user turn.
+- Paths are repo-relative. Claude Code shows the absolute path of the run's random scratch workspace, which is not known when the text is generated.
+- Files are sorted. Claude Code uses directory-listing order, which varies by filesystem.
+- A block comment nested in a list item or a blockquote may be removed here; Claude Code keeps it.
+- A `paths:` rule, which a real session loads once the agent reads a matching file, never loads here.
+- **Release-check cannot see a routing change in an always-loaded rule.** It re-runs the previous tag with HEAD's `evals/`, so both sides get HEAD's rule text. To measure such a change, run the affected cases on the old and the new rule text within one release (regenerate the blocks on each), or add a pair of cases, one with the rule and one tagged `description-only`.
+- **Cost:** the block adds about 10 KB (~2.5k tokens) per run. Sonnet's mean cost per run went from $0.129 (v2.8.0 baseline) to $0.145, about 13% more.
+
+A canary codeword in `CLAUDE.md` and in the last-sorted rule was quoted back in 3 of 3 Sonnet runs, and absent in 3 of 3 under `description-only`; a codeword in a `paths:` rule stayed absent (2026-09-29).
 
 Mechanisms that don't work on 2.1.284, so nobody retries them: copying the files into the run's user config dir (CLAUDE.md loading is disabled outright); a `SessionStart` hook in that dir's `settings.json` (the harness writes that file itself, exclusively, when Bash is granted, and the run fails with `EEXIST`); `managed-settings.json` there (not read); a helper plugin with the hook listed in `plugins:` (a plugin inside `evals/` must sit inside the case directory, and one outside `evals/` is missing from the older release worktree `release-check.sh` builds).
 
