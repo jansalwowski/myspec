@@ -2,7 +2,7 @@
 
 When a session is archived, `/myspec:session-complete` scans the session's Claude Code transcripts and reports friction that repeated: the same hook blocking again and again, hooks that could not run, subagents that got stuck or needed context, subagents sent back for several fix rounds. Each row names an owner, so you can tell whether to fix something in your project, refresh your myspec install, or open an issue against myspec.
 
-The scan is a deterministic script (`lib/friction-scan/scan.mjs`). It makes no model calls, adds nothing to prompts, installs no hook, and writes no files. Nothing leaves your machine.
+The scan is a deterministic script (`lib/friction-scan/scan.mjs`). It makes no model calls, adds nothing to prompts, and writes no files. Nothing leaves your machine. The same script, run with `--emit` by a `SessionEnd` hook, records local per-skill field metrics: see [field-metrics.md](field-metrics.md).
 
 ## Reading the report
 
