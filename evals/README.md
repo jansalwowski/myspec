@@ -68,7 +68,7 @@ Files changed between `--base` (default: `git merge-base origin/main HEAD`) and 
 | `evals/<case>/…` | that case |
 | `evals/_fixtures/<entry>…` | every case whose files mention `<entry>` (a top-level file or directory name); `lib.sh` is sourced by every case, so it selects them all |
 
-Nothing else selects a case. Changes to `framework-files/`, `scaffolding/`, `hooks/` or `lib/` are left to the full suite, even though the scaffold copies `framework-files/` into every workspace.
+Nothing else selects a case. Changes to `framework-files/`, `scaffolding/`, `hooks/` or `lib/` are left to the full suite, even though the scaffold copies `framework-files/` into every workspace. The exception is an always-loaded rule in `framework-files/rules/`: regenerating the [project instructions](#project-instructions) rewrites every `case.yaml`, which selects every case.
 
 Tag a case with **every** skill its graders name, siblings included. A description change in `code-review` can start stealing `skill-verify`'s prompts, so `nearmiss-skill-verify` carries `skill:code-review` too.
 
@@ -97,20 +97,60 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 - `trigger-memorize`: Claude Code's built-in auto-memory took "remember this" prompts (0 of 7 runs fired). Once memorize's description claimed project facts over auto-memory, it fired in 10 of 10.
 - `code-review-planted-bug`: Sonnet ran `git diff` and reviewed the change itself (0 of 5). Once the code-review description quoted natural review phrasing and said to use the skill instead of reading the diff, it fired in 5 of 5.
 
+## Project instructions
+
+A real myspec project loads its `CLAUDE.md` and the always-loaded rules in `.claude/rules/` (`workflow.md`, `memory-system.md`, `auto-memory-style.md`) into every session, and some routing lives there: `memory-system.md` sends "remember …" to memorize and a new session to bootstrap. The eval harness loads neither. It starts the agent with `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1` and `--setting-sources user`, and no case field or setting turns that off. So each case carries its instructions as `execution.append_system_prompt` in `case.yaml`, generated from what its scaffold writes:
+
+```bash
+evals/_fixtures/project-instructions.sh            # rewrite the generated block in every case.yaml
+evals/_fixtures/project-instructions.sh --check    # exit 1 naming each stale case; the test suite runs this
+```
+
+- For each case the script runs `fixture.sh` in a scratch workspace. It then renders `CLAUDE.md` and every always-loaded `.claude/rules/**/*.md` the way Claude Code 2.1.284 shows them to the model (`_fixtures/project-instructions.pl`):
+  - It removes the YAML frontmatter and block-level `<!-- … -->` comments, and keeps inline and fenced comments.
+  - It trims each file and puts it under Claude Code's `Contents of … (project instructions, checked into the codebase):` header, after its preamble.
+  - A rule counts as always loaded when it has no `paths:`, or when every glob in it is `**` (Claude Code drops a trailing `/**` first).
+  - The text comes from the actual scaffolded files, which `myspec_init` copies from `framework-files/`, so it matches what `init` installs.
+  - A live `claude -p` session echoed the same text for a probe workspace. The test keeps that workspace and its output.
+- The block sits between `# BEGIN project-instructions` and `# END project-instructions` at the end of `case.yaml`. Don't edit it. Put other `execution:` keys in `prompt.md` frontmatter; the script refuses a `case.yaml` with its own `execution:` block. It also refuses `append_system_prompt` in `prompt.md`, because the harness would let that key replace the block.
+- **Re-run the script** after adding a case, or after changing a fixture, `_fixtures/lib.sh`, or anything in `framework-files/rules/`. `scripts/tests/eval-project-instructions.test.sh` fails in CI while any block is stale or missing, and checks each block against an independent rendering.
+- **Default: on.** Every case scaffolds an initialised project, and every initialised project loads these files, so a score without them describes a setup no user has. A description change is measured with the rules loaded too, because that is what it ships into.
+- **Opt out** with the tag `description-only` in `prompt.md`, then re-run the script to drop the block. The tag can be in any YAML list form (quoted or not, inline or block). Use it only for a case that models a project where `init` never ran (plugin installed, no rules), so only skill descriptions and bodies decide. No current case opts out.
+
+Limits:
+- The text goes into the system prompt, while Claude Code puts `CLAUDE.md` in the first user turn.
+- Paths are repo-relative. Claude Code shows the absolute path of the run's random scratch workspace, which is not known when the text is generated.
+- Files are sorted. Claude Code uses directory-listing order, which varies by filesystem.
+- A block comment nested in a list item or a blockquote may be removed here; Claude Code keeps it.
+- A `paths:` rule, which a real session loads once the agent reads a matching file, never loads here.
+- **Release-check cannot see a routing change in an always-loaded rule.** It re-runs the previous tag with HEAD's `evals/`, so both sides get HEAD's rule text. To measure such a change, run the affected cases on the old and the new rule text within one release (regenerate the blocks on each), or add a pair of cases, one with the rule and one tagged `description-only`.
+- **Cost:** the block adds about 10 KB (~2.5k tokens) per run. Sonnet's mean cost per run went from $0.129 (v2.8.0 baseline) to $0.145, about 13% more.
+
+A canary codeword in `CLAUDE.md` and in the last-sorted rule was quoted back in 3 of 3 Sonnet runs, and absent in 3 of 3 under `description-only`; a codeword in a `paths:` rule stayed absent (2026-09-29).
+
+Mechanisms that don't work on 2.1.284, so nobody retries them: copying the files into the run's user config dir (CLAUDE.md loading is disabled outright); a `SessionStart` hook in that dir's `settings.json` (the harness writes that file itself, exclusively, when Bash is granted, and the run fails with `EEXIST`); `managed-settings.json` there (not read); a helper plugin with the hook listed in `plugins:` (a plugin inside `evals/` must sit inside the case directory, and one outside `evals/` is missing from the older release worktree `release-check.sh` builds).
+
 ## Adding a case
 
 1. Create `evals/<case>/` with `case.yaml`, `prompt.md`, `fixture.sh`, `graders/`, and `grader-samples.json` if it has regex graders.
 2. Phrase the prompt the way a user types it. Never name the skill.
 3. Give it **at least one deterministic grader** (`tool_used`, `regex`, `file_exists`, `tool_order`). An `llm` grader may add to it but never replace it: a judge's verdict varies between runs, and the default Haiku judge voted FAIL three times on a review that plainly passed.
-4. Tag it: `skill:<name>` for every skill its graders name, the family (`trigger`, `near-miss`, `planted-flaw`, `artifact-contract`), and `capability`.
-5. Prove each grader can fail (next section), then run it a few times before promoting it to `regression`.
+4. Tag it: `skill:<name>` for every skill its graders name, the family (`trigger`, `near-miss`, `planted-flaw`, `artifact-contract`), and `capability`. Add `description-only` only for the opt-out in [Project instructions](#project-instructions).
+5. Run `evals/_fixtures/project-instructions.sh <case>` to append the generated project instructions to its `case.yaml`.
+6. Prove each grader can fail (next section), then run it a few times before promoting it to `regression`.
 
 ```yaml
-# evals/<case>/case.yaml
+# evals/<case>/case.yaml — hand-written part; the script appends the generated block
 schema_version: "1.1"
 name: <case>
 context:
   scaffold_script: fixture.sh
+
+# BEGIN project-instructions: generated by evals/_fixtures/project-instructions.sh, do not edit
+execution:
+  append_system_prompt: |
+    Codebase and user instructions are shown below. …
+# END project-instructions
 ```
 
 ```markdown
@@ -157,7 +197,7 @@ arm: both
 
 For `code-review`, `doctor` and `init` write `"myspec:<name>"` without the optional group: Claude Code ships built-in skills with those names, and the bare call is not ours.
 
-`evals/_fixtures/lib.sh` provides `myspec_init [name] [description] [stack]`, `add_feature <fixture-dir> <feature> <status> [phase] [priority]`, `register_feature <feature> <status>`, `copy_tree <fixture-dir>` and `git_commit_all <message>`. Shared fixture trees live beside it (`project-billing/`: a Python billing app with three features, a stale manifest and an orphan folder). A fixture used by one case lives in that case's directory (`tech-spec-review-planted-flaws/workspace/`).
+`evals/_fixtures/lib.sh` provides `myspec_init [name] [description] [stack]`, `add_feature <fixture-dir> <feature> <status> [phase] [priority]`, `register_feature <feature> <status>`, `copy_tree <fixture-dir>` and `git_commit_all <message>`. `project-instructions.sh` beside it generates each case's project instructions from the finished workspace. Shared fixture trees live beside it (`project-billing/`: a Python billing app with three features, a stale manifest and an orphan folder). A fixture used by one case lives in that case's directory (`tech-spec-review-planted-flaws/workspace/`).
 
 ## Proving a grader can fail
 
@@ -170,7 +210,7 @@ A grader that cannot fail is worthless, and a case that passes whether or not th
 ## Known gotchas
 
 - **Hooks don't load.** The eval sandbox never loads myspec's hooks (the plugin's root `hooks.json` isn't on Claude Code's plugin-hook path, and projects get hooks from `init`). The scaffold therefore installs no `.claude/hooks/` or `.claude/settings.json`. Hook behaviour stays with `hooks/tests/`.
-- **Project instructions don't load either.** The scaffold writes `CLAUDE.md` and `.claude/rules/`, but the run never sees them: a canary rule in both was absent from the model's context (2026-09-29). A routing change in `framework-files/rules/` cannot be measured here; only skill descriptions and bodies can. Routing an eval must see goes in the skill description as well.
+- **Project instructions don't load on their own.** The harness disables `CLAUDE.md` loading and project settings, so a scaffolded `CLAUDE.md` and `.claude/rules/` are invisible (canary, 2026-09-29). Each case gets them through a generated `append_system_prompt` instead; see [Project instructions](#project-instructions). Path-scoped rules are still never loaded.
 - **Two-arm mode hides the skill signal.** Under `--ablation with-without`, `tool_used: Skill` graders become unscored "plugin-fired indicators", so a case can score 1.0 while its skill never fired. `run.sh` defaults to `--ablation none`, where they count, and its `FIRED` column reads them either way. Sibling graders carry `arm: both` so they are scored in both modes.
 - **Haiku as judge gives false negatives.** The judge is pinned to Sonnet. Prefer a regex for long outputs.
 - **Turns.** A run that hits `max_turns` is recorded with an error but still graded on what it produced. Trigger cases set a low cap on purpose: the Skill call happens in the first turns, and the rest of the skill's work costs money without informing the grade.

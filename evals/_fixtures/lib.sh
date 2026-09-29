@@ -17,6 +17,11 @@
 # hooks would run outside the sandbox and make runs slower and less repeatable.
 # Framework files are copied from the plugin under test, so a change to
 # framework-files/ is exercised by every case.
+#
+# The run never loads the CLAUDE.md and .claude/rules/ written here. After
+# changing this file or a fixture, run evals/_fixtures/project-instructions.sh
+# so each case.yaml carries them as append_system_prompt (evals/README.md,
+# "Project instructions").
 
 set -euo pipefail
 
