@@ -53,6 +53,23 @@ When writing or editing skills, follow the principles enforced by the `skill-ver
 - **A dispatched subagent cannot reach the user.** Never tell one to ask the user something. Have it mark the blocked work and return a structured line naming what would unblock it (the probe executor's `NEED:` lines); the controller asks and re-dispatches with the answer in a named prompt field. Otherwise the gate stays blocked with no way for the answer to arrive. (PR #109 review, 2026-09-27.)
 - **Gate on a command's exit status, not only its output.** `git diff --stat <sha> HEAD` with a sha that no longer exists (after a rebase or squash) exits 128 with empty stdout, which a skill checking "output is empty" reads as "nothing changed". Write "exits 0 with empty output". (PR #109 review, 2026-09-27.)
 
+## Quality gates
+
+Each check sits in the cheapest layer that can catch its failure. The reasoning and the fix-commit history behind each layer are in `docs/quality-monitoring-research-2026-09-29.md`.
+
+| Layer | What | Where it runs |
+|-------|------|---------------|
+| Static lint | `node scripts/lint-skills.mjs`: frontmatter, "Use when" + "Do NOT" description rules, dead links and anchors, step pointers, size budget | pre-commit (staged content), CI |
+| Deterministic tests | `lib/tests`, `hooks/tests`, `scripts/tests` | CI; run locally with `TZ=UTC` |
+| Behavioural evals | `evals/` via `scripts/evals/run.sh` (`claude plugin eval`) | pre-push (changed skills only, 1 run, Sonnet, report-only), `/release` (full suite) |
+| Release comparison | `scripts/evals/release-check.sh`: paired delta, bootstrap CI and pass^k against the previous release's baseline in `quality/baselines/` | `/release`, report-only until `quality/release-check.json` sets `"gate": true` |
+
+Evals run only on the maintainer's Claude Code login. There is no API budget, so there is no CI eval job. Enable the git hooks once per clone with `scripts/install-git-hooks.sh`. Agents pushing from inside Claude Code skip the pre-push evals by default: run `scripts/evals/run.sh --mode changed` yourself with a long enough Bash timeout.
+
+- **A new skill or a changed trigger gets an eval case.** Add a `skill:<name>` tag so pre-push selects it. Include at least one deterministic grader, and show that each grader can fail before trusting it (`evals/README.md`).
+- **A fixed regression gets a test in the cheapest layer.** Use a lint rule for a structural mistake, a bash test for hook or lib logic, and an eval only when the fix lives in skill prose. A new test must fail with the fix reverted.
+- **A flaky case moves to the `capability` tier; don't loosen its threshold.** A score that moves by one case between runs is noise at 15 cases. Read the transcript before editing a skill to chase it.
+
 ## Paths in skills, blueprints, and templates
 
 Everything in `skills/`, `blueprints/`, `framework-files/`, and `templates/` is read by downstream models inside other people's repos. Hardcoded absolute paths (`/Users/<you>/...`) and resolved aiDir values (`ai/features/...`) leak local layout.

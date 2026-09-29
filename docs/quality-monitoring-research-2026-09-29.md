@@ -1,5 +1,13 @@
 # Quality monitoring for myspec — research (2026-09-29)
 
+**Decisions taken when building it (2026-09-29):**
+- Evals run locally only, on the maintainer's Claude Code login. There is no API budget, so there is no CI eval job; this replaces the per-PR CI tier in §5 L2.
+- Pre-commit runs the static lint.
+- Pre-push runs the eval cases for changed skills, once each, on Sonnet, and only reports.
+- `/release` runs the full suite (3 runs, Sonnet and Haiku as the agent model, Sonnet as judge) and compares it with the previous release's baseline. It is report-only until a gate is switched on.
+
+The Quality gates section of AGENTS.md is the current reference.
+
 This is input for a brainstorm. The question: how can we measure the quality, predictability and performance of myspec itself, how do other frameworks do it, and what exactly could we build?
 
 ## 0. Summary
