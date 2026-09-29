@@ -130,6 +130,7 @@ expect_eq "$STATUS" "0" "re-queue exits 0"
 grep -q '^issue comment 152 --repo o/r --body All sub-issues are closed (#158 #159)' <<<"$LOG" && ok || fail "re-queue comments on the parent with the closed children"
 grep -q '^issue edit 152 --repo o/r --add-label status:needs-triage --remove-label status:blocked$' <<<"$LOG" && ok || fail "re-queue swaps status:blocked for status:needs-triage"
 grep -q 'issue close' <<<"$LOG" && fail "tracker-check must never close the parent" || ok
+expect_eq "$(sed -n 1p <<<"$LOG" | cut -d' ' -f1-2)" "issue edit" "the label lands before the comment, so a re-run sees it"
 
 FAKE_PARENT="$OPENP" FAKE_SUBS='158 closed\n' FAKE_PLABELS='status:ready\n' track 158
 grep -q -- '--remove-label status:ready$' <<<"$LOG" && ok || fail "any other status label is swapped out too"

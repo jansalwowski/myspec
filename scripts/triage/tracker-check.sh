@@ -45,12 +45,14 @@ LABELS=$(gh api "repos/$REPO/issues/$PARENT/labels" --jq '.[].name') || exit 1
 # Already queued: a child closed, reopened and closed again must not repeat the comment.
 if grep -Fxq 'status:needs-triage' <<<"$LABELS"; then echo "tracker-check: parent #$PARENT already queued"; exit 0; fi
 
-CLOSED=$(awk '{ printf "#%s ", $1 }' <<<"$SUBS")
-gh issue comment "$PARENT" --repo "$REPO" --body "All sub-issues are closed (${CLOSED% }). Re-queued for triage: close this tracker if its mapping comment leaves nothing open, otherwise split or relabel what remains." >/dev/null || exit 1
-# Exactly one status:* label: drop whichever the tracker carries.
+# Label first: it is the already-queued signal above, so a run that dies
+# between the two calls re-runs without a second comment. The workflow's
+# concurrency group serializes siblings closed by one PR.
 REMOVE=()
 while IFS= read -r l; do
   case "$l" in status:*) REMOVE+=(--remove-label "$l") ;; esac
 done <<<"$LABELS"
 gh issue edit "$PARENT" --repo "$REPO" --add-label status:needs-triage ${REMOVE[@]+"${REMOVE[@]}"} >/dev/null || exit 1
+CLOSED=$(awk '{ printf "#%s ", $1 }' <<<"$SUBS")
+gh issue comment "$PARENT" --repo "$REPO" --body "All sub-issues are closed (${CLOSED% }). Re-queued for triage: close this tracker if its mapping comment leaves nothing open, otherwise split or relabel what remains." >/dev/null || exit 1
 echo "tracker-check: parent #$PARENT re-queued"

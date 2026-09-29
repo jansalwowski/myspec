@@ -39,6 +39,11 @@ jobs:
 
   tracker:
     if: github.event.action == 'closed'
+    # Repo-wide, not per issue: one PR closing several siblings starts one run
+    # each, and they must not both see "all closed, not yet queued".
+    concurrency:
+      group: issue-tracker
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
