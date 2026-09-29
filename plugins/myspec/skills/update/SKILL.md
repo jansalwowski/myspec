@@ -60,7 +60,7 @@ From `manifest.json`, collect all files. Each file has a `type`:
 For `files` entries: destination is `{aiDir}/{filename}` — **except** `templates/{name}` entries, which install to `{aiDir}/.templates/{name}` (the dot-directory `init` creates; skills read templates from there — never create `{aiDir}/templates/`).
 For `rules` entries: source is `framework-files/rules/{filename}`, destination is the `dest` path (e.g., `.claude/rules/workflow.md`).
 For `hooks` entries: source is `hooks/{filename}`, destination is the `dest` path (e.g., `.claude/hooks/guard-worktree-context.sh`).
-For `lib` entries: source is `lib/{filename}`, destination is the `dest` path (e.g., `.claude/lib/path-normalize.sh`).
+For `lib` entries: source is `lib/{filename}`, destination is the `dest` path (e.g., `.claude/lib/path-normalize.sh`; `friction-scan/scan.mjs` → `.claude/lib/friction-scan/scan.mjs`, creating the directory).
 
 **Renamed entries — migrate the destination before applying.** A `files` or `rules` entry may carry `renamedFrom: "<old key>"`. It means the framework changed a file's name, and the project on disk still holds the old one. Before applying such an entry:
 

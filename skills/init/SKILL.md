@@ -45,6 +45,7 @@ Ask these **one at a time** and wait for each answer:
    - Session tracking (creates a live log in `.claude/state/sessions/` on the first code edit)
    - Frontmatter validation (enforces YAML frontmatter on AI docs)
    - Verification on stop (runs lint/tests before agent completes)
+   - Field metrics on session end (per-skill counts and timings in gitignored `.claude/state/metrics/`, never uploaded; opt out with `"feedback": { "metrics": false }` or `DO_NOT_TRACK=1`)
 
    Note: Codex can use the plugin's built-in `hooks.json` directly. This option is for keeping project-local Claude compatibility."
 
@@ -147,10 +148,11 @@ Create `.claude/hooks/` directory. Copy these files from the plugin's `hooks/` d
 - `verify-before-stop.sh`
 - `no-absolute-paths.sh`
 - `require-reuse-audit.sh`
+- `record-session-metrics.sh`
 
 Make them executable: `chmod +x .claude/hooks/*.sh`
 
-Create `.claude/lib/` and copy the lib files listed in `manifest.json`'s `lib` block from the plugin's `lib/` directory, then `chmod +x .claude/lib/*.sh` (some are sourced, some are invoked directly). Use the manifest as the source of truth — do not glob the directory (it also holds plugin-internal helpers like `lib/feature-status-audit/` and `lib/brainstorm-server/`, which run from the plugin root and are never copied into projects). These back skills and hooks (e.g. `<repo_root>`/`<encoded_cwd>` placeholders; the reuse-audit table validator; the branch-guard command scanner; sanctioned branch cleanup; memory ID allocation, index generation, and the memory conformance check).
+Create `.claude/lib/` and copy the lib files listed in `manifest.json`'s `lib` block from the plugin's `lib/` directory (a key with a slash, such as `friction-scan/scan.mjs`, lands in the matching subdirectory of its `dest`), then `chmod +x .claude/lib/*.sh` (some are sourced, some are invoked directly). Use the manifest as the source of truth — do not glob the directory (it also holds plugin-internal helpers like `lib/feature-status-audit/` and `lib/brainstorm-server/`, which run from the plugin root and are never copied into projects). These back skills and hooks (e.g. `<repo_root>`/`<encoded_cwd>` placeholders; the reuse-audit table validator; the branch-guard command scanner; sanctioned branch cleanup; memory ID allocation, index generation, and the memory conformance check).
 
 Append `.claude/state/` to `.gitignore` (create the file if absent). `memory-claim-id.sh` keeps its per-checkout ID registry there; committing it would make one clone's claims another clone's stale floor.
 
@@ -202,7 +204,7 @@ Hooks:   {enabled / skipped}
 Created:
   .myspec.json
   ${aiDir}/ (features, memory, ideas, templates)
-  {if hooks: .claude/hooks/ (7 hooks), .claude/lib/ (N helpers, per manifest), .claude/rules/ (8 rules)}
+  {if hooks: .claude/hooks/ (8 hooks), .claude/lib/ (N helpers, per manifest), .claude/rules/ (8 rules)}
   {if hooks: .claude/settings.json, .claude/verification.json}
   {if base agents installed: list each ~/.{harness}/agents/{file} that was installed or updated, grouped by harness}
 
@@ -219,7 +221,7 @@ Next steps:
 - Skip empty verification commands gracefully (write placeholder, note it needs filling)
 - Never overwrite existing `.myspec.json` without explicit confirmation
 - If `.claude/settings.json` already exists, deep-merge the `hooks` key only:
-  - For each hook type (`PreToolUse`, `PostToolUse`, `Stop`), append new hook entries that don't already exist (match by `command` field)
+  - For each hook type (`PreToolUse`, `PostToolUse`, `Stop`, `SessionEnd`), append new hook entries that don't already exist (match by `command` field)
   - Do not modify or remove existing hook entries or any other settings keys
   - If no `hooks` key exists in the existing file, add it
 - Base subagents (`skills/feature-implement/agents/`) install to user scope only. Never copy to project-scope `.claude/agents/`, `.cursor/agents/`, `.codex/agents/` in the repo root.
@@ -237,7 +239,7 @@ Next steps:
 - [ ] `${aiDir}/anti-patterns.md` created (framework anti-pattern index — distinct from `${aiDir}/memory/index.md`, the Layer 1 memory index)
 - [ ] `${aiDir}/pre-flight.md` created
 - [ ] `${aiDir}` binding written to `AGENTS.md` (or `CLAUDE.md`) between `myspec:paths` markers
-- [ ] If hooks enabled: `.claude/hooks/` has 7 scripts, all executable
+- [ ] If hooks enabled: `.claude/hooks/` has 8 scripts, all executable
 - [ ] If hooks enabled: `.claude/lib/` has every helper in `manifest.json`'s `lib` block, all executable
 - [ ] If hooks enabled: `.claude/rules/` has 8 framework rules
 - [ ] If hooks enabled: `.claude/settings.json` and `.claude/verification.json` created
