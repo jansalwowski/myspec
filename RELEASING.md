@@ -63,6 +63,25 @@ It:
 | Minor | New skills, new framework files, new manifest entries. Backward-compatible.                       |
 | Major | Breaking changes to `.myspec.json` schema, removed/renamed skills, workflows requiring migration. |
 
+## Breaking changes
+
+A change is breaking when a consumer project that runs `/myspec:update` ends up broken or silently different, and nothing in the release fixes it for them. It is not breaking when it ships with its own migration: a manifest rename carrying `renamedFrom`, or a removal listed in the manifest `removed` block, is a minor change.
+
+Breaking, unless a migration ships with it:
+
+- A `.myspec.json` schema change `update` does not migrate
+- A removed or renamed skill, or a renamed agent dispatch name (`myspec:<agent>`)
+- A renamed or removed config-contract heading (see AGENTS.md, "Config contracts")
+- A changed or dropped manifest key without `renamedFrom` or a `removed` entry
+- A dropped harness (Codex, #143) or a dropped supported stack
+- A workflow change that needs consumers to act, such as a new required plan field that old plans lack and a skill now rejects
+
+**Tracking.** Every candidate gets an issue with the `breaking` label, in the next major's milestone (currently [v3.0.0](https://github.com/jansalwowski/myspec/milestone/1)). That milestone is the major's roadmap; do not keep one anywhere else. A PR that lands a breaking change carries the `breaking` label too, which is what the release gate reads.
+
+**Gate.** `/release` lists merged PRs carrying `breaking` since the last tag and refuses a minor or patch bump while any exist. Those PRs are either released in the major or have the label removed with a comment saying why they are not breaking.
+
+**Cutting the major.** Write `docs/myspec-<N>.0-breaking-changes.md` and `docs/upgrading-to-<N>.0.md` from the milestone, as `docs/myspec-2.0-breaking-changes.md` and `docs/upgrading-to-2.0.md` were for 2.0.
+
 ## When in doubt
 
 The single most consequential field is `frameworkVersion` in `framework-files/manifest.json` — that's what gates whether existing consumer projects see new framework files via `/myspec:update`. If you touched anything under `framework-files/`, the version must bump (minor at minimum), and the script must run.
