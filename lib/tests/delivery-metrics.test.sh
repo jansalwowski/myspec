@@ -4,7 +4,9 @@
 # Builds a git repository with a synthetic, fully dated feature history and
 # asserts every metric's exact value: lead time (spec commit -> the merge that
 # landed status complete), stage dwell, plan deferral rate, conformance
-# first-time pass (FAIL then PASS), rework rate (fix commits inside and outside
+# first-time pass (FAIL then PASS across committed versions, and from the
+# report's own verdict history through a merge and a squash; a partial or
+# unreadable history), rework rate (fix commits inside and outside
 # the 30-day window, touching a PHP and a Python inventory path), and spec
 # churn. Also: a renamed feature keeps its history, --since/--feature filter,
 # --fix-pattern replaces the default, a shallow clone and a non-repository are
@@ -85,6 +87,20 @@ spec() {            # spec <feature> <spec_version> [extra line]
 
 conformance() {     # conformance <feature> <verdict>
   printf -- '---\nfeature: %s\nverdict: %s\n---\n\n# Conformance\n' "$1" "$2" > "$F/$1/conformance-report.md"
+}
+
+conformance_hist() {  # conformance_hist <feature> <complete|partial> <row verdict>...
+  # The report as feature-implement-review writes it: the frontmatter verdict
+  # is the newest run's, `## Verdict history` holds one row per run.
+  local feat="$1" mark="$2"; shift 2
+  local last n=0 v
+  for v in "$@"; do last="$v"; done
+  mkdir -p "$F/$feat"
+  {
+    printf -- '---\nfeature: %s\nverdict: %s\nverdict_history: %s\n---\n\n# Conformance\n\n' "$feat" "$last" "$mark"
+    printf '## Verdict history\n\n| Reviewed | Head | Verdict | Critical | High | Medium | Low |\n|----------|------|---------|----------|------|--------|-----|\n'
+    for v in "$@"; do n=$((n + 1)); printf '| 2025-05-%02d | %s%02d | %s | 0 | %s | 0 | 0 |\n' "$n" "$feat" "$n" "$v" "$n"; done
+  } > "$F/$feat/conformance-report.md"
 }
 
 touch_code() {      # touch_code <path> <line>
@@ -321,8 +337,47 @@ MD
   spec café-export 2
   commit 2025-04-25 "docs(café-export): spec v2"
 
+  # Verdict history in the report. Each report is committed once: without
+  # the history a single committed version could not rule out a failure.
+  conformance_hist hist-fail-pass complete not-verifiable gaps conformant
+  commit 2025-05-01 "docs(hist-fail-pass): conformance"
+  conformance_hist hist-pass complete conformant
+  # a history example inside a fence is not the report's history
+  printf '\n```markdown\n## Verdict history\n\n| Reviewed | Head | Verdict |\n|---|---|---|\n| 2025-01-01 | x | gaps |\n```\n' > "$ROOT/conf-fence.md"
+  { head -n 7 "$F/hist-pass/conformance-report.md"; cat "$ROOT/conf-fence.md"; tail -n +8 "$F/hist-pass/conformance-report.md"; } > "$ROOT/conf-report.md"
+  mv "$ROOT/conf-report.md" "$F/hist-pass/conformance-report.md"
+  commit 2025-05-02 "docs(hist-pass): conformance"
+
+  # the same FAIL-then-PASS branch history landed by a merge and by a squash
+  local how
+  for how in merged squash; do
+    at 2025-05-03 checkout -b "feat/hist-$how"
+    conformance_hist "hist-$how" complete gaps
+    commit 2025-05-03 "docs(hist-$how): conformance gaps"
+    conformance_hist "hist-$how" complete gaps conformant
+    commit 2025-05-04 "docs(hist-$how): conformance conformant"
+    at 2025-05-05 checkout main
+    if [ "$how" = merged ]; then
+      at 2025-05-05 merge --no-ff "feat/hist-$how" -m "Merge branch feat/hist-$how"
+    else
+      at 2025-05-05 merge --squash "feat/hist-$how"
+      commit 2025-05-05 "docs(hist-$how): squash-merge"
+    fi
+  done
+
+  # a history started on an older report: a PASS in its first row proves nothing
+  conformance_hist hist-partial partial conformant
+  commit 2025-05-06 "docs(hist-partial): conformance"
+
+  # unreadable histories: a verdict the skill never writes, a short row
+  conformance_hist hist-bad-verdict complete PASS
+  conformance_hist hist-bad-row complete gaps conformant
+  sed -i.bak 's/^| 2025-05-02 | hist-bad-row02 | conformant | 0 | 2 |.*$/| 2025-05-02 | conformant |/' "$F/hist-bad-row/conformance-report.md"
+  rm -f "$F/hist-bad-row/conformance-report.md.bak"
+  commit 2025-05-07 "docs: unreadable conformance histories"
+
   # never-committed and two long ids: only in the working tree
-  manifest "$M"'  - name: café-export\n    status: complete\n  - name: never-committed\n    status: draft\n  - name: a-very-long-feature-identifier-number-one\n    status: draft\n  - name: a-very-long-feature-identifier-number-two\n    status: draft\n'
+  manifest "$M"'  - name: café-export\n    status: complete\n  - name: never-committed\n    status: draft\n  - name: a-very-long-feature-identifier-number-one\n    status: draft\n  - name: a-very-long-feature-identifier-number-two\n    status: draft\n'"$(printf '  - name: %s\\n    status: in-progress\\n' hist-fail-pass hist-pass hist-merged hist-squash hist-partial hist-bad-verdict hist-bad-row)"
   spec never-committed 1
 }
 
@@ -369,6 +424,17 @@ expect_eq 'f("retro-doc").firstTimePass.value === null && f("retro-doc").firstTi
 
 expect_eq 'f("squashed").leadTime.value === null && f("squashed").leadTime.reason.startsWith("spec.md landed in the same commit")' 'true' "a squash merge carrying spec and completion has no lead time, not 0"
 expect_eq 'f("squashed").firstTimePass.value' 'false' "a single committed FAIL is still a failure"
+expect_eq '[f("invoice-export").firstTimePass.basis, f("retro-doc").firstTimePass.basis, f("squashed").firstTimePass.basis].join(",")' 'committed-versions,committed-versions,committed-versions' "a report without a verdict history falls back to its committed versions"
+
+expect_eq 'f("hist-fail-pass").firstTimePass.value + "|" + f("hist-fail-pass").firstTimePass.basis + "|" + f("hist-fail-pass").firstTimePass.committedVersions' 'false|verdict-history|1' "a history with FAIL then PASS is not a first-time pass, from one committed version"
+expect_eq 'f("hist-fail-pass").firstTimePass.verdicts.join(",")' 'not-verifiable,gaps,conformant' "history rows read oldest first; not-verifiable is skipped"
+expect_eq 'f("hist-pass").firstTimePass.value + "|" + f("hist-pass").firstTimePass.basis' 'true|verdict-history' "a history with one PASS row is a first-time pass"
+expect_eq 'f("hist-pass").firstTimePass.verdicts.join(",")' 'conformant' "a fenced history example is not the report's history"
+expect_eq 'f("hist-squash").firstTimePass.value + "|" + f("hist-squash").firstTimePass.committedVersions' 'false|1' "a squash merge keeps one version, and its history still shows the FAIL"
+expect_eq 'f("hist-merged").firstTimePass.value + "|" + f("hist-merged").firstTimePass.committedVersions' 'false|2' "merge and squash of the same history agree"
+expect_eq 'f("hist-partial").firstTimePass.value === null && f("hist-partial").firstTimePass.basis + "|" + f("hist-partial").firstTimePass.historyVerdicts.join(",")' 'committed-versions|conformant' "a partial history's PASS falls back to the committed versions"
+expect_eq 'f("hist-bad-verdict").firstTimePass.value === null && f("hist-bad-verdict").firstTimePass.reason' 'the committed verdict history is unreadable: row 1 verdict "PASS" is not one of conformant, divergent, gaps, not-verifiable' "a verdict the skill never writes is not guessed"
+expect_eq 'f("hist-bad-row").firstTimePass.value === null && f("hist-bad-row").firstTimePass.reason' 'the committed verdict history is unreadable: row 2 has 2 cells, the header 7' "a short row makes the history unreadable, not skipped"
 
 expect_eq 'f("café-export").specChurn.value' '1' "a non-ASCII feature id reads its spec history"
 expect_eq 'f("café-export").leadTime.value' '1' "a non-ASCII feature id gets a lead time"
@@ -382,8 +448,9 @@ expect_eq '[d.aggregate.leadTime.median, d.aggregate.leadTime.p85, d.aggregate.l
 expect_eq 'd.aggregate.leadTime.firstSeenComplete' '1' "aggregate counts the first-seen-complete exclusions"
 expect_eq 'd.aggregate.stageDwell.draft.median + "," + d.aggregate.stageDwell["in-progress"].median + "," + d.aggregate.stageDwell.planned.median' '3,4,5' "median dwell per status"
 expect_eq 'd.aggregate.deferralRate.value + "," + d.aggregate.deferralRate.openOnComplete' '0.5556,1' "pooled deferral rate and open tasks on complete features"
-expect_eq '[d.aggregate.firstTimePass.passed, d.aggregate.firstTimePass.n].join("/")' '0/2' "first-time pass counts only non-null features"
-expect_eq 'd.aggregate.firstTimePass.basis' 'committed verdict history only; a lower bound on failures' "first-time pass is labelled a lower bound"
+expect_eq '[d.aggregate.firstTimePass.passed, d.aggregate.firstTimePass.n].join("/")' '1/6' "first-time pass counts only non-null features"
+expect_eq '[d.aggregate.firstTimePass.fromHistory, d.aggregate.firstTimePass.fromCommittedVersions].join(",")' '4,2' "aggregate counts values per basis"
+expect_eq 'd.aggregate.firstTimePass.basis' '2 of 6 from committed report versions only, a lower bound on failures for those' "only the committed-version values are labelled a lower bound"
 expect_eq '[d.aggregate.reworkRate.fix, d.aggregate.reworkRate.total].join("/")' '2/3' "pooled rework"
 expect_eq '[d.aggregate.specChurn.bumps, d.aggregate.specChurn.featuresWithBumps, d.aggregate.specChurn.n].join(",")' '2,2,7' "spec churn aggregate"
 expect_eq 'Object.keys(d.definitions).sort().join(",")' 'deferralRate,firstTimePass,landed,leadTime,reworkRate,specChurn,stageDwell' "json carries a definitions block"
@@ -396,7 +463,8 @@ expect_status 0 "text run exits 0"
 expect_line '^invoice-export +complete +10 +5/9 56% +1 +no +2/3 67% +1$' "text table row carries every metric, open tasks included"
 expect_line '^a-very-long-feature-identifier-number-one +draft ' "long ids are not truncated (one)"
 expect_line '^a-very-long-feature-identifier-number-two +draft ' "long ids are not truncated (two)"
-expect_line '^  first-time pass: .*committed verdict history only; a lower bound on failures' "text labels first-time pass a lower bound"
+expect_line '^  first-time pass: +17% \(1/6\) — 2 of 6 from committed report versions only, a lower bound on failures for those$' "text names the lower-bound share of first-time pass"
+expect_line '^hist-pass +in-progress .* yes ' "text table shows a first-time pass from the history"
 expect_line '^  lead time: .*1 first seen already complete, excluded' "text names the lead-time exclusions"
 expect_line '^  invoice-export: draft 3 -> in-progress 7 -> complete \(since 2025-01-11\)$' "stage dwell line"
 expect_line '^  never-committed lead time: spec.md was never committed$' "null reasons are printed"
