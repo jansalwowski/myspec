@@ -1,0 +1,38 @@
+{
+  "flags-uncovered-req": {
+    "pass": [
+      "| REQ-004 | — | — |",
+      "| Critical | Spec Alignment | Uncovered requirement | spec.md | 24 | REQ-004 (drafts never exported) has no implementation step; by_issue_date returns every status. |",
+      "REQ-004 is not covered: nothing filters drafts, so they would be exported."
+    ],
+    "fail": [
+      "| REQ-004 | 2 | full — drafts excluded by the repository |",
+      "REQ-004 maps to step 2 and is fully covered."
+    ]
+  },
+  "flags-ignored-reuse": {
+    "pass": [
+      "The reuse audit skips CSV serialisation, but .ai/conventions/backend.md requires app/reporting/tabular_export.py for every tabular download."
+    ],
+    "fail": [
+      "The reuse audit has two rows with valid decisions and reasons."
+    ]
+  },
+  "verdict-blocks-planning": {
+    "pass": [
+      "| Critical | Spec Alignment | Uncovered requirement | spec.md | 24 | ... |",
+      "### Critical\n- REQ-004 has no step"
+    ],
+    "fail": [
+      "| High | Pattern Conformance | Hand-rolled CSV | tech-spec.md | 34 | on the critical path |"
+    ]
+  },
+  "verdict-not-passed": {
+    "pass": [
+      "1 Critical and 1 High remain, so the tech-spec stays draft and feature-plan is blocked."
+    ],
+    "fail": [
+      "Review passed — mark tech-spec.md status: approved?"
+    ]
+  }
+}

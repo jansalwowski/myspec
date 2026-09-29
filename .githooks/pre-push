@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# pre-push: run the behavioural eval cases for skills changed on the pushed
+# branch (scripts/evals/run.sh --mode changed), 1 run each, Sonnet.
+#
+# Report-only: a low score prints a table and the push goes ahead.
+#   MYSPEC_EVALS_STRICT=1        a below-threshold result blocks the push
+#   MYSPEC_SKIP_EVALS=1          skip the evals (or: git push --no-verify)
+# Fails open: when claude is missing, not logged in, or the eval run itself
+# errors, the hook warns and lets the push through.
+#
+# git feeds one line per pushed ref on stdin:
+#   <local ref> <local sha> <remote ref> <remote sha>
+# A local sha of zeros is a deletion (skipped). A remote sha of zeros is a new
+# branch: its range starts at the merge base with <remote>/main. The evals run
+# against the working tree, so only a ref whose tip is the checked-out HEAD is
+# evaluated.
+
+set -uo pipefail
+
+remote="${1:-origin}"
+
+if [ "${MYSPEC_SKIP_EVALS:-0}" = 1 ]; then
+  echo "pre-push: evals skipped (MYSPEC_SKIP_EVALS=1)" >&2
+  exit 0
+fi
+
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+run="$repo_root/scripts/evals/run.sh"
+if [ ! -x "$run" ]; then
+  exit 0
+fi
+
+head_sha=$(git rev-parse HEAD 2>/dev/null) || exit 0
+is_zero() { [[ "$1" =~ ^0+$ ]]; }
+
+bases=()
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -n "${local_sha:-}" ] || continue
+  is_zero "$local_sha" && continue                      # deleting a remote ref
+  case "$local_ref" in refs/tags/*) continue ;; esac     # tags carry no branch diff
+  if [ "$local_sha" != "$head_sha" ]; then
+    echo "pre-push: $local_ref is not checked out; evals run the working tree, so it is not evaluated" >&2
+    continue
+  fi
+  if ! is_zero "$remote_sha" && git cat-file -e "${remote_sha}^{commit}" 2>/dev/null; then
+    base="$remote_sha"
+  else
+    base=""
+    for ref in "refs/remotes/$remote/main" refs/remotes/origin/main refs/heads/main; do
+      if base=$(git merge-base "$ref" "$local_sha" 2>/dev/null) && [ -n "$base" ]; then break; fi
+      base=""
+    done
+    if [ -z "$base" ]; then
+      echo "pre-push: no merge base with $remote/main for $local_ref; evals skipped" >&2
+      continue
+    fi
+  fi
+  case " ${bases[*]:-} " in *" $base "*) continue ;; esac
+  bases+=("$base")
+done
+
+[ "${#bases[@]}" -gt 0 ] || exit 0
+
+status=0
+for base in "${bases[@]}"; do
+  "$run" --mode changed --base "$base" --runs 1 --models sonnet < /dev/null
+  rc=$?
+  case "$rc" in
+    0) ;;
+    1) status=1 ;;
+    *) echo "pre-push: eval run failed (exit $rc); pushing anyway. Skip with MYSPEC_SKIP_EVALS=1." >&2 ;;
+  esac
+done
+
+if [ "$status" = 1 ]; then
+  echo "pre-push: blocked by MYSPEC_EVALS_STRICT=1. Push anyway with --no-verify." >&2
+fi
+exit "$status"
