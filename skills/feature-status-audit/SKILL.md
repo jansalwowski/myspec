@@ -1,6 +1,6 @@
 ---
 name: feature-status-audit
-description: "Use when the whole feature manifest needs auditing against on-disk docs. Keywords: manifest drift, index.yaml audit, orphan features, docs ahead of status, stale status, plan checkbox drift, feature inventory. Do NOT use for one feature's deep audit (feature-verify)."
+description: "Use when the whole feature manifest needs auditing against on-disk docs, or delivery metrics across features are wanted. Keywords: manifest drift, index.yaml audit, orphan features, docs ahead of status, stale status, plan checkbox drift, feature inventory, lead time, rework rate. Do NOT use for one feature's deep audit (feature-verify)."
 allowed-tools: [Bash, Read]
 ---
 
@@ -64,6 +64,21 @@ The script outputs:
 
 Present the report to the user. Do NOT attempt fixes automatically. Ask which issue they want to tackle, then invoke the routed skill (usually `/myspec:feature-verify <name>` for a deep dive on the worst offender, then `/myspec:feature-spec-sync` or the relevant fix skill).
 
+### 5. Optional: delivery metrics
+
+Run only when the user asks how delivery is going (lead time, rework, deferrals) or for a periodic review. It is a separate read-only script, and its numbers are outcomes, not drift: never route them to a fix skill.
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/lib/delivery-metrics/metrics.mjs"   # add --json, --feature=<id>, --since=YYYY-MM-DD
+```
+
+It computes, per feature and in aggregate, from git history plus the feature docs: spec→complete lead time, stage dwell per manifest status, plan deferral rate, conformance first-time pass, 30-day rework rate over the tech-spec File Inventory paths, and spec churn after completion. Each metric's definition is printed with the report (`definitions` in `--json`). A metric it cannot compute is `null` with a reason, and it exits 3 in a shallow clone rather than report truncated history.
+
+When presenting:
+- Quote the definitions line for any metric you discuss, and report `null` reasons as they are; never estimate a missing value.
+- Rework counts a commit as a fix when its subject matches the printed fix pattern (Conventional Commits `fix:` plus common free-form prefixes). If the project's commits follow another convention, say so and re-run with `--fix-pattern=<regex>`.
+- With fewer than about five features in an aggregate (`n`), call it anecdotal.
+
 ## Status → expected docs matrix
 
 The script encodes this policy. Reference when explaining flags:
@@ -104,6 +119,7 @@ Counting takes list-item checkboxes (`[ ]`, `[~]`, `[x]`) only; table cells and 
 - [ ] For each plan-ratio flag with a `git log:` hint, checked whether the work actually merged before routing
 - [ ] Noted orphan directories separately (they often represent renamed features)
 - [ ] Routed each flagged feature to the right fix skill rather than fixing ad-hoc
+- [ ] If delivery metrics were run: every `null` reported with its reason, not estimated, and the fix-pattern assumption stated with the rework rate
 - [ ] Did not modify any files during the audit
 
 ## Integration
