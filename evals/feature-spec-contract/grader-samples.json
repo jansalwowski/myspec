@@ -1,0 +1,62 @@
+{
+  "section-overview": {
+    "pass": [
+      "---\ntitle: \"Invoice Reminders\"\nstatus: draft\nphase: 1\npriority: P2\nspec_version: 1\ncreated: 2026-09-29\nlast_updated: 2026-09-29\n---\n\n# Invoice Reminders\n\n## Overview\nCustomers get reminders.\n\n## Goals\n- Fewer late payments.\n\n## Requirements\n1. REQ-001: A reminder must be sent three days before the due date.\n\n## User Stories\n- As an account owner, I want reminders sent for me.\n\n## Acceptance Criteria\n- [ ] AC-1: An unpaid invoice due in 3 days gets one reminder.\n\n## Out of Scope\n- SMS reminders.\n\n## Open Questions\n- None.\n"
+    ],
+    "fail": [
+      "---\ntitle: \"Invoice Reminders\"\nstatus: draft\nphase: 1\npriority: P2\nspec_version: 1\ncreated: 2026-09-29\nlast_updated: 2026-09-29\n---\n\n# Invoice Reminders\n\n## Notes\nCustomers get reminders.\n\n## Goals\n- Fewer late payments.\n\n## Requirements\n1. REQ-001: A reminder must be sent three days before the due date.\n\n## User Stories\n- As an account owner, I want reminders sent for me.\n\n## Acceptance Criteria\n- [ ] AC-1: An unpaid invoice due in 3 days gets one reminder.\n\n## Out of Scope\n- SMS reminders.\n\n## Open Questions\n- None.\n"
+    ]
+  },
+  "section-requirements": {
+    "pass": [
+      "---\ntitle: \"Invoice Reminders\"\nstatus: draft\nphase: 1\npriority: P2\nspec_version: 1\ncreated: 2026-09-29\nlast_updated: 2026-09-29\n---\n\n# Invoice Reminders\n\n## Overview\nCustomers get reminders.\n\n## Goals\n- Fewer late payments.\n\n## Requirements\n1. REQ-001: A reminder must be sent three days before the due date.\n\n## User Stories\n- As an account owner, I want reminders sent for me.\n\n## Acceptance Criteria\n- [ ] AC-1: An unpaid invoice due in 3 days gets one reminder.\n\n## Out of Scope\n- SMS reminders.\n\n## Open Questions\n- None.\n"
+    ],
+    "fail": [
+      "---\ntitle: \"Invoice Reminders\"\nstatus: draft\nphase: 1\npriority: P2\nspec_version: 1\ncreated: 2026-09-29\nlast_updated: 2026-09-29\n---\n\n# Invoice Reminders\n\n## Overview\nCustomers get reminders.\n\n## Goals\n- Fewer late payments.\n\n## Notes\n1. REQ-001: A reminder must be sent three days before the due date.\n\n## User Stories\n- As an account owner, I want reminders sent for me.\n\n## Acceptance Criteria\n- [ ] AC-1: An unpaid invoice due in 3 days gets one reminder.\n\n## Out of Scope\n- SMS reminders.\n\n## Open Questions\n- None.\n"
+    ]
+  },
+  "section-user-stories": {
+    "pass": [
+      "---\ntitle: \"Invoice Reminders\"\nstatus: draft\nphase: 1\npriority: P2\nspec_version: 1\ncreated: 2026-09-29\nlast_updated: 2026-09-29\n---\n\n# Invoice Reminders\n\n## Overview\nCustomers get reminders.\n\n## Goals\n- Fewer late payments.\n\n## Requirements\n1. REQ-001: A reminder must be sent three days before the due date.\n\n## User Stories\n- As an account owner, I want reminders sent for me.\n\n## Acceptance Criteria\n- [ ] AC-1: An unpaid invoice due in 3 days gets one reminder.\n\n## Out of Scope\n- SMS reminders.\n\n## Open Questions\n- None.\n"
+    ],
+    "fail": [
+      "---\ntitle: \"Invoice Reminders\"\nstatus: draft\nphase: 1\npriority: P2\nspec_version: 1\ncreated: 2026-09-29\nlast_updated: 2026-09-29\n---\n\n# Invoice Reminders\n\n## Overview\nCustomers get reminders.\n\n## Goals\n- Fewer late payments.\n\n## Requirements\n1. REQ-001: A reminder must be sent three days before the due date.\n\n## Notes\n- As an account owner, I want reminders sent for me.\n\n## Acceptance Criteria\n- [ ] AC-1: An unpaid invoice due in 3 days gets one reminder.\n\n## Out of Scope\n- SMS reminders.\n\n## Open Questions\n- None.\n",
+      "---\ntitle: \"Invoice CSV Export\"\nstatus: draft\nphase: 1\npriority: P2\nspec_version: 1\ncreated: 2026-09-20\nlast_updated: 2026-09-20\n---\n\n# Invoice CSV Export\n\n## Overview\nAccount owners can download their invoices as a CSV file for bookkeeping.\n\n## Goals\n- Let users move invoice data into spreadsheets and accounting tools.\n\n## Requirements\n1. REQ-001: The user must be able to choose a date range (start and end date).\n2. REQ-002: The export must include every invoice in the range, regardless of its status.\n3. REQ-003: Each row must contain invoice number, issue date, customer name, net amount, currency and status.\n4. REQ-004: Draft invoices must never appear in an export.\n5. REQ-005: The file downloads immediately after the user clicks \"Export\".\n\n## Acceptance Criteria\n- [ ] AC-1: Choosing a range and clicking \"Export\" downloads a CSV with one row per invoice in the range.\n- [ ] AC-2: The export should be fast.\n- [ ] AC-3: Column headers match the fields listed in REQ-003.\n\n## Out of Scope\n- PDF export.\n- Scheduled or emailed exports.\n\n## Open Questions\n- None.\n"
+    ]
+  },
+  "section-acceptance-criteria": {
+    "pass": [
+      "---\ntitle: \"Invoice Reminders\"\nstatus: draft\nphase: 1\npriority: P2\nspec_version: 1\ncreated: 2026-09-29\nlast_updated: 2026-09-29\n---\n\n# Invoice Reminders\n\n## Overview\nCustomers get reminders.\n\n## Goals\n- Fewer late payments.\n\n## Requirements\n1. REQ-001: A reminder must be sent three days before the due date.\n\n## User Stories\n- As an account owner, I want reminders sent for me.\n\n## Acceptance Criteria\n- [ ] AC-1: An unpaid invoice due in 3 days gets one reminder.\n\n## Out of Scope\n- SMS reminders.\n\n## Open Questions\n- None.\n"
+    ],
+    "fail": [
+      "---\ntitle: \"Invoice Reminders\"\nstatus: draft\nphase: 1\npriority: P2\nspec_version: 1\ncreated: 2026-09-29\nlast_updated: 2026-09-29\n---\n\n# Invoice Reminders\n\n## Overview\nCustomers get reminders.\n\n## Goals\n- Fewer late payments.\n\n## Requirements\n1. REQ-001: A reminder must be sent three days before the due date.\n\n## User Stories\n- As an account owner, I want reminders sent for me.\n\n## Notes\n- [ ] AC-1: An unpaid invoice due in 3 days gets one reminder.\n\n## Out of Scope\n- SMS reminders.\n\n## Open Questions\n- None.\n"
+    ]
+  },
+  "section-out-of-scope": {
+    "pass": [
+      "---\ntitle: \"Invoice Reminders\"\nstatus: draft\nphase: 1\npriority: P2\nspec_version: 1\ncreated: 2026-09-29\nlast_updated: 2026-09-29\n---\n\n# Invoice Reminders\n\n## Overview\nCustomers get reminders.\n\n## Goals\n- Fewer late payments.\n\n## Requirements\n1. REQ-001: A reminder must be sent three days before the due date.\n\n## User Stories\n- As an account owner, I want reminders sent for me.\n\n## Acceptance Criteria\n- [ ] AC-1: An unpaid invoice due in 3 days gets one reminder.\n\n## Out of Scope\n- SMS reminders.\n\n## Open Questions\n- None.\n"
+    ],
+    "fail": [
+      "---\ntitle: \"Invoice Reminders\"\nstatus: draft\nphase: 1\npriority: P2\nspec_version: 1\ncreated: 2026-09-29\nlast_updated: 2026-09-29\n---\n\n# Invoice Reminders\n\n## Overview\nCustomers get reminders.\n\n## Goals\n- Fewer late payments.\n\n## Requirements\n1. REQ-001: A reminder must be sent three days before the due date.\n\n## User Stories\n- As an account owner, I want reminders sent for me.\n\n## Acceptance Criteria\n- [ ] AC-1: An unpaid invoice due in 3 days gets one reminder.\n\n## Notes\n- SMS reminders.\n\n## Open Questions\n- None.\n"
+    ]
+  },
+  "frontmatter-keys": {
+    "pass": [
+      "---\ntitle: \"Invoice Reminders\"\nstatus: draft\nphase: 1\npriority: P2\nspec_version: 1\ncreated: 2026-09-29\nlast_updated: 2026-09-29\n---\n\n# Invoice Reminders\n\n## Overview\nCustomers get reminders.\n\n## Goals\n- Fewer late payments.\n\n## Requirements\n1. REQ-001: A reminder must be sent three days before the due date.\n\n## User Stories\n- As an account owner, I want reminders sent for me.\n\n## Acceptance Criteria\n- [ ] AC-1: An unpaid invoice due in 3 days gets one reminder.\n\n## Out of Scope\n- SMS reminders.\n\n## Open Questions\n- None.\n"
+    ],
+    "fail": [
+      "---\ntitle: \"Invoice Reminders\"\nstatus: draft\nphase: 1\npriority: P2\ncreated: 2026-09-29\nlast_updated: 2026-09-29\n---\n\n# Invoice Reminders\n\n## Overview\nCustomers get reminders.\n\n## Goals\n- Fewer late payments.\n\n## Requirements\n1. REQ-001: A reminder must be sent three days before the due date.\n\n## User Stories\n- As an account owner, I want reminders sent for me.\n\n## Acceptance Criteria\n- [ ] AC-1: An unpaid invoice due in 3 days gets one reminder.\n\n## Out of Scope\n- SMS reminders.\n\n## Open Questions\n- None.\n",
+      "---\ntitle: \"Invoice Reminders\"\nstatus: approved\nphase: 1\npriority: P2\nspec_version: 1\ncreated: 2026-09-29\nlast_updated: 2026-09-29\n---\n\n# Invoice Reminders\n\n## Overview\nCustomers get reminders.\n\n## Goals\n- Fewer late payments.\n\n## Requirements\n1. REQ-001: A reminder must be sent three days before the due date.\n\n## User Stories\n- As an account owner, I want reminders sent for me.\n\n## Acceptance Criteria\n- [ ] AC-1: An unpaid invoice due in 3 days gets one reminder.\n\n## Out of Scope\n- SMS reminders.\n\n## Open Questions\n- None.\n",
+      "---\ntitle: \"Invoice Reminders\"\nstatus: draft\nphase: 1\nspec_version: 1\ncreated: 2026-09-29\nlast_updated: 2026-09-29\n---\n\n# Invoice Reminders\n\n## Overview\nCustomers get reminders.\n\n## Goals\n- Fewer late payments.\n\n## Requirements\n1. REQ-001: A reminder must be sent three days before the due date.\n\n## User Stories\n- As an account owner, I want reminders sent for me.\n\n## Acceptance Criteria\n- [ ] AC-1: An unpaid invoice due in 3 days gets one reminder.\n\n## Out of Scope\n- SMS reminders.\n\n## Open Questions\n- None.\n"
+    ]
+  },
+  "manifest-entry": {
+    "pass": [
+      "features:\n  - name: invoice-reminders\n    status: draft\n"
+    ],
+    "fail": [
+      "features: []\n",
+      "features:\n  - name: invoice-reminders-v2\n"
+    ]
+  }
+}

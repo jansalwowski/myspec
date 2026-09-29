@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# pre-commit: static skill lint on staged SKILL.md files, `bash -n` on staged
+# hook scripts. Free and fast: nothing runs when neither kind is staged.
+#
+# What is checked is what gets committed: the index is materialised into a
+# temp dir and linted there, so an unstaged edit can neither hide a staged
+# defect nor block a clean staged file. The whole index is exported, not only
+# the staged files, because relative links and the name/directory check need
+# the surrounding tree.
+#
+# Installed by scripts/install-git-hooks.sh (core.hooksPath=.githooks).
+#
+# Escape hatch: git commit --no-verify
+
+set -uo pipefail
+
+root=$(git rev-parse --show-toplevel) || exit 0
+cd "$root" || exit 0
+
+skills=()
+shells=()
+while IFS= read -r -d '' f; do
+  if [[ "$f" =~ ^(plugins/[^/]+/|\.claude/)?skills/[^/]+/SKILL\.md$ ]]; then
+    skills+=("$f")
+  elif [[ "$f" =~ ^(plugins/[^/]+/)?hooks/.*\.sh$ ]]; then
+    shells+=("$f")
+  fi
+done < <(git diff --cached --name-only --diff-filter=ACMR -z)
+
+[ ${#skills[@]} -eq 0 ] && [ ${#shells[@]} -eq 0 ] && exit 0
+
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/pre-commit-index.XXXXXX") || { echo "pre-commit: mktemp failed; checks skipped" >&2; exit 0; }
+trap 'rm -rf "$tmp"' EXIT
+# GIT_INDEX_FILE, when git sets it for `git commit <paths>` or `-a`, is honoured.
+if ! git checkout-index -a -f --prefix="$tmp/"; then
+  echo "pre-commit: could not export the index; checks skipped" >&2
+  exit 0
+fi
+
+status=0
+
+for f in ${shells[@]+"${shells[@]}"}; do
+  if ! out=$(bash -n "$tmp/$f" 2>&1); then
+    printf '%s\n' "${out//$tmp\//}" >&2
+    printf 'pre-commit: bash -n failed on %s\n' "$f" >&2
+    status=1
+  fi
+done
+
+if [ ${#skills[@]} -gt 0 ]; then
+  # Prefer the staged linter; fall back to the working tree's when it is not tracked.
+  linter="$tmp/scripts/lint-skills.mjs"
+  [ -f "$linter" ] || linter="$root/scripts/lint-skills.mjs"
+  if ! command -v node >/dev/null 2>&1; then
+    echo "pre-commit: node not found; skill lint skipped" >&2
+  elif [ ! -f "$linter" ]; then
+    echo "pre-commit: scripts/lint-skills.mjs not found; skill lint skipped" >&2
+  else
+    # Run from the export with repo-relative paths, so findings print as repo paths.
+    (cd "$tmp" && node "$linter" --root "$tmp" --files "${skills[@]}")
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      [ "$rc" -eq 1 ] || echo "pre-commit: lint-skills exited $rc (usage or internal error)" >&2
+      status=1
+    fi
+  fi
+fi
+
+if [ "$status" -ne 0 ]; then
+  echo "" >&2
+  echo "pre-commit: commit blocked (checked the staged content). Fix the findings above, or bypass once with: git commit --no-verify" >&2
+fi
+exit $status

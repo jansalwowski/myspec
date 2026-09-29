@@ -55,6 +55,13 @@ claude --plugin-dir /path/to/myspec
 
 Use `/reload-plugins` after making changes.
 
+Run `scripts/install-git-hooks.sh` once per clone. It sets up two hooks:
+
+- **pre-commit:** lints staged skills.
+- **pre-push:** runs the eval cases for the skills you changed. These evals run on your Claude Code login and only report; they never block the push. Skip them with `MYSPEC_SKIP_EVALS=1`.
+
+See [evals/README.md](evals/README.md) and the Quality gates section of [AGENTS.md](AGENTS.md).
+
 For Codex, reload or reinstall the local plugin after editing the manifest or skills, depending on your Codex setup.
 
 To add this repository as a Codex marketplace from Git, use:
@@ -167,6 +174,8 @@ A `symlink` entry is a path string or an object naming the lockfiles that pin it
 ```
 
 A string entry whose basename is a well-known dependency directory takes its lockfiles from a built-in map — `node_modules` (npm, Yarn, pnpm, Bun lockfiles), `vendor` (`composer.lock`, `Gemfile.lock`, `go.sum`), `vendor/bundle` (`Gemfile.lock`), `.venv` / `venv` (`poetry.lock`, `Pipfile.lock`, `uv.lock`, `pdm.lock`, `requirements*.txt`) — matched beside the entry and at the repo root; a `*` stays within one directory. Any other string entry is unguarded. Provisioning skips an entry whose lockfiles the branch changed against `--base`; the Stop hook blocks on a linked entry whose lockfiles differ from the checkout it points into. Neither accepts a tree that loads the project's own source from the main checkout (a Composer `vendor`, a `.venv` with an editable install): through a link, checks would run the main checkout's code.
+
+When a session ends, a hook records one line per skill run in `.claude/state/metrics/runs.jsonl`: time, tokens, subagents, hook blocks and fix rounds. The file is gitignored, stays on your machine, and stores no prompt or file content. `/myspec:doctor` summarises it. To turn recording off, set `"feedback": { "metrics": false }`, `MYSPEC_DISABLE_METRICS=1` or `DO_NOT_TRACK=1`. See [docs/field-metrics.md](docs/field-metrics.md), which also covers opt-in OpenTelemetry.
 
 `frameworkVersion` is kept in lockstep across `framework-files/manifest.json`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` (with matching git `ref`), `.codex-plugin/plugin.json`, and `plugins/myspec/.codex-plugin/plugin.json`. Use `./scripts/bump-version.sh X.Y.Z` to update all five in one shot; see [RELEASING.md](RELEASING.md) for the full release workflow.
 

@@ -6,6 +6,12 @@
 // Usage:
 //   node scan.mjs --session=<id> [--projects-dir=<path>] [--json]
 //   node scan.mjs --transcript=<path/to/session.jsonl> [--json]
+//   node scan.mjs --session=<id> | --transcript=<path> --emit[=<runs.jsonl>] [--json]
+//
+// --emit records field metrics instead of printing the report: one JSON line
+// per skill run and one per session, appended to
+// <main checkout>/.claude/state/metrics/runs.jsonl (see metrics.mjs). It
+// always exits 0; a skipped or failed run prints one line on stderr.
 //
 // Defaults:
 //   --projects-dir   $CLAUDE_CONFIG_DIR/projects, else ~/.claude/projects
@@ -64,6 +70,7 @@ export const MYSPEC_HOOKS = [
   'guard-worktree-context.sh',
   'mark-code-changed.sh',
   'no-absolute-paths.sh',
+  'record-session-metrics.sh',
   'require-isolation-decision.sh',
   'require-reuse-audit.sh',
   'validate-frontmatter.sh',
@@ -139,6 +146,16 @@ function hookScript(command) {
 
 function signatureFor(message) {
   return HOOK_SIGNATURES.find((s) => message.includes(s.match)) ?? null
+}
+
+// A hook-block event as a short name for the metrics records: the signature
+// id when the message is known, else the script that blocked, else the hook
+// event. Never the message itself, which can quote project content.
+export function blockName(ev) {
+  const sig = signatureFor(ev.message ?? '')
+  if (sig) { return sig.id }
+  const script = hookScript(ev.command)
+  return script || String(ev.hookName ?? '?').split(':')[0]
 }
 
 function rawFirstLine(text) {
@@ -232,7 +249,7 @@ export function extractEvents(entries, source) {
   return events
 }
 
-function lastAssistantText(entries) {
+export function lastAssistantText(entries) {
   for (let i = entries.length - 1; i >= 0; i--) {
     const e = entries[i]
     if (e.type !== 'assistant') { continue }
@@ -244,11 +261,15 @@ function lastAssistantText(entries) {
 
 // A subagent continued by the controller (a fix round) receives another
 // plain user prompt in its transcript. Tool results do not count, and neither
-// do harness injections, which open with "<system-reminder>" or a "[tag]".
-function promptCount(entries) {
+// do harness injections: text opening with "<system-reminder>" or a "[tag]",
+// the summary auto-compaction writes (isCompactSummary, isVisibleInTranscriptOnly),
+// and isMeta entries such as a forked skill's injected body. A controller's
+// SendMessage arrives as isMeta too, but with origin.kind "coordinator".
+export function promptCount(entries) {
   let n = 0
   for (const e of entries) {
-    if (e.type !== 'user') { continue }
+    if (e.type !== 'user' || e.isCompactSummary || e.isVisibleInTranscriptOnly) { continue }
+    if (e.isMeta && e.origin?.kind !== 'coordinator') { continue }
     const c = e.message?.content
     const text = typeof c === 'string'
       ? c
@@ -261,7 +282,7 @@ function promptCount(entries) {
 // Wall-clock between first and last entry overstates resumed sessions, so
 // count only gaps up to IDLE_GAP_MS as active time.
 const IDLE_GAP_MS = 5 * 60 * 1000
-function activeMs(entries) {
+export function activeMs(entries) {
   const times = entries.map(ts).filter((t) => t !== null).sort((a, b) => a - b)
   let total = 0
   for (let i = 1; i < times.length; i++) {
@@ -440,7 +461,7 @@ export function renderText(sessionId, result) {
 // .myspec.json lives at the checkout root; session-complete may run from a
 // subdirectory. Same lookup as repoRoot() in lib/memory-files.mjs, with git's
 // stderr silenced so a run outside git stays quiet and falls back to cwd.
-function projectRoot() {
+export function projectRoot() {
   try {
     return execFileSync('git', ['rev-parse', '--show-toplevel'], { cwd: cwd(), encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
   } catch {
@@ -455,7 +476,7 @@ function disabled(root) {
   try { return JSON.parse(readFileSync(cfgPath, 'utf8'))?.feedback?.frictionReport === false } catch { return false }
 }
 
-function findTranscript(projectsDir, sessionId) {
+export function findTranscript(projectsDir, sessionId) {
   if (!existsSync(projectsDir)) { return null }
   for (const dir of readdirSync(projectsDir)) {
     const p = join(projectsDir, dir, `${sessionId}.jsonl`)
@@ -464,12 +485,24 @@ function findTranscript(projectsDir, sessionId) {
   return null
 }
 
-function main() {
+async function main() {
   const args = {}
   for (const raw of argv.slice(2)) {
     if (!raw.startsWith('--')) { continue }
     const i = raw.indexOf('=')
     args[i === -1 ? raw.slice(2) : raw.slice(2, i)] = i === -1 ? true : raw.slice(i + 1)
+  }
+
+  // Metrics have their own opt-outs and must never fail the caller (a
+  // SessionEnd hook), so they take a separate path that always exits 0.
+  if (args.emit !== undefined) {
+    try {
+      const { emitCli } = await import('./metrics.mjs')
+      await emitCli(args)
+    } catch (err) {
+      stderr.write(`friction-scan: metrics not recorded: ${String(err?.message ?? err).split('\n')[0]}\n`)
+    }
+    exit(0)
   }
 
   if (disabled(projectRoot())) {
@@ -509,4 +542,6 @@ function main() {
   }
 }
 
+// Not awaited at top level: metrics.mjs imports this module, and a top-level
+// await here would leave it mid-evaluation while main() imports metrics.mjs.
 if (import.meta.url === `file://${argv[1]}` || argv[1]?.endsWith('/scan.mjs')) { main() }

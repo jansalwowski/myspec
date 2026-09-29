@@ -60,7 +60,7 @@ From `manifest.json`, collect all files. Each file has a `type`:
 For `files` entries: destination is `{aiDir}/{filename}` — **except** `templates/{name}` entries, which install to `{aiDir}/.templates/{name}` (the dot-directory `init` creates; skills read templates from there — never create `{aiDir}/templates/`).
 For `rules` entries: source is `framework-files/rules/{filename}`, destination is the `dest` path (e.g., `.claude/rules/workflow.md`).
 For `hooks` entries: source is `hooks/{filename}`, destination is the `dest` path (e.g., `.claude/hooks/guard-worktree-context.sh`).
-For `lib` entries: source is `lib/{filename}`, destination is the `dest` path (e.g., `.claude/lib/path-normalize.sh`).
+For `lib` entries: source is `lib/{filename}`, destination is the `dest` path (e.g., `.claude/lib/path-normalize.sh`; `friction-scan/scan.mjs` → `.claude/lib/friction-scan/scan.mjs`, creating the directory).
 
 **Renamed entries — migrate the destination before applying.** A `files` or `rules` entry may carry `renamedFrom: "<old key>"`. It means the framework changed a file's name, and the project on disk still holds the old one. Before applying such an entry:
 
@@ -117,6 +117,8 @@ node .claude/lib/setup-doctor.mjs --plugin-root "${CLAUDE_PLUGIN_ROOT}" wiring
 ```
 
 For each `wiring-incomplete` finding, add the entry from `templates/settings-hooks.json` under the same event (deep-merge: append to the existing array for that event and matcher, create the event when absent, match existing entries by the hook script the `command` runs, not the raw string — `"$CLAUDE_PROJECT_DIR"/.claude/hooks/x.sh` and a pre-2.2 install's bare `.claude/hooks/x.sh` are the same hook, and a literal comparison would wire it a second time). For each hook deleted by a `removed` entry, delete its `command` entries. If the file has no `hooks` key, add the template's whole block. Never add, remove, or reorder anything outside `hooks`, and never touch `settings.local.json`. Re-run the same command afterwards: `wiring-incomplete` must be gone; report what remains (`hook-not-executable`, `hook-syntax`) with the `run:` line it carries.
+
+**State gitignore (only if hooks were processed).** Ensure `.gitignore` contains a `.claude/state/` line; append it if missing (create `.gitignore` if absent). The hooks write per-checkout state there (session logs, isolation decisions, field metrics in `.claude/state/metrics/`), and the metrics recorder refuses to write while the line is missing.
 
 If the doctor is not on disk yet (this run is what installs it), do the comparison by hand this once: for each `command` in the template, take the `.claude/hooks/*.sh` path it runs and check whether any command under the project's `settings.json` `hooks` key runs that same script — ignoring quotes and a leading `"$CLAUDE_PROJECT_DIR"/` — and add only the ones absent by that test. Comparing the raw strings duplicates every hook on an install that predates the template switch.
 
@@ -272,7 +274,7 @@ After running the skill:
 - [ ] Memory health checked when a memory tree exists: `--check` clean (after regeneration or backfill where needed), doctor summary reported, `.claude/state/` gitignored
 - [ ] `${aiDir}` binding refreshed between `myspec:paths` markers; content outside markers unchanged
 - [ ] `.myspec.json` `frameworkVersion` bumped; project fields (`name`, `description`, `techStack`) untouched; `frameworkFiles` holds pins only
-- [ ] Hook wiring run via `setup-doctor.mjs wiring` (or by hand when the doctor was not yet installed): missing template entries added and removed hooks unwired under `settings.json` `hooks`, nothing else in that file touched, `wiring-incomplete` gone on re-run
+- [ ] Hook wiring run via `setup-doctor.mjs wiring` (or by hand when the doctor was not yet installed): missing template entries added and removed hooks unwired under `settings.json` `hooks`, nothing else in that file touched, `wiring-incomplete` gone on re-run; `.gitignore` has a `.claude/state/` line
 - [ ] Full `setup-doctor.mjs` run in Step 3.7, before the Step 5 version stamp; every `install`-, `schema`- and `features`-group error resolved or reported
 - [ ] No file outside `manifest.json` was modified, except `settings.json` `hooks` and the doctor-rule rename
 - [ ] Summary printed with `Updated files`, `Migrations`, `Removed`, `Preserved`, `Hooks`, `Lib`, and `Hook wiring` lines

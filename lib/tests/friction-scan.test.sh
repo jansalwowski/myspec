@@ -181,6 +181,23 @@ expect_line "^\\| repeated Bash error \\| unknown \\| 3 \\| - \\| Exit code 1: h
 expect_line "${HOME}et/x" "HOME is only shortened at a path boundary"
 expect_no_line 'probes-failed|subagent-blocked' "verdict words mentioned in prose are not verdicts"
 
+# ── 6c. harness entries are not fix rounds ──
+# Auto-compaction's summary and isMeta injections (a forked skill's body) are
+# not the controller sending the subagent back; a SendMessage continuation
+# is, and arrives as isMeta with origin.kind "coordinator".
+S=s6c-not-rounds
+{ prompt 'go'; } > "$(session $S)"
+compact() { printf '{"type":"user","isCompactSummary":true,"isVisibleInTranscriptOnly":true,"timestamp":"%s","message":{"role":"user","content":"This session is being continued from a previous conversation."}}\n' "$(stamp)"; }
+injected() { printf '{"type":"user","isMeta":true,"timestamp":"%s","message":{"role":"user","content":"(No effort level given, reusing high)"}}\n' "$(stamp)"; }
+coordinator() { printf '{"type":"user","isMeta":true,"origin":{"kind":"coordinator"},"timestamp":"%s","message":{"role":"user","content":"The coordinator sent a message: %s"}}\n' "$(stamp)" "$1"; }
+F=$(subagent $S c1); meta $S c1 'Long task'
+{ prompt 'Task 1'; compact; injected; compact; injected; compact; say '**Status:** DONE'; } > "$F"
+F=$(subagent $S c2); meta $S c2 'Reworked task'
+{ prompt 'Task 2'; coordinator 'fix 1'; coordinator 'fix 2'; coordinator 'fix 3'; say '**Status:** DONE'; } > "$F"
+run --session=$S
+expect_no_line '^\| subagent continued .* Long task' "compaction summaries and injected bodies are not fix rounds"
+expect_line '^\| subagent continued 3 times \| unknown \| 1 \| - \| Reworked task' "coordinator continuations are fix rounds"
+
 # ── 7. JSON mode ──
 run --session=s6-subagents --json
 if jq -e '.findings | length == 5' >/dev/null <<<"$OUTPUT"; then ok; else fail "json: five findings"; fi

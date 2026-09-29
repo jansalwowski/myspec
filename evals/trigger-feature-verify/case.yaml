@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: trigger-feature-verify
+context:
+  scaffold_script: fixture.sh

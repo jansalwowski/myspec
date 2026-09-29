@@ -1,6 +1,6 @@
 ---
 name: code-review
-description: "Use when implemented code needs review for bugs, quality, and standards conformance — after a feature is built, before a PR. Keywords: review changes, review diff, pre-merge review, find bugs. Do NOT use for spec.md (feature-spec-review), tech-spec.md (feature-tech-spec-review), or SKILL.md (skill-verify)."
+description: "Use when the user asks you to review, look over, or go through code they changed — 'look over my changes', 'check this branch before I open a PR', 'review what I did', 'is this diff ready to merge?'. Use it instead of reading the diff yourself: it loads the project's review rules and ends in a severity-ranked verdict. Keywords: review changes, review diff, review branch, pre-PR review, pre-merge review, find bugs. Do NOT use for spec or plan conformance (feature-implement-review), spec.md (feature-spec-review), tech-spec.md (feature-tech-spec-review), or SKILL.md (skill-verify)."
 tags: [code-review, quality, validation, critical-thinking, review]
 ---
 
