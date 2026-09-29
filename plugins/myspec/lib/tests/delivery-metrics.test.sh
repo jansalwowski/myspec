@@ -124,6 +124,7 @@ based_on_spec_version: 2
 |------|--------|---------|
 | `app/Invoice/Exporter.php` | Create | exporter |
 | `services/export/worker.py` | Create | worker |
+| `web/[id].php` | Create | a literal path, not a glob |
 | `path/to/{placeholder}.x` | Create | placeholder, skipped |
 
 ### Decisions
@@ -157,6 +158,7 @@ archived: 2025-01-09
 |---|---|---|
 | spec.md AC-1 | "exports" | T1 |
 | spec.md AC-9 | "emails" | DEFERRED — out of scope |
+| spec.md AC-10 | "pdf" | Deferred — lowercase cell |
 
 ## Task Status
 
@@ -186,6 +188,23 @@ archived: 2025-01-09
 - [x] **Step 1**
 - [ ] **Step 2**
 
+### Task T5: T-prefixed heading
+
+- [x] **Step 1**
+
+### Task 6: Notifications (deferred)
+
+- [ ] **Step 1**
+
+### Task 7: Background jobs
+
+- [x] **Step 1: add deferred job loading** (work, not a deferral)
+
+### Task 8: Audit trail
+
+**Status:** deferred — moved to an idea
+- [ ] **Step 1**
+
 ## Execution Log
 
 - Deferred minor (Phase 1): not a task deferral
@@ -200,6 +219,8 @@ MD
   commit 2025-01-15 "fix(invoice-export): round totals"
   touch_code services/export/worker.py '# retry'
   commit 2025-01-20 "Fix worker retry on timeout"
+  touch_code web/i.php '<?php // matched only if [id] were a glob'
+  commit 2025-01-22 "fix: web/i.php is not web/[id].php"
   touch_code app/Invoice/Exporter.php '// csv column'
   commit 2025-01-25 "feat(invoice-export): add csv column"
   echo 'unrelated' >> "$REPO/README.md"
@@ -229,8 +250,79 @@ MD
   spec invoice-export 3 "clarified wording"
   commit 2025-03-05 "docs(invoice-export): wording"
 
-  # never-committed: only in the working tree
-  manifest '  - name: invoice-export\n    status: complete\n  - name: billing-sync\n    status: complete\n  - name: never-committed\n    status: draft\n'
+  local B='  - name: invoice-export\n    status: complete\n  - name: billing-sync\n    status: complete\n'
+
+  # old-name -> new-name: renamed in the manifest after completion, spec.md
+  # rewritten in the move so --follow loses it; the one-for-one swap links them
+  spec old-name 1
+  manifest "$B"'  - name: old-name\n    status: draft\n'
+  commit 2025-04-01 "docs(old-name): spec"
+  manifest "$B"'  - name: old-name\n    status: draft\n  - name: squashed\n    status: planned\n'
+  commit 2025-04-02 "docs: plan squashed"
+  manifest "$B"'  - name: old-name\n    status: in-progress\n  - name: squashed\n    status: planned\n'
+  commit 2025-04-03 "docs(old-name): start"
+  manifest "$B"'  - name: old-name\n    status: complete\n  - name: squashed\n    status: planned\n'
+  commit 2025-04-05 "docs(old-name): complete"
+
+  # squashed: the whole flow on a branch, landed by git merge --squash —
+  # spec.md and status complete arrive in one commit; one committed FAIL report
+  at 2025-04-06 checkout -b feat/squashed
+  spec squashed 1
+  conformance squashed gaps
+  commit 2025-04-06 "docs(squashed): spec"
+  manifest "$B"'  - name: old-name\n    status: complete\n  - name: squashed\n    status: complete\n'
+  commit 2025-04-07 "feat(squashed): done"
+  at 2025-04-07 checkout main
+  at 2025-04-07 merge --squash feat/squashed
+  commit 2025-04-07 "feat(squashed): squash-merge"
+
+  mkdir -p "$F/new-name"
+  (cd "$REPO" && git rm -q -r ai/features/old-name) || fail "fixture: git rm old-name"
+  {
+    printf -- '---\nspec_version: 1\nowner: payments\n---\n\n'
+    for i in 1 2 3 4 5 6 7 8 9 10 11 12; do printf 'Entirely rewritten requirement line %s for the renamed feature.\n' "$i"; done
+  } > "$F/new-name/spec.md"
+  manifest "$B"'  - name: new-name\n    status: complete\n  - name: squashed\n    status: complete\n'
+  commit 2025-04-08 "docs: rename old-name to new-name"
+
+  # retro-doc: documented after the fact — first seen already complete; its
+  # only committed conformance report is a PASS
+  spec retro-doc 1
+  conformance retro-doc conformant
+  commit 2025-04-09 "docs(retro-doc): spec"
+  local R="$B"'  - name: new-name\n    status: complete\n  - name: squashed\n    status: complete\n  - name: retro-doc\n    status: complete\n'
+  manifest "$R"
+  commit 2025-04-10 "docs(retro-doc): register"
+
+  # legacy-x -> modern-x: the rename commit also adds other-y, so only
+  # renamedFrom can link them
+  spec legacy-x 1
+  manifest "$R"'  - name: legacy-x\n    status: draft\n'
+  commit 2025-04-11 "docs(legacy-x): spec"
+  (cd "$REPO" && git rm -q -r ai/features/legacy-x) || fail "fixture: git rm legacy-x"
+  mkdir -p "$F/modern-x"
+  {
+    printf -- '---\nspec_version: 1\nteam: platform\n---\n\n'
+    for i in 1 2 3 4 5 6 7 8 9 10 11 12; do printf 'Modern requirement %s, nothing like the legacy text.\n' "$i"; done
+  } > "$F/modern-x/spec.md"
+  manifest "$R"'  - name: modern-x\n    status: draft\n    renamedFrom: legacy-x\n  - name: other-y\n    status: draft\n'
+  commit 2025-04-13 "docs: rename legacy-x to modern-x, add other-y"
+  # renamedFrom is dropped again later: the committed history must carry it
+  local M="$R"'  - name: modern-x\n    status: complete\n  - name: other-y\n    status: draft\n'
+  manifest "$M"
+  commit 2025-04-16 "docs(modern-x): complete"
+
+  # café-export: a non-ASCII feature id, spec_version bumped after completion
+  spec café-export 1
+  manifest "$M"'  - name: café-export\n    status: draft\n'
+  commit 2025-04-20 "docs(café-export): spec"
+  manifest "$M"'  - name: café-export\n    status: complete\n'
+  commit 2025-04-21 "docs(café-export): complete"
+  spec café-export 2
+  commit 2025-04-25 "docs(café-export): spec v2"
+
+  # never-committed and two long ids: only in the working tree
+  manifest "$M"'  - name: café-export\n    status: complete\n  - name: never-committed\n    status: draft\n  - name: a-very-long-feature-identifier-number-one\n    status: draft\n  - name: a-very-long-feature-identifier-number-two\n    status: draft\n'
   spec never-committed 1
 }
 
@@ -245,12 +337,13 @@ expect_eq 'f("invoice-export").leadTime.value' '10' "lead time runs from the spe
 expect_eq 'f("invoice-export").leadTime.end' '2025-01-11T12:00:00Z' "lead time ends at the merge commit, not the branch commit"
 expect_eq 'f("invoice-export").stageDwell.value.map(s => s.status + ":" + s.days).join(",")' 'draft:3,in-progress:7' "stage dwell per status on the first-parent history"
 expect_eq 'f("invoice-export").stageDwell.current.status' 'complete' "current status has no dwell"
-expect_eq 'f("invoice-export").deferralRate.value' '0.5' "deferral = (1 task + 1 coverage row) / (2 checked + 2 deferred)"
-expect_eq '[f("invoice-export").deferralRate.checked, f("invoice-export").deferralRate.deferredTasks, f("invoice-export").deferralRate.deferredCoverageRows, f("invoice-export").deferralRate.tasks].join(",")' '2,1,1,4' "fenced and table checkboxes ignored; half-done task neither checked nor deferred"
+expect_eq 'f("invoice-export").deferralRate.value' '0.5556' "deferral = (3 tasks + 2 coverage rows) / (4 checked + 5 deferred)"
+expect_eq '[f("invoice-export").deferralRate.checked, f("invoice-export").deferralRate.deferredTasks, f("invoice-export").deferralRate.deferredCoverageRows, f("invoice-export").deferralRate.tasks].join(",")' '4,3,2,8' "Task T5 heading, lowercase and status-marker deferrals count; fenced/table boxes and 'deferred job loading' do not"
+expect_eq 'f("invoice-export").deferralRate.open' '1' "a half-done task is reported as open, outside the rate"
 expect_eq 'f("invoice-export").firstTimePass.value' 'false' "PASS after an earlier FAIL is not a first-time pass"
 expect_eq 'f("invoice-export").firstTimePass.verdicts.join(",")' 'gaps,conformant' "verdict history read oldest first"
-expect_eq 'f("invoice-export").reworkRate.paths.join(",")' 'app/Invoice/Exporter.php,services/export/worker.py' "inventory paths: PHP and Python, placeholder and other tables skipped"
-expect_eq '[f("invoice-export").reworkRate.fix, f("invoice-export").reworkRate.total].join("/")' '2/3' "rework counts fix commits in the window only"
+expect_eq 'f("invoice-export").reworkRate.paths.join(",")' 'app/Invoice/Exporter.php,services/export/worker.py,web/[id].php' "inventory paths: PHP and Python, placeholder and other tables skipped"
+expect_eq '[f("invoice-export").reworkRate.fix, f("invoice-export").reworkRate.total].join("/")' '2/3' "rework counts fix commits in the window only; web/[id].php is literal, so web/i.php is not counted"
 expect_eq 'f("invoice-export").reworkRate.value' '0.6667' "rework rate value"
 expect_eq 'f("invoice-export").specChurn.value' '1' "only the spec_version bump after completion counts"
 
@@ -262,17 +355,37 @@ expect_eq 'f("billing-sync").deferralRate.reason' 'no implementation-plan.md or 
 expect_eq 'f("billing-sync").firstTimePass.reason' 'no conformance-report.md in history' "first-time pass is null without a report"
 expect_eq 'f("billing-sync").specChurn.value' '0' "no bump, no churn"
 
+expect_eq 'f("new-name").formerIds.join(",")' 'old-name' "a one-for-one manifest swap links a rename --follow missed"
+expect_eq 'f("new-name").leadTime.value + "|" + f("new-name").leadTime.end' '4|2025-04-05T12:00:00Z' "a manifest-renamed feature's lead time ends at its real completion, not the rename"
+expect_eq 'f("new-name").stageDwell.value.map(s => s.status + ":" + s.days).join(",")' 'draft:2,in-progress:2' "a manifest rename keeps the pre-rename stages"
+
+expect_eq 'f("modern-x").formerIds.join(",")' 'legacy-x' "renamedFrom links a rename the swap rule cannot see"
+expect_eq 'f("modern-x").leadTime.value' '5' "renamedFrom: lead time starts at the legacy spec commit"
+
+expect_eq 'f("retro-doc").leadTime.value === null && f("retro-doc").leadTime.reason.startsWith("first seen already complete")' 'true' "a feature first seen already complete has no lead time"
+expect_eq 'f("retro-doc").firstSeenComplete' 'true' "json flags first-seen-complete"
+expect_eq 'f("retro-doc").formerIds.length + "," + f("retro-doc").specFirstWritten' '0,2025-04-09T12:00:00Z' "a spec.md git sees as a copy of another feature's does not inherit its history"
+expect_eq 'f("retro-doc").firstTimePass.value === null && f("retro-doc").firstTimePass.reason.startsWith("only one committed version")' 'true' "a single committed PASS is not counted as a first-time pass"
+
+expect_eq 'f("squashed").leadTime.value === null && f("squashed").leadTime.reason.startsWith("spec.md landed in the same commit")' 'true' "a squash merge carrying spec and completion has no lead time, not 0"
+expect_eq 'f("squashed").firstTimePass.value' 'false' "a single committed FAIL is still a failure"
+
+expect_eq 'f("café-export").specChurn.value' '1' "a non-ASCII feature id reads its spec history"
+expect_eq 'f("café-export").leadTime.value' '1' "a non-ASCII feature id gets a lead time"
+
 expect_eq 'f("never-committed").leadTime.reason' 'spec.md was never committed' "an uncommitted feature has no lead time"
 expect_eq 'f("never-committed").stageDwell.reason' 'the feature never appears in a committed version of its manifest' "an uncommitted feature has no dwell"
 
 # ═══ aggregate + definitions ═════════════════════════════════════════════════
 
-expect_eq '[d.aggregate.leadTime.median, d.aggregate.leadTime.p85, d.aggregate.leadTime.n].join(",")' '9.5,10,2' "lead time median and P85"
-expect_eq 'd.aggregate.stageDwell.draft.median + "," + d.aggregate.stageDwell["in-progress"].median' '4,5.5' "median dwell per status"
-expect_eq 'd.aggregate.deferralRate.value' '0.5' "pooled deferral rate"
-expect_eq '[d.aggregate.firstTimePass.passed, d.aggregate.firstTimePass.n].join("/")' '0/1' "first-time pass counts only features with a decisive verdict"
+expect_eq '[d.aggregate.leadTime.median, d.aggregate.leadTime.p85, d.aggregate.leadTime.n].join(",")' '5,10,5' "lead time median and P85 exclude first-seen-complete and same-commit features"
+expect_eq 'd.aggregate.leadTime.firstSeenComplete' '1' "aggregate counts the first-seen-complete exclusions"
+expect_eq 'd.aggregate.stageDwell.draft.median + "," + d.aggregate.stageDwell["in-progress"].median + "," + d.aggregate.stageDwell.planned.median' '3,4,5' "median dwell per status"
+expect_eq 'd.aggregate.deferralRate.value + "," + d.aggregate.deferralRate.openOnComplete' '0.5556,1' "pooled deferral rate and open tasks on complete features"
+expect_eq '[d.aggregate.firstTimePass.passed, d.aggregate.firstTimePass.n].join("/")' '0/2' "first-time pass counts only non-null features"
+expect_eq 'd.aggregate.firstTimePass.basis' 'committed verdict history only; a lower bound on failures' "first-time pass is labelled a lower bound"
 expect_eq '[d.aggregate.reworkRate.fix, d.aggregate.reworkRate.total].join("/")' '2/3' "pooled rework"
-expect_eq '[d.aggregate.specChurn.bumps, d.aggregate.specChurn.featuresWithBumps, d.aggregate.specChurn.n].join(",")' '1,1,2' "spec churn aggregate"
+expect_eq '[d.aggregate.specChurn.bumps, d.aggregate.specChurn.featuresWithBumps, d.aggregate.specChurn.n].join(",")' '2,2,7' "spec churn aggregate"
 expect_eq 'Object.keys(d.definitions).sort().join(",")' 'deferralRate,firstTimePass,landed,leadTime,reworkRate,specChurn,stageDwell' "json carries a definitions block"
 expect_eq 'd.assumptions.fixPatternSource.startsWith("default")' 'true' "json names the fix-pattern assumption"
 
@@ -280,7 +393,11 @@ expect_eq 'd.assumptions.fixPatternSource.startsWith("default")' 'true' "json na
 
 run
 expect_status 0 "text run exits 0"
-expect_line '^invoice-export +complete +10 +2/4 50% +no +2/3 67% +1$' "text table row carries every metric"
+expect_line '^invoice-export +complete +10 +5/9 56% +1 +no +2/3 67% +1$' "text table row carries every metric, open tasks included"
+expect_line '^a-very-long-feature-identifier-number-one +draft ' "long ids are not truncated (one)"
+expect_line '^a-very-long-feature-identifier-number-two +draft ' "long ids are not truncated (two)"
+expect_line '^  first-time pass: .*committed verdict history only; a lower bound on failures' "text labels first-time pass a lower bound"
+expect_line '^  lead time: .*1 first seen already complete, excluded' "text names the lead-time exclusions"
 expect_line '^  invoice-export: draft 3 -> in-progress 7 -> complete \(since 2025-01-11\)$' "stage dwell line"
 expect_line '^  never-committed lead time: spec.md was never committed$' "null reasons are printed"
 expect_line '^  reworkRate: fix commits / all non-merge commits' "definitions are printed"
@@ -288,8 +405,8 @@ expect_line '^fix pattern: ' "fix-pattern assumption is printed"
 
 # ═══ filters and fix pattern ═════════════════════════════════════════════════
 
-run --json --since=2025-02-01
-expect_eq 'd.features.map(x => x.id).join(",")' 'billing-sync' "--since keeps features completed on or after the date and drops undated ones"
+run --json --since=2025-04-18
+expect_eq 'd.features.map(x => x.id).join(",")' 'café-export' "--since keeps features completed on or after the date and drops undated ones"
 
 run --json --feature=invoice-export
 expect_eq 'd.features.map(x => x.id).join(",")' 'invoice-export' "--feature selects one feature"
