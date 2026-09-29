@@ -81,7 +81,7 @@ verdict_history: complete | partial
 ---
 ```
 
-If a previous `conformance-report.md` exists, overwrite it (the frontmatter records which commit was reviewed), except for its `## Verdict history`. That section is the report's last and records every run:
+The previous report is the working-tree `conformance-report.md`. If the working tree has none, use the newest committed version, when `git log -1 --format=%H -- <report path>` exits 0 with a sha (`git show <sha>:<report path>`): a report stashed or deleted before this run still has a past. Overwrite the previous report (the frontmatter records which commit was reviewed), except for its `## Verdict history`. That section is the report's last and records every run:
 
 ```markdown
 ## Verdict history
@@ -94,13 +94,15 @@ If a previous `conformance-report.md` exists, overwrite it (the frontmatter reco
 
 `delivery-metrics` reads the first decisive row as the feature's first-time conformance result. The rows are the only record of earlier runs: every run overwrites the report, and a squash merge keeps only its last version.
 
-1. Append one row per run, at the bottom: `reviewed`, `head_sha`, the `verdict` token exactly as in the frontmatter, and the number of findings at each severity before routing.
-2. Copy every existing row across unchanged, in order. Never drop, reorder, or rewrite one.
-3. No previous report: create the section with this run's row and set `verdict_history: complete`.
-4. A previous report without the section (it predates the section): seed one row from it, using its frontmatter and its findings table. Then add this run's row and set `verdict_history: partial`, because runs before the seeded one are lost.
-5. Otherwise keep the previous report's `verdict_history` value.
+1. Append one row per run, at the bottom, including each Step 6 re-run: `reviewed`, `head_sha`, the verdict, and the number of findings at each severity before routing.
+2. Write the Verdict cell as the plain verdict word from the frontmatter (`conformant`, `divergent`, `gaps`, `not-verifiable`), with no emphasis, symbols, or backticks. Keep the heading and header exactly as shown. Do not copy the matrix's `✓ conformant` or `✗ gap`.
+3. Copy every existing row across unchanged, in order. Never drop, reorder, or rewrite one.
+4. No previous report, in the working tree or in git: create the section with this run's row and set `verdict_history: complete`.
+5. A previous report without the section (it predates the section): seed one row from it, using its frontmatter and its findings table. Then add this run's row and set `verdict_history: partial`, because runs before the seeded one are lost.
+6. Otherwise keep the previous report's `verdict_history` value.
+7. Merge conflict in the section (both branches appended rows): keep every row from both sides in one table, ordered by the Reviewed date, and remove the conflict markers.
 
-Do not commit the report. Commits are the user's call in develop isolation (`.claude/rules/work-isolation.md`), and Step 2 can review work sitting on the default branch. The history rides in the file, so one commit made with the branch before merge carries every run.
+Commit the report on its own, as `feature-implement` does with `holistic-review.md`: `git add <report path> && git commit -m "docs({feature}): conformance report ({verdict})" -- <report path>`. An uncommitted report can miss the branch entirely, because `feature-complete` pushes and merges only commits. The exception is HEAD on the default branch (develop mode). There, leave the report uncommitted, because commits are the user's call (`.claude/rules/work-isolation.md`), and say so in Step 7.
 
 ### Step 6: Present Findings and Route
 
@@ -116,12 +118,12 @@ options:
   - "Skip / accept"            → record as an accepted deviation in the report
 ```
 
-**Hard constraint — this skill never auto-edits implementation code.** Editing code based on a spec reading is how you introduce *new* divergence. Only after the user picks "Fix now" do you make the change, and you re-run the reviewer on the touched scope to confirm it closed the finding. A re-run that changes the verdict updates the frontmatter and appends a history row. "Skip / accept" appends the finding to an "Accepted deviations" section, placed above `## Verdict history`, so the decision is traceable.
+**Hard constraint — this skill never auto-edits implementation code.** Editing code based on a spec reading is how you introduce *new* divergence. Only after the user picks "Fix now" do you make the change, and you re-run the reviewer on the touched scope to confirm it closed the finding. The re-run is a run: update the frontmatter, append its history row, and commit as in Step 5. "Skip / accept" appends the finding to an "Accepted deviations" section, placed above `## Verdict history`, so the decision is traceable.
 
 ### Step 7: Summary and Next Step
 
 - Show what was routed where, and the final verdict.
-- Say that `conformance-report.md` is uncommitted and belongs in the branch's next commit. `delivery-metrics` reads only committed reports.
+- On the default branch, say that `conformance-report.md` is uncommitted and must be committed with the work. `delivery-metrics` reads only committed reports.
 - If verdict is `conformant` (or all blocking findings resolved/accepted): recommend `/myspec:feature-complete`.
 - If findings were routed to `feature-implement` or `feature-spec-sync`: recommend running those, then re-running this review.
 
@@ -188,7 +190,9 @@ Locate the code implementing each requirement in this order:
 - [ ] Bidirectional traceability matrix produced (forward + reverse)
 - [ ] Behavioral layer run where executable; `not-verifiable` reported where not — never inferred
 - [ ] `conformance-report.md` written with frontmatter recording the reviewed commit and verdict
-- [ ] `## Verdict history` has this run's row appended, and every earlier row carried over unchanged
+- [ ] `## Verdict history` has this run's row appended (plain verdict word), and every earlier row carried over unchanged
+- [ ] `verdict_history: complete` only when no earlier report exists in the working tree or in git
+- [ ] Report committed, unless HEAD is the default branch
 - [ ] Each finding routed via `AskUserQuestion`; no implementation code edited without "Fix now"
 - [ ] Accepted deviations recorded in the report
 - [ ] Next step recommended (feature-complete, or fix-and-re-review)

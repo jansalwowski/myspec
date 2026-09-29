@@ -50,12 +50,17 @@
 //                  was PASS (`conformant`) rather than FAIL (`divergent` or
 //                  `gaps`); `not-verifiable` is neither. Read from the newest
 //                  committed conformance-report.md. When it has a
-//                  `## Verdict history` table (feature-implement-review appends
-//                  one row per run, oldest first, and carries the rows across
-//                  overwrites), the value is the first decisive row: exact,
-//                  since the rows survive overwrites and squash merges. A table
-//                  that cannot be read row by row is null with the reason, never
-//                  repaired. A history not marked `verdict_history: complete`
+//                  `Verdict history` table (any heading level;
+//                  feature-implement-review appends one row per run, oldest
+//                  first, and carries the rows across overwrites), the value is
+//                  the first decisive row: exact, since the rows survive
+//                  overwrites and squash merges. Emphasis, backticks and symbols
+//                  around a cell are ignored; any other unreadable table is null
+//                  with the reason, never repaired. A committed FAIL verdict
+//                  the history does not record first still wins: false when the
+//                  oldest committed decisive verdict is FAIL, or when a
+//                  committed version failed and the history has no FAIL row.
+//                  A history not marked `verdict_history: complete`
 //                  (`partial`: started on a report written before the section
 //                  existed) is exact only for a FAIL; a PASS falls back to the
 //                  committed versions.
@@ -123,7 +128,7 @@ const DEFINITIONS = {
   leadTime: 'days from the author date of the oldest commit adding the feature\'s spec.md (under any former id: spec.md renames, manifest renamedFrom, or a one-for-one manifest swap) to the landed date of the first manifest change setting status complete; null when first seen already complete or when spec.md landed in the completing commit; aggregate median and P85 (nearest rank)',
   stageDwell: 'days each status was held on the first-parent history of the feature\'s manifest, from the landed change that set it to the landed change that replaced it; the current status has no dwell; aggregate median per status',
   deferralRate: 'deferred / (checked + deferred) over implementation-plan.md and plans/*.md: a `### Task N:`/`### Task TN:` section is deferred when its heading says deferred (any case) or a body line carries a deferral marker, checked when all its list-item checkboxes are [x], otherwise open (outside the rate, reported as `open`); each DEFERRED `## Spec Coverage` row is one deferred unit; aggregate pooled',
-  firstTimePass: 'first decisive conformance verdict (conformant = pass; divergent/gaps = fail; not-verifiable skipped), from the newest committed conformance-report.md. basis verdict-history: the first decisive row of its `## Verdict history` table, exact (rows survive overwrites and squash merges); an unreadable table is null; a history not marked `verdict_history: complete` is exact only for a fail, a pass falls back to committed-versions. basis committed-versions (no history section): a lower bound on failures, false when the oldest committed decisive verdict fails, true when it passes and the report has 2+ committed versions, null when a pass is its only committed version; aggregate passes / non-null features',
+  firstTimePass: 'first decisive conformance verdict (conformant = pass; divergent/gaps = fail; not-verifiable skipped), from the newest committed conformance-report.md. basis verdict-history: the first decisive row of its `Verdict history` table, exact (rows survive overwrites and squash merges), except that a committed fail verdict the history does not record first (oldest committed decisive verdict fails, or a committed fail with no fail row) makes it false; cell emphasis and symbols are ignored, any other unreadable table is null; a history not marked `verdict_history: complete` is exact only for a fail, a pass falls back to committed-versions. basis committed-versions (no history section): a lower bound on failures, false when the oldest committed decisive verdict fails, true when it passes and the report has 2+ committed versions, null when a pass is its only committed version; aggregate passes / non-null features',
   reworkRate: `fix commits / all non-merge commits reachable from HEAD touching a tech-spec.md File Inventory path with a committer date within ${WINDOW_DAYS} days after the landed completion; fix = subject matches the fix pattern; null until the window closes; aggregate pooled`,
   specChurn: 'commits raising spec.md spec_version (renames followed) committed after the landed completion',
   landed: 'committer date of the first-parent commit of HEAD that made the change (the merge or squash commit for merged branches); all dates UTC',
@@ -541,6 +546,16 @@ function firstTimePass(texts) {
   const partial = String(frontmatterField(newest, 'verdict_history') ?? '').toLowerCase() !== 'complete'
   const detail = { basis: HISTORY, verdicts, partial, committedVersions: texts.length }
   const first = verdicts.find(v => PASS_VERDICTS.has(v) || FAIL_VERDICTS.has(v))
+  // A committed FAIL the history cannot account for wins: the oldest committed
+  // decisive verdict failing, or a committed failure while the history holds
+  // no FAIL row at all. Either means the history was started without the
+  // report's committed past (the file was stashed or deleted before a run).
+  const committed = committedVerdicts(texts)
+  const committedFirst = committed.find(v => PASS_VERDICTS.has(v) || FAIL_VERDICTS.has(v))
+  const unrecorded = committed.some(v => FAIL_VERDICTS.has(v)) && !verdicts.some(v => FAIL_VERDICTS.has(v))
+  if (FAIL_VERDICTS.has(committedFirst ?? '') || unrecorded) {
+    return { value: false, reason: null, ...detail, committedVerdicts: committed, overriddenBy: 'a committed FAIL verdict the history does not record first' }
+  }
   if (first === undefined) { return nullMetric('no conformant/divergent/gaps row in the verdict history yet', detail) }
   if (FAIL_VERDICTS.has(first)) { return { value: false, reason: null, ...detail } }
   if (!partial) { return { value: true, reason: null, ...detail } }
@@ -553,8 +568,12 @@ function firstTimePass(texts) {
 // Fallback without a verdict history: the committed versions' frontmatter
 // verdicts. A lower bound on failures, since the report is overwritten on
 // every run and a squash merge keeps only its last version.
+function committedVerdicts(texts) {
+  return texts.map(t => String(frontmatterField(t, 'verdict') ?? '').toLowerCase()).filter(v => v !== '')
+}
+
 function fromCommittedVersions(texts) {
-  const verdicts = texts.map(t => String(frontmatterField(t, 'verdict') ?? '').toLowerCase()).filter(v => v !== '')
+  const verdicts = committedVerdicts(texts)
   const decisive = verdicts.filter(v => PASS_VERDICTS.has(v) || FAIL_VERDICTS.has(v))
   const detail = { basis: VERSIONS, verdicts, committedVersions: texts.length }
   if (decisive.length === 0) { return nullMetric('no committed conformant/divergent/gaps verdict yet', detail) }
@@ -563,11 +582,13 @@ function fromCommittedVersions(texts) {
   return { value: true, reason: null, ...detail }
 }
 
-// The `## Verdict history` section feature-implement-review keeps in
-// conformance-report.md: one markdown table whose header names a Verdict
-// column, one row per run, oldest first. Returns null when there is no such
-// section, the verdicts when every row reads, { error } otherwise. Nothing is
-// repaired: skipping an unreadable row could skip the first run.
+// The `Verdict history` section (any heading level) feature-implement-review
+// keeps in conformance-report.md: one markdown table whose header names a
+// Verdict column, one row per run, oldest first. Returns null when there is no
+// such section, the verdicts when every row reads, { error } otherwise.
+// Formatting is stripped before matching (`**gaps**`, `❌ gaps`, `**Verdict**`),
+// but only the verdict words themselves are accepted, and an unreadable row
+// is never skipped: skipping one could skip the first run.
 function verdictHistory(text) {
   if (typeof text !== 'string') { return null }
   const lines = text.split(/\r?\n/)
@@ -586,14 +607,15 @@ function verdictHistory(text) {
       if (fence === null) { fence = f[1] } else if (f[1][0] === fence[0] && f[1].length >= fence.length) { fence = null }
     } else if (fence === null && /^#{1,6}\s/.test(line)) {
       // a deeper heading inside the section ends it too: the table comes first
-      current = /^##\s+verdict history\s*#*\s*$/i.test(line) ? [] : null
+      current = plain(line).toLowerCase().replace(/\s+/g, ' ') === 'verdict history' ? [] : null
       if (current) { sections.push(current) }
       continue
     }
     if (current) { current.push(line) }
   }
   if (sections.length === 0) { return null }
-  if (sections.length > 1) { return { error: `${sections.length} "## Verdict history" sections` } }
+  if (sections.length > 1) { return { error: `${sections.length} "Verdict history" sections` } }
+  if (sections[0].some(l => /^(<{7}|={7}|>{7})( |$)/.test(l))) { return { error: 'the section has unresolved merge conflict markers' } }
   const tables = []
   let block = null
   for (const line of sections[0]) {
@@ -603,7 +625,7 @@ function verdictHistory(text) {
   }
   if (tables.length !== 1) { return { error: tables.length === 0 ? 'the section has no table' : `the section has ${tables.length} tables` } }
   const [headerLine, sepLine, ...rowLines] = tables[0]
-  const header = tableCells(headerLine).map(c => c.toLowerCase())
+  const header = tableCells(headerLine).map(c => plain(c).toLowerCase())
   const sep = sepLine === undefined ? [] : tableCells(sepLine)
   if (sep.length !== header.length || !sep.every(c => /^:?-+:?$/.test(c))) { return { error: 'the table header has no matching separator row' } }
   const col = header.indexOf('verdict')
@@ -613,11 +635,18 @@ function verdictHistory(text) {
   for (const [n, line] of rowLines.entries()) {
     const cells = tableCells(line)
     if (cells.length !== header.length) { return { error: `row ${n + 1} has ${cells.length} cells, the header ${header.length}` } }
-    const verdict = cells[col].replace(/^`([^`]*)`$/, '$1').trim().toLowerCase()
+    const verdict = plain(cells[col]).toLowerCase()
     if (!VERDICTS.has(verdict)) { return { error: `row ${n + 1} verdict "${cells[col]}" is not one of ${[...VERDICTS].join(', ')}` } }
     rows.push(verdict)
   }
   return { rows }
+}
+
+// A cell or heading without markdown emphasis, backticks, or the symbols and
+// punctuation around its words (✓, ❌, ⚠): every verdict word and column name
+// starts and ends with a letter.
+function plain(s) {
+  return s.replace(/[*_`~]/g, '').replace(/^[^\p{L}]+|[^\p{L}]+$/gu, '')
 }
 
 // The cells of one markdown table row; `\|` is a literal pipe.

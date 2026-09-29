@@ -68,7 +68,7 @@ verdict_history: complete
 ---
 ```
 
-This is the feature's first review, so the skill creates the report's closing `## Verdict history` section with one row:
+This is the feature's first review: there is no report in the working tree, and `git log -- <report path>` finds none committed. The skill creates the report's closing `## Verdict history` section with one row, and `verdict_history: complete`:
 
 ```markdown
 ## Verdict history
@@ -79,11 +79,11 @@ This is the feature's first review, so the skill creates the report's closing `#
 ```
 
 6. **Present and route** — no findings, so there is nothing to route. The skill shows the matrix and verdict.
-7. **Next step** — recommends `/myspec:feature-complete saved-searches`, and notes that `conformance-report.md` is uncommitted and goes into the branch's next commit.
+7. **Next step** — recommends `/myspec:feature-complete saved-searches`.
 
 ### Result
 
-`conformance-report.md` written with verdict `conformant`. No implementation code touched. The user commits the report with the branch and proceeds to `feature-complete`.
+`conformance-report.md` written with verdict `conformant`. No implementation code touched. HEAD is `feat/saved-searches`, not the default branch, so the skill commits the report on its own (`docs(saved-searches): conformance report (conformant)`). The user proceeds to `feature-complete`.
 
 ### Why this example matters
 

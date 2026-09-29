@@ -85,7 +85,7 @@ The skill reports:
 
 #### Phase 2 — Branch integration
 
-The skill checks `git status`:
+The skill commits the Phase 1 doc changes (`docs(favorite-reports): complete`), then checks `git status`:
 
 ```
 On branch feature/favorite-reports
