@@ -1,0 +1,40 @@
+{
+  "dispatched-implementer": {
+    "pass": [
+      [
+        { "tool": "Agent", "input": { "description": "Implement Task 1: Due-date rules", "subagent_type": "general-purpose", "model": "sonnet", "prompt": "You are implementing Task 1: Due-date rules\n\n## Task Description\n...\n\n## Report Format\nStatus: DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT" } },
+        { "tool": "Write", "input": { "file_path": "<workspace>/app/invoices/due_dates.py", "content": "..." } }
+      ]
+    ],
+    "fail": [
+      [
+        { "tool": "Agent", "input": { "description": "Explore invoice code", "subagent_type": "Explore", "prompt": "Find where invoices are serialized and list the files under app/invoices/ and tests/invoices/." } },
+        { "tool": "Write", "input": { "file_path": "<workspace>/app/invoices/due_dates.py", "content": "..." } }
+      ],
+      [
+        { "tool": "Write", "input": { "file_path": "<workspace>/tests/invoices/test_due_dates.py", "content": "..." } },
+        { "tool": "Write", "input": { "file_path": "<workspace>/app/invoices/due_dates.py", "content": "..." } }
+      ]
+    ]
+  },
+  "dispatch-before-source-write": {
+    "pass": [
+      [
+        { "tool": "Edit", "input": { "file_path": "<workspace>/.ai/features/invoice-due-dates/implementation-plan.md", "old_string": "- [ ]", "new_string": "- [~]" } },
+        { "tool": "Agent", "input": { "description": "Implement Task 1: Due-date rules", "subagent_type": "general-purpose", "model": "sonnet", "prompt": "You are implementing Task 1: Due-date rules\n\n## Report Format\nStatus: DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT" } },
+        { "tool": "Write", "input": { "file_path": "<workspace>/app/invoices/due_dates.py", "content": "..." } }
+      ]
+    ],
+    "fail": [
+      [
+        { "tool": "Agent", "input": { "description": "Explore invoice code", "subagent_type": "Explore", "prompt": "Find where invoices are serialized and list the files under app/invoices/ and tests/invoices/." } },
+        { "tool": "Write", "input": { "file_path": "<workspace>/app/invoices/due_dates.py", "content": "..." } },
+        { "tool": "Agent", "input": { "description": "Implement Task 1: Due-date rules", "subagent_type": "general-purpose", "prompt": "You are implementing Task 1: Due-date rules\n\nStatus: DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT" } }
+      ],
+      [
+        { "tool": "Agent", "input": { "description": "Explore invoice code", "subagent_type": "Explore", "prompt": "Find where invoices are serialized." } },
+        { "tool": "Write", "input": { "file_path": "<workspace>/app/invoices/due_dates.py", "content": "..." } }
+      ]
+    ]
+  }
+}
