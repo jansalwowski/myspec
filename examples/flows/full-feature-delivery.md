@@ -272,7 +272,7 @@ A fresh reviewer (no memory of how the code got written) traces **spec/plan ↔ 
 
 > **Drift (Medium)**: `ScheduleForm` exposes a "send a test export now" button. No requirement or AC covers it — it crept in during implementation.
 
-The skill never edits code. It routes: the test-export button is genuinely useful, so the user chooses to **document it** rather than rip it out — the agent points them at `/myspec:feature-update` to add the requirement. Everything else is conformant. Verdict: `divergent`, resolved.
+The skill never edits code. It routes: the test-export button is genuinely useful, so the user chooses to **document it** rather than rip it out — the agent points them at `/myspec:feature-update` to add the requirement. Everything else is conformant. Verdict: `divergent`, resolved. The report's `## Verdict history` keeps that `divergent` row through later re-runs, which append their own rows, and through a squash merge. `delivery-metrics` therefore counts the feature as not passing first time.
 
 ---
 

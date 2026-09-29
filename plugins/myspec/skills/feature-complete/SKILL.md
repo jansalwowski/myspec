@@ -136,6 +136,8 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 
 3. **Execute choice:**
 
+   Options 1 and 2 carry only commits. Before either one, commit the feature branch's uncommitted feature docs: the Phase 1 edits, the manifest, and a `conformance-report.md` left uncommitted. For example, `git add ${aiDir}/features/{feature}/ ${aiDir}/features/index.yaml && git commit -m "docs({feature}): complete"`. Otherwise they stay behind in the working tree, and the report's verdict history never reaches `delivery-metrics`. Option 5 promotes the uncommitted diff instead, so include `${aiDir}/features/{feature}/` in its `--only` paths.
+
    **Option 1 — Merge locally:**
 
    The `guard-worktree-context.sh` hook (if installed) blocks checkout and merge on the main checkout; the `MYSPEC_ALLOW_BRANCH_OPS=1` prefix marks this as a user-confirmed integration flow and is required for those commands to pass. `git branch -d` needs no prefix: the hook allows deleting a branch that no worktree has checked out, and blocks it (as git does) while one still does:

@@ -64,7 +64,18 @@ head_sha: f4e5d6c
 reviewed: 2026-05-27
 verdict: conformant
 holistic_reused: true
+verdict_history: complete
 ---
+```
+
+This is the feature's first review: there is no report in the working tree, and `git log -- <report path>` finds none committed. The skill creates the report's closing `## Verdict history` section with one row, and `verdict_history: complete`:
+
+```markdown
+## Verdict history
+
+| Reviewed | Head | Verdict | Critical | High | Medium | Low |
+|----------|------|---------|----------|------|--------|-----|
+| 2026-05-27 | f4e5d6c | conformant | 0 | 0 | 0 | 0 |
 ```
 
 6. **Present and route** — no findings, so there is nothing to route. The skill shows the matrix and verdict.
@@ -72,12 +83,13 @@ holistic_reused: true
 
 ### Result
 
-`conformance-report.md` written with verdict `conformant`. No implementation code touched. The user proceeds to `feature-complete`.
+`conformance-report.md` written with verdict `conformant`. No implementation code touched. HEAD is `feat/saved-searches`, not the default branch, so the skill commits the report on its own (`docs(saved-searches): conformance report (conformant)`). The user proceeds to `feature-complete`.
 
 ### Why this example matters
 
 - **A `conformant` verdict is a real, signed artifact — not a no-op.** The frontmatter pins the exact commit reviewed (`head_sha`), so "this was audited" is verifiable later. If code changes after this, the recorded SHA shows the audit is stale.
 - **"Behavioral: ✅ pass" requires runnable proof.** The reviewer ran the scenarios; it did not read the code and conclude it works. Every behavioral cell here is backed by an actually-executed test. The clean column is earned, not assumed.
+- **The first history row is the first-time result.** `delivery-metrics` reads the first decisive row, so this feature counts as a first-time pass. That holds after a squash merge too, because the history lives in the file rather than in commits.
 - **Independence is the whole point.** The reviewer never saw the implementation conversation, so it can't rationalize a shortcut the implementer talked itself into. A self-review of one's own code would have rubber-stamped it.
 
 ---
@@ -120,7 +132,7 @@ Findings (most severe first)
 Verdict: divergent — code does something beyond the spec/plan in 1 place.
 ```
 
-The skill writes `conformance-report.md` with `verdict: divergent`, then routes the one finding via `AskUserQuestion`:
+The skill writes `conformance-report.md` with `verdict: divergent` and appends a `divergent` row to its `## Verdict history`, then routes the one finding via `AskUserQuestion`:
 
 ```
 Finding F1 (High): src/searches/cache.ts adds an unplanned result cache. How do you want to handle it?
@@ -134,12 +146,20 @@ The cache is sound and the user wants to keep it, so they pick **Route to featur
 
 ### Result
 
-`conformance-report.md` written with verdict `divergent` and the routed finding recorded. **No code edited** — the skill never auto-touches implementation. The user runs `feature-spec-sync`, adds a cache test, then re-runs the review to land on `conformant`.
+`conformance-report.md` written with verdict `divergent` and the routed finding recorded. **No code edited** — the skill never auto-touches implementation. The user runs `feature-spec-sync`, adds a cache test, then re-runs the review to land on `conformant`. The re-run rewrites the report but carries the history across and appends its own row:
+
+```markdown
+| Reviewed | Head | Verdict | Critical | High | Medium | Low |
+|----------|------|---------|----------|------|--------|-----|
+| 2026-05-27 | f4e5d6c | divergent | 0 | 1 | 0 | 0 |
+| 2026-05-28 | 7a8b9c0 | conformant | 0 | 0 | 0 | 0 |
+```
 
 ### Why this example matters
 
 - **Scope drift is invisible to forward-only checks.** All four ACs trace cleanly to code and tests — a forward trace alone would call this done. Only the *reverse* trace (every changed file must serve a plan item) surfaces the cache. That bidirectional matrix is what separates this skill from "did we build the features."
 - **"Good code" and "drift" are orthogonal.** The cache might pass code-review with flying colors. Conformance review still flags it, because the spec/plan no longer describe what shipped — a future reader trusting the docs would be wrong.
+- **An overwrite no longer erases the failure.** The final report reads `conformant`, but its first history row is `divergent`, so `delivery-metrics` does not count the feature as a first-time pass. That holds even if the branch is squash-merged and the `divergent` version was never committed.
 - **Routing respects the nature of the gap.** This wasn't a code defect, so it routed to `feature-spec-sync` (fix the docs), not `feature-implement` (change the code) or "Fix now" (rip the cache out). The four routing options exist precisely so the disposition matches the cause.
 
 ---
@@ -184,7 +204,7 @@ Findings (most severe first)
 Verdict: gaps — a criterion (AC-5) and a plan step have no conforming implementation.
 ```
 
-The skill writes `conformance-report.md` with `verdict: gaps`, then routes each finding via `AskUserQuestion`. For the Critical AC-5 finding the user picks **Route to feature-implement** — this is missing/wrong code that needs real implementation work, not a doc fix and not a quick in-session patch. The High faked-done finding is part of the same work (the checkbox gets corrected when the task is actually done), so it's batched with the same disposition.
+The skill writes `conformance-report.md` with `verdict: gaps` and appends a `gaps | 1 | 1 | 1 | 0` row to its `## Verdict history`, then routes each finding via `AskUserQuestion`. For the Critical AC-5 finding the user picks **Route to feature-implement** — this is missing/wrong code that needs real implementation work, not a doc fix and not a quick in-session patch. The High faked-done finding is part of the same work (the checkbox gets corrected when the task is actually done), so it's batched with the same disposition.
 
 ### Result
 
