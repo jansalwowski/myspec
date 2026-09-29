@@ -60,8 +60,10 @@ sub unquote {
   return $v;
 }
 
-# Values of a top-level key: an inline scalar, an inline [a, b] list, or a
-# block list of "- item" lines. Returns (found, values...).
+# Values of a top-level key: an inline scalar, a [a, b] flow list (which may
+# wrap onto following lines), or a block list of "- item" lines. Returns
+# (found, values...). A flow list with no closing `]` exits 2, so a caller
+# never mistakes it for a list without the value it looks for.
 sub key_values {
   my ($fm, $key) = @_;
   my @lines = split /\n/, $fm;
@@ -69,8 +71,22 @@ sub key_values {
     next unless $lines[$i] =~ /^\Q$key\E:[ \t]*(.*?)[ \t]*$/;
     my $v = $1;
     my @vals;
+    if ($v =~ /^\[/) {
+      $v =~ s/[ \t]+#[^\]]*$//;
+      while ($v !~ /\][ \t]*$/) {
+        # A flow list continues only on indented lines; the next unindented
+        # line is another key, so the list never closed.
+        if ($i + 1 >= @lines || $lines[$i + 1] !~ /^[ \t]/) {
+          print STDERR "project-instructions.pl: `$key:` opens a [ list that never closes\n";
+          exit 2;
+        }
+        (my $next = $lines[++$i]) =~ s/^[ \t]+|[ \t]+$//g;
+        $next =~ s/[ \t]+#[^\]]*$//;
+        $v .= " $next";
+      }
+    }
     if ($v ne '' && $v !~ /^#/) {
-      if ($v =~ /^\[(.*)\]$/s) { @vals = map { unquote($_) } split /,/, $1; }
+      if ($v =~ /^\[(.*)\][ \t]*$/s) { @vals = map { unquote($_) } split /,/, $1; }
       else { @vals = map { unquote($_) } split /,/, $v; }
     } else {
       while ($i + 1 < @lines && $lines[$i + 1] =~ /^[ \t]*-[ \t]+(.*)$/) {

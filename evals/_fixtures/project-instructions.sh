@@ -71,11 +71,12 @@ strip_block() {
     END { if (held) print "" }' "$1"
 }
 
-# prompt_has <case> <tags|keys> <value> — prompt.md frontmatter lists <value>
-# among its tags (any YAML list form) or its top-level keys.
-prompt_has() {
-  [ -f "$EVALS_DIR/$1/prompt.md" ] || return 1
-  perl "$HELPER" "$2" "$EVALS_DIR/$1/prompt.md" | grep -qxF -- "$3"
+# prompt_list <case> <tags|keys> — prompt.md frontmatter's tags (any YAML
+# list form) or top-level keys, one per line. Fails when the helper cannot
+# parse them, so a malformed list is an error rather than a missing tag.
+prompt_list() {
+  [ -f "$EVALS_DIR/$1/prompt.md" ] || return 0
+  perl "$HELPER" "$2" "$EVALS_DIR/$1/prompt.md"
 }
 
 stale=() rc=0
@@ -86,13 +87,17 @@ for c in "${cases[@]}"; do
     echo "project-instructions: $c/case.yaml has its own execution: block; move those keys to prompt.md frontmatter" >&2
     rc=2; continue
   fi
-  if prompt_has "$c" keys append_system_prompt; then
+  if ! keys=$(prompt_list "$c" keys) || ! tags=$(prompt_list "$c" tags); then
+    echo "project-instructions: cannot read $c/prompt.md frontmatter" >&2
+    rc=2; continue
+  fi
+  if printf '%s\n' "$keys" | grep -qxF append_system_prompt; then
     echo "project-instructions: $c/prompt.md sets append_system_prompt, which replaces the generated project instructions; remove it, or tag the case description-only and put the text in case.yaml" >&2
     rc=2; continue
   fi
   text="$TMP/$c.txt"
   : > "$text"
-  if ! prompt_has "$c" tags description-only && [ -f "$dir/fixture.sh" ]; then
+  if ! printf '%s\n' "$tags" | grep -qxF description-only && [ -f "$dir/fixture.sh" ]; then
     root="$TMP/$c.run"
     mkdir -p "$root/home/cwd"
     if ! err=$(cd "$root/home/cwd" && env -i PATH="$PATH" HOME="$root/home" TMPDIR="$TMP" TERM=dumb \

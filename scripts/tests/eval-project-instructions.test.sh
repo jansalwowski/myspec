@@ -109,23 +109,29 @@ out=$(cd "$SRC_ROOT" && bash "$GEN" --check 2>&1); rc=$?
 expect_eq "every case.yaml's project instructions are current (run $GEN if not)" "$rc" "0"
 [ "$rc" = 0 ] || printf '%s\n' "$out" | sed 's/^/     /'
 
-n=0
-for yaml in "$SRC_ROOT"/evals/*/case.yaml; do
-  dir=$(dirname "$yaml") name=$(basename "$(dirname "$yaml")")
-  n=$((n + 1))
-  if awk 'NR == 1 { next } /^---/ { exit } { print }' "$dir/prompt.md" | grep -q 'description-only'; then
-    expect_lacks "$name: description-only, no instructions" "$(cat "$yaml")" "append_system_prompt"
-    continue
-  fi
-  expect_has "$name: has a generated append_system_prompt" "$(cat "$yaml")" "  append_system_prompt: |-"
-  root="$TMP/run-$name"; mkdir -p "$root/home/cwd"
-  if ! err=$(cd "$root/home/cwd" && env -i PATH="$PATH" HOME="$root/home" TMPDIR="$TMP" bash "$dir/fixture.sh" 2>&1 >/dev/null); then
-    nok "$name: fixture runs" "$err"; continue
-  fi
-  expect_eq "$name: text matches an independent rendering of the workspace" \
-    "$(block_text "$yaml")" "$(node "$TMP/expect.cjs" render "$root/home/cwd")"
-done
-[ "$n" -gt 0 ] && ok "checked $n cases" || nok "no case.yaml found under evals/"
+# check_cases <repo-root> <label> — every case under <repo-root>/evals/: a
+# description-only case (by its tags, as the generator reads them) has no
+# block; any other has one that matches the independent rendering.
+check_cases() {
+  local root_dir="$1" label="$2" yaml dir name n=0 ws
+  for yaml in "$root_dir"/evals/*/case.yaml; do
+    dir=$(dirname "$yaml") name="$label$(basename "$(dirname "$yaml")")"
+    n=$((n + 1))
+    if perl "$root_dir/evals/_fixtures/project-instructions.pl" tags "$dir/prompt.md" | grep -qxF description-only; then
+      expect_lacks "$name: description-only, no instructions" "$(cat "$yaml")" "append_system_prompt"
+      continue
+    fi
+    expect_has "$name: has a generated append_system_prompt" "$(cat "$yaml")" "  append_system_prompt: |-"
+    ws="$TMP/run-$(printf '%s' "$name" | tr '/ ' '__')"; mkdir -p "$ws/home/cwd"
+    if ! err=$(cd "$ws/home/cwd" && env -i PATH="$PATH" HOME="$ws/home" TMPDIR="$TMP" bash "$dir/fixture.sh" 2>&1 >/dev/null); then
+      nok "$name: fixture runs" "$err"; continue
+    fi
+    expect_eq "$name: text matches an independent rendering of the workspace" \
+      "$(block_text "$yaml")" "$(node "$TMP/expect.cjs" render "$ws/home/cwd")"
+  done
+  [ "$n" -gt 0 ] && ok "${label}checked $n cases" || nok "${label}no case.yaml found under evals/"
+}
+check_cases "$SRC_ROOT" ""
 
 text=$(block_text "$SRC_ROOT/evals/trigger-new-feature/case.yaml")
 for rule in "$SRC_ROOT"/framework-files/rules/*.md; do
@@ -236,7 +242,9 @@ for form in 'tags: [description-only, trigger]' \
             'tags: ["description-only", "trigger"]' \
             "tags: [trigger, 'description-only']" \
             $'tags:\n  - trigger\n  - description-only' \
-            $'tags:\n  - "description-only"'; do
+            $'tags:\n  - "description-only"' \
+            $'tags: [trigger,\n  description-only]' \
+            $'tags: [trigger, # wraps\n    "description-only",\n    capability]'; do
   label=$(printf '%s' "$form" | tr '\n' ' ')
   set_tags "$form"
   out=$(gen --check trigger-memorize); rc=$?
@@ -251,6 +259,19 @@ done
 set_tags 'tags: [trigger, not-description-only]'
 out=$(gen --check trigger-memorize); rc=$?
 expect_eq "a tag that only contains the word is not the opt-out" "$rc" "0"
+printf '%s\n' "$orig_prompt" > "$R/evals/trigger-memorize/prompt.md"
+
+set_tags $'tags: [trigger,\n  description-only'
+out=$(gen --check trigger-memorize); rc=$?
+expect_eq "an unterminated [ tags list: exits 2" "$rc" "2"
+expect_has "an unterminated [ tags list: says so" "$out" "opens a [ list that never closes"
+printf '%s\n' "$orig_prompt" > "$R/evals/trigger-memorize/prompt.md"
+
+# The word in description: is not the opt-out, for the generator or the checks.
+printf '%s\n' "$orig_prompt" | sed 's/^description: "/description: "Not description-only: /' > "$R/evals/trigger-memorize/prompt.md"
+out=$(gen --check trigger-memorize); rc=$?
+expect_eq "description-only in description: is not the opt-out (block kept)" "$rc" "0"
+check_cases "$R" "copy, description mentions the tag: "
 printf '%s\n' "$orig_prompt" > "$R/evals/trigger-memorize/prompt.md"
 
 printf '%s\n' "$orig_prompt" | awk '/^tags:/ { print; print "append_system_prompt: \"Be terse.\""; next } { print }' > "$R/evals/trigger-memorize/prompt.md"
