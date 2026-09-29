@@ -98,6 +98,10 @@
     "require-reuse-audit.sh": {
       "type": "overwrite",
       "dest": ".claude/hooks/require-reuse-audit.sh"
+    },
+    "record-session-metrics.sh": {
+      "type": "overwrite",
+      "dest": ".claude/hooks/record-session-metrics.sh"
     }
   },
   "lib": {
@@ -156,6 +160,14 @@
     "plan-checkbox.sh": {
       "type": "overwrite",
       "dest": ".claude/lib/plan-checkbox.sh"
+    },
+    "friction-scan/scan.mjs": {
+      "type": "overwrite",
+      "dest": ".claude/lib/friction-scan/scan.mjs"
+    },
+    "friction-scan/metrics.mjs": {
+      "type": "overwrite",
+      "dest": ".claude/lib/friction-scan/metrics.mjs"
     }
   },
   "removed": {

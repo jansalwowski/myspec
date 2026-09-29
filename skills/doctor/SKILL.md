@@ -55,6 +55,13 @@ due for a pass; reach for tier 1 when the user named a surface or tier 0 pointed
 
    Missing script (project predates it) → note "tier 0 unavailable — run /myspec:update" and
    run the surfaces the old way, accepting that they will be slower and less reproducible.
+5. Field metrics, only when `.claude/state/metrics/runs.jsonl` exists in the main checkout (the `SessionEnd` hook records it; absent → skip without comment):
+
+   ```bash
+   node "${CLAUDE_PLUGIN_ROOT}/lib/friction-scan/stats.mjs" --json
+   ```
+
+   Hand its `hook_blocks` to surface E and its per-skill `blocked_rate`, `fix_rounds` and `hook_blocks` to surface B. They are leads, not findings: a signature blocking in most sessions earns a behavioral re-run of that hook, and a project skill with repeated BLOCKED runs or fix rounds earns a closer read. A `myspec:*` skill that stands out is framework-side: name it in Phase 3 for an upstream issue instead of auditing it here. Field data never makes a finding blocking on its own.
 
 ### Phase 1 — Fan out read-only audit subagents
 
@@ -109,7 +116,7 @@ is left is judgment:
 
 ### Phase 3 — Report and get approval
 
-Present: per-surface findings with evidence, token table (now → target), the fix grouping below, and a needs-user-decision list. Wait for the user before editing anything. Always needs a user decision: feature status transitions (`/myspec:feature-complete`'s job), orphan-feature promotion, anything in `settings.local.json` or `## Read-only` files.
+Present: per-surface findings with evidence, token table (now → target), the fix grouping below, the field-metrics lines that led anywhere (when Phase 0 step 5 ran), and a needs-user-decision list. Wait for the user before editing anything. Always needs a user decision: feature status transitions (`/myspec:feature-complete`'s job), orphan-feature promotion, anything in `settings.local.json` or `## Read-only` files.
 
 ### Phase 4 — Apply as grouped PRs
 
