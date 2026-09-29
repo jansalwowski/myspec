@@ -1,0 +1,24 @@
+# Feature Manifest — single source of truth for feature status
+# Managed by /myspec:feature-spec, /myspec:feature-complete
+# Status: planned | draft | in-progress | complete | deprecated
+# Priority: P0 (critical) | P1 (high) | P2 (medium) | P3 (low)
+
+features:
+  - name: customer-portal
+    title: "Customer Portal"
+    status: complete
+    phase: 1
+    priority: P1
+    depends-on: []
+  - name: invoice-export
+    title: "Invoice CSV Export"
+    status: in-progress
+    phase: 1
+    priority: P2
+    depends-on: []
+  - name: payment-reminders
+    title: "Payment Reminders"
+    status: draft
+    phase: 2
+    priority: P2
+    depends-on: [invoice-export]

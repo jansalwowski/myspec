@@ -1,0 +1,108 @@
+#!/usr/bin/env bash
+# pre-push: run the behavioural eval cases for skills changed on the pushed
+# branch (scripts/evals/run.sh --mode changed), 1 run each, Sonnet.
+#
+# Report-only: a low score prints a table and the push goes ahead.
+#   MYSPEC_EVALS_STRICT=1            a below-threshold result blocks the push
+#   MYSPEC_SKIP_EVALS=1              skip the evals (or: git push --no-verify)
+#   MYSPEC_EVAL_DEADLINE_SECONDS     overall budget, default 240; on expiry the
+#                                    run stops, reports what finished, and the
+#                                    push goes ahead
+#   MYSPEC_EVALS_IN_AGENT=1          run the evals even inside Claude Code
+# Fails open: when claude is missing, not logged in, the API is unreachable,
+# the deadline passes or the eval run itself errors, the hook warns and lets
+# the push through.
+#
+# Inside Claude Code (CLAUDECODE is set) the evals are skipped by default: the
+# agent's Bash tool times out long before a multi-case run finishes and would
+# kill the push halfway. The hook tells the agent to run them itself.
+#
+# git feeds one line per pushed ref on stdin:
+#   <local ref> <local sha> <remote ref> <remote sha>
+# A local sha of zeros is a deletion (skipped). The range starts at the remote
+# sha when that is an ancestor of the pushed tip (a plain push); otherwise (a
+# new branch, or a force push after a rebase) at the merge base with
+# <remote>/main, so a rebase onto main does not re-evaluate main's own changes.
+# The evals run against the working tree, so only a ref whose tip is the
+# checked-out HEAD is evaluated.
+
+set -uo pipefail
+
+remote="${1:-origin}"
+skip_hint="skip with MYSPEC_SKIP_EVALS=1 git push, or git push --no-verify"
+
+if [ "${MYSPEC_SKIP_EVALS:-0}" = 1 ]; then
+  echo "pre-push: evals skipped (MYSPEC_SKIP_EVALS=1)" >&2
+  exit 0
+fi
+if [ -n "${CLAUDECODE:-}" ] && [ "${MYSPEC_EVALS_IN_AGENT:-0}" != 1 ]; then
+  echo "pre-push: evals skipped inside Claude Code; run scripts/evals/run.sh --mode changed yourself with a Bash timeout of 10 minutes or more (MYSPEC_EVALS_IN_AGENT=1 runs them here)" >&2
+  exit 0
+fi
+
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+run="$repo_root/scripts/evals/run.sh"
+if [ ! -x "$run" ]; then
+  exit 0
+fi
+
+head_sha=$(git rev-parse HEAD 2>/dev/null) || exit 0
+is_zero() { [[ "$1" =~ ^0+$ ]]; }
+
+bases=()
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ -n "${local_sha:-}" ] || continue
+  is_zero "$local_sha" && continue                      # deleting a remote ref
+  case "$local_ref" in refs/tags/*) continue ;; esac     # tags carry no branch diff
+  if [ "$local_sha" != "$head_sha" ]; then
+    echo "pre-push: $local_ref is not checked out; evals run the working tree, so it is not evaluated" >&2
+    continue
+  fi
+  if ! is_zero "$remote_sha" && git merge-base --is-ancestor "$remote_sha" "$local_sha" 2>/dev/null; then
+    base="$remote_sha"
+  else
+    base=""
+    for ref in "refs/remotes/$remote/main" refs/remotes/origin/main refs/heads/main; do
+      if base=$(git merge-base "$ref" "$local_sha" 2>/dev/null) && [ -n "$base" ]; then break; fi
+      base=""
+    done
+    if [ -z "$base" ]; then
+      echo "pre-push: no merge base with $remote/main for $local_ref; evals skipped" >&2
+      continue
+    fi
+  fi
+  case " ${bases[*]:-} " in *" $base "*) continue ;; esac
+  bases+=("$base")
+done
+
+[ "${#bases[@]}" -gt 0 ] || exit 0
+
+export MYSPEC_EVAL_DEADLINE_SECONDS="${MYSPEC_EVAL_DEADLINE_SECONDS:-240}"
+concurrency="${MYSPEC_EVAL_CONCURRENCY:-4}"
+
+status=0
+for base in "${bases[@]}"; do
+  # Count first (no model calls), so the skip hint and the time estimate come
+  # before any wait.
+  n=$(MYSPEC_EVALS_DRY_RUN=1 "$run" --mode changed --base "$base" --out "${TMPDIR:-/tmp}/myspec-evals-count-$$" < /dev/null 2>/dev/null \
+      | sed -n 's/.* cases=\([0-9][0-9]*\).*/\1/p')
+  rm -rf "${TMPDIR:-/tmp}/myspec-evals-count-$$"
+  if [ -z "$n" ] || [ "$n" = 0 ]; then
+    echo "pre-push: no eval cases cover the skills changed on this push" >&2
+    continue
+  fi
+  waves=$(( (n + concurrency - 1) / concurrency ))
+  echo "pre-push: $n eval case(s), about $((waves * 60))s, at most ${MYSPEC_EVAL_DEADLINE_SECONDS}s; $skip_hint" >&2
+  "$run" --mode changed --base "$base" --runs 1 --models sonnet < /dev/null
+  rc=$?
+  case "$rc" in
+    0) ;;
+    1) status=1 ;;
+    *) echo "pre-push: eval run incomplete or failed (exit $rc); pushing anyway" >&2 ;;
+  esac
+done
+
+if [ "$status" = 1 ]; then
+  echo "pre-push: blocked by MYSPEC_EVALS_STRICT=1. Push anyway with --no-verify." >&2
+fi
+exit "$status"

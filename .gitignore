@@ -21,3 +21,7 @@ npm-debug.log*
 *.ntvs*
 *.njsproj
 *.sln
+
+# Eval results (scripts/evals/run.sh default, and claude plugin eval's own default)
+.eval-results/
+evals/results/
