@@ -1,0 +1,6 @@
+{
+  "checks": [
+    { "name": "Lint", "command": "ruff check .", "diffCommand": "", "description": "Linter", "required": true },
+    { "name": "Test", "command": "pytest -q", "diffCommand": "", "description": "Test suite", "required": true }
+  ]
+}
