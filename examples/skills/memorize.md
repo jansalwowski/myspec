@@ -2,6 +2,8 @@
 
 `/memorize` is the single-shot capture skill: the user hands over the exact thing to remember, and the skill turns it into a properly-classified memory entry. Each section below is a different scenario, ordered from simplest to most involved.
 
+The scenarios type `/memorize`, but natural phrasing triggers it too when the content is a fact about the project: "remember this for next time: staging credentials rotate every Monday", "note that…", "keep in mind that…". Those go to the shared project memory under `${aiDir}/memory/` rather than Claude Code's built-in auto-memory. A personal preference about how the user likes to work ("remember that I prefer short answers") stays in auto-memory and does not trigger the skill.
+
 **Contents**
 
 - [Simple procedural rule](#simple-procedural-rule) — zero-question happy path
