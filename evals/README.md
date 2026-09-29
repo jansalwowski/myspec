@@ -92,7 +92,7 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 | `code-review-planted-bug` | planted flaw | code-review (Python fixture) finds an off-by-one that drops the first line item and does not approve |
 | `feature-spec-contract` | artifact contract | feature-spec writes spec.md with every section and frontmatter key feature-spec-review checks, plus dependencies.md and a manifest entry |
 
-The two `capability` cases fail for reasons the plugin has not fixed yet. In `trigger-memorize`, Claude Code's built-in auto-memory takes "remember this" prompts before memorize can. In `code-review-planted-bug`, Sonnet runs `git diff` and reviews the change itself without invoking code-review. Both runs still save or find the right thing, so only the skill-fired and verdict-format graders fail.
+The `capability` case `trigger-memorize` fails for a reason the plugin has not fixed yet: Claude Code's built-in auto-memory takes "remember this" prompts before memorize can. The run still saves the right thing, so only the skill-fired grader fails. `code-review-planted-bug` failed the same way (0/5 on Sonnet: it ran `git diff` and reviewed the change itself) until the code-review description quoted natural review phrasing and said to use the skill instead of reading the diff directly; it then fired 5/5 and moved to `regression`.
 
 ## Adding a case
 
@@ -167,6 +167,7 @@ A grader that cannot fail is worthless, and a case that passes whether or not th
 ## Known gotchas
 
 - **Hooks don't load.** The eval sandbox never loads myspec's hooks (the plugin's root `hooks.json` isn't on Claude Code's plugin-hook path, and projects get hooks from `init`). The scaffold therefore installs no `.claude/hooks/` or `.claude/settings.json`. Hook behaviour stays with `hooks/tests/`.
+- **Project instructions don't load either.** The scaffold writes `CLAUDE.md` and `.claude/rules/`, but the run never sees them: a canary rule in both was absent from the model's context (2026-09-29). A routing change in `framework-files/rules/` cannot be measured here; only skill descriptions and bodies can.
 - **Two-arm mode hides the skill signal.** Under `--ablation with-without`, `tool_used: Skill` graders become unscored "plugin-fired indicators", so a case can score 1.0 while its skill never fired. `run.sh` defaults to `--ablation none`, where they count, and its `FIRED` column reads them either way. Sibling graders carry `arm: both` so they are scored in both modes.
 - **Haiku as judge gives false negatives.** The judge is pinned to Sonnet. Prefer a regex for long outputs.
 - **Turns.** A run that hits `max_turns` is recorded with an error but still graded on what it produced. Trigger cases set a low cap on purpose: the Skill call happens in the first turns, and the rest of the skill's work costs money without informing the grade.
