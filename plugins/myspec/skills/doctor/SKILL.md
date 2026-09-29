@@ -100,6 +100,7 @@ is left is judgment:
 **E. Hooks + harness config** — `.claude/settings.json`, every `.claude/hooks/*.sh`, `.claude/lib/*.sh`, `.claude/verification.json`, `.myspec.json`. Tier 0 owns existence, registration, executability, `bash -n`, framework and hook content drift, and schema validity; its `install`, `wiring`, and `schema` records are in the brief and are not to be re-derived. This surface is behavior, which no script can settle:
 - Execute each hook with synthetic stdin JSON (`printf '{"tool_input":{...},"cwd":"..."}' | bash <hook>`) for both the should-block and the should-pass case, and check the decision against what the hook claims to do. A hook can exist, be wired, be executable, parse cleanly — and still approve everything
 - Environment assumptions: commands run where the convention says (host vs container); the worktree case degrades gracefully; a `tooling-absent` record from tier 0 means some gate is currently passing without running
+- A required `verification.json` check that runs its work in a container or on another host (`docker exec`, `kubectl exec`, `ssh`), directly or through a script it calls, declares a `cleanup` that stops that work. The Stop hook's cap kills only the local client, so without one every capped stop leaves another run going there
 - `verification.json` commands actually exercise this project (right package manager, right workspace) — tier 0 only knows whether a command string is present
 - Whether each derived pattern survives its config value, beyond the `aiDir` trailing slash tier 0 catches
 

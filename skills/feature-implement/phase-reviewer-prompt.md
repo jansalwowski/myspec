@@ -113,6 +113,10 @@ Task tool (general-purpose):
       each. If you run a `.claude/verification.json` check whose
       `diffCommand` is non-empty, run that instead of its `command`, with
       `MYSPEC_BASE_REF` set to `git merge-base HEAD <default branch>`.
+      Export a fresh `MYSPEC_CHECK_RUN_ID` for each one. If a check is
+      killed or times out and it declares a `cleanup`, run that with the
+      same `MYSPEC_CHECK_RUN_ID` before running the check again. The kill stops only the local client, and work it started in
+      a container or on another host keeps running.
     - For an invariant over real output ("output unchanged", "byte-identical",
       "never splits"), prefer a real-engine / real-data check over a mock: a
       test that mocks the engine pins what the mock returns, not what the

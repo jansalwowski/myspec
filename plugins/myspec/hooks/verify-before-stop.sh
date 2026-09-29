@@ -375,19 +375,33 @@ CHECK_CAP_SECONDS=120
 if [[ "${MYSPEC_CHECK_CAP_SECONDS:-}" =~ ^[1-9][0-9]*$ ]] && [ "$MYSPEC_CHECK_CAP_SECONDS" -lt "$CHECK_CAP_SECONDS" ]; then
   CHECK_CAP_SECONDS=$MYSPEC_CHECK_CAP_SECONDS
 fi
+# A check's cleanup command (below) gets its own cap, lowered with the check
+# cap and never above 30 s.
+CLEANUP_CAP_SECONDS=30
+[ "$CHECK_CAP_SECONDS" -lt "$CLEANUP_CAP_SECONDS" ] && CLEANUP_CAP_SECONDS=$CHECK_CAP_SECONDS
 CAP_SENTINEL=$(mktemp "${TMPDIR:-/tmp}/.myspec-cap.XXXXXX")
 rm -f "$CAP_SENTINEL"
+CHECK_LOG=""
+trap 'rm -f "$MARKER_FILE" "$CAP_SENTINEL" ${CHECK_LOG:+"$CHECK_LOG"}' EXIT
 
-# run_with_cap <command>: runs it under the cap and kills the whole process
-# group at the deadline. Killing only the direct child is not enough: a test
-# runner's workers inherit the output pipe, the $(...) capture waits for them,
-# and the hook then waits for the full run anyway (measured: 456 s under a
-# 120 s cap). perl is in the macOS base system and in nearly every Linux
-# image; it puts the check in its own process group, SIGTERMs the group at the
-# deadline (SIGKILL once the check exits, at most 5 s later) and touches $CAP_SENTINEL so the caller knows
-# the exit was the cap's, not the command's own. Without perl, GNU timeout
-# also signals the group; its exit 124 is ambiguous, so the caller also checks
-# the elapsed time. With neither, the check runs uncapped.
+# run_with_cap <seconds> <command>: runs it under the cap and kills the whole
+# process group at the deadline. Killing only the direct child is not enough:
+# a test runner's workers would keep running (measured: 456 s under a 120 s
+# cap). perl is in the macOS base system and in nearly every Linux image; it
+# puts the command in its own process group, SIGTERMs the group at the
+# deadline (SIGKILL once the command exits, at most 5 s later) and touches
+# $CAP_SENTINEL so the caller knows the exit was the cap's, not the command's
+# own. When the command exits on its own, whatever it left in its group (a
+# server started with &, workers that did not exit) is killed too: nothing
+# will read their output. Without perl, GNU timeout also signals the group at
+# the deadline (it leads the group it runs in), and kill_group reaps the rest
+# after it returns; its exit 124 is ambiguous, so the caller also checks the
+# elapsed time. With neither, the command runs uncapped and its leftovers
+# are not reaped.
+# The group kill reaches only processes on this machine that stay in the
+# group. Work a command runs in a container or on another host (docker exec,
+# kubectl exec, ssh) outlives its client; the check's cleanup command is how
+# the project stops it.
 run_with_cap() {
   if command -v perl &>/dev/null; then
     perl -e '
@@ -404,15 +418,64 @@ run_with_cap() {
       alarm $cap;
       waitpid($pid, 0);
       alarm 0;
-      exit(($? & 127) ? 128 + ($? & 127) : $? >> 8);
-    ' "$CHECK_CAP_SECONDS" "$CAP_SENTINEL" bash -c "$1"
-  elif command -v gtimeout &>/dev/null; then
-    gtimeout "$CHECK_CAP_SECONDS" bash -c "$1"
-  elif command -v timeout &>/dev/null; then
-    timeout "$CHECK_CAP_SECONDS" bash -c "$1"
+      my $rc = ($? & 127) ? 128 + ($? & 127) : $? >> 8;
+      if (kill 0, -$pid) {
+        kill "TERM", -$pid;
+        for (1 .. 20) { last unless kill 0, -$pid; select(undef, undef, undef, 0.1) }
+        kill "KILL", -$pid;
+      }
+      exit $rc;
+    ' "$1" "$CAP_SENTINEL" bash -c "$2"
+  elif command -v gtimeout &>/dev/null || command -v timeout &>/dev/null; then
+    local bin pid rc=0
+    bin=$(command -v gtimeout || command -v timeout)
+    "$bin" "$1" bash -c "$2" &
+    pid=$!
+    wait "$pid" || rc=$?
+    kill_group "$pid"
+    return "$rc"
   else
-    bash -c "$1"
+    bash -c "$2"
   fi
+}
+
+# kill_group <pgid>: TERM what is left of the process group, KILL after 2 s.
+# A group that no longer exists (or a timeout that did not lead one) is a
+# no-op.
+kill_group() {
+  local n
+  kill -TERM -- "-$1" 2>/dev/null || return 0
+  for n in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    kill -0 -- "-$1" 2>/dev/null || return 0
+    sleep 0.1
+  done
+  kill -KILL -- "-$1" 2>/dev/null || true
+}
+
+# capped <exit code> <elapsed> <cap> -> 0 when the exit was the cap's.
+capped() {
+  [ -f "$CAP_SENTINEL" ] || { [ "$1" -eq 124 ] && [ "$2" -ge "$3" ]; }
+}
+
+# run_capped <seconds> <command> <run id>: runs <command> from the repo root
+# under run_with_cap. Sets RUN_EXIT, RUN_ELAPSED and RUN_OUTPUT.
+# Output goes to a file, not a $(...) capture: a process that escapes the
+# group kill (it called setsid, or it is a detaching daemon) would otherwise
+# hold the pipe open and keep the hook waiting until it exits on its own,
+# whatever the cap says. Each run gets its own file, removed after reading,
+# because such a process keeps writing to it: a shared file would put its
+# output into the next check's report.
+run_capped() {
+  local start
+  rm -f "$CAP_SENTINEL"
+  CHECK_LOG=$(mktemp "${TMPDIR:-/tmp}/.myspec-check.XXXXXX")
+  start=$(date +%s)
+  (cd "$REPO_ROOT" && MYSPEC_STOP_HOOK_ACTIVE=1 MYSPEC_CHECK_RUN_ID="$3" run_with_cap "$1" "$2") \
+    >"$CHECK_LOG" 2>&1 </dev/null && RUN_EXIT=0 || RUN_EXIT=$?
+  RUN_ELAPSED=$(( $(date +%s) - start ))
+  RUN_OUTPUT=$(cat "$CHECK_LOG")
+  rm -f "$CHECK_LOG"
+  CHECK_LOG=""
 }
 
 # Base ref for diff-scoped checks. A repo whose lint or type-check is already
@@ -488,30 +551,41 @@ for i in $(seq 0 $((CHECKS_COUNT - 1))); do
   NAME=$(jq -r ".checks[$i].name" "$CONFIG_FILE")
   COMMAND=$(jq -r ".checks[$i].command" "$CONFIG_FILE")
   DIFF_COMMAND=$(jq -r ".checks[$i].diffCommand // \"\"" "$CONFIG_FILE")
+  CLEANUP=$(jq -r ".checks[$i].cleanup // \"\"" "$CONFIG_FILE")
 
   if [ -n "${DIFF_COMMAND// /}" ] && [ -n "$MYSPEC_BASE_REF" ]; then
     COMMAND="$DIFF_COMMAND"
   fi
 
-  rm -f "$CAP_SENTINEL"
-  CHECK_START=$(date +%s)
-  OUTPUT=$(cd "$REPO_ROOT" && MYSPEC_STOP_HOOK_ACTIVE=1 run_with_cap "$COMMAND" 2>&1) && EXIT_CODE=0 || EXIT_CODE=$?
-  CHECK_ELAPSED=$(( $(date +%s) - CHECK_START ))
+  # Exported to the check and to its cleanup, so a wrapper that starts work
+  # the group kill cannot reach can tag it and the cleanup can find it.
+  RUN_ID="myspec-$(date +%s)-$$-$i"
+  run_capped "$CHECK_CAP_SECONDS" "$COMMAND" "$RUN_ID"
+  EXIT_CODE=$RUN_EXIT
+  OUTPUT=$RUN_OUTPUT
 
   if [ "$EXIT_CODE" -ne 0 ]; then
     # Keep the end of the output: it names the result (a summary line, the
     # last error). The first 2000 characters of the last 50 lines cut that
     # end off mid-line.
     TRUNCATED=$(printf '%s\n' "$OUTPUT" | tail -50 | tail -c 2000)
-    TIMED_OUT=0
-    if [ -f "$CAP_SENTINEL" ]; then
-      TIMED_OUT=1
-    elif [ "$EXIT_CODE" -eq 124 ] && [ "$CHECK_ELAPSED" -ge "$CHECK_CAP_SECONDS" ]; then
-      TIMED_OUT=1
-    fi
-    if [ "$TIMED_OUT" -eq 1 ]; then
+    if capped "$EXIT_CODE" "$RUN_ELAPSED" "$CHECK_CAP_SECONDS"; then
+      # Cleanup runs only here: a check that exited on its own took its
+      # remote work with it (the client returns when that work ends).
+      if [ -n "${CLEANUP// /}" ]; then
+        run_capped "$CLEANUP_CAP_SECONDS" "$CLEANUP" "$RUN_ID"
+        if [ "$RUN_EXIT" -eq 0 ]; then
+          CLEANUP_NOTE="Cleanup ran ($CLEANUP)."
+        elif capped "$RUN_EXIT" "$RUN_ELAPSED" "$CLEANUP_CAP_SECONDS"; then
+          CLEANUP_NOTE="Cleanup timed out after ${CLEANUP_CAP_SECONDS}s ($CLEANUP): work this check started in a container, on another host or detached may still be running. Confirm it stopped before running the check again."
+        else
+          CLEANUP_NOTE="Cleanup failed (exit $RUN_EXIT) ($CLEANUP): work this check started in a container, on another host or detached may still be running. Confirm it stopped before running the check again. Cleanup output: $(printf '%s\n' "$RUN_OUTPUT" | tail -10 | tail -c 600)"
+        fi
+      else
+        CLEANUP_NOTE="No cleanup declared. The kill reaches only processes on this machine that stay in the check's process group: work it runs in a container or on another host (docker exec, kubectl exec, ssh) or detaches keeps running. Confirm that stopped before running the check again, or give the check a cleanup command in .claude/verification.json."
+      fi
       TIMED_OUT_CHECKS+=("$NAME")
-      FAILED_OUTPUT+=("[$NAME timed out after ${CHECK_CAP_SECONDS}s] $COMMAND was killed before it finished, so its result is unknown. This is not a test failure. Run the check directly and report its real exit code; if it passes but is slow, reduce its runtime (narrow what it runs). Do not raise the cap. Output so far:"$'\n'"$TRUNCATED")
+      FAILED_OUTPUT+=("[$NAME timed out after ${CHECK_CAP_SECONDS}s] $COMMAND was killed before it finished, so its result is unknown. This is not a test failure. $CLEANUP_NOTE Then run the check directly and report its real exit code; if it passes but is slow, reduce its runtime (narrow what it runs). Do not raise the cap. Output so far:"$'\n'"$TRUNCATED")
     else
       FAILED_CHECKS+=("$NAME")
       FAILED_OUTPUT+=("[$NAME] $COMMAND failed:"$'\n'"$TRUNCATED")

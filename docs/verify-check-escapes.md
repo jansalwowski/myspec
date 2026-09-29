@@ -1,0 +1,42 @@
+# Stop-gate checks that escape the cap
+
+Design for issue #147, generalized. `verify-before-stop.sh` caps each check at 120 s and, since #116, kills the check's process group at the deadline. The cap is only as good as what the group kill reaches.
+
+## What escaped (measured, cap lowered to 3 s)
+
+| Escape | Hook wait before | Left running |
+|---|---|---|
+| Passing check leaves a background child (`server &`) | as long as the child, cap ignored | yes |
+| Grandchild leaves the group (`setsid`, a detaching daemon) | as long as the grandchild | yes |
+| Remote execution: `docker exec`, `docker compose exec` (same mechanism: `kubectl exec`, `ssh`) | 3 s | yes, in the container |
+
+The first two defeat the cap: the hook captured output with `$(...)`, which waits for every holder of the pipe. The third leaves one more full run per capped stop, and those overlap (#147 measured 122 s alone, 306 s with a leftover run).
+
+Rejected: a host-side sweep for processes carrying a tagged environment variable. macOS `ps` does not show other processes' environments, so it is not portable. A documented `trap` wrapper alone: it only gets the hook's 5 s TERM-to-KILL grace, and every project would need to copy the boilerplate correctly.
+
+## Design
+
+1. **Output goes to a file, not a pipe, one file per run.** The hook's wait is then bounded by the cap whatever escapes, and a detached process that keeps writing cannot reach a later check's report.
+2. **When a check exits on its own, the rest of its group gets TERM, then KILL after 2 s.** This holds with perl and with the GNU `timeout` fallback, which leads its own group; with neither, the check runs uncapped and nothing is reaped. Leftovers of a finished check are orphans. Daemons meant to persist (Gradle, Nx and the like) start their own session and are untouched.
+3. **`MYSPEC_CHECK_RUN_ID`** is exported to each check, unique per run.
+4. **Optional `checks[].cleanup`.** It runs only after a timeout, since a check that exited on its own took its remote work with it. It runs outside the killed group, with the same `MYSPEC_CHECK_RUN_ID` and its own cap: 30 s, lowered with `MYSPEC_CHECK_CAP_SECONDS`, never raised.
+5. **The timeout report says what happened to the leftover work.** It reads "Cleanup ran", "Cleanup failed (exit N)" with its output, or "Cleanup timed out". With no cleanup declared, it says work in a container, on another host or detached may still be running, and to confirm it stopped before re-running.
+6. **Doctor surface E** flags a required check that reaches a container or another host, directly or through a script, without `cleanup`.
+7. **Skills that run checks themselves** (feature-implement's controller and phase reviewer, feature-complete) export a run ID per check and run `cleanup` after they kill a check or it times out.
+
+The cleanup pattern for a container-run check is in README.md. The exec'd shell records `$$` in a file named after the run ID; cleanup runs `kill -TERM -<pid>`. That shell leads its own group in the container. Omit `--`, which BusyBox `kill` rejects.
+
+## Verification
+
+`hooks/tests/verify-before-stop-timeout.test.sh` covers:
+- a passing check's leftover child is killed and does not hold the hook;
+- a `setsid` grandchild at timeout does not hold the hook;
+- cleanup gets the run ID;
+- cleanup success, failure and timeout are each reported;
+- cleanup never runs for a check that exited on its own.
+
+Docker was verified by hand through the real hook, because CI has no daemon. Without `cleanup`, three processes survived in the container. With the README pattern, none did, and the hook returned in 4 s.
+
+## Compatibility
+
+`cleanup` is optional, and a check without it behaves as before except for item 2: a check that leaves a process in its own group now has it killed. That is the cap's intent applied to a normal exit, not a RELEASING.md breaking change. No schema, manifest or contract heading changes.
