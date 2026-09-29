@@ -1,0 +1,23 @@
+[
+  { "name": "type:bug", "renamedFrom": "bug", "color": "d73a4a", "description": "Something shipped does not work as documented" },
+  { "name": "type:enhancement", "renamedFrom": "enhancement", "color": "a2eeef", "description": "New skill, capability or convention, or a change to how one works" },
+  { "name": "type:docs", "renamedFrom": "documentation", "color": "0075ca", "description": "README, AGENTS.md, RELEASING.md, examples/ or docs/ only" },
+  { "name": "breaking", "color": "B60205", "description": "Breaks consumers without a migration; ships only in a major" },
+
+  { "name": "area:skills", "color": "5319e7", "description": "skills/ (a shipped skill body, trigger or reference)" },
+  { "name": "area:hooks", "color": "5319e7", "description": "hooks/ and hooks.json" },
+  { "name": "area:lib", "color": "5319e7", "description": "lib/ helpers called by skills and hooks" },
+  { "name": "area:framework-files", "color": "5319e7", "description": "framework-files/, blueprints/, templates/ and the manifest; init and update" },
+  { "name": "area:plugin", "color": "5319e7", "description": "Plugin packaging: .claude-plugin/, .codex-plugin/, the plugins/myspec mirror" },
+  { "name": "area:tooling", "color": "5319e7", "description": "Maintainer tooling: scripts/, evals/, quality/, .github/, .githooks/, .claude/" },
+
+  { "name": "P1", "color": "b60205", "description": "Wrong result, data loss, security, or blocks consumers; fix before the next release" },
+  { "name": "P2", "color": "fbca04", "description": "Real defect or friction with a workaround; next few PRs" },
+  { "name": "P3", "color": "c2e0c6", "description": "Polish or nice-to-have; when convenient" },
+
+  { "name": "status:needs-triage", "color": "ededed", "description": "Not yet triaged; the issue-triage workflow adds it on open" },
+  { "name": "status:needs-repro", "color": "d4c5f9", "description": "Did not reproduce on current main; waiting for a repro" },
+  { "name": "status:needs-split", "color": "d4c5f9", "description": "Bundles several problems; split into sub-issues before work starts" },
+  { "name": "status:ready", "color": "0e8a16", "description": "Triaged and reproduced; can be picked up" },
+  { "name": "status:blocked", "color": "000000", "description": "Waiting on another issue, PR or decision (named in a comment)" }
+]

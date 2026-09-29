@@ -89,6 +89,10 @@ A framework file's **name** is the same kind of contract, and it is the one that
 
 RELEASING.md "Breaking changes" defines what counts. When a change you are making or proposing meets it, open or label its issue `breaking` in the next major's milestone and label the PR `breaking` too. `/release` refuses a minor while a labelled PR is unreleased, so a missing label is how a break ships in a minor. A change with its own migration (`renamedFrom`, a `removed` entry) is not breaking.
 
+## Issues
+
+File one problem per issue, and start the title with the component it concerns, named as it is in the repo (`feature-plan: …`, `verify-before-stop: …`). `.github/ISSUE_TEMPLATE/report.md` gives the body sections. The `issue-triage` workflow reads that prefix to add `area:*` labels plus `status:needs-triage`. It runs `scripts/triage/area-labels.mjs` and makes no model call. The repo-local `/triage` skill (`.claude/skills/triage/`) then reproduces each issue on `origin/main`, dedupes it, splits bundled issues, sets type and priority, and groups ready issues into work batches by the files they touch. `.github/labels.json` defines the labels; apply changes to it with `scripts/triage/sync-labels.sh`.
+
 ## Stacked PRs
 
 A PR based on another PR's branch merges into that branch, not main. After merging the parent, GitHub retargets the child only if the parent branch was deleted. Otherwise retarget it yourself with `gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -f base=main` (`gh pr edit --base` fails with this repo's token), and confirm `mergeStateStatus` is `CLEAN` before merging. Merge the parent first: merging the child alone into main also lands the parent's commits unreviewed. (#108/#109, 2026-09-27.)
