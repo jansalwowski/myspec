@@ -12,7 +12,9 @@ Evals run **locally only**, on the maintainer's Claude Code login. There is no C
 | pre-push | cases for the skills changed on the branch, 1 run each, Sonnet | `.githooks/pre-push` → `run.sh --mode changed` | no (report-only) |
 | release | every case, 3 runs, two agent models (Sonnet, Haiku), judge Sonnet | `run.sh --mode full` | the `/release` preflight decides |
 
-Enable the hooks once per clone with `scripts/install-git-hooks.sh`. Skip the pre-push evals with `MYSPEC_SKIP_EVALS=1 git push` or `git push --no-verify`. Make a below-threshold result block the push with `MYSPEC_EVALS_STRICT=1`. The hook fails open: if `claude` is missing, not logged in, or the run errors, it warns and the push goes ahead.
+Enable the hooks once per clone with `scripts/install-git-hooks.sh`. That script and `.githooks/pre-commit` come from PR #137 (requires #137). Skip the pre-push evals with `MYSPEC_SKIP_EVALS=1 git push` or `git push --no-verify`. Make a below-threshold result block the push with `MYSPEC_EVALS_STRICT=1`.
+
+The hook prints the case count, a time estimate and the skip hint before it starts. It stops after `MYSPEC_EVAL_DEADLINE_SECONDS` (default 240) and reports what finished. It fails open: if `claude` is missing or logged out, the API is unreachable, the deadline passes, or a run errors, it warns and the push goes ahead, even under strict. Inside Claude Code (`CLAUDECODE` set) it skips the evals and tells the agent to run `scripts/evals/run.sh --mode changed` itself with a long enough Bash timeout, because the agent's default 120 s timeout would kill the push halfway. `MYSPEC_EVALS_IN_AGENT=1` runs them anyway.
 
 Each case also carries a **stability tier** tag:
 
@@ -31,14 +33,14 @@ scripts/evals/run.sh --mode full --runs 1 --models sonnet --case 'trigger-*'
 MYSPEC_EVALS_DRY_RUN=1 scripts/evals/run.sh --mode changed   # show the selection and the command, spend nothing
 ```
 
-Results go to `.eval-results/<UTC timestamp>-<mode>/<model>/` (gitignored): claude's own `aggregate-result.json` and `report.html`, plus `eval.log`. `--mode changed` runs one `claude plugin eval` invocation per selected case (its `--case` takes a single glob), so there each case has its own `<model>/<case>/` directory. The script ends with a table:
+Results go to `.eval-results/<UTC timestamp>-<mode>-<pid>/<model>/` (gitignored): claude's own `aggregate-result.json` and `report.html`, plus `eval.log`. `--mode changed` runs one `claude plugin eval` invocation per selected case (its `--case` takes a single glob), so there each case has its own `<model>/<case>/` directory. The script ends with a table:
 
 ```
-CASE                       MODEL   SCORE  FIRED  WRONG  COST   TIME  NOTES
-route-spec-review          sonnet  1.00   1/1    0/1    $0.14  33s
+CASE                       MODEL   SCORE  FIRED  WRONG  ERRORS  COST   TIME  NOTES
+route-spec-review          sonnet  1.00   1/1    0/1    -       $0.14  33s
 ```
 
-`FIRED` counts runs in which the expected skill was invoked; `WRONG` counts runs in which a sibling that should have stayed quiet was invoked. `NOTES` names the other failing graders and any run error.
+`FIRED` counts runs in which the expected skill was invoked; `WRONG` counts runs in which a sibling that should have stayed quiet was invoked. `ERRORS` counts runs that ended in an error; they are left out of the other columns. `NOTES` names the other failing graders and any run error.
 
 Every run passes `--trust-plugin --scaffold --no-publish --judge-model sonnet --ablation none`, a tool grant (`Write`, `Edit`, and read-only `git` verbs), and a cost ceiling.
 
@@ -46,12 +48,14 @@ Every run passes `--trust-plugin --scaffold --no-publish --judge-model sonnet --
 |---|---|---|
 | `MYSPEC_EVALS_STRICT` | `0` | `1`: exit 1 when a case scores below the threshold |
 | `MYSPEC_EVAL_THRESHOLD` | `0.8` | case score threshold |
-| `MYSPEC_EVAL_MAX_COST_USD` | `2` changed (per case) / `20` full (per model) | `--max-cost-usd` for each `claude plugin eval` invocation |
+| `MYSPEC_EVAL_MAX_COST_USD` | `2` changed / `20` full | cumulative ceiling for the whole call: no invocation starts once it is spent, and each one gets the remainder as `--max-cost-usd`. Runs already in flight can overshoot it by at most `MYSPEC_EVAL_CONCURRENCY` runs |
+| `MYSPEC_EVAL_DEADLINE_SECONDS` | none (pre-push: `240`) | stop launching, stop in-flight invocations, report what finished, exit 2 |
+| `MYSPEC_EVAL_PROBE_URL` | `$ANTHROPIC_BASE_URL` or `https://api.anthropic.com` | reachability probe run before any case |
 | `MYSPEC_EVAL_CONCURRENCY` | `4` | parallel runs |
 | `MYSPEC_EVAL_ABLATION` | `none` | `with-without` adds the no-plugin baseline arm and its Δ (doubles the cost) |
 | `MYSPEC_EVALS_DRY_RUN` | `0` | `1`: print selection and commands only |
 
-Exit status: `0` ran (report-only), `1` below threshold and strict, `2` infrastructure error (claude missing or logged out, bad `--base`, a case file that failed to load, cost ceiling hit, a usage or rate limit during a run). An exit 2 says nothing about the plugin; read the eval log it prints.
+Exit status: `0` ran (report-only), `1` below threshold and strict, `2` infrastructure error (claude missing or logged out, API unreachable, bad `--base`, a case file that failed to load, cost ceiling or deadline hit, or any run that ended in an error other than the `max_turns` cap). An exit 2 says nothing about the plugin; read the eval log it prints.
 
 ## Which cases `--mode changed` selects
 
@@ -169,5 +173,6 @@ A grader that cannot fail is worthless, and a case that passes whether or not th
 - **No user.** Runs are non-interactive and `AskUserQuestion` is not granted, so skills that stop for confirmation either stop or carry on. Prompts that need a finished artifact say "don't ask me anything".
 - **`--case` takes one glob.** Braces and repeated `--case` flags don't work (the last one wins). That is why `--mode changed` invokes claude once per case.
 - **No `---` inside grader frontmatter values.** A `pattern:` containing `---` breaks the frontmatter parser ("Unexpected EOF"); write `-{3}`.
-- **Usage limits look like regressions.** A run that hits the plan's usage limit is graded on nothing and scores 0 without marking the suite partial. `summary.mjs` turns such a run error into exit 2.
+- **Errored runs look like regressions.** A run that ends in an error (offline, proxy down, usage limit, timeout) is still graded, on an empty or truncated transcript, and the suite is not marked partial. Every `max: 0` sibling grader passes there by default. `summary.mjs` therefore drops such runs from SCORE, FIRED and WRONG, shows them in an ERRORS column, and exits 2. The one exception is hitting `max_turns`: trigger cases cap turns on purpose.
+- **`auth status` passes offline.** It reads local state only, so `run.sh` also probes the API URL before launching anything; offline, it fails in seconds instead of minutes of retries.
 - **Workspace `.claude/skills/` would load.** Keep fixture SKILL.md files outside `.claude/skills/` (`nearmiss-skill-verify` uses `tools/agent-skills/`), or they become project skills in the run.

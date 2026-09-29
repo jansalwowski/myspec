@@ -19,15 +19,19 @@
 # Environment:
 #   MYSPEC_EVALS_STRICT=1          exit 1 when a case scores below threshold (default: report only)
 #   MYSPEC_EVAL_THRESHOLD          case score threshold, default 0.8
-#   MYSPEC_EVAL_MAX_COST_USD       cost ceiling per claude invocation; default 2 (changed, per case) / 20 (full, per model)
+#   MYSPEC_EVAL_MAX_COST_USD       cumulative cost ceiling for this whole call, default 2 (changed) / 20 (full);
+#                                  no invocation starts once it is spent, each gets the remainder as --max-cost-usd
+#   MYSPEC_EVAL_DEADLINE_SECONDS   stop launching and kill in-flight invocations after this many seconds (default: none)
 #   MYSPEC_EVAL_CONCURRENCY        parallel runs, default 4
 #   MYSPEC_EVAL_ABLATION           none (default) | with-without
 #   MYSPEC_EVALS_DRY_RUN=1         print the selection and the commands, run nothing
 #   MYSPEC_EVAL_CLAUDE             claude binary, default: claude (tests point it at a stub)
+#   MYSPEC_EVAL_PROBE_URL          reachability probe, default $ANTHROPIC_BASE_URL or https://api.anthropic.com
 #
 # Exit status: 0 ran (report only) · 1 below threshold, only when strict ·
-#              2 infrastructure error (claude missing, not logged in, bad ref,
-#                cost ceiling hit, usage limit, eval exit 2)
+#              2 infrastructure error (claude missing, not logged in, API
+#                unreachable, bad ref, cost ceiling or deadline hit, a run
+#                that ended in an error, eval exit 2)
 
 set -uo pipefail
 
@@ -36,7 +40,7 @@ EVALS_DIR="$REPO_ROOT/evals"
 SCRIPT_DIR="$REPO_ROOT/scripts/evals"
 
 die() { echo "evals: $*" >&2; exit 2; }
-usage() { sed -n '2,31p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,35p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 MODE="" BASE="" OUT="" RUNS="" MODELS="" CASE_GLOB=""
 while [ $# -gt 0 ]; do
@@ -64,6 +68,8 @@ THRESHOLD="${MYSPEC_EVAL_THRESHOLD:-0.8}"
 CONCURRENCY="${MYSPEC_EVAL_CONCURRENCY:-4}"
 ABLATION="${MYSPEC_EVAL_ABLATION:-none}"
 if [ "$MODE" = changed ]; then MAX_COST="${MYSPEC_EVAL_MAX_COST_USD:-2}"; else MAX_COST="${MYSPEC_EVAL_MAX_COST_USD:-20}"; fi
+DEADLINE="${MYSPEC_EVAL_DEADLINE_SECONDS:-0}"
+case "$DEADLINE" in ''|*[!0-9]*) die "MYSPEC_EVAL_DEADLINE_SECONDS must be a whole number of seconds" ;; esac
 # Tools beyond the read-only set that some case needs: feature-spec writes
 # spec.md (Write, Edit); code-review reads the branch diff (git, read-only verbs).
 ALLOW_TOOLS=(Write Edit "Bash(git diff:*)" "Bash(git log:*)" "Bash(git status:*)" "Bash(git show:*)"
@@ -183,18 +189,43 @@ preflight() {
     || die "claude auth status failed or timed out; run: claude auth login"
   printf '%s' "$status" | grep -qE '"loggedIn"[[:space:]]*:[[:space:]]*true' \
     || die "claude is not logged in; run: claude auth login"
+  # `auth status` reads local state only, so it passes offline. Without this
+  # probe every run would start, fail with "Connection refused" after its
+  # retries, and cost minutes before reporting.
+  local probe="${MYSPEC_EVAL_PROBE_URL:-${ANTHROPIC_BASE_URL:-https://api.anthropic.com}}" err
+  if command -v curl >/dev/null 2>&1; then
+    err=$(curl -sS -o /dev/null --max-time 8 "$probe" 2>&1) \
+      || die "cannot reach $probe (offline, or proxy down): ${err:-curl failed}"
+  fi
 }
 
-# run_eval <output-dir> <model> [--case <glob>] — one `claude plugin eval` invocation.
+# Cost so far: agent runs plus judge calls, every arm, every finished invocation.
+spent_usd() {
+  node -e '
+    const fs = require("fs"), path = require("path");
+    let t = 0;
+    const walk = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p);
+      else if (e.name === "aggregate-result.json") {
+        try { for (const c of JSON.parse(fs.readFileSync(p, "utf8")).cases ?? [])
+          for (const r of Object.values(c.arms ?? {}).flat()) t += (r.costUsd ?? 0) + (r.judgeCostUsd ?? 0);
+        } catch {}
+      } } };
+    walk(process.argv[1]);
+    console.log(t.toFixed(4));' "$OUT"
+}
+
+# run_eval <output-dir> <model> <max-cost> [--case <glob>] — one `claude plugin eval` invocation.
 # Echoes the eval's exit code to <output-dir>/exit-code.
 run_eval() {
-  local outdir="$1" model="$2"; shift 2
+  local outdir="$1" model="$2" cost="$3"; shift 3
   mkdir -p "$outdir"
   local cmd=("$CLAUDE_BIN" plugin eval "$REPO_ROOT"
     --trust-plugin --scaffold --no-publish
     --model "$model" --judge-model sonnet
     --runs "$RUNS" --ablation "$ABLATION" --threshold "$THRESHOLD"
-    --concurrency "$CONCURRENCY" --max-cost-usd "$MAX_COST"
+    --concurrency "$CONCURRENCY" --max-cost-usd "$cost"
     --output-dir "$outdir" --report "$outdir/report.html"
     "$@"
     --allow-tools "${ALLOW_TOOLS[@]}")
@@ -260,35 +291,74 @@ printf '  %s\n' $selected
 
 if [ "${MYSPEC_EVALS_DRY_RUN:-0}" != 1 ]; then preflight; fi
 
-[ -n "$OUT" ] || OUT="$REPO_ROOT/.eval-results/$(date -u +%Y%m%dT%H%M%SZ)-$MODE"
+# The pid suffix keeps two runs started in the same second apart.
+[ -n "$OUT" ] || OUT="$REPO_ROOT/.eval-results/$(date -u +%Y%m%dT%H%M%SZ)-$MODE-$$"
 mkdir -p "$OUT" || die "cannot create $OUT"
 echo "evals: results in $OUT"
 
 worst=0
-note() { [ "$1" -gt "$worst" ] && worst="$1"; }
+note() { if [ "$1" -gt "$worst" ]; then worst="$1"; fi; }
 
+# Jobs, one per line: <output-dir>|<model>|<case glob or empty>.
+# `claude plugin eval --case` takes one glob, so --mode changed runs one
+# invocation per case, $CONCURRENCY at a time; --mode full runs one
+# invocation per model, one after the other (each parallelises its own runs).
+jobs_list=""
 IFS=',' read -r -a model_list <<< "$MODELS"
 for model in "${model_list[@]}"; do
   [ -n "$model" ] || continue
   if [ "$MODE" = full ]; then
-    run_eval "$OUT/$model" "$model" ${CASE_GLOB:+--case "$CASE_GLOB"}
-    note "$(classify "$OUT/$model")"
+    jobs_list="$jobs_list$OUT/$model|$model|$CASE_GLOB"$'\n'
   else
-    # `claude plugin eval --case` takes one glob, so a selection of several
-    # cases runs as one invocation per case, up to $CONCURRENCY at a time.
-    pids=()
     while IFS= read -r c; do
-      [ -n "$c" ] || continue
-      run_eval "$OUT/$model/$c" "$model" --case "$c" &
-      pids+=($!)
-      if [ "${#pids[@]}" -ge "$CONCURRENCY" ]; then wait "${pids[0]}"; pids=("${pids[@]:1}"); fi
-    done <<< "$selected"
-    wait
-    while IFS= read -r c; do
-      [ -n "$c" ] && note "$(classify "$OUT/$model/$c")"
+      [ -n "$c" ] && jobs_list="$jobs_list$OUT/$model/$c|$model|$c"$'\n'
     done <<< "$selected"
   fi
 done
+if [ "$MODE" = full ]; then slots=1; else slots="$CONCURRENCY"; fi
+
+started=$(date +%s)
+running=""   # "pid:outdir pid:outdir …"
+stopped=""   # why no further invocation was launched
+launched=0
+total=$(printf '%s' "$jobs_list" | grep -c .)
+while :; do
+  still=""
+  for entry in $running; do
+    if kill -0 "${entry%%:*}" 2>/dev/null; then still="$still $entry"; else wait "${entry%%:*}" 2>/dev/null; fi
+  done
+  running="$still"
+  if [ "$DEADLINE" -gt 0 ] && [ $(( $(date +%s) - started )) -ge "$DEADLINE" ] && [ -z "$stopped" ]; then
+    stopped="deadline of ${DEADLINE}s reached"
+    for entry in $running; do
+      pkill -TERM -P "${entry%%:*}" 2>/dev/null; kill -TERM "${entry%%:*}" 2>/dev/null
+      echo 143 > "${entry#*:}/exit-code" 2>/dev/null
+    done
+    for entry in $running; do wait "${entry%%:*}" 2>/dev/null; done
+    running=""
+  fi
+  n_running=$(printf '%s' "$running" | wc -w | tr -d ' ')
+  while [ -z "$stopped" ] && [ "$launched" -lt "$total" ] && [ "$n_running" -lt "$slots" ]; do
+    if [ "${MYSPEC_EVALS_DRY_RUN:-0}" = 1 ]; then left="$MAX_COST"; else
+      left=$(LC_ALL=C awk -v cap="$MAX_COST" -v s="$(spent_usd)" 'BEGIN { printf "%.4f", cap - s }')
+    fi
+    if LC_ALL=C awk -v l="$left" 'BEGIN { exit !(l <= 0) }'; then stopped="cost ceiling \$$MAX_COST reached"; break; fi
+    job=$(printf '%s' "$jobs_list" | sed -n "$((launched + 1))p")
+    IFS='|' read -r j_out j_model j_case <<< "$job"
+    run_eval "$j_out" "$j_model" "$left" ${j_case:+--case "$j_case"} &
+    running="$running $!:$j_out"
+    launched=$((launched + 1)); n_running=$((n_running + 1))
+  done
+  if [ -z "$running" ] && { [ -n "$stopped" ] || [ "$launched" -ge "$total" ]; }; then break; fi
+  sleep 1
+done
+if [ -n "$stopped" ]; then
+  echo "evals: $stopped; $((total - launched)) of $total invocation(s) not started, in-flight ones stopped" >&2
+  note 2
+fi
+while IFS='|' read -r j_out _ _; do
+  [ -n "$j_out" ] && [ -f "$j_out/exit-code" ] && note "$(classify "$j_out")"
+done <<< "$jobs_list"
 
 if [ "${MYSPEC_EVALS_DRY_RUN:-0}" = 1 ]; then exit 0; fi
 

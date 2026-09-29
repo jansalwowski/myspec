@@ -33,6 +33,7 @@ if [ "${1:-} ${2:-}" = "auth status" ]; then
   exit 0
 fi
 if [ "${1:-} ${2:-}" = "plugin eval" ]; then
+  [ -n "${STUB_SLEEP:-}" ] && sleep "$STUB_SLEEP"
   out="" case_name="all" model="-"
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -51,7 +52,7 @@ if [ "${1:-} ${2:-}" = "plugin eval" ]; then
    "graders":[{"name":"right-skill","type":"tool_used","config":{"tool":"Skill"}},
               {"name":"wrong-skill","type":"tool_used","config":{"tool":"Skill","min":0,"max":0}}],
    "aggregates":{"score":${STUB_SCORE:-1}},
-   "arms":{"with":[{"score":${STUB_SCORE:-1},"costUsd":0.01,"judgeCostUsd":0,"durationSeconds":3,"error":null,
+   "arms":{"with":[{"score":${STUB_SCORE:-1},"costUsd":${STUB_COST:-0.01},"judgeCostUsd":0,"durationSeconds":3,"error":${STUB_ERROR:-null},
      "graders":[{"name":"right-skill","passed":true},{"name":"wrong-skill","passed":true}]}]}}]}
 JSON
   fi
@@ -62,7 +63,10 @@ exit 0
 SH
 chmod +x "$STUB"
 export STUB_LOG MYSPEC_EVAL_CLAUDE="$STUB"
-unset MYSPEC_EVALS_STRICT MYSPEC_SKIP_EVALS MYSPEC_EVALS_DRY_RUN MYSPEC_EVAL_THRESHOLD
+unset MYSPEC_EVALS_STRICT MYSPEC_SKIP_EVALS MYSPEC_EVALS_DRY_RUN MYSPEC_EVAL_THRESHOLD \
+  MYSPEC_EVAL_DEADLINE_SECONDS MYSPEC_EVAL_MAX_COST_USD MYSPEC_EVAL_CONCURRENCY CLAUDECODE MYSPEC_EVALS_IN_AGENT
+# The reachability probe must not touch the network in tests.
+export MYSPEC_EVAL_PROBE_URL="file:///dev/null"
 
 # ------------------------------------------------------- synthetic repo
 
@@ -206,6 +210,52 @@ out=$(STUB_LOGGED_IN=false "$RUN" --mode changed --out "$TMP/x6" 2>&1); rc=$?
 expect_eq "not logged in: exit 2" "$rc" "2"
 expect_has "not logged in: says how to fix" "$out" "claude auth login"
 
+echo "# errored runs, reachability, deadline, cumulative cost, results dir"
+out=$(STUB_ERROR='"exit 1: API Error: Connection refused"' STUB_SCORE=0.67 STUB_EXIT=1 "$RUN" --mode changed --out "$TMP/e1" 2>&1); rc=$?
+expect_eq "run that ended in an API error: exit 2, not below threshold" "$rc" "2"
+expect_lacks "API error: not reported as a low score" "$out" "0.67"
+expect_has "API error: row marked as an error" "$out" "error"
+out=$(MYSPEC_EVALS_STRICT=1 STUB_ERROR='"exit 1: API Error: Connection refused"' STUB_SCORE=0.67 STUB_EXIT=1 "$RUN" --mode changed --out "$TMP/e2" 2>&1); rc=$?
+expect_eq "API error under strict: exit 2 (fail open), never 1" "$rc" "2"
+out=$(STUB_ERROR='"exit 1: Reached maximum number of turns (6)"' "$RUN" --mode changed --out "$TMP/e3" 2>&1); rc=$?
+expect_eq "max_turns cap is not an infrastructure error: exit 0" "$rc" "0"
+
+: > "$STUB_LOG"
+start=$(date +%s)
+out=$(MYSPEC_EVAL_PROBE_URL="http://127.0.0.1:9/" "$RUN" --mode changed --out "$TMP/p1" 2>&1); rc=$?
+expect_eq "API unreachable: exit 2" "$rc" "2"
+expect_has "API unreachable: says so" "$out" "cannot reach"
+expect_lacks "API unreachable: no eval run started" "$(cat "$STUB_LOG")" "plugin eval"
+[ $(( $(date +%s) - start )) -lt 15 ] && ok "API unreachable: fails in seconds" || nok "API unreachable: fails in seconds"
+
+git checkout -q s7   # lib.sh change: selects all three cases
+: > "$STUB_LOG"
+start=$(date +%s)
+out=$(MYSPEC_EVAL_CONCURRENCY=1 MYSPEC_EVAL_DEADLINE_SECONDS=2 STUB_SLEEP=4 "$RUN" --mode changed --out "$TMP/d1" 2>&1); rc=$?
+elapsed=$(( $(date +%s) - start ))
+expect_eq "deadline: exit 2" "$rc" "2"
+expect_has "deadline: says it stopped" "$out" "deadline of 2s reached"
+expect_eq "deadline: no further case launched" "$(grep -c 'plugin eval' "$STUB_LOG")" "1"
+[ "$elapsed" -lt 8 ] && ok "deadline: in-flight run stopped (${elapsed}s)" || nok "deadline: in-flight run stopped (${elapsed}s)"
+
+: > "$STUB_LOG"
+out=$(MYSPEC_EVAL_CONCURRENCY=1 MYSPEC_EVAL_MAX_COST_USD=0.015 STUB_COST=0.01 "$RUN" --mode changed --out "$TMP/c1" 2>&1); rc=$?
+expect_eq "cumulative cost ceiling: exit 2" "$rc" "2"
+expect_has "cumulative cost ceiling: says so" "$out" "cost ceiling \$0.015 reached"
+expect_eq "cumulative cost ceiling: stops after the budget is spent" "$(grep -c 'plugin eval' "$STUB_LOG")" "2"
+expect_has "cumulative cost ceiling: next invocation gets the remainder" "$(grep 'plugin eval' "$STUB_LOG" | sed -n 2p)" "--max-cost-usd 0.0050"
+: > "$STUB_LOG"
+LC_ALL=pl_PL.UTF-8 "$RUN" --mode changed --out "$TMP/c2" >/dev/null 2>&1
+expect_has "cost passed with a dot even in a comma-decimal locale" "$(cat "$STUB_LOG")" "--max-cost-usd 2.0000"
+
+rm -rf "$REPO/.eval-results"
+MYSPEC_EVALS_DRY_RUN=1 "$RUN" --mode changed >/dev/null 2>&1 &
+MYSPEC_EVALS_DRY_RUN=1 "$RUN" --mode changed >/dev/null 2>&1 &
+wait
+ndirs=$(ls -d "$REPO"/.eval-results/*-changed* 2>/dev/null | wc -l | tr -d ' ')
+expect_eq "two runs started together get separate results dirs" "$ndirs" "2"
+rm -rf "$REPO/.eval-results"
+
 echo "# pre-push ref parsing"
 HOOK="$REPO/.githooks/pre-push"
 ZERO=0000000000000000000000000000000000000000
@@ -225,7 +275,7 @@ tip2=$(git rev-parse HEAD)
 : > "$STUB_LOG"
 out=$(echo "refs/heads/s1 $tip2 refs/heads/s1 $tip" | "$HOOK" origin "$ORIGIN" 2>&1); rc=$?
 expect_eq "existing branch, docs-only push: exit 0" "$rc" "0"
-expect_has "existing branch: range starts at the remote sha" "$out" "nothing to run"
+expect_has "existing branch: range starts at the remote sha" "$out" "no eval cases cover"
 expect_lacks "existing branch, docs-only: no eval run" "$(cat "$STUB_LOG")" "plugin eval"
 
 : > "$STUB_LOG"
@@ -263,7 +313,45 @@ expect_eq "below threshold, report-only: push allowed" "$rc" "0"
 out=$(echo "$line" | MYSPEC_EVALS_STRICT=1 STUB_SCORE=0.5 STUB_EXIT=1 "$HOOK" origin "$ORIGIN" 2>&1); rc=$?
 expect_eq "below threshold, strict: push blocked" "$rc" "1"
 
+echo "# pre-push: hint first, agent skip, deadline, offline"
+out=$(echo "$line" | "$HOOK" origin "$ORIGIN" 2>&1); rc=$?
+first=$(printf '%s\n' "$out" | head -1)
+expect_has "hint comes first: case count" "$first" "2 eval case(s)"
+expect_has "hint comes first: time estimate" "$first" "about 60s"
+expect_has "hint comes first: how to skip" "$first" "MYSPEC_SKIP_EVALS=1"
+: > "$STUB_LOG"
+out=$(echo "$line" | CLAUDECODE=1 "$HOOK" origin "$ORIGIN" 2>&1); rc=$?
+expect_eq "inside Claude Code: exit 0" "$rc" "0"
+expect_has "inside Claude Code: tells the agent to run the evals itself" "$out" "scripts/evals/run.sh --mode changed"
+expect_lacks "inside Claude Code: no eval run" "$(cat "$STUB_LOG")" "plugin eval"
+: > "$STUB_LOG"
+out=$(echo "$line" | CLAUDECODE=1 MYSPEC_EVALS_IN_AGENT=1 "$HOOK" origin "$ORIGIN" 2>&1); rc=$?
+expect_has "MYSPEC_EVALS_IN_AGENT=1: runs anyway" "$(cat "$STUB_LOG")" "plugin eval"
+start=$(date +%s)
+out=$(echo "$line" | MYSPEC_EVALS_STRICT=1 MYSPEC_EVAL_DEADLINE_SECONDS=2 STUB_SLEEP=6 "$HOOK" origin "$ORIGIN" 2>&1); rc=$?
+expect_eq "deadline in the hook: push goes ahead even when strict" "$rc" "0"
+[ $(( $(date +%s) - start )) -lt 10 ] && ok "deadline in the hook: returns promptly" || nok "deadline in the hook: returns promptly"
+out=$(echo "$line" | MYSPEC_EVALS_STRICT=1 MYSPEC_EVAL_PROBE_URL="http://127.0.0.1:9/" "$HOOK" origin "$ORIGIN" 2>&1); rc=$?
+expect_eq "offline push with strict: fails open" "$rc" "0"
+
+echo "# pre-push: force push after a rebase"
+git checkout -q -B fp main
+echo "gamma work" >> skills/gamma/SKILL.md; git commit -qam "gamma change on the branch"
+git push -q origin fp
+old_tip=$(git rev-parse HEAD)
+git checkout -q main
+echo "beta work" >> skills/beta/SKILL.md; git commit -qam "beta change on main"
+git push -q origin main
+git checkout -q fp
+git rebase -q main
+new_tip=$(git rev-parse HEAD)
+: > "$STUB_LOG"
+out=$(echo "refs/heads/fp $new_tip refs/heads/fp $old_tip" | "$HOOK" origin "$ORIGIN" 2>&1); rc=$?
+expect_has "force push after rebase: evaluates the branch's own change" "$(cat "$STUB_LOG")" "--case case-alpha-gamma"
+expect_lacks "force push after rebase: does not evaluate main's change" "$(cat "$STUB_LOG")" "--case case-beta"
+
 echo "# real git push through the hook (temp repo's own config only)"
+git checkout -q s12
 git config core.hooksPath .githooks
 : > "$STUB_LOG"
 out=$(git push -q origin s12 2>&1 < /dev/null); rc=$?

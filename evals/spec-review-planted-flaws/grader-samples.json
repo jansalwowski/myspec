@@ -1,10 +1,15 @@
 {
   "flags-contradiction": {
     "pass": [
-      "| Critical | Consistency | spec.md | 21, 24 | REQ-002 says every invoice regardless of status, but REQ-004 says drafts must never appear. |"
+      "| Critical | Consistency | spec.md | 21, 24 | REQ-002 says every invoice regardless of status, but REQ-004 says drafts must never appear. |",
+      "REQ-002 contradicts REQ-004: one includes every status, the other excludes drafts.",
+      "### REQ-002 vs REQ-004"
     ],
     "fail": [
-      "REQ-002 is clear and complete. AC-2 needs a number."
+      "REQ-002 is clear and complete. AC-2 needs a number.",
+      "REQ-001, REQ-002, REQ-003 and REQ-004 have no acceptance criteria.",
+      "REQ-002 and REQ-004 are clear, but AC-2 is vague.",
+      "REQ-002 is fine.\nThe export in REQ-004 needs a format."
     ]
   },
   "flags-untestable-ac": {

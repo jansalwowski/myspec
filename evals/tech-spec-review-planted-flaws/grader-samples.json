@@ -3,11 +3,15 @@
     "pass": [
       "| REQ-004 | — | — |",
       "| Critical | Spec Alignment | Uncovered requirement | spec.md | 24 | REQ-004 (drafts never exported) has no implementation step; by_issue_date returns every status. |",
-      "REQ-004 is not covered: nothing filters drafts, so they would be exported."
+      "REQ-004 is not covered: nothing filters drafts, so they would be exported.",
+      "| REQ-004 — drafts never exported | — | — |"
     ],
     "fail": [
       "| REQ-004 | 2 | full — drafts excluded by the repository |",
-      "REQ-004 maps to step 2 and is fully covered."
+      "REQ-004 maps to step 2 and is fully covered.",
+      "| REQ-004: Draft invoices must never appear in an export | 2 | full |",
+      "| REQ-004 | 2 | — |",
+      "| REQ-004 | 2 | full — nothing is missing |"
     ]
   },
   "flags-ignored-reuse": {
@@ -21,10 +25,16 @@
   "verdict-blocks-planning": {
     "pass": [
       "| Critical | Spec Alignment | Uncovered requirement | spec.md | 24 | ... |",
-      "### Critical\n- REQ-004 has no step"
+      "### Critical\n- REQ-004 has no step",
+      "1 Critical and 1 High remain, so feature-plan is blocked.",
+      "| **Critical** | Spec Alignment | Uncovered requirement |"
     ],
     "fail": [
-      "| High | Pattern Conformance | Hand-rolled CSV | tech-spec.md | 34 | on the critical path |"
+      "| High | Pattern Conformance | Hand-rolled CSV | tech-spec.md | 34 | on the critical path |",
+      "No **Critical** findings; 2 High.",
+      "### Critical\nNone.",
+      "### Critical\n\n- none",
+      "0 Critical, 2 High."
     ]
   },
   "verdict-not-passed": {
