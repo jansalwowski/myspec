@@ -1,0 +1,1005 @@
+{
+ "schemaVersion": 1,
+ "claudeVersion": "2.1.290",
+ "durationSeconds": 60,
+ "costUsd": 0,
+ "partial": false,
+ "suite": {
+  "ablation": "none",
+  "modelOverride": "sonnet",
+  "judgeModel": "sonnet",
+  "threshold": 0.8
+ },
+ "cases": [
+  {
+   "name": "case-01",
+   "graders": [
+    {
+     "name": "right-skill",
+     "type": "tool_used",
+     "config": {
+      "tool": "Skill"
+     }
+    },
+    {
+     "name": "finds-flaw",
+     "type": "regex",
+     "config": {}
+    }
+   ],
+   "arms": {
+    "with": [
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     },
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     },
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     }
+    ]
+   },
+   "aggregates": {
+    "score": 1
+   }
+  },
+  {
+   "name": "case-02",
+   "graders": [
+    {
+     "name": "right-skill",
+     "type": "tool_used",
+     "config": {
+      "tool": "Skill"
+     }
+    },
+    {
+     "name": "finds-flaw",
+     "type": "regex",
+     "config": {}
+    }
+   ],
+   "arms": {
+    "with": [
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     },
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     },
+     {
+      "score": 0.9,
+      "passed": false,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": false,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     }
+    ]
+   },
+   "aggregates": {
+    "score": 0.9666666666666667
+   }
+  },
+  {
+   "name": "case-03",
+   "graders": [
+    {
+     "name": "right-skill",
+     "type": "tool_used",
+     "config": {
+      "tool": "Skill"
+     }
+    },
+    {
+     "name": "finds-flaw",
+     "type": "regex",
+     "config": {}
+    }
+   ],
+   "arms": {
+    "with": [
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     },
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     },
+     {
+      "score": 0.9,
+      "passed": false,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": false,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     }
+    ]
+   },
+   "aggregates": {
+    "score": 0.9666666666666667
+   }
+  },
+  {
+   "name": "case-04",
+   "graders": [
+    {
+     "name": "right-skill",
+     "type": "tool_used",
+     "config": {
+      "tool": "Skill"
+     }
+    },
+    {
+     "name": "finds-flaw",
+     "type": "regex",
+     "config": {}
+    }
+   ],
+   "arms": {
+    "with": [
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     },
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     },
+     {
+      "score": 0.9,
+      "passed": false,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": false,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     }
+    ]
+   },
+   "aggregates": {
+    "score": 0.9666666666666667
+   }
+  },
+  {
+   "name": "case-05",
+   "graders": [
+    {
+     "name": "right-skill",
+     "type": "tool_used",
+     "config": {
+      "tool": "Skill"
+     }
+    },
+    {
+     "name": "finds-flaw",
+     "type": "regex",
+     "config": {}
+    }
+   ],
+   "arms": {
+    "with": [
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     },
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     },
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     }
+    ]
+   },
+   "aggregates": {
+    "score": 1
+   }
+  },
+  {
+   "name": "case-06",
+   "graders": [
+    {
+     "name": "right-skill",
+     "type": "tool_used",
+     "config": {
+      "tool": "Skill"
+     }
+    },
+    {
+     "name": "finds-flaw",
+     "type": "regex",
+     "config": {}
+    }
+   ],
+   "arms": {
+    "with": [
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     },
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     },
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     }
+    ]
+   },
+   "aggregates": {
+    "score": 1
+   }
+  },
+  {
+   "name": "case-07",
+   "graders": [
+    {
+     "name": "right-skill",
+     "type": "tool_used",
+     "config": {
+      "tool": "Skill"
+     }
+    },
+    {
+     "name": "finds-flaw",
+     "type": "regex",
+     "config": {}
+    }
+   ],
+   "arms": {
+    "with": [
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     },
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     },
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     }
+    ]
+   },
+   "aggregates": {
+    "score": 1
+   }
+  },
+  {
+   "name": "case-08",
+   "graders": [
+    {
+     "name": "right-skill",
+     "type": "tool_used",
+     "config": {
+      "tool": "Skill"
+     }
+    },
+    {
+     "name": "finds-flaw",
+     "type": "regex",
+     "config": {}
+    }
+   ],
+   "arms": {
+    "with": [
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     },
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     },
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     }
+    ]
+   },
+   "aggregates": {
+    "score": 1
+   }
+  },
+  {
+   "name": "case-09",
+   "graders": [
+    {
+     "name": "right-skill",
+     "type": "tool_used",
+     "config": {
+      "tool": "Skill"
+     }
+    },
+    {
+     "name": "finds-flaw",
+     "type": "regex",
+     "config": {}
+    }
+   ],
+   "arms": {
+    "with": [
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     },
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     },
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     }
+    ]
+   },
+   "aggregates": {
+    "score": 1
+   }
+  },
+  {
+   "name": "case-10",
+   "graders": [
+    {
+     "name": "right-skill",
+     "type": "tool_used",
+     "config": {
+      "tool": "Skill"
+     }
+    },
+    {
+     "name": "finds-flaw",
+     "type": "regex",
+     "config": {}
+    }
+   ],
+   "arms": {
+    "with": [
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     },
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     },
+     {
+      "score": 1,
+      "passed": true,
+      "costUsd": 0.1,
+      "judgeCostUsd": 0.01,
+      "durationSeconds": 10,
+      "error": null,
+      "graders": [
+       {
+        "name": "right-skill",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "finds-flaw",
+        "passed": true,
+        "scored": true
+       },
+       {
+        "name": "plugin-fired",
+        "passed": false,
+        "scored": false
+       }
+      ]
+     }
+    ]
+   },
+   "aggregates": {
+    "score": 1
+   }
+  }
+ ]
+}
