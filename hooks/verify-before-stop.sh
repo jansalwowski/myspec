@@ -381,12 +381,8 @@ CLEANUP_CAP_SECONDS=30
 [ "$CHECK_CAP_SECONDS" -lt "$CLEANUP_CAP_SECONDS" ] && CLEANUP_CAP_SECONDS=$CHECK_CAP_SECONDS
 CAP_SENTINEL=$(mktemp "${TMPDIR:-/tmp}/.myspec-cap.XXXXXX")
 rm -f "$CAP_SENTINEL"
-# Check output goes to this file, not a $(...) capture: a process that
-# escapes the group kill (it called setsid, or it is a detaching daemon)
-# would otherwise hold the pipe open and keep the hook waiting until it
-# exits on its own, whatever the cap says.
-CHECK_LOG=$(mktemp "${TMPDIR:-/tmp}/.myspec-check.XXXXXX")
-trap 'rm -f "$MARKER_FILE" "$CHECK_LOG" "$CAP_SENTINEL"' EXIT
+CHECK_LOG=""
+trap 'rm -f "$MARKER_FILE" "$CAP_SENTINEL" ${CHECK_LOG:+"$CHECK_LOG"}' EXIT
 
 # run_with_cap <seconds> <command>: runs it under the cap and kills the whole
 # process group at the deadline. Killing only the direct child is not enough:
@@ -398,8 +394,10 @@ trap 'rm -f "$MARKER_FILE" "$CHECK_LOG" "$CAP_SENTINEL"' EXIT
 # own. When the command exits on its own, whatever it left in its group (a
 # server started with &, workers that did not exit) is killed too: nothing
 # will read their output. Without perl, GNU timeout also signals the group at
-# the deadline; its exit 124 is ambiguous, so the caller also checks the
-# elapsed time. With neither, the command runs uncapped.
+# the deadline (it leads the group it runs in), and kill_group reaps the rest
+# after it returns; its exit 124 is ambiguous, so the caller also checks the
+# elapsed time. With neither, the command runs uncapped and its leftovers
+# are not reaped.
 # The group kill reaches only processes on this machine that stay in the
 # group. Work a command runs in a container or on another host (docker exec,
 # kubectl exec, ssh) outlives its client; the check's cleanup command is how
@@ -428,13 +426,30 @@ run_with_cap() {
       }
       exit $rc;
     ' "$1" "$CAP_SENTINEL" bash -c "$2"
-  elif command -v gtimeout &>/dev/null; then
-    gtimeout "$1" bash -c "$2"
-  elif command -v timeout &>/dev/null; then
-    timeout "$1" bash -c "$2"
+  elif command -v gtimeout &>/dev/null || command -v timeout &>/dev/null; then
+    local bin pid rc=0
+    bin=$(command -v gtimeout || command -v timeout)
+    "$bin" "$1" bash -c "$2" &
+    pid=$!
+    wait "$pid" || rc=$?
+    kill_group "$pid"
+    return "$rc"
   else
     bash -c "$2"
   fi
+}
+
+# kill_group <pgid>: TERM what is left of the process group, KILL after 2 s.
+# A group that no longer exists (or a timeout that did not lead one) is a
+# no-op.
+kill_group() {
+  local n
+  kill -TERM -- "-$1" 2>/dev/null || return 0
+  for n in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    kill -0 -- "-$1" 2>/dev/null || return 0
+    sleep 0.1
+  done
+  kill -KILL -- "-$1" 2>/dev/null || true
 }
 
 # capped <exit code> <elapsed> <cap> -> 0 when the exit was the cap's.
@@ -443,16 +458,24 @@ capped() {
 }
 
 # run_capped <seconds> <command> <run id>: runs <command> from the repo root
-# under run_with_cap with its output in $CHECK_LOG. Sets RUN_EXIT, RUN_ELAPSED
-# and RUN_OUTPUT.
+# under run_with_cap. Sets RUN_EXIT, RUN_ELAPSED and RUN_OUTPUT.
+# Output goes to a file, not a $(...) capture: a process that escapes the
+# group kill (it called setsid, or it is a detaching daemon) would otherwise
+# hold the pipe open and keep the hook waiting until it exits on its own,
+# whatever the cap says. Each run gets its own file, removed after reading,
+# because such a process keeps writing to it: a shared file would put its
+# output into the next check's report.
 run_capped() {
   local start
   rm -f "$CAP_SENTINEL"
+  CHECK_LOG=$(mktemp "${TMPDIR:-/tmp}/.myspec-check.XXXXXX")
   start=$(date +%s)
   (cd "$REPO_ROOT" && MYSPEC_STOP_HOOK_ACTIVE=1 MYSPEC_CHECK_RUN_ID="$3" run_with_cap "$1" "$2") \
     >"$CHECK_LOG" 2>&1 </dev/null && RUN_EXIT=0 || RUN_EXIT=$?
   RUN_ELAPSED=$(( $(date +%s) - start ))
   RUN_OUTPUT=$(cat "$CHECK_LOG")
+  rm -f "$CHECK_LOG"
+  CHECK_LOG=""
 }
 
 # Base ref for diff-scoped checks. A repo whose lint or type-check is already

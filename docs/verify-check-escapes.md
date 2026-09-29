@@ -16,8 +16,8 @@ Rejected: a host-side sweep for processes carrying a tagged environment variable
 
 ## Design
 
-1. **Output goes to a file, not a pipe.** The hook's wait is then bounded by the cap whatever escapes.
-2. **When a check exits on its own, the rest of its group gets TERM, then KILL after 2 s.** Leftovers of a finished check are orphans. Daemons meant to persist (Gradle, Nx and the like) start their own session and are untouched.
+1. **Output goes to a file, not a pipe, one file per run.** The hook's wait is then bounded by the cap whatever escapes, and a detached process that keeps writing cannot reach a later check's report.
+2. **When a check exits on its own, the rest of its group gets TERM, then KILL after 2 s.** This holds with perl and with the GNU `timeout` fallback, which leads its own group; with neither, the check runs uncapped and nothing is reaped. Leftovers of a finished check are orphans. Daemons meant to persist (Gradle, Nx and the like) start their own session and are untouched.
 3. **`MYSPEC_CHECK_RUN_ID`** is exported to each check, unique per run.
 4. **Optional `checks[].cleanup`.** It runs only after a timeout, since a check that exited on its own took its remote work with it. It runs outside the killed group, with the same `MYSPEC_CHECK_RUN_ID` and its own cap: 30 s, lowered with `MYSPEC_CHECK_CAP_SECONDS`, never raised.
 5. **The timeout report says what happened to the leftover work.** It reads "Cleanup ran", "Cleanup failed (exit N)" with its output, or "Cleanup timed out". With no cleanup declared, it says work in a container, on another host or detached may still be running, and to confirm it stopped before re-running.
