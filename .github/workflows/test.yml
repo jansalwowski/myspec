@@ -25,7 +25,7 @@ jobs:
         run: |
           status=0
           shopt -s nullglob
-          for suite in lib/tests/*.test.sh hooks/tests/*.test.sh; do
+          for suite in lib/tests/*.test.sh hooks/tests/*.test.sh scripts/tests/*.test.sh; do
             echo "::group::$suite"
             if bash "$suite"; then
               echo "PASS $suite"
@@ -45,3 +45,28 @@ jobs:
 
       - name: Check for concrete localhost:<port> addresses
         run: scripts/check-no-localhost-ports.sh
+
+  skill-lint:
+    name: skill lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Lint every SKILL.md
+        run: |
+          node scripts/lint-skills.mjs
+          node scripts/lint-skills.mjs --files plugins/myspec/skills/*/SKILL.md
+
+      - name: Hook scripts parse (bash -n)
+        run: |
+          status=0
+          for f in hooks/*.sh hooks/*/*.sh .githooks/* scripts/*.sh; do
+            [ -f "$f" ] || continue
+            head -n1 "$f" | grep -qE '^#!.*[/ ](ba)?sh( |$)' || continue
+            bash -n "$f" || { echo "::error file=$f::bash -n failed"; status=1; }
+          done
+          exit $status

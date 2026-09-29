@@ -1,0 +1,171 @@
+#!/usr/bin/env bash
+# Regression fixture for .githooks/pre-commit and scripts/install-git-hooks.sh.
+#
+# Everything runs in a throwaway clone. The installer writes git config, and a
+# worktree shares .git/config with the main checkout, so it must never run
+# against the repo this suite lives in. The git environment a calling hook may
+# export (GIT_DIR, GIT_INDEX_FILE, ...) is cleared for the same reason.
+#
+# Usage: git-hooks.test.sh
+
+set -uo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+SRC=$(cd "$HERE/../.." && pwd)
+for f in scripts/lint-skills.mjs scripts/install-git-hooks.sh .githooks/pre-commit; do
+  [ -f "$SRC/$f" ] || { echo "FATAL: missing $SRC/$f" >&2; exit 1; }
+done
+
+# shellcheck disable=SC2046
+unset $(git rev-parse --local-env-vars 2>/dev/null)
+export GIT_CONFIG_GLOBAL=/dev/null
+export GIT_CONFIG_SYSTEM=/dev/null
+
+TMP=$(cd "$(mktemp -d)" && pwd -P)
+trap 'rm -rf "$TMP"' EXIT
+REPO="$TMP/repo"
+
+PASS=0
+FAIL=0
+ok()   { PASS=$((PASS + 1)); }
+fail() { FAIL=$((FAIL + 1)); printf 'FAIL  %s\n' "$1" >&2; }
+expect_line()    { if grep -Eq -- "$1" <<<"$OUTPUT"; then ok; else fail "$2 (no line matching: $1)"; fi; }
+expect_no_line() { if grep -Eq -- "$1" <<<"$OUTPUT"; then fail "$2 (unexpected line matching: $1)"; else ok; fi; }
+expect_exit()    { if [ "$STATUS" -eq "$1" ]; then ok; else fail "$2 (exit $STATUS, want $1)"; fi; }
+in_repo() { OUTPUT=$(cd "${WT:-$REPO}" && "$@" 2>&1); STATUS=$?; [ -z "${DEBUG:-}" ] || printf "%s\n" "$OUTPUT" >&2; }
+hooks_path() { git -C "$REPO" config --local --get core.hooksPath; }
+
+good_skill() {
+  mkdir -p "$(dirname "$1")"
+  printf -- '---\nname: %s\ndescription: "Use when a demo needs linting. Do NOT use for real work."\n---\n\n# Demo\n' "$2" > "$1"
+}
+bad_skill() {
+  mkdir -p "$(dirname "$1")"
+  printf -- '---\nname: %s\ndescription: "Use to lint demos."\n---\n\n# Demo\n' "$2" > "$1"
+}
+
+mkdir -p "$REPO/scripts" "$REPO/.githooks" "$REPO/skills" "$REPO/hooks"
+cp "$SRC/scripts/lint-skills.mjs" "$SRC/scripts/install-git-hooks.sh" "$REPO/scripts/"
+cp "$SRC/.githooks/pre-commit" "$REPO/.githooks/"
+cd "$REPO" || exit 1
+git init -q -b main .
+git config user.email t@t
+git config user.name t
+good_skill skills/base/SKILL.md base
+git add -A
+git commit -qm init
+
+# ── installer ───────────────────────────────────────────────────────────────
+in_repo scripts/install-git-hooks.sh
+expect_exit 0 "install exits 0"
+expect_line "set core.hooksPath=\.githooks" "install says what it set"
+expect_line "active: \.githooks/pre-commit" "install lists the active hook"
+[ "$(hooks_path)" = ".githooks" ] && ok || fail "install writes core.hooksPath=.githooks"
+
+in_repo scripts/install-git-hooks.sh
+expect_exit 0 "second install exits 0"
+expect_line "already \.githooks; nothing to do" "install is idempotent"
+
+git worktree add -q "$TMP/wt" -b wt-branch
+WT="$TMP/wt" in_repo scripts/install-git-hooks.sh
+expect_line "already \.githooks" "install from a linked worktree sees the shared setting"
+WT="$TMP/wt" in_repo git rev-parse --git-path hooks
+expect_line "^\.githooks$" "a linked worktree resolves hooks to its own .githooks"
+
+git config --local core.hooksPath .husky
+in_repo scripts/install-git-hooks.sh
+expect_exit 1 "install refuses to replace a foreign hooksPath"
+[ "$(hooks_path)" = ".husky" ] && ok || fail "a refused install leaves the foreign hooksPath"
+in_repo scripts/install-git-hooks.sh --uninstall
+expect_line "is \.husky, not \.githooks; left unchanged" "uninstall leaves a foreign hooksPath"
+in_repo scripts/install-git-hooks.sh --force
+expect_line "replaced \.husky" "--force replaces and says what it replaced"
+
+printf '[core]\n\thooksPath = /elsewhere\n' > "$TMP/global.cfg"
+git config --local --unset core.hooksPath
+OUTPUT=$(cd "$REPO" && GIT_CONFIG_GLOBAL="$TMP/global.cfg" scripts/install-git-hooks.sh 2>&1); STATUS=$?
+expect_exit 0 "install over a global hooksPath exits 0"
+expect_line "overrides your global core.hooksPath \(/elsewhere\)" "install notes the global it overrides"
+
+in_repo scripts/install-git-hooks.sh --uninstall
+expect_line "unset core.hooksPath" "uninstall unsets"
+hooks_path >/dev/null && fail "uninstall removes core.hooksPath" || ok
+in_repo scripts/install-git-hooks.sh --uninstall
+expect_exit 0 "second uninstall exits 0"
+expect_line "nothing to uninstall" "uninstall is idempotent"
+
+in_repo scripts/install-git-hooks.sh --bogus
+expect_exit 2 "an unknown flag exits 2"
+
+in_repo scripts/install-git-hooks.sh
+git worktree remove --force "$TMP/wt"
+
+# ── pre-commit ──────────────────────────────────────────────────────────────
+echo notes > README.txt
+git add README.txt
+in_repo git commit -qm "no skills staged"
+expect_exit 0 "a commit with no skill or hook staged passes"
+
+bad_skill skills/bad/SKILL.md bad
+git add skills/bad/SKILL.md
+in_repo git commit -qm "bad skill"
+expect_exit 1 "a bad staged skill blocks the commit"
+expect_line "skills/bad/SKILL\.md:3: DESC-USE-WHEN" "the finding is shown"
+expect_line "git commit --no-verify" "the escape hatch is named"
+in_repo git commit -q --no-verify -m "bypass"
+expect_exit 0 "--no-verify bypasses the hook"
+
+good_skill "skills/with space/SKILL.md" "x"
+git add "skills/with space/SKILL.md"
+in_repo git commit -qm "spaced path"
+expect_exit 1 "a staged skill under a path with spaces is linted"
+expect_line "skills/with space/SKILL\.md:2: NAME-MISMATCH" "the spaced path is reported intact"
+git reset -q
+rm -rf "skills/with space"
+
+good_skill skills/fine/SKILL.md fine
+git add skills/fine/SKILL.md
+in_repo git commit -qm "good skill"
+expect_exit 0 "a good staged skill passes"
+expect_no_line "DESC-USE-WHEN" "a committed bad skill that is not staged is not linted"
+
+git rm -q skills/fine/SKILL.md
+in_repo git commit -qm "delete a skill"
+expect_exit 0 "a staged deletion passes"
+
+good_skill skills/gone/SKILL.md gone
+git add skills/gone/SKILL.md
+bad_skill skills/gone/SKILL.md gone
+git add skills/gone/SKILL.md
+rm skills/gone/SKILL.md
+in_repo git commit -qm "staged then removed from disk"
+expect_exit 0 "a staged file missing from the working tree is skipped, not an error"
+expect_no_line "no such file" "the linter is not handed a missing path"
+
+mkdir -p plugins/myspec/skills/bad2
+bad_skill plugins/myspec/skills/bad2/SKILL.md bad2
+git add plugins/myspec/skills/bad2/SKILL.md
+in_repo git commit -qm "bad mirror skill"
+expect_exit 1 "a bad skill in the plugin mirror blocks the commit"
+git reset -q
+rm -rf plugins
+
+mkdir -p skills/nested/references
+bad_skill skills/nested/references/SKILL.md whatever
+git add skills/nested/references/SKILL.md
+in_repo git commit -qm "not a skill entry point"
+expect_exit 0 "a SKILL.md deeper than skills/<name>/ is not treated as a skill"
+
+# 4334ff1: an apostrophe inside $(cat <<EOF ...) breaks the parse.
+printf '#!/usr/bin/env bash\nmsg=$(cat <<EOF\nit'"'"'s broken\nEOF\n' > hooks/broken.sh
+git add hooks/broken.sh
+in_repo git commit -qm "broken hook"
+expect_exit 1 "a hook script that fails bash -n blocks the commit"
+expect_line "bash -n failed on hooks/broken\.sh" "the broken hook is named"
+printf '#!/usr/bin/env bash\necho fine\n' > hooks/broken.sh
+git add hooks/broken.sh
+in_repo git commit -qm "fixed hook"
+expect_exit 0 "a hook script that parses passes"
+
+printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
+[ "$FAIL" -eq 0 ]
