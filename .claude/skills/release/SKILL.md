@@ -20,7 +20,7 @@ Cut a myspec release from `main`. Repo-local maintainer skill — lives in `.cla
 
 Run all checks; any failure → report it and stop (fix first, never release around a failure):
 
-1. On `main` (`git rev-parse --abbrev-ref HEAD`), clean tree (`git status --porcelain` empty), synced (`git pull` reports up to date).
+1. On `main` (`git rev-parse --abbrev-ref HEAD`), clean tree (`git status --porcelain` empty), synced (`git pull` reports up to date), and not ahead: `git status -sb` must not say `ahead`. `git pull` reports "Already up to date" even when a local commit, such as a `chore(quality)` commit left by an aborted release, sits unpushed; show `git log --oneline origin/main..HEAD` and resolve it (Step 3's Abort) first.
 2. Mirror parity — the same diffs CI runs: `diff -r skills plugins/myspec/skills`, `diff -r hooks plugins/myspec/hooks`, `diff hooks.json plugins/myspec/hooks.json`, `diff -r lib plugins/myspec/lib`, `diff -r .codex-plugin plugins/myspec/.codex-plugin`.
 3. Hooks parse: `bash -n` every `hooks/*.sh`.
 4. Latest CI run on main succeeded: `gh run list --branch main --limit 1`. If not green, show the failure and ask for explicit confirmation before continuing.
@@ -39,18 +39,25 @@ Run all checks; any failure → report it and stop (fix first, never release aro
 | Situation | Spend | Time |
 |---|---|---|
 | Stored baseline for the previous tag is reused (the usual case) | about $8 (Sonnet ≈ $5.8, Haiku ≈ $2.0) | about 7 min |
-| No usable baseline: the previous tag is re-run too | about $16 | about 15 min |
+| The previous tag's whole suite is re-run too | about $16 | about 15 min |
 
-The script prints which case applies (`baseline REUSE …` / `baseline RERUN … <reason>`). It re-runs the previous tag only when `quality/baselines/v{prev}.json` is missing, the Claude Code major.minor differs, or the resolved model id differs, and then only for the affected models.
+The script prints which applies (`baseline REUSE …`, `RERUN <model> <reason>`, `RERUN-CASE <case> <reason>`). RELEASING.md lists the rules: any Claude Code version change, a changed or unresolved model id, or changed `evals/_fixtures/` re-runs the suite; a changed case re-runs only that case. The check writes nothing to `quality/`; it stages files in its output directory.
 
-1. Tell the maintainer the estimate. If they choose to skip (quota, outage, docs-only release), run `scripts/evals/release-check.sh --version {X.Y.Z} --skip "<reason>"`, which records the reason in `quality/trend.jsonl`, and go to item 4.
-2. Run `scripts/evals/release-check.sh --version {X.Y.Z}` in the background: it can outlast a 10-minute tool timeout. Wait for it to exit, then show the comparison report.
+1. Tell the maintainer the estimate. If they choose to skip (quota, outage, docs-only release), run `scripts/evals/release-check.sh --version {X.Y.Z} --skip "<reason>"`, which records the reason in `quality/trend.jsonl`, and go to item 5.
+2. Run `scripts/evals/release-check.sh --version {X.Y.Z}` in the background: it can outlast a 10-minute tool timeout. Wait for it to exit, then show the comparison report and note the output directory it printed (`release-check: output in <out>`).
 3. Act on the exit status, not on the output alone:
-   - **0, verdict improved or no-change:** continue.
-   - **0 with `REGRESSED; report-only`:** show the regressed models, their reasons, and the cases with negative DIFF. Call `AskUserQuestion`: continue the release, or stop to investigate.
-   - **1** (regressed and `"gate": true` in `quality/release-check.json`): stop. The release does not go out on a regressed verdict while the gate is on.
-   - **2** (infrastructure error: usage limit, logged out, run failed): show the last lines it printed. Call `AskUserQuestion`: retry, skip with a reason (item 1), or stop. When HEAD's run finished, retry with `--head-results <out>/head` so it is not paid for twice.
-4. Commit what it wrote, before the bump: `git add quality && git commit -m "chore(quality): record v{X.Y.Z} eval baseline"`. This keeps the bump diff to version files only.
+   - **0, verdict improved, no-change or insufficient-data:** go to item 4. Show any `warning:` line (a single regressed case).
+   - **0 with `REGRESSED; report-only`:** show the regressed models, their reasons, and the REGRESSED column. Call `AskUserQuestion`: continue the release, or stop to investigate. On stop, go to Abort.
+   - **1** (regressed and `"gate": true` in `quality/release-check.json`): stop and go to Abort. The release does not go out on a regressed verdict while the gate is on.
+   - **2** (infrastructure error: usage limit, logged out, run failed, interrupted): show the last lines it printed. Call `AskUserQuestion`: retry, skip with a reason (item 1), or stop. When HEAD's run finished, retry with `--head-results <out>/head` so it is not paid for twice.
+4. On a go: `scripts/evals/release-check.sh --record <out>` copies the staged baselines and trend line into `quality/`.
+5. Commit them before the bump: `git add quality && git commit -m "chore(quality): record v{X.Y.Z} eval baseline"`. This keeps the bump diff to version files only.
+
+**Abort**, whenever the release stops after this step:
+
+- Before `--record`, `quality/` is untouched and there is nothing to undo.
+- Recorded but not committed: `git checkout -- quality && git clean -fd quality`.
+- Committed: the commit is local and ahead of `origin/main`. Show `git log --oneline origin/main..HEAD`. If it lists only the `chore(quality)` commit, run `git reset --hard origin/main`. Otherwise stop and ask.
 
 ### Step 4: Bump, Commit, Tag, Push
 
@@ -93,9 +100,9 @@ Pushing the tag **auto-publishes** the release — the workflow runs `gh release
 
 ## Verification Checklist
 
-- [ ] Preflight fully passed (main, clean, synced, mirrors identical, hooks parse, CI green or explicitly overridden)
+- [ ] Preflight fully passed (main, clean, synced, not ahead of origin, mirrors identical, hooks parse, CI green or explicitly overridden)
 - [ ] Version confirmed by the user against the semver table
-- [ ] Eval comparison ran or a skip was recorded with its reason; a regressed or failed run was confirmed by the user; `quality/` committed as `chore(quality): record v{X.Y.Z} eval baseline` before the bump
+- [ ] Eval comparison ran or a skip was recorded with its reason; a regressed or failed run was confirmed by the user before `--record`; `quality/` committed as `chore(quality): record v{X.Y.Z} eval baseline` before the bump
 - [ ] Bump diff contained only the five version files; committed as `chore: bump to v{X.Y.Z}`
 - [ ] Notes written and approved **before** the tag was pushed
 - [ ] Notes landed via `gh release edit` (the tag auto-publishes; `create` only as a fallback if the workflow failed)
