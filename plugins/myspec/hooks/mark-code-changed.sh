@@ -1,10 +1,18 @@
 #!/usr/bin/env bash
 # mark-code-changed.sh
-# PostToolUse hook (Write|Edit and Bash matchers) — marks that code files were
-# changed in this session, and keeps the session's live log.
+# PostToolUse hook (Write|Edit and Bash matchers) — records every file this
+# session writes, and keeps the session's live log.
 #
-# Marker: /tmp/.myspec-code-changed-<session_id>, so verify-before-stop.sh only
-# runs verification when the current session actually modified code.
+# Ledger: /tmp/.myspec-session-writes-<session_id>, one line per written file:
+# `<code|file><TAB><checkout root><TAB><repo-relative path>`. The root is the
+# physical toplevel of the checkout holding the file, so a write in another
+# repository or in a linked worktree never arms this checkout.
+# verify-before-stop.sh runs its checks only when a `code` line for its
+# checkout is newer than its last `verified` line. It reads every line as the
+# list of files this session wrote when it decides whose failure it is. That is
+# why non-code writes are recorded too: a config file this session edited is
+# its own. It replaces the empty /tmp/.myspec-code-changed-<session_id> marker,
+# which was deleted after every run and so lost that list.
 #
 # Session log: .claude/state/sessions/<session_id>.md in the PRIMARY checkout
 # of the repository the edited file belongs to, created on the first code edit
@@ -19,16 +27,21 @@
 # FILE (not the cwd) keeps a session that edits another repository from filing
 # its log in this one.
 #
-# Bash writes: `sed -i`, redirects, `tee`, `git apply` and the like never fire
-# the Write|Edit matcher, so a Bash-driven session used to leave no log at all.
-# Registered under a Bash matcher too, this hook scans the command (quoted spans
-# and heredoc bodies blanked by lib/command-scan.sh) for a write verb and a
-# code-file path. A script that writes from inside a heredoc body is not seen —
-# run it as `python3 script.py` or use the Write tool.
+# Bash writes: `sed -i`, redirects, `tee` and the like never fire the
+# Write|Edit matcher, so this hook is registered under a Bash matcher too. It
+# scans the command (quoted spans and heredoc bodies blanked by
+# lib/command-scan.sh) and records only what the command writes: a redirect
+# target other than /dev/null or a descriptor, the operands of `tee`, `sed -i`
+# and `perl -i`, every operand of `mv`, the destination of `cp`, `rsync` and
+# `install`, and the file `patch` edits. Reading, grepping or running a file
+# records nothing. A quoted or variable path, `git apply`, and a script that
+# writes from inside a heredoc body are not seen — run it as
+# `python3 script.py` or use the Write tool.
 #
 # `## Files touched` is how a skill finds ITS OWN session among several: the
 # harness never exposes the session id to the model, but the paths it edited
-# are known to it. Fixture: hooks/tests/mark-code-changed.test.sh
+# are known to it. Tests live in the plugin repository (hooks/tests/), which
+# projects do not receive.
 
 set -euo pipefail
 
@@ -38,7 +51,7 @@ fi
 
 INPUT=$(cat)
 
-CODE_EXT='(ts|tsx|vue|js|jsx|mjs|cjs|mts|cts|py|rb|go|java|php|rs|cs|swift|kt|sh|bash)'
+CODE_EXT='(ts|tsx|vue|js|jsx|mjs|cjs|mts|cts|py|rb|go|java|php|rs|cs|swift|kt|sh|bash|graphql|gql)'
 
 # Nearest existing directory at or above the edited file. PostToolUse runs after
 # the write, so the parent normally exists; walking up keeps resolution working
@@ -72,267 +85,233 @@ main_worktree_root() {
   # Submodules and bare repos have a common dir that is not named `.git`; for
   # those the plain toplevel is already the correct root.
   if [ "$(basename "$common_git_dir")" = ".git" ]; then
-    dirname "$common_git_dir"
-    return 0
+    (cd "$(dirname "$common_git_dir")" && pwd -P)
+    return
   fi
 
-  git -C "$path" rev-parse --show-toplevel 2>/dev/null
+  common_git_dir=$(git -C "$path" rev-parse --show-toplevel 2>/dev/null) || return 1
+  (cd "$common_git_dir" && pwd -P)
 }
 
-# Repository root before main-worktree normalisation, most authoritative source
-# first: the edited file's repository, then whatever cwd the payload carries.
-resolve_repo_root_raw() {
-  local file_path="$1"
-  local anchor candidate resolved
-
-  case "$file_path" in
-    /*)
-      if anchor=$(anchor_dir_for_file "$file_path"); then
-        if resolved=$(git -C "$anchor" rev-parse --show-toplevel 2>/dev/null); then
-          printf '%s\n' "$resolved"
-          return 0
-        fi
-      fi
-      ;;
-  esac
-
-  while IFS= read -r candidate; do
-    [ -n "$candidate" ] || continue
-    if resolved=$(git -C "$candidate" rev-parse --show-toplevel 2>/dev/null); then
-      printf '%s\n' "$resolved"
+# checkout_root <existing dir> -> the physical root of the checkout holding it:
+# its git toplevel, or, in a project without git, the nearest directory with a
+# .myspec.json. Fails when there is neither: nothing there to verify.
+checkout_root() {
+  local dir="$1" top
+  if top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null); then
+    (cd "$top" && pwd -P)
+    return
+  fi
+  dir=$(cd "$dir" && pwd -P) || return 1
+  while :; do
+    if [ -f "$dir/.myspec.json" ]; then
+      printf '%s\n' "$dir"
       return 0
     fi
-    if [ -f "$candidate/.myspec.json" ]; then
-      printf '%s\n' "$candidate"
-      return 0
-    fi
-  done <<JSON
-$(printf '%s' "$INPUT" | jq -r '
-    [
-      .cwd,
-      .workdir,
-      .workspace.cwd,
-      .session.cwd,
-      .tool_input.cwd,
-      .tool_input.workdir
-    ] | map(select(type == "string" and . != "")) | .[]
-  ' 2>/dev/null)
-JSON
-
-  if resolved=$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null); then
-    printf '%s\n' "$resolved"
-    return 0
-  fi
-
-  candidate="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-  if resolved=$(git -C "$candidate" rev-parse --show-toplevel 2>/dev/null); then
-    printf '%s\n' "$resolved"
-    return 0
-  fi
-
-  return 1
-}
-
-FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
-COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
-SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
-
-[ -n "$SESSION_ID" ] || exit 0
-
-PATHS=()
-CONTEXT=""
-
-if [ -n "$FILE_PATH" ]; then
-  # Only code files (not docs, config, etc.) — common extensions across stacks.
-  if [[ ! "$FILE_PATH" =~ \.${CODE_EXT}$ ]]; then
-    exit 0
-  fi
-
-  if ! RAW_ROOT="$(resolve_repo_root_raw "$FILE_PATH")"; then
-    exit 0
-  fi
-
-  PATHS=("$FILE_PATH")
-  CONTEXT="Auto-created on first code edit at \`$FILE_PATH\`."
-elif [ -n "$COMMAND" ]; then
-  if ! RAW_ROOT="$(resolve_repo_root_raw "")"; then
-    exit 0
-  fi
-
-  SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-  LIB=""
-  for cand in "$SCRIPT_DIR/../lib/command-scan.sh" "$RAW_ROOT/.claude/lib/command-scan.sh" "$RAW_ROOT/lib/command-scan.sh"; do
-    if [ -f "$cand" ]; then
-      LIB="$cand"
-      break
-    fi
+    [ "$dir" != "/" ] || return 1
+    dir=$(dirname "$dir")
   done
-  [ -n "$LIB" ] || exit 0
+}
 
-  # shellcheck source=/dev/null
-  . "$LIB"
+# physical_path <path> -> absolute, with its directory resolved (symlinks,
+# `..`). A relative path is taken from BASE_DIR: the payload cwd, moved by any
+# literal `cd` earlier in a Bash command.
+physical_path() {
+  local p="$1" dir
+  case "$p" in
+    /*) ;;
+    *) p="$BASE_DIR/$p" ;;
+  esac
+  dir=$(dirname "$p")
+  if [ -d "$dir" ]; then
+    dir=$(cd "$dir" && pwd -P) || return 1
+    printf '%s/%s\n' "${dir%/}" "$(basename "$p")"
+  else
+    printf '%s\n' "$p"
+  fi
+}
 
-  # Paths come only from what a segment WRITES: the target of a `>`/`>>`
-  # redirect, or the file arguments of a write verb at command position (sed -i,
-  # perl -i, tee, mv, patch, git apply; for cp/rsync/install the destination).
-  # A redirect to /dev/null or an fd dup (`2>&1`, `>&2`) writes nothing, and a
-  # code path elsewhere in the command (`cat src/a.ts 2>/dev/null`, `git log --
-  # src/a.ts > /dev/null`) is only read. Collecting from the whole command once
-  # a write pattern matched anywhere logged read-only sessions and armed the
-  # Stop hook's full verification on them. Relative paths resolve against the
-  # cwd (and any literal `cd` before them), so a write inside a linked worktree
-  # records the worktree file, not a same-named one in the main checkout.
-  CODE_PATH_RE="^[A-Za-z0-9_@./-]+\.${CODE_EXT}\$"
+# emit_target <word> [must-exist] [no-glob] -> the physical path of a written
+# file named by <word>. Placeholders for quoted spans (Q), variables,
+# substitutions, remote paths and devices name nothing this hook can resolve.
+# A glob expands against BASE_DIR. With must-exist, a word that is not a
+# file after the write is skipped: sed's and perl's script operand.
+emit_target() {
+  local w="$1" p
+  case "$w" in
+    ''|Q|-|*'$'*|*'`'*|*:*|/dev/*) return 0 ;;
+  esac
+  if [ -z "${3:-}" ] && [[ "$w" == *[\*\?\[]* ]]; then
+    while IFS= read -r p; do
+      emit_target "$p" "${2:-}" no-glob
+    done < <(cd "$BASE_DIR" 2>/dev/null && compgen -G "$w" || true)
+    return 0
+  fi
+  p=$(physical_path "$w") || return 0
+  if [ -d "$p" ]; then
+    return 0
+  fi
+  if [ -n "${2:-}" ] && [ ! -f "$p" ]; then
+    return 0
+  fi
+  printf '%s\n' "$p"
+}
 
-  BASE_DIR=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
-  [ -n "$BASE_DIR" ] && [ -d "$BASE_DIR" ] || BASE_DIR="$PWD"
-  BASE_DIR=$(cd "$BASE_DIR" && pwd -P)
-
-  add_path() {  # add_path <word>
-    local w="${1#./}"
-    [[ "$w" =~ $CODE_PATH_RE ]] || return 0
-    case "$w" in
-      /*) PATHS+=("$w") ;;
-      *) PATHS+=("$BASE_DIR/$w") ;;
-    esac
-  }
-
+# bash_write_targets <command> -> the files the command writes, one physical
+# path per line. Every segment is scanned for redirects; a segment's operands
+# count only when a write verb stands at its command position. A literal `cd`
+# moves BASE_DIR for the segments after it, and a subshell restores it on exit,
+# so `cd <worktree> && echo x > a.ts` records the worktree's file.
+bash_write_targets() {
+  local line sep seg verb word skip i last dest next
+  local -a words ops scopes=()
   while IFS= read -r line; do
-    segment=$(strip_command_prefix "${line#*$'\t'}")
-    words=()
-    read -r -a words <<< "$segment" || true
-    [ "${#words[@]}" -gt 0 ] || continue
+    sep="${line%%$'\t'*}"
+    case "$sep" in
+      '(') scopes+=("$BASE_DIR") ;;
+      ')')
+        if [ "${#scopes[@]}" -gt 0 ]; then
+          BASE_DIR="${scopes[${#scopes[@]}-1]}"
+          unset "scopes[${#scopes[@]}-1]"
+        fi
+        ;;
+    esac
+    seg=$(strip_command_prefix "${line#*$'\t'}")
+    [ -n "$seg" ] || continue
 
-    # A literal `cd` moves the base for relative paths after it.
+    read -ra words <<< "$seg"
+    [ "${#words[@]}" -gt 0 ] || continue
     if [ "${words[0]}" = cd ]; then
-      if [ "${#words[@]}" -ge 2 ] && NEXT_DIR=$(cd "$BASE_DIR" 2>/dev/null && cd "${words[1]}" 2>/dev/null && pwd -P); then
-        BASE_DIR="$NEXT_DIR"
+      if [ "${#words[@]}" -ge 2 ] && next=$(cd "$BASE_DIR" 2>/dev/null && cd "${words[1]}" 2>/dev/null && pwd -P); then
+        BASE_DIR="$next"
       fi
       continue
     fi
 
-    # Redirect targets. `[0-9]*` covers `2>`; the scanner already split
-    # `&>` and `>&N` on the `&`, leaving no target after the `>`.
-    while IFS= read -r redirect; do
-      target="${redirect##*[>|]}"
-      target="${target#"${target%%[![:space:]]*}"}"
-      case "$target" in
-        /dev/*|'') ;;
-        *) add_path "$target" ;;
-      esac
-    done < <(printf '%s' "$segment" | grep -oE '>{1,2}\|?[[:space:]]*[^[:space:]<>|]+' || true)
+    # `2>&1` and `>&2` never match: the split on `&` leaves nothing after `>`.
+    while IFS= read -r word; do
+      emit_target "$word"
+    done < <(printf '%s\n' "$seg" | grep -oE '>{1,2}[[:space:]]*[^[:space:]<>]+' | sed -E 's/^>{1,2}[[:space:]]*//' || true)
 
-    # Write verbs: their file arguments.
     verb="${words[0]##*/}"
-    args=("${words[@]:1}")
+    ops=()
+    skip=0
+    for ((i = 1; i < ${#words[@]}; i++)); do
+      word="${words[$i]}"
+      if [ "$skip" -eq 1 ]; then
+        skip=0
+        continue
+      fi
+      case "$word" in
+        *'>'|*'<') skip=1; continue ;;
+        *'>'*|*'<'*|-*) continue ;;
+      esac
+      ops+=("$word")
+    done
+    [ "${#ops[@]}" -gt 0 ] || continue
+    last="${ops[${#ops[@]}-1]}"
+
     case "$verb" in
       sed)
-        printf '%s' "$segment" | grep -qE '^[^[:space:]]*sed[[:space:]]+(.*[[:space:]])?(-[a-zA-Z]*i|--in-place)' || args=() ;;
+        printf '%s\n' "$seg" | grep -qE '^sed([[:space:]]+-[^[:space:]]+)*[[:space:]]+(-[a-zA-Z]*i|--in-place)' || continue
+        for word in "${ops[@]}"; do emit_target "$word" must-exist; done
+        ;;
       perl)
-        printf '%s' "$segment" | grep -qE '^[^[:space:]]*perl[[:space:]]+(.*[[:space:]])?-[a-zA-Z]*i' || args=() ;;
-      tee|mv|patch) ;;
-      git)
-        [ "${words[1]:-}" = apply ] || args=() ;;
-      cp|rsync|install)
-        # Only the destination is written; into a directory, as <dir>/<name>.
-        dest=""
-        sources=()
-        for w in ${args[@]+"${args[@]}"}; do
-          case "$w" in
-            *'>'*|'<'*) break ;;
-            -*) ;;
-            *) [ -z "$dest" ] || sources+=("$dest"); dest="$w" ;;
-          esac
-        done
-        args=()
-        if [ -n "$dest" ]; then
-          if [[ "${dest#./}" =~ $CODE_PATH_RE ]]; then
-            args=("$dest")
-          else
-            for w in ${sources[@]+"${sources[@]}"}; do
-              [[ "$w" =~ $CODE_PATH_RE ]] && args+=("${dest%/}/${w##*/}")
-            done
-          fi
-        fi ;;
-      *) args=() ;;
+        printf '%s\n' "$seg" | grep -qE '^perl([[:space:]]+-[^[:space:]]+)*[[:space:]]+-[a-zA-Z]*i' || continue
+        for word in "${ops[@]}"; do emit_target "$word" must-exist; done
+        ;;
+      tee)
+        for word in "${ops[@]}"; do emit_target "$word"; done
+        ;;
+      mv|cp|rsync|install)
+        # A move deletes its sources: those are changes too.
+        if [ "$verb" = mv ]; then
+          for word in "${ops[@]}"; do emit_target "$word"; done
+        fi
+        dest=$(physical_path "$last") || continue
+        if [ -d "$dest" ]; then
+          for ((i = 0; i < ${#ops[@]} - 1; i++)); do
+            emit_target "$last/$(basename "${ops[$i]}")"
+          done
+        elif [ "$verb" != mv ]; then
+          emit_target "$last"
+        fi
+        ;;
+      patch)
+        emit_target "${ops[0]}" must-exist
+        ;;
     esac
-    for w in ${args[@]+"${args[@]}"}; do
-      case "$w" in
-        -*) ;;
-        *) add_path "$w" ;;
-      esac
-    done
-  done < <(printf '%s' "$COMMAND" | sanitize_command | split_segments)
+  done < <(printf '%s' "$1" | sanitize_command | split_segments)
+  return 0
+}
 
-  [ "${#PATHS[@]}" -gt 0 ] || exit 0
+# ledger_add <kind> <root> <rel>: appends the line unless it is already there
+# since the root's last `verified` line.
+ledger_add() {
+  local line
+  line=$(printf '%s\t%s\t%s' "$1" "$2" "$3")
+  if [ -f "$LEDGER" ] && L="$line" R="$2" awk -F'\t' '
+      $1 == "verified" && $2 == ENVIRON["R"] { seen = 0; next }
+      $0 == ENVIRON["L"] { seen = 1 }
+      END { exit !seen }' "$LEDGER"; then
+    return 0
+  fi
+  printf '%s\n' "$line" >> "$LEDGER"
+}
 
-  # Dedupe, keeping order.
-  UNIQUE=()
-  for p in "${PATHS[@]}"; do
-    case " ${UNIQUE[*]-} " in
-      *" $p "*) ;;
-      *) UNIQUE+=("$p") ;;
-    esac
-  done
-  PATHS=("${UNIQUE[@]}")
+# write_session_log <checkout root> <path>...: creates or extends the live log
+# in the primary checkout of <checkout root>, a myspec project only.
+write_session_log() {
+  local raw_root="$1" repo_root state_dir active_file worktree topic_seed started short_id p rel
+  shift
 
-  # Anchor on the written file, as the Write branch does.
-  if ANCHORED_ROOT="$(resolve_repo_root_raw "${PATHS[0]}")"; then
-    RAW_ROOT="$ANCHORED_ROOT"
+  # raw_root is the repository root as seen from the edit (a linked worktree
+  # resolves to itself); repo_root is pinned to the primary checkout, where the
+  # session store lives.
+  if ! repo_root="$(main_worktree_root "$raw_root")"; then
+    repo_root="$raw_root"
   fi
 
-  CONTEXT="Auto-created on a Bash write: \`$(printf '%s' "$COMMAND" | tr '\n' ' ' | head -c 120)\`."
-else
-  exit 0
-fi
+  # Logs only in a myspec-managed project: an edit in an unrelated repository
+  # must not grow a stray state tree there.
+  [ -f "$repo_root/.myspec.json" ] || return 0
 
-touch "/tmp/.myspec-code-changed-${SESSION_ID}"
+  state_dir="$repo_root/.claude/state/sessions"
+  active_file="$state_dir/${SESSION_ID}.md"
 
-# RAW_ROOT is the repository root as seen from the edit (a linked worktree
-# resolves to itself); REPO_ROOT is pinned to the primary checkout, where the
-# session store lives.
-if ! REPO_ROOT="$(main_worktree_root "$RAW_ROOT")"; then
-  REPO_ROOT="$RAW_ROOT"
-fi
+  # Worktree marker: the edit resolved to a linked worktree when the raw root
+  # differs from the pinned primary checkout. The basename is portable (no
+  # absolute path) and lets session-clean's liveness gate match the session
+  # against `git worktree list`. Main checkout: empty (gate uses mtime).
+  worktree=""
+  if [ "$raw_root" != "$repo_root" ]; then
+    worktree=$(basename "$raw_root")
+  fi
 
-# Logs only in a myspec-managed project: an edit in an unrelated repository
-# must not grow a stray state tree there.
-[ -f "$REPO_ROOT/.myspec.json" ] || exit 0
+  if [ ! -f "$active_file" ]; then
+    mkdir -p "$state_dir"
 
-STATE_DIR="$REPO_ROOT/.claude/state/sessions"
-ACTIVE_FILE="$STATE_DIR/${SESSION_ID}.md"
+    # Topic seed: parent directory name of the first edited file
+    topic_seed=$(basename "$(dirname "$1")" 2>/dev/null || echo "auto")
+    if [ -z "$topic_seed" ] || [ "$topic_seed" = "." ]; then
+      topic_seed="auto"
+    fi
+    started=$(date '+%Y-%m-%d %H:%M')
+    short_id="${SESSION_ID:0:8}"
 
-# Worktree marker: the edit resolved to a linked worktree when the raw root
-# differs from the pinned primary checkout. The basename is portable (no
-# absolute path) and lets session-clean's liveness gate match the session
-# against `git worktree list`. Main checkout: empty (gate uses mtime).
-WORKTREE=""
-if [ "$RAW_ROOT" != "$REPO_ROOT" ]; then
-  WORKTREE=$(basename "$RAW_ROOT")
-fi
-
-if [ ! -f "$ACTIVE_FILE" ]; then
-  mkdir -p "$STATE_DIR"
-
-  # Topic seed: parent directory name of the first edited file
-  TOPIC_SEED=$(basename "$(dirname "${PATHS[0]}")" 2>/dev/null || echo "auto")
-  [ -z "$TOPIC_SEED" ] || [ "$TOPIC_SEED" = "." ] && TOPIC_SEED="auto"
-  STARTED=$(date '+%Y-%m-%d %H:%M')
-  SHORT_ID="${SESSION_ID:0:8}"
-
-  cat > "$ACTIVE_FILE" <<SESSION
+    cat > "$active_file" <<SESSION
 ---
 session_id: $SESSION_ID
-topic: "auto:$TOPIC_SEED"
+topic: "auto:$topic_seed"
 feature: ""
 mode: implementation
-started: $STARTED
+started: $started
 status: active
 auto_created: true
-worktree: "$WORKTREE"
+worktree: "$worktree"
 ---
 
-# Session $SHORT_ID — auto:$TOPIC_SEED
+# Session $short_id — auto:$topic_seed
 
 ## Context
 $CONTEXT Refine topic, feature, and mode as the work crystallizes.
@@ -356,22 +335,132 @@ $CONTEXT Refine topic, feature, and mode as the work crystallizes.
 ## Files touched
 <!-- Appended by mark-code-changed.sh; this is how a skill recognises its own session -->
 SESSION
-fi
-
-# Append every code path once. Kept as the LAST section so appending is a
-# plain `>>`; a log created by a 1.x hook gains the section on its first edit.
-if ! grep -q '^## Files touched' "$ACTIVE_FILE" 2>/dev/null; then
-  printf '\n## Files touched\n' >> "$ACTIVE_FILE"
-fi
-
-for p in "${PATHS[@]}"; do
-  case "$p" in
-    "$REPO_ROOT"/*) rel="${p#"$REPO_ROOT"/}" ;;
-    *) rel="$p" ;;
-  esac
-  if ! grep -qF -- "- \`$rel\`" "$ACTIVE_FILE"; then
-    printf -- '- `%s`\n' "$rel" >> "$ACTIVE_FILE"
   fi
+
+  # Append every code path once. Kept as the LAST section so appending is a
+  # plain `>>`; a log created by a 1.x hook gains the section on its first edit.
+  if ! grep -q '^## Files touched' "$active_file" 2>/dev/null; then
+    printf '\n## Files touched\n' >> "$active_file"
+  fi
+
+  for p in "$@"; do
+    case "$p" in
+      "$repo_root"/*) rel="${p#"$repo_root"/}" ;;
+      *) rel="$p" ;;
+    esac
+    if ! grep -qF -- "- \`$rel\`" "$active_file"; then
+      printf -- '- `%s`\n' "$rel" >> "$active_file"
+    fi
+  done
+}
+
+FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' 2>/dev/null)
+COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
+SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
+
+[ -n "$SESSION_ID" ] || exit 0
+
+# The directory relative paths are taken from: the first cwd the payload
+# carries that exists, else the hook's own.
+PAYLOAD_CWD=""
+while IFS= read -r candidate; do
+  if [ -n "$candidate" ] && [ -d "$candidate" ]; then
+    PAYLOAD_CWD="$candidate"
+    break
+  fi
+done <<JSON
+$(printf '%s' "$INPUT" | jq -r '
+    [
+      .cwd,
+      .workdir,
+      .workspace.cwd,
+      .session.cwd,
+      .tool_input.cwd,
+      .tool_input.workdir
+    ] | map(select(type == "string" and . != "")) | .[]
+  ' 2>/dev/null)
+JSON
+[ -n "$PAYLOAD_CWD" ] || PAYLOAD_CWD="$PWD"
+BASE_DIR=$(cd "$PAYLOAD_CWD" && pwd -P)
+
+TARGETS=()
+CONTEXT=""
+
+if [ -n "$FILE_PATH" ]; then
+  TARGETS=("$(physical_path "$FILE_PATH")")
+  CONTEXT="Auto-created on first code edit at \`$FILE_PATH\`."
+elif [ -n "$COMMAND" ]; then
+  SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+  CWD_ROOT=$(git -C "$PAYLOAD_CWD" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$PAYLOAD_CWD")
+  LIB=""
+  for cand in "$SCRIPT_DIR/../lib/command-scan.sh" "$CWD_ROOT/.claude/lib/command-scan.sh" "$CWD_ROOT/lib/command-scan.sh"; do
+    if [ -f "$cand" ]; then
+      LIB="$cand"
+      break
+    fi
+  done
+  [ -n "$LIB" ] || exit 0
+
+  # shellcheck source=/dev/null
+  . "$LIB"
+
+  # Cheap gate before the full scan: a write verb or a redirect at some
+  # segment. Most Bash calls stop here.
+  WRITE_PATTERNS=(
+    '^sed[[:space:]]'
+    '^perl[[:space:]]+-'
+    '^patch([[:space:]]|$)'
+    '^(tee|mv|cp|rsync|install)[[:space:]]'
+    '>{1,2}[[:space:]]*[^&[:space:]]'
+  )
+  [ -n "$(find_matching_segment "$COMMAND" "${WRITE_PATTERNS[@]}")" ] || exit 0
+
+  while IFS= read -r p; do
+    [ -n "$p" ] && TARGETS+=("$p")
+  done < <(bash_write_targets "$COMMAND")
+
+  CONTEXT="Auto-created on a Bash write: \`$(printf '%s' "$COMMAND" | tr '\n' ' ' | head -c 120)\`."
+else
+  exit 0
+fi
+
+[ "${#TARGETS[@]}" -gt 0 ] || exit 0
+
+LEDGER="/tmp/.myspec-session-writes-${SESSION_ID}"
+CODE_ROOTS=()
+CODE_PATHS=()
+
+for p in "${TARGETS[@]}"; do
+  anchor=$(anchor_dir_for_file "$p") || continue
+  root=$(checkout_root "$anchor") || continue
+  case "$p" in
+    "$root"/*) rel="${p#"$root"/}" ;;
+    *) continue ;;
+  esac
+  kind=file
+  if [[ "$p" =~ \.${CODE_EXT}$ ]]; then
+    kind=code
+    CODE_ROOTS+=("$root")
+    CODE_PATHS+=("$p")
+  fi
+  ledger_add "$kind" "$root" "$rel"
+done
+
+# One log per checkout the code writes landed in, in first-seen order.
+DONE_ROOTS=$'\n'
+for ((i = 0; i < ${#CODE_ROOTS[@]}; i++)); do
+  root="${CODE_ROOTS[$i]}"
+  case "$DONE_ROOTS" in
+    *$'\n'"$root"$'\n'*) continue ;;
+  esac
+  DONE_ROOTS="$DONE_ROOTS$root"$'\n'
+  ROOT_PATHS=()
+  for ((j = i; j < ${#CODE_ROOTS[@]}; j++)); do
+    if [ "${CODE_ROOTS[$j]}" = "$root" ]; then
+      ROOT_PATHS+=("${CODE_PATHS[$j]}")
+    fi
+  done
+  write_session_log "$root" "${ROOT_PATHS[@]}"
 done
 
 exit 0

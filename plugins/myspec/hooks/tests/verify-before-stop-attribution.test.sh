@@ -1,0 +1,227 @@
+#!/usr/bin/env bash
+# Fixture for the stop gate's session scope (docs/stop-gate.md, R1, R2, R4).
+#
+# Arming goes through the real mark-code-changed.sh, so the ledger contract
+# between the two hooks is under test, not a hand-written marker. The gate must
+# run only after this session wrote code in this checkout (#145), and it must
+# not block a session on failures that name only files another session left
+# uncommitted in a shared checkout (#198). When it can't tell, it still blocks,
+# and says which changes are not the session's.
+#
+# Usage: verify-before-stop-attribution.test.sh [path-to-hook]
+
+set -uo pipefail
+
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+HOOK="${1:-$HERE/../verify-before-stop.sh}"
+MARK="$HERE/../mark-code-changed.sh"
+
+ROOT=$(cd "$(mktemp -d)" && pwd -P)
+REPO="$ROOT/checkout"
+SID="vbs-attr-$$"
+RAN="$ROOT/ran"
+trap 'rm -rf "$ROOT"; rm -f /tmp/.myspec-session-writes-'"$SID"'-* /tmp/.myspec-code-changed-'"$SID"'-*' EXIT
+
+PASS=0
+FAIL=0
+ok()   { PASS=$((PASS + 1)); }
+fail() { FAIL=$((FAIL + 1)); printf 'FAIL  %s\n' "$1" >&2; }
+
+mkdir -p "$REPO/.claude"
+git init -q -b main "$REPO"
+git -C "$REPO" config user.email t@t
+git -C "$REPO" config user.name t
+printf '{"aiDir":".ai"}\n' > "$REPO/.myspec.json"
+printf '.claude/state/\n' > "$REPO/.gitignore"
+printf 'export const a = 1;\n' > "$REPO/app.ts"
+printf 'export const b = 2;\n' > "$REPO/other.ts"
+printf '{}\n' > "$REPO/tsconfig.json"
+printf '{"checks":[]}\n' > "$REPO/.claude/verification.json"
+git -C "$REPO" add -A
+git -C "$REPO" commit -q -m init
+
+# set_checks <command>...: one required check per command, each touching $RAN
+# first so a run is visible. Committed, so it is not an uncommitted change.
+set_checks() {
+  local json='[]' i=0 c
+  for c in "$@"; do
+    i=$((i + 1))
+    json=$(printf '%s' "$json" | jq --arg n "check$i" --arg c "touch $RAN; $c" '. + [{name: $n, command: $c, required: true}]')
+  done
+  printf '{"checks":%s}\n' "$json" > "$REPO/.claude/verification.json"
+  git -C "$REPO" add .claude/verification.json
+  git -C "$REPO" commit -q -m checks >/dev/null || true
+}
+
+reset_tree() {
+  git -C "$REPO" checkout -q -- .
+  git -C "$REPO" clean -qfd
+}
+
+mark_write() {  # mark_write <sid> <file>: the Write tool wrote <file>
+  jq -n --arg s "$SID-$1" --arg d "$REPO" --arg f "$2" '{session_id: $s, tool_name: "Write", cwd: $d, tool_input: {file_path: $f}}' \
+    | bash "$MARK" >/dev/null 2>&1
+}
+
+mark_bash() {  # mark_bash <sid> <command>
+  jq -n --arg s "$SID-$1" --arg d "$REPO" --arg c "$2" '{session_id: $s, tool_name: "Bash", cwd: $d, tool_input: {command: $c}}' \
+    | bash "$MARK" >/dev/null 2>&1
+}
+
+stop() {  # stop <sid> -> hook stdout
+  rm -f "$RAN"
+  jq -n --arg s "$SID-$1" --arg d "$REPO" '{session_id: $s, cwd: $d}' | bash "$HOOK" 2>/dev/null
+}
+
+decision() { printf '%s' "$1" | jq -r '.decision // "none"' 2>/dev/null || printf 'not-json'; }
+text()     { printf '%s' "$1" | jq -r '(.reason // "") + (.systemMessage // "")' 2>/dev/null; }
+
+expect_decision() {  # expect_decision <want> <out> <desc>
+  local got
+  got=$(decision "$2")
+  if [ "$got" = "$1" ]; then ok; else fail "$3 (want $1, got $got: $(text "$2" | head -3))"; fi
+}
+
+expect_text() {  # expect_text <out> <fixed string> <desc>
+  if text "$1" | grep -qF -- "$2"; then ok; else fail "$3 (text lacks: $2)"; fi
+}
+
+expect_no_text() {
+  if text "$1" | grep -qF -- "$2"; then fail "$3 (text has: $2)"; else ok; fi
+}
+
+ran()     { [ -e "$RAN" ]; }
+
+# A linter-like check: names every file holding BROKEN, fails if any does.
+LINT='! grep -H BROKEN app.ts other.ts tsconfig.json'
+
+# --- arming (R1, R2) -------------------------------------------------------------
+set_checks "$LINT"
+printf 'BROKEN\n' >> "$REPO/other.ts"
+
+OUT=$(stop 1)
+expect_decision approve "$OUT" "no write, no ledger: approved"
+ran && fail "no write runs no check" || ok
+
+mark_bash 2 'cat app.ts 2>/dev/null; grep -c x other.ts > /dev/null'
+OUT=$(stop 2)
+expect_decision approve "$OUT" "#145: a read-only Bash command does not arm the gate"
+ran && fail "#145: a read-only Bash command runs no check" || ok
+
+mark_write 3 "$REPO/notes.md"
+OUT=$(stop 3)
+expect_decision approve "$OUT" "a doc-only write does not arm the gate"
+ran && fail "a doc-only write runs no check" || ok
+
+ELSEWHERE="$ROOT/elsewhere"
+git init -q -b main "$ELSEWHERE"
+mark_write 4 "$ELSEWHERE/x.ts"
+OUT=$(stop 4)
+expect_decision approve "$OUT" "#145: a code write in another repository does not arm this one"
+ran && fail "#145: a write elsewhere runs no check here" || ok
+reset_tree
+
+# --- #198: another session's uncommitted breakage ---------------------------------
+printf 'BROKEN\n' >> "$REPO/other.ts"
+printf 'export const a = 3;\n' > "$REPO/app.ts"
+mark_write 10 "$REPO/app.ts"
+OUT=$(stop 10)
+expect_decision approve "$OUT" "#198: failures naming only another session's file do not block"
+ran && ok || fail "#198: the checks still run"
+expect_text "$OUT" 'names only files changed outside this session: other.ts' "#198: the warning names the foreign file"
+expect_text "$OUT" 'worktree per session' "#198: the warning points at isolation"
+OUT=$(stop 10)
+ran && fail "a warned run counts as verified: no re-run without a new write" || ok
+
+# Absolute paths in the output are the same file.
+set_checks 'grep -q BROKEN other.ts && echo "$PWD/other.ts:2:1 error" && exit 1 || true'
+mark_write 11 "$REPO/app.ts"
+OUT=$(stop 11)
+expect_decision approve "$OUT" "an absolute path to the foreign file counts as naming it"
+
+# A clean file that shares the foreign file's name is not that file.
+set_checks 'grep -q BROKEN other.ts && echo "pkg/other.ts:2:1 error" && exit 1 || true'
+mark_write 12 "$REPO/app.ts"
+OUT=$(stop 12)
+expect_decision block "$OUT" "a clean file with the foreign file's basename does not count as foreign"
+
+# A silent failure can't be attributed: block, but say whose changes are whose.
+set_checks '! grep -q BROKEN other.ts'
+mark_write 13 "$REPO/app.ts"
+OUT=$(stop 13)
+expect_decision block "$OUT" "#198: a failure that names no file still blocks"
+expect_text "$OUT" 'uncommitted changes this session did not write (other.ts)' "the block lists the changes that are not the session's"
+expect_text "$OUT" 'names none of the changed files' "the block says the failure names none of them"
+expect_text "$OUT" 'Do not edit files changed outside this session' "the block tells the agent to leave them alone"
+expect_no_text "$OUT" 'Fix failures before completing' "the block no longer orders every failure fixed"
+
+# The session's own failure blocks even with foreign changes around.
+set_checks "$LINT"
+printf 'BROKEN\n' >> "$REPO/app.ts"
+mark_write 14 "$REPO/app.ts"
+OUT=$(stop 14)
+expect_decision block "$OUT" "a failure naming the session's file blocks"
+expect_text "$OUT" 'names files this session wrote: app.ts' "the block says which failure is the session's"
+
+# A timeout is never downgraded.
+set_checks "$LINT" 'sleep 5'
+mark_write 15 "$REPO/app.ts"
+git -C "$REPO" checkout -q -- app.ts
+OUT=$(export MYSPEC_CHECK_CAP_SECONDS=1; stop 15)
+expect_decision block "$OUT" "a timeout blocks even when every failure is foreign"
+reset_tree
+
+# --- single session: nothing uncommitted is anyone else's --------------------------
+set_checks "$LINT"
+printf 'BROKEN\n' >> "$REPO/app.ts"
+mark_write 20 "$REPO/app.ts"
+OUT=$(stop 20)
+expect_decision block "$OUT" "a single session's failure blocks"
+expect_no_text "$OUT" 'did not write' "no attribution paragraph when every change is the session's"
+reset_tree
+
+# A config file the session edited is its own, so a failure naming it blocks.
+printf 'BROKEN\n' >> "$REPO/tsconfig.json"
+mark_write 21 "$REPO/tsconfig.json"
+printf 'export const a = 4;\n' > "$REPO/app.ts"
+mark_write 21 "$REPO/app.ts"
+OUT=$(stop 21)
+expect_decision block "$OUT" "a failure naming a non-code file the session wrote blocks"
+reset_tree
+
+# --- the ledger outlives a run ----------------------------------------------------
+set_checks "$LINT"
+printf 'export const a = 5;\n' > "$REPO/app.ts"
+mark_write 30 "$REPO/app.ts"
+OUT=$(stop 30)
+expect_decision approve "$OUT" "a clean run approves"
+printf 'export const x = 1;\n' > "$REPO/new.ts"
+printf 'BROKEN\n' >> "$REPO/app.ts"
+mark_write 30 "$REPO/new.ts"
+OUT=$(stop 30)
+expect_decision block "$OUT" "a file written before the last run still counts as the session's"
+expect_no_text "$OUT" 'did not write' "an earlier write is not reported as someone else's change"
+reset_tree
+
+# --- cwd = main checkout, edits in a linked worktree (#201) ------------------------
+set_checks "$LINT"
+WT="$ROOT/wt"
+git -C "$REPO" worktree add -q -b wt "$WT"
+printf 'BROKEN\n' >> "$WT/app.ts"
+mark_write 35 "$WT/app.ts"
+OUT=$(stop 35)
+expect_decision block "$OUT" "a session that broke a worktree from a main-checkout cwd is blocked"
+expect_text "$OUT" "[in $WT]" "the report names the worktree the check ran in"
+git -C "$REPO" worktree remove --force "$WT"
+
+# --- legacy marker: armed, attribution off -----------------------------------------
+set_checks "$LINT"
+printf 'BROKEN\n' >> "$REPO/other.ts"
+touch "/tmp/.myspec-code-changed-$SID-40"
+OUT=$(stop 40)
+expect_decision block "$OUT" "a legacy marker arms the gate without attribution"
+[ ! -e "/tmp/.myspec-code-changed-$SID-40" ] && ok || fail "the legacy marker is removed after the run"
+reset_tree
+
+printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
+[ "$FAIL" -eq 0 ]

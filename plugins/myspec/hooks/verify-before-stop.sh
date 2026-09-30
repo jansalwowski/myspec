@@ -3,9 +3,12 @@
 # Stop hook — runs verification checks before agent completes.
 # Reads commands from .claude/verification.json (requires jq).
 # Outputs {"decision": "block", "reason": "..."} on failure or {"decision": "approve"} on success.
-# The checks run in each checkout the session's log lists under `## Files
-# touched` (a linked worktree edited from a main-checkout cwd included), or in
-# the cwd's checkout when there is no log.
+# The checks run in each checkout of this repository where the session wrote
+# code since the last run (the ledger mark-code-changed.sh keeps), a linked
+# worktree edited from a main-checkout cwd included. A failure that names only
+# files another session left uncommitted there becomes a non-blocking
+# systemMessage warning. Requirements behind each rule: docs/stop-gate.md in
+# the plugin repository.
 # During feature-implement (.claude/state/implement-in-progress.json, at most
 # 8h old) check failures become a non-blocking systemMessage warning instead.
 # Before any check runs, blocks when a dependency directory (each guarded
@@ -137,29 +140,24 @@ if ! command -v jq &>/dev/null; then
   exit 0
 fi
 
-# Check if this session actually changed code files.
-# mark-code-changed.sh (PostToolUse) touches a marker file when the agent edits code.
-# This avoids running verification for brainstorming/planning sessions with pre-existing changes.
-SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
-MARKER_FILE="/tmp/.myspec-code-changed-${SESSION_ID}"
-
-if [ -z "$SESSION_ID" ] || [ ! -f "$MARKER_FILE" ]; then
-  # No code files changed by Claude this session — skip verification
-  echo '{"decision": "approve"}'
-  exit 0
-fi
-
-# Which checkout(s) to verify. The harness cwd is not necessarily where the
-# session's edits are: a session whose cwd is the main checkout can edit files
-# in a linked worktree (absolute paths, `cd <worktree> && ...`), and verifying
-# the untouched main checkout then reports a green that describes the wrong
-# tree. The session log (mark-code-changed.sh, `## Files touched`, in the main
-# checkout's .claude/state/sessions/) names every file the session edited, so
-# each distinct checkout those files live in is verified, once. Only checkouts
-# of this repository count (same git common dir). No log, or no usable path in
-# it, falls back to the cwd checkout, which was the only behaviour before.
-ORIG_ROOT="$REPO_ROOT"
+# Whether to verify, and which checkouts. mark-code-changed.sh (PostToolUse)
+# appends every file the session writes to a per-session ledger, keyed by the
+# physical root of the checkout holding it (docs/stop-gate.md in the plugin
+# repo). A checkout is armed when a `code` line for its root comes after its
+# last `verified` line. Each armed checkout of this repository (same git common
+# dir as the cwd's) is verified, once: the harness cwd is not necessarily where
+# the edits are, and verifying an untouched main checkout while the session
+# edited a linked worktree reports a green that describes the wrong tree. A
+# research session over a dirty tree, and a session whose writes all landed in
+# another repository, run no checks. The empty marker the ledger replaced
+# (/tmp/.myspec-code-changed-<id>, written by an older hook) arms the cwd's
+# checkout, with attribution off: it carries no list of what the session wrote.
+SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
+LEDGER="/tmp/.myspec-session-writes-${SESSION_ID}"
+LEGACY_MARKER="/tmp/.myspec-code-changed-${SESSION_ID}"
+ORIG_ROOT=$(cd "$REPO_ROOT" && pwd -P)
 VERIFY_ROOTS=()
+ATTRIBUTE=1
 
 # physical_common_dir <dir> -> the physical git common dir of the checkout.
 physical_common_dir() {
@@ -176,26 +174,48 @@ add_verify_root() {
   VERIFY_ROOTS+=("$1")
 }
 
-if ORIG_COMMON=$(physical_common_dir "$ORIG_ROOT"); then
-  SESSION_LOG="$(dirname "$ORIG_COMMON")/.claude/state/sessions/${SESSION_ID}.md"
-  if [ -f "$SESSION_LOG" ]; then
-    while IFS= read -r touched; do
-      [ -n "$touched" ] || continue
-      case "$touched" in
-        /*) ;;
-        *) touched="$(dirname "$ORIG_COMMON")/$touched" ;;
-      esac
-      touched_dir=$(dirname "$touched")
-      while [ -n "$touched_dir" ] && [ "$touched_dir" != "/" ] && [ ! -d "$touched_dir" ]; do
-        touched_dir=$(dirname "$touched_dir")
-      done
-      touched_root=$(git -C "$touched_dir" rev-parse --show-toplevel 2>/dev/null) || continue
-      [ "$(physical_common_dir "$touched_root" 2>/dev/null || printf '')" = "$ORIG_COMMON" ] || continue
-      add_verify_root "$touched_root"
-    done < <(awk '/^## Files touched/{p=1; next} /^## /{p=0} p && /^- `.*`$/{sub(/^- `/, ""); sub(/`$/, ""); print}' "$SESSION_LOG")
+# armed_roots -> each root with a `code` line after its last `verified` line,
+# in first-written order.
+armed_roots() {
+  awk -F'\t' '
+    $1 == "verified" { armed[$2] = 0; next }
+    $1 == "code" {
+      if (!($2 in seen)) { seen[$2] = 1; roots[++n] = $2 }
+      armed[$2] = 1
+    }
+    END { for (i = 1; i <= n; i++) if (armed[roots[i]]) print roots[i] }' "$LEDGER"
+}
+
+# same_repo <root> -> 0 when <root> is a checkout of the cwd's repository (the
+# cwd's own root, for a project without git).
+ORIG_COMMON=$(physical_common_dir "$ORIG_ROOT" 2>/dev/null || printf '')
+same_repo() {
+  if [ -n "$ORIG_COMMON" ]; then
+    [ "$(physical_common_dir "$1" 2>/dev/null || printf '')" = "$ORIG_COMMON" ]
+  else
+    [ "$1" = "$ORIG_ROOT" ]
+  fi
+}
+
+if [ -n "$SESSION_ID" ]; then
+  if [ -f "$LEDGER" ]; then
+    while IFS= read -r root; do
+      if [ -d "$root" ] && same_repo "$root"; then
+        add_verify_root "$root"
+      fi
+    done < <(armed_roots)
+  fi
+  if [ -f "$LEGACY_MARKER" ]; then
+    ATTRIBUTE=0
+    add_verify_root "$ORIG_ROOT"
   fi
 fi
-[ "${#VERIFY_ROOTS[@]}" -gt 0 ] || VERIFY_ROOTS=("$ORIG_ROOT")
+
+if [ "${#VERIFY_ROOTS[@]}" -eq 0 ]; then
+  # No code written in this repository since the last run — skip verification
+  echo '{"decision": "approve"}'
+  exit 0
+fi
 
 # A symlinked dependency directory (node_modules, vendor, .venv, ...) makes
 # every check below run against ANOTHER checkout dependency tree, so the gate
@@ -416,8 +436,20 @@ if [ "$ALLOW_LINKED" != "true" ] && [ "${MYSPEC_ALLOW_LINKED_MODULES:-}" != "1" 
 fi
 done
 
-# Clean up marker after verification runs (success or failure)
-trap 'rm -f "$MARKER_FILE"' EXIT
+# Once the checks run (success or failure), the ledger gets a `verified` line
+# for each verified checkout, so only a later code write re-arms it, and a
+# legacy marker is removed. The ledger itself stays: it is the list of what
+# this session wrote, which attribution below needs on every later run.
+finish_run() {
+  local r
+  rm -f "$LEGACY_MARKER"
+  if [ -f "$LEDGER" ]; then
+    for r in "${VERIFY_ROOTS[@]}"; do
+      printf 'verified\t%s\t-\n' "$r" >> "$LEDGER"
+    done
+  fi
+}
+trap 'finish_run' EXIT
 
 # Per-check time cap. A check that outlives it is killed and reported as
 # timed out: the result is unknown, which is not a failure, and the report must
@@ -435,7 +467,7 @@ CLEANUP_CAP_SECONDS=30
 CAP_SENTINEL=$(mktemp "${TMPDIR:-/tmp}/.myspec-cap.XXXXXX")
 rm -f "$CAP_SENTINEL"
 CHECK_LOG=""
-trap 'rm -f "$MARKER_FILE" "$CAP_SENTINEL" ${CHECK_LOG:+"$CHECK_LOG"}' EXIT
+trap 'finish_run; rm -f "$CAP_SENTINEL" ${CHECK_LOG:+"$CHECK_LOG"}' EXIT
 
 # run_with_cap <seconds> <command>: runs it under the cap and kills the whole
 # process group at the deadline. Killing only the direct child is not enough:
@@ -531,13 +563,140 @@ run_capped() {
   CHECK_LOG=""
 }
 
+# Attribution (docs/stop-gate.md, R4). When several sessions share one
+# checkout, a red check may come from another session's uncommitted work
+# (#198). T is the files this session wrote here (the ledger). F is the
+# uncommitted and untracked files outside T. A failure is this session's when
+# its output names a file in T, matched by basename, which errs toward
+# blocking. The stop warns instead of blocking only when every failed check
+# names a file in F and none names one in T, and nothing timed out. F is
+# matched by its full repo-relative path, which errs toward blocking too: a
+# package-relative path in a monorepo tool's output does not match.
+
+# session_files -> repo-relative paths this session wrote in this checkout.
+session_files() {
+  R="$ROOT_KEY" awk -F'\t' '$2 == ENVIRON["R"] && ($1 == "code" || $1 == "file") { print $3 }' "$LEDGER" | sort -u
+}
+
+# changed_files -> uncommitted and untracked paths, both sides of a rename.
+changed_files() {
+  local entry second=0
+  while IFS= read -r -d '' entry; do
+    if [ "$second" -eq 1 ]; then
+      second=0
+      printf '%s\n' "$entry"
+      continue
+    fi
+    printf '%s\n' "${entry:3}"
+    case "${entry:0:2}" in
+      *R*|*C*) second=1 ;;
+    esac
+  done < <(git -C "$REPO_ROOT" status --porcelain=v1 -z --untracked-files=all 2>/dev/null)
+}
+
+# names_in <base|full> <paths file> <output file> -> the listed paths the output
+# names. The output is split into runs of path characters, and each run is
+# looked up: by basename in base mode; in full mode as a repo-relative path,
+# once a leading ./ or this checkout's root is dropped. A lookup, not a
+# substring scan per path, keeps a multi-megabyte test log under a second.
+names_in() {
+  MODE="$1" ROOT="$ROOT_KEY/" awk '
+    FILENAME == ARGV[1] {
+      key = $0
+      if (ENVIRON["MODE"] == "base") sub(/.*\//, "", key)
+      if (key == "") next
+      if (key in want) want[key] = want[key] "\n" $0
+      else want[key] = $0
+      next
+    }
+    {
+      gsub(/[^A-Za-z0-9_.@\/-]+/, " ")
+      n = split($0, tok, " ")
+      for (i = 1; i <= n; i++) {
+        t = tok[i]
+        if (t in seen) continue
+        seen[t] = 1
+        sub(/\.+$/, "", t)
+        if (ENVIRON["MODE"] == "base") {
+          sub(/.*\//, "", t)
+        } else {
+          r = ENVIRON["ROOT"]
+          if (substr(t, 1, length(r)) == r) t = substr(t, length(r) + 1)
+          while (substr(t, 1, 2) == "./") t = substr(t, 3)
+        }
+        if ((t in want) && !(t in hit)) {
+          hit[t] = 1
+          print want[t]
+        }
+      }
+    }' "$2" "$3"
+}
+
+# short_list <file> <max> -> "a, b, c and N more"
+short_list() {
+  local total list
+  total=$(grep -c . "$1" || true)
+  list=$(head -n "$2" "$1" | paste -sd ',' - | sed 's/,/, /g')
+  if [ "$total" -gt "$2" ]; then
+    list="$list and $((total - $2)) more"
+  fi
+  printf '%s' "$list"
+}
+
+# attribute_failures: for the checks of the checkout at ROOT_KEY (from index
+# ROOT_FAILED_START on), sets ATTRIBUTION (a paragraph for the report, empty
+# when every uncommitted change there is this session's) and ATTRIBUTION_WARN=1
+# when its failures should warn instead of block.
+attribute_failures() {
+  local tfile ffile ofile i own foreign where lines="" unknown=0 owned=0
+  ATTRIBUTION=""
+  ATTRIBUTION_WARN=0
+  tfile=$(mktemp "${TMPDIR:-/tmp}/.myspec-attr.XXXXXX")
+  ffile=$(mktemp "${TMPDIR:-/tmp}/.myspec-attr.XXXXXX")
+  ofile=$(mktemp "${TMPDIR:-/tmp}/.myspec-attr.XXXXXX")
+  session_files > "$tfile"
+  # .claude/state/ is per-checkout hook state, not anyone's work. At most 1000
+  # paths take part: past that, a failure matches nothing, which blocks.
+  changed_files | grep -v '^\.claude/state/' | sort -u | grep -vxF -f "$tfile" | head -n 1000 > "$ffile" || true
+  if [ ! -s "$ffile" ]; then
+    rm -f "$tfile" "$ffile" "$ofile"
+    return 0
+  fi
+  for ((i = ROOT_FAILED_START; i < ${#FAILED_CHECKS[@]}; i++)); do
+    printf '%s\n' "${FAILED_FULL[$i]}" > "$ofile"
+    own=$(names_in base "$tfile" "$ofile" | head -n 5 | paste -sd ',' - | sed 's/,/, /g')
+    if [ -n "$own" ]; then
+      owned=1
+      lines="$lines"$'\n'"- ${FAILED_CHECKS[$i]} names files this session wrote: $own"
+      continue
+    fi
+    foreign=$(names_in full "$ffile" "$ofile" | head -n 5 | paste -sd ',' - | sed 's/,/, /g')
+    if [ -n "$foreign" ]; then
+      lines="$lines"$'\n'"- ${FAILED_CHECKS[$i]} names only files changed outside this session: $foreign"
+    else
+      unknown=1
+      lines="$lines"$'\n'"- ${FAILED_CHECKS[$i]} names none of the changed files"
+    fi
+  done
+  if [ "$owned" -eq 0 ] && [ "$unknown" -eq 0 ] && [ ${#TIMED_OUT_CHECKS[@]} -eq "$ROOT_TIMED_START" ]; then
+    ATTRIBUTION_WARN=1
+  fi
+  where="This checkout"
+  [ "$ROOT_KEY" = "$ORIG_ROOT" ] || where="The checkout at $ROOT_KEY"
+  ATTRIBUTION="$where has uncommitted changes this session did not write ($(short_list "$ffile" 10)), so a failure may not be yours.$lines"
+  rm -f "$tfile" "$ffile" "$ofile"
+}
+
 # Run each required check, once per checkout to verify.
 FAILED_CHECKS=()
+FAILED_FULL=()
 TIMED_OUT_CHECKS=()
 FAILED_OUTPUT=()
-# A failure blocks unless every checkout that failed carries a live
-# feature-implement marker (below).
+# A failure blocks unless its checkout carries a live feature-implement marker
+# or attribution clears it (above). Notes say which, for the report.
 BLOCKING_FAILURE=0
+WARN_NOTES=()
+BLOCK_NOTES=()
 
 for REPO_ROOT in "${VERIFY_ROOTS[@]}"; do
 ROOT_CONFIG="$REPO_ROOT/.claude/verification.json"
@@ -546,6 +705,9 @@ ROOT_CONFIG="$REPO_ROOT/.claude/verification.json"
 ROOT_LABEL=""
 [ "$REPO_ROOT" = "$ORIG_ROOT" ] || ROOT_LABEL=" [in $REPO_ROOT]"
 ROOT_FAILURES=${#FAILED_OUTPUT[@]}
+ROOT_FAILED_START=${#FAILED_CHECKS[@]}
+ROOT_TIMED_START=${#TIMED_OUT_CHECKS[@]}
+ROOT_KEY="$REPO_ROOT"
 
 # Base ref for diff-scoped checks. A repo whose lint or type-check is already
 # red on the default branch cannot use a whole-repo command as a gate — it
@@ -652,12 +814,31 @@ for i in $(seq 0 $((CHECKS_COUNT - 1))); do
       FAILED_OUTPUT+=("[$NAME timed out after ${CHECK_CAP_SECONDS}s] $COMMAND was killed before it finished, so its result is unknown. This is not a test failure. $CLEANUP_NOTE Then run the check directly and report its real exit code; if it passes but is slow, reduce its runtime (narrow what it runs). Do not raise the cap. Output so far:"$'\n'"$TRUNCATED")
     else
       FAILED_CHECKS+=("$NAME")
+      FAILED_FULL+=("$OUTPUT")
       FAILED_OUTPUT+=("[$NAME] $COMMAND failed:"$'\n'"$TRUNCATED")
     fi
   fi
 done
-if [ "${#FAILED_OUTPUT[@]}" -gt "$ROOT_FAILURES" ] && [ "$IMPLEMENT_ACTIVE" -eq 0 ]; then
-  BLOCKING_FAILURE=1
+if [ "${#FAILED_OUTPUT[@]}" -gt "$ROOT_FAILURES" ]; then
+  if [ "$IMPLEMENT_ACTIVE" -eq 1 ]; then
+    WARN_NOTES+=("Failing${ROOT_LABEL} during feature-implement orchestration; not blocking (marker .claude/state/implement-in-progress.json). The final verification step still gates.")
+  else
+    ATTRIBUTION=""
+    ATTRIBUTION_WARN=0
+    if [ "$ATTRIBUTE" -eq 1 ] && [ "${#FAILED_CHECKS[@]}" -gt "$ROOT_FAILED_START" ]; then
+      attribute_failures
+    fi
+    if [ "$ATTRIBUTION_WARN" -eq 1 ]; then
+      # The failures are real, but they name only files another session left
+      # uncommitted.
+      WARN_NOTES+=("Not blocking: every failure${ROOT_LABEL} names only files changed outside this session. $ATTRIBUTION"$'\n'"A worktree per session keeps each session's gate to its own changes.")
+    else
+      BLOCKING_FAILURE=1
+      if [ -n "$ATTRIBUTION" ]; then
+        BLOCK_NOTES+=("$ATTRIBUTION")
+      fi
+    fi
+  fi
 fi
 done
 rm -f "$CAP_SENTINEL"
@@ -684,15 +865,25 @@ if [ ${#FAILED_CHECKS[@]} -gt 0 ] || [ ${#TIMED_OUT_CHECKS[@]} -gt 0 ]; then
     DETAILS+="${ENTRY}"$'\n---\n'
   done
   DETAILS=${DETAILS%$'\n---\n'}
+  NOTES=""
+  for ENTRY in ${WARN_NOTES[@]+"${WARN_NOTES[@]}"}; do
+    NOTES+="${ENTRY}"$'\n\n'
+  done
   if [ "$BLOCKING_FAILURE" -eq 0 ]; then
     # Non-blocking: no decision block, so the stop proceeds; systemMessage
     # surfaces the failure to the user.
-    MESSAGE=$(printf "Verification failing (%s) during feature-implement orchestration; not blocking (marker %s). The final verification step still gates.\n\n%s" "$NAMES" ".claude/state/implement-in-progress.json" "$DETAILS" | jq -Rs .)
+    MESSAGE=$(printf "Verification failing (%s).\n\n%s%s" "$NAMES" "$NOTES" "$DETAILS" | jq -Rs .)
     echo "{\"decision\": \"approve\", \"systemMessage\": $MESSAGE}"
     exit 0
   fi
+  if [ "${#BLOCK_NOTES[@]}" -gt 0 ]; then
+    for ENTRY in "${BLOCK_NOTES[@]}"; do
+      NOTES+="${ENTRY}"$'\n\n'
+    done
+    NOTES+="Fix what your changes broke. Do not edit files changed outside this session to make a check pass: another session sharing this checkout may be working on them. If a failure comes from those changes, say so and stop. A Bash side effect (an install, code generation) is not recorded as this session's write, so if you made one of those changes, it is yours."$'\n\n'
+  fi
   # Escape for JSON
-  REASON=$(printf "Verification did not pass (%s). Fix failures before completing; for a timeout, get the real result first.\n\n%s" "$NAMES" "$DETAILS" | jq -Rs .)
+  REASON=$(printf "Verification did not pass (%s). Fix the failures your changes caused before completing; for a timeout, get the real result first.\n\n%s%s" "$NAMES" "$NOTES" "$DETAILS" | jq -Rs .)
   echo "{\"decision\": \"block\", \"reason\": $REASON}"
   exit 0
 fi
