@@ -1,0 +1,65 @@
+name: PR labels
+
+# Deterministic labels on every PR: type from the Conventional Commit title,
+# areas from the changed files, breaking and priority from the title, body and
+# the issues it closes (scripts/triage/pr-labels.mjs). No model call, so no API
+# spend. Labels are only added, never removed, so a label set by hand stays.
+# A second step warns (never fails) when a skill change lacks its examples/ or
+# evals/ companion (scripts/triage/pr-companions.mjs).
+#
+# pull_request_target, so a fork's PR gets a token that can label. It checks
+# out the base branch, never the PR's code, and reads the PR only through the
+# API: nothing from the PR is executed.
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  pull-requests: write
+  issues: read
+  contents: read
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Label from title, files and closing issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          TITLE: ${{ github.event.pull_request.title }}
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          owner=${GITHUB_REPOSITORY%/*} name=${GITHUB_REPOSITORY#*/}
+          gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$NUMBER/files" | jq -s 'add // []' > files.json
+          jq -r '.[].filename' files.json > files.txt
+          issue_labels=$(gh api graphql -F owner="$owner" -F name="$name" -F n="$NUMBER" -f query='
+            query($owner: String!, $name: String!, $n: Int!) {
+              repository(owner: $owner, name: $name) { pullRequest(number: $n) {
+                closingIssuesReferences(first: 20) { nodes { labels(first: 30) { nodes { name } } } } } } }' \
+            --jq '[.data.repository.pullRequest.closingIssuesReferences.nodes[].labels.nodes[].name] | unique | join(",")')
+          printf '%s' "${BODY:-}" > body.txt
+          node scripts/triage/pr-labels.mjs --title "$TITLE" --body-file body.txt --issue-labels "$issue_labels" < files.txt > labels.txt
+          echo "labels: $(paste -sd, - < labels.txt)"
+          # The REST labels endpoint, not `gh pr edit`, which fails with this
+          # repo's token (AGENTS.md "Stacked PRs").
+          [ ! -s labels.txt ] || jq -R . labels.txt | jq -s '{labels: .}' \
+            | gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$NUMBER/labels" --input - > /dev/null
+
+      - name: Warn on missing companion changes
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          printf '%s' "${BODY:-}" > body.txt
+          node scripts/triage/pr-companions.mjs --body-file body.txt < files.json > warnings.txt
+          while IFS= read -r w; do echo "::warning title=PR companions::$w"; echo "- $w" >> "$GITHUB_STEP_SUMMARY"; done < warnings.txt
+          [ -s warnings.txt ] || echo "no companion warnings"

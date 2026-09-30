@@ -44,16 +44,23 @@ run_hook() {  # run_hook <cwd> <session-id> <file-path> → stdout
 }
 
 check() {  # check <want> <desc> <session-id> <file-path>
-  local want="$1" desc="$2" sid="$3" file="$4" got out
+  local want="$1" desc="$2" sid="$3" file="$4" got out rc
   out=$(run_hook "$REPO" "$sid" "$file")
+  rc=$?
 
-  if printf '%s' "$out" | grep -q '"block"'; then got=block; else got=allow; fi
+  # An allow is exit 0 with EMPTY stdout. Anything printed on allow is a
+  # defect: {"decision": "approve"} is the deprecated PreToolUse spelling of
+  # "allow", which skips the user's permission prompt (issue #158).
+  if printf '%s' "$out" | grep -q '"block"'; then got=block
+  elif [ "$rc" -eq 0 ] && [ -z "$out" ]; then got=allow
+  else got="noisy"; fi
 
   if [ "$got" = "$want" ]; then
     PASS=$((PASS + 1))
   else
     FAIL=$((FAIL + 1))
-    printf 'FAIL  want=%-5s got=%-5s  %s (%s)\n' "$want" "$got" "$desc" "$file" >&2
+    printf 'FAIL  want=%-5s got=%-5s  %s (%s)\n      rc=%s stdout: %s\n' \
+      "$want" "$got" "$desc" "$file" "$rc" "$out" >&2
   fi
 }
 
@@ -140,11 +147,13 @@ fi
 # --- not a myspec project: the hook stays out of the way ----------------------
 OTHER="$ROOT/other"
 git init -q -b main "$OTHER"
-if printf '{"tool_input":{"file_path":%s},"cwd":%s,"session_id":"x"}' \
-     "$(printf '%s' "$OTHER/src/a.ts" | jq -Rs .)" "$(printf '%s' "$OTHER" | jq -Rs .)" | "$HOOK" | grep -q '"block"'; then
-  FAIL=$((FAIL + 1)); echo "FAIL  a repo without .myspec.json was gated" >&2
-else
+OUT=$(printf '{"tool_input":{"file_path":%s},"cwd":%s,"session_id":"x"}' \
+     "$(printf '%s' "$OTHER/src/a.ts" | jq -Rs .)" "$(printf '%s' "$OTHER" | jq -Rs .)" | "$HOOK")
+RC=$?
+if [ "$RC" -eq 0 ] && [ -z "$OUT" ]; then
   PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); echo "FAIL  a repo without .myspec.json must pass silently (rc=$RC, stdout: $OUT)" >&2
 fi
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"

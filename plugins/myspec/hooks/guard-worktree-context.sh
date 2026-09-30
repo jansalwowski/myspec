@@ -31,7 +31,8 @@
 # A plain substring match fires on the verb wherever it appears — inside a
 # commit message, a PR body, doc prose — and blocks a command that mutates
 # nothing. Those false positives were the branch guard's dominant failure mode.
-# Fixture: hooks/tests/guard-worktree-context.test.sh
+# The fixture, hooks/tests/guard-worktree-context.test.sh, lives in the myspec
+# plugin repo and is not copied into adopting projects.
 #
 # WHERE a segment runs is decided per segment, not once per command: the
 # payload's cwd, then every `cd <dir>` before it (scoped to its subshell), then
