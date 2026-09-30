@@ -64,9 +64,9 @@ expect_quiet() {  # expect_quiet <desc>: exit 0 and no output
 
 # big_body <file>: appends ~256 KiB of prose, well past any pipe buffer
 big_body() {
-  local line i
+  local line
   line=$(printf 'lorem ipsum dolor sit amet %.0s' 1 2 3 4 5 6 7 8)
-  for i in $(seq 1 1200); do printf '%s\n' "$line"; done >> "$1"
+  for _ in $(seq 1 1200); do printf '%s\n' "$line"; done >> "$1"
 }
 
 mkdir -p "$REPO/.ai/features/x"

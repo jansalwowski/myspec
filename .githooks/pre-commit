@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# pre-commit: static skill lint on staged SKILL.md files, `bash -n` on staged
-# hook scripts, eslint (scripts/lint-js.sh) on staged lib/ JS. Nothing runs
-# when none of those is staged. eslint comes through npx, so when it cannot
-# run (offline, no node) the JS lint is skipped with a notice, not blocked.
+# pre-commit: static skill lint on staged SKILL.md files, `bash -n` and
+# ShellCheck on staged hooks/ and lib/ shell scripts, eslint
+# (scripts/lint-js.sh) on staged lib/ JS. Nothing runs when none of those is
+# staged. When shellcheck is not installed, or eslint cannot run through npx
+# (offline, no node), that check is skipped with a notice, not blocked.
 #
 # What is checked is what gets committed: the index is materialised into a
 # temp dir and linted there, so an unstaged edit can neither hide a staged
@@ -25,7 +26,7 @@ jsfiles=()
 while IFS= read -r -d '' f; do
   if [[ "$f" =~ ^(plugins/[^/]+/|\.claude/)?skills/[^/]+/SKILL\.md$ ]]; then
     skills+=("$f")
-  elif [[ "$f" =~ ^(plugins/[^/]+/)?hooks/.*\.sh$ ]]; then
+  elif [[ "$f" =~ ^(plugins/[^/]+/)?(hooks|lib)/.*\.sh$ ]]; then
     shells+=("$f")
   elif [[ "$f" =~ ^(plugins/[^/]+/)?lib/.*\.(mjs|cjs|js)$ ]]; then
     jsfiles+=("$f")
@@ -51,6 +52,23 @@ for f in ${shells[@]+"${shells[@]}"}; do
     status=1
   fi
 done
+
+if [ ${#shells[@]} -gt 0 ]; then
+  # CI pins the version (test.yml); here any installed shellcheck will do.
+  # Run from the export so the staged tests/.shellcheckrc files apply and
+  # findings print as repo paths.
+  if ! command -v shellcheck >/dev/null 2>&1; then
+    echo "pre-commit: shellcheck not found; shell lint skipped" >&2
+  else
+    (cd "$tmp" && shellcheck "${shells[@]}") >&2
+    rc=$?
+    if [ "$rc" -eq 1 ]; then
+      status=1
+    elif [ "$rc" -ne 0 ]; then
+      echo "pre-commit: shellcheck exited $rc (usage or internal error); shell lint skipped" >&2
+    fi
+  fi
+fi
 
 if [ ${#skills[@]} -gt 0 ]; then
   # Prefer the staged linter; fall back to the working tree's when it is not tracked.

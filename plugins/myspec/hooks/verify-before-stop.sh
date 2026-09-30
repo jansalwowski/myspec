@@ -270,6 +270,7 @@ fi
 # root (a nested apps/web/node_modules is pinned by either). Anything else (an
 # .env file, a cache) is unguarded: it pins no dependency set, and guarding it
 # would block every stop that links one.
+# shellcheck disable=SC2034 # only verify-before-stop.sh reads it; the block is byte-identical in both files
 DEP_DIRS="node_modules vendor vendor/bundle .venv venv"
 
 # dep_lockfiles <path> -> the lockfile names that pin that directory.
@@ -349,6 +350,7 @@ symlink_entries() {
 # Python install (poetry, uv, pip -e) records its source in direct_url.json.
 tree_loads_checkout() {
   local tree="$1" checkout="$2" f url dir
+  # shellcheck disable=SC2016 # the literal $baseDir text Composer writes, not a variable
   grep -qsF '$baseDir . ' "$tree"/composer/autoload_*.php && return 0
   for f in "$tree"/lib/python*/site-packages/*.dist-info/direct_url.json; do
     [ -f "$f" ] || continue
@@ -426,6 +428,7 @@ if [ "$ALLOW_LINKED" != "true" ] && [ "${MYSPEC_ALLOW_LINKED_MODULES:-}" != "1" 
     kind="${line%%$'\t'*}"
     line="${line#*$'\t'}"
     entry="${line%%$'\t'*}"
+    # shellcheck disable=SC2015 # B is a test too: either one failing means skip
     [ -n "$entry" ] && [ "$line" != "$entry" ] || continue
     [ -L "$REPO_ROOT/$entry" ] || continue
     src=$(link_source "$entry") || src=""
@@ -542,9 +545,8 @@ run_with_cap() {
 # A group that no longer exists (or a timeout that did not lead one) is a
 # no-op.
 kill_group() {
-  local n
   kill -TERM -- "-$1" 2>/dev/null || return 0
-  for n in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
     kill -0 -- "-$1" 2>/dev/null || return 0
     sleep 0.1
   done

@@ -230,6 +230,30 @@ git add hooks/broken.sh
 in_repo git commit -qm "fixed hook"
 expect_exit 0 "a hook script that parses passes"
 
+# ShellCheck (#209). A stub on PATH stands in for shellcheck, so the result does
+# not depend on which version (if any) the machine has: it flags any file
+# containing SC_BAD, printing the path it was given, and exits 1.
+mkdir -p "$TMP/scbin"
+cat > "$TMP/scbin/shellcheck" <<'STUB'
+#!/bin/sh
+rc=0
+for f in "$@"; do
+  if grep -q SC_BAD "$f"; then echo "In $f line 2: SC_BAD is unused"; rc=1; fi
+done
+exit $rc
+STUB
+chmod +x "$TMP/scbin/shellcheck"
+mkdir -p lib
+printf '#!/usr/bin/env bash\nSC_BAD=1\n' > lib/lintme.sh
+git add lib/lintme.sh
+PATH="$TMP/scbin:$PATH" in_repo git commit -qm "shellcheck finding in lib"
+expect_exit 1 "a staged lib shell script with a shellcheck finding blocks the commit"
+expect_line "^In lib/lintme\.sh line 2" "the shellcheck finding is shown with a repo-relative path"
+printf '#!/usr/bin/env bash\necho fine\n' > lib/lintme.sh
+git add lib/lintme.sh
+PATH="$TMP/scbin:$PATH" in_repo git commit -qm "clean lib script"
+expect_exit 0 "a clean staged lib shell script passes"
+
 # JS lint (#208). A stub stands in for scripts/lint-js.sh so the suite stays
 # offline: it flags any file containing unusedVar the way eslint does (absolute
 # path, exit 1), and fails its --version probe when STUB_ESLINT_DOWN is set.

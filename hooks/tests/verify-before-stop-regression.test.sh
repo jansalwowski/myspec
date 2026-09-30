@@ -67,6 +67,7 @@ OUT=$(run_hook '')
 R=$(reason "$OUT")
 printf '%s' "$R" | grep -qF 'alpha, beta' && ok || fail "failed check names are joined with \", \" (got: $(printf '%s' "$R" | head -1))"
 printf '%s\n' "$R" | grep -qx -- '---' && ok || fail "per-check sections are separated by a --- line"
+# shellcheck disable=SC1003 # '\' is a lone literal backslash, not an escaped quote
 printf '%s' "$R" | grep -qF '\' && fail "the report holds no literal backslash (got: $(printf '%s' "$R" | grep -F '\' | head -1))" || ok
 printf '%s\n' "$R" | grep -qx 'ALPHA-OUT' && ok || fail "check output starts on its own line"
 printf '%s\n' "$R" | grep -qx 'BETA-OUT' && ok || fail "the second check's output is reported too"

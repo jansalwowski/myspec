@@ -29,6 +29,7 @@ usage() {
   exit 1
 }
 
+# shellcheck disable=SC2015 # B is a test too: either one failing means usage
 [ $# -ge 2 ] && [ $# -le 3 ] || usage
 PLAN="$1"
 TASK="$2"

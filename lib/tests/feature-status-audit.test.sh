@@ -41,7 +41,7 @@ expect_no_line() {  # expect_no_line <regex> <description>
 }
 
 run_audit() {       # run_audit [args...]
-  OUTPUT=$(cd "$REPO" && node "$SCRIPT" "$@" 2>&1); STATUS=$?
+  OUTPUT=$(cd "$REPO" && node "$SCRIPT" "$@" 2>&1)
 }
 
 doc() {             # doc <path> <status>   — spec/tech-spec with frontmatter status
@@ -137,8 +137,8 @@ status: superseded/' "$F/complete-superseded-archive/plans/2026-02-01-v1-plan.md
   # parent-ticked ticks ACs (convention in use) and has open ones.
   # A checkbox under a later heading must not count as an AC.
   local acs='## Acceptance Criteria\n\n- [x] AC-1\n- [ ] AC-2\n- [ ] AC-3\n\n## Out of Scope\n\n- [ ] not an AC\n'
-  printf -- "---\nstatus: approved\n---\n\n$acs" > "$F/parent-ticked/spec.md"
-  printf -- "---\nstatus: approved\n---\n\n$acs" > "$F/parent-mixed/spec.md"
+  printf -- '---\nstatus: approved\n---\n\n%b' "$acs" > "$F/parent-ticked/spec.md"
+  printf -- '---\nstatus: approved\n---\n\n%b' "$acs" > "$F/parent-mixed/spec.md"
   # parent-unticked never ticks ACs: a convention, not drift.
   printf -- '---\nstatus: approved\n---\n\n## Acceptance Criteria\n\n- [ ] AC-1\n- [ ] AC-2\n' > "$F/parent-unticked/spec.md"
 }

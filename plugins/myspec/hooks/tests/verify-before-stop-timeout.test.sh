@@ -34,6 +34,7 @@ GRANDCHILD_PID="$ROOT/grandchild.pid"
 LEFTOVER_PID="$ROOT/leftover.pid"
 DETACHED_PID="$ROOT/detached.pid"
 WRITER_PID="$ROOT/writer.pid"
+# shellcheck disable=SC2154 # p is the trap body's own loop variable
 trap 'for p in "$GRANDCHILD_PID" "$LEFTOVER_PID" "$DETACHED_PID" "$WRITER_PID"; do [ -f "$p" ] && kill "$(cat "$p")" 2>/dev/null; done; rm -rf "$ROOT"; rm -f "$CHANGED"' EXIT
 
 PASS=0

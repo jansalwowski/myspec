@@ -181,6 +181,7 @@ HEAVY_PATTERNS=(
 resolve_dir() {
   local base="$1" word
   word=$(decode_word "$2")
+  # shellcheck disable=SC2088 # the ~/ branch matches a literal ~/ in the command text, then expands it by hand
   case "$word" in
     '') word="${HOME:-}" ;;
     -|*'$'*|*'`'*|*'*'*|*'?'*) return 1 ;;
@@ -287,6 +288,7 @@ branch_verdict() {
     # -i: on a case-insensitive filesystem (macOS default) git resolves
     # WT-A to the ref file of wt-a, so a case-variant name deletes it too.
     if printf '%s\n' "$checked_out" | grep -qixF -- "$word"; then
+      # shellcheck disable=SC2016 # literal backticks: the message quotes a command
       printf 'BLOCKED: branch %s is checked out in a worktree (see `git worktree list`), and deleting it would leave that working tree on a missing branch. Remove the worktree first, or clean up with .claude/lib/branch-cleanup.sh. Blocked: %s' "$word" "$(printf '%s' "$segment" | head -c 200)"
       return 0
     fi
@@ -327,6 +329,7 @@ session_mode() {
 
   # 2. Inherited decision — subagents cannot prompt, so they follow the newest
   #    recent marker.
+  # shellcheck disable=SC2012 # ls -t is the portable mtime sort; the names are generated session ids
   newest=$(ls -t "$state_dir"/*.json 2>/dev/null | head -1 || printf '')
   if [ -n "$newest" ] && [ -f "$newest" ]; then
     read_marker "$newest"

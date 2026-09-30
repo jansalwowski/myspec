@@ -96,7 +96,7 @@ rm "$T3/untracked.js"
 [ "$(git -C "$CTRL" branch --show-current)" = "feat/x" ]; ok "controller stays on the feature branch" $?
 [ ! -e "$T2" ] && [ ! -e "$T3" ]; ok "merged worktrees are removed" $?
 ! git -C "$REPO" show-ref --verify --quiet refs/heads/feat/x--t2; ok "merged task branch is deleted" $?
-[ -z "$(git -C "$REPO" branch --show-current | grep -v '^main$')" ]; ok "main checkout never changed branch" $?
+! git -C "$REPO" branch --show-current | grep -v '^main$' >/dev/null; ok "main checkout never changed branch" $?
 
 # --- conflict: stop with the merge in progress, rerun cleans up -----------------
 "$SCRIPT" create t6 >/dev/null 2>&1
