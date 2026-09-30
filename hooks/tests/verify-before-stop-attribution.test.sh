@@ -214,6 +214,47 @@ expect_decision block "$OUT" "a session that broke a worktree from a main-checko
 expect_text "$OUT" "[in $WT]" "the report names the worktree the check ran in"
 git -C "$REPO" worktree remove --force "$WT"
 
+# --- PR #203 review: many matches do not kill the hook (SIGPIPE) ------------------
+# ~50 KB of matched paths: `head` in the pipeline used to exit early, and under
+# pipefail the hook died with 141 and printed no decision.
+mkdir -p "$REPO/gen"
+for i in $(seq 1 1000); do printf 'BROKEN\n' > "$REPO/gen/generated-component-with-a-long-name-$i.ts"; done
+set_checks '! grep -l BROKEN gen/*.ts'
+mark_write 36 "$REPO/app.ts"
+OUT=$(stop 36); RC=$?
+[ "$RC" -eq 0 ] && ok || fail "the hook exits 0 when a failure names 1000 changed paths (exit $RC)"
+expect_decision approve "$OUT" "1000 foreign paths named: still a decision, and a warning"
+expect_text "$OUT" 'and 990 more' "the foreign list is cut to ten"
+reset_tree
+
+# --- the session's files reach the checks -----------------------------------------
+set_checks "printf '%s\n' \"\$MYSPEC_SESSION_FILES\" > $ROOT/session-files"
+printf 'export const a = 6;\n' > "$REPO/app.ts"
+mark_write 37 "$REPO/app.ts"
+mark_write 37 "$REPO/tsconfig.json"
+OUT=$(stop 37)
+[ "$(cat "$ROOT/session-files")" = "$(printf 'app.ts\ntsconfig.json')" ] && ok || fail "MYSPEC_SESSION_FILES lists the files this session wrote (got: $(cat "$ROOT/session-files" | tr '\n' ' '))"
+reset_tree
+
+# --- PR #203 review: an edit inside a submodule verifies the superproject ----------
+MOD="$ROOT/modsrc"
+git init -q -b main "$MOD"
+git -C "$MOD" config user.email t@t
+git -C "$MOD" config user.name t
+printf 'ok\n' > "$MOD/m.ts"
+git -C "$MOD" add -A
+git -C "$MOD" commit -q -m init
+git -C "$REPO" -c protocol.file.allow=always submodule add -q "$MOD" mod >/dev/null 2>&1
+git -C "$REPO" commit -q -m submodule
+set_checks '! grep -H BROKEN mod/m.ts'
+printf 'BROKEN\n' >> "$REPO/mod/m.ts"
+mark_write 38 "$REPO/mod/m.ts"
+OUT=$(stop 38)
+expect_decision block "$OUT" "a broken submodule file blocks through the superproject's checks"
+OUT=$(stop 38)
+ran && fail "the submodule write counts as verified after the run" || ok
+git -C "$REPO/mod" checkout -q -- m.ts
+
 # --- legacy marker: armed, attribution off -----------------------------------------
 set_checks "$LINT"
 printf 'BROKEN\n' >> "$REPO/other.ts"

@@ -209,6 +209,36 @@ bashcmd "$SID-48" "$REPO" '(cd src && echo x > sub.ts); echo x > top.ts'
 ledger_has "$SID-48" code "$REPO" src/sub.ts && ok || fail "a cd inside a subshell applies within it"
 ledger_has "$SID-48" code "$REPO" top.ts && ok || fail "and ends with it"
 
+# --- PR #203 review: sed/perl forms, patch options, quoted targets -------------
+for f in r1 r2 r3 r4 r6 r10; do printf 'a\n' > "$REPO/src/$f.ts"; done
+printf 'x\n' > "$REPO/fix.diff"
+bashcmd "$SID-50" "$REPO" "/usr/bin/sed -i '' 's/a/b/' src/r1.ts"
+ledger_has "$SID-50" code "$REPO" src/r1.ts && ok || fail "sed by its full path still arms"
+bashcmd "$SID-51" "$REPO" "sed -e 's/a/b/' -i '' src/r2.ts"
+ledger_has "$SID-51" code "$REPO" src/r2.ts && ok || fail "sed with -i after another option still arms"
+bashcmd "$SID-52" "$REPO" "sed --silent -n 's/a/b/p' src/r2.ts"
+[ ! -s "/tmp/.myspec-session-writes-$SID-52" ] && ok || fail "sed without -i records nothing"
+bashcmd "$SID-53" "$REPO" "perl -pi -e 's/a/b/' src/r3.ts"
+ledger_has "$SID-53" code "$REPO" src/r3.ts && ok || fail "perl -pi arms"
+bashcmd "$SID-54" "$REPO" "perl -Mstrict -e 'print 1' src/r3.ts"
+[ ! -s "/tmp/.myspec-session-writes-$SID-54" ] && ok || fail "a perl -M module name is not -i"
+bashcmd "$SID-55" "$REPO" 'patch -i fix.diff src/r4.ts'
+ledger_has "$SID-55" code "$REPO" src/r4.ts && ok || fail "patch -i records the file it edits"
+grep -q 'fix.diff' "/tmp/.myspec-session-writes-$SID-55" && fail "patch -i does not record the diff it reads" || ok
+bashcmd "$SID-56" "$REPO" 'patch -o src/r5.ts src/r4.ts fix.diff'
+ledger_has "$SID-56" code "$REPO" src/r5.ts && ok || fail "patch -o records the file it writes"
+bashcmd "$SID-57" "$REPO" "sed -i '' 's/a/b/' \"src/r6.ts\""
+ledger_has "$SID-57" code "$REPO" src/r6.ts && ok || fail "a quoted sed target is recorded"
+bashcmd "$SID-58" "$REPO" 'echo x > "src/r7 spaced.ts"'
+ledger_has "$SID-58" code "$REPO" 'src/r7 spaced.ts' && ok || fail "a quoted redirect target with a space is recorded"
+bashcmd "$SID-59" "$REPO" 'cd "src" && echo x > r8.ts'
+ledger_has "$SID-59" code "$REPO" src/r8.ts && ok || fail "a quoted cd target moves the base directory"
+bashcmd "$SID-60" "$REPO" 'echo "a > b.ts" > src/r9.ts'
+ledger_has "$SID-60" code "$REPO" src/r9.ts && ok || fail "the real redirect target is recorded"
+[ "$(wc -l < "/tmp/.myspec-session-writes-$SID-60")" -eq 1 ] && ok || fail "a > inside quotes is not a redirect"
+bashcmd "$SID-61" "$REPO" 'sed -i "" "s/a/b/" "$F" src/r10.ts'
+ledger_has "$SID-61" code "$REPO" src/r10.ts && ok || fail "a variable operand does not hide the literal one after it"
+
 # --- an edit inside a linked worktree logs in the PRIMARY checkout -----------
 git -C "$REPO" worktree add -q "$REPO/.claude/worktrees/wt-a" -b wt-a
 WT="$REPO/.claude/worktrees/wt-a"

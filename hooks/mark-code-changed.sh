@@ -33,10 +33,10 @@
 # lib/command-scan.sh) and records only what the command writes: a redirect
 # target other than /dev/null or a descriptor, the operands of `tee`, `sed -i`
 # and `perl -i`, every operand of `mv`, the destination of `cp`, `rsync` and
-# `install`, and the file `patch` edits. Reading, grepping or running a file
-# records nothing. A quoted or variable path, `git apply`, and a script that
-# writes from inside a heredoc body are not seen — run it as
-# `python3 script.py` or use the Write tool.
+# `install`, and the files `patch` edits and writes. Reading, grepping or
+# running a file records nothing. A quoted literal path is read; a variable
+# path, `git apply`, and a script that writes from inside a heredoc body are
+# not seen — run it as `python3 script.py` or use the Write tool.
 #
 # `## Files touched` is how a skill finds ITS OWN session among several: the
 # harness never exposes the session id to the model, but the paths it edited
@@ -162,10 +162,14 @@ emit_target() {
 # count only when a write verb stands at its command position. A literal `cd`
 # moves BASE_DIR for the segments after it, and a subshell restores it on exit,
 # so `cd <worktree> && echo x > a.ts` records the worktree's file.
+# Two scans of the command run in step: the plain one (quoted spans blanked to
+# Q) decides what is a verb, an option or a redirect; the `keep` one supplies
+# the operand's text, so a quoted literal path ("src/a.ts") resolves too. Both
+# split into the same segments and words (lib/command-scan.sh).
 bash_write_targets() {
-  local line sep seg verb word skip i last dest next
-  local -a words ops scopes=()
-  while IFS= read -r line; do
+  local line kline sep seg kseg verb word skip i last dest next inplace
+  local -a words kwords ops scopes=()
+  while IFS= read -r line && IFS= read -r kline <&3; do
     sep="${line%%$'\t'*}"
     case "$sep" in
       '(') scopes+=("$BASE_DIR") ;;
@@ -178,46 +182,83 @@ bash_write_targets() {
     esac
     seg=$(strip_command_prefix "${line#*$'\t'}")
     [ -n "$seg" ] || continue
+    kseg=$(strip_command_prefix "${kline#*$'\t'}")
 
     read -ra words <<< "$seg"
+    read -ra kwords <<< "$kseg"
     [ "${#words[@]}" -gt 0 ] || continue
+    if [ "${#kwords[@]}" -ne "${#words[@]}" ]; then
+      kwords=("${words[@]}")
+    fi
     if [ "${words[0]}" = cd ]; then
-      if [ "${#words[@]}" -ge 2 ] && next=$(cd "$BASE_DIR" 2>/dev/null && cd "${words[1]}" 2>/dev/null && pwd -P); then
+      if [ "${#words[@]}" -ge 2 ] && next=$(cd "$BASE_DIR" 2>/dev/null && cd "$(decode_word "${kwords[1]}")" 2>/dev/null && pwd -P); then
         BASE_DIR="$next"
       fi
       continue
     fi
 
-    # `2>&1` and `>&2` never match: the split on `&` leaves nothing after `>`.
-    while IFS= read -r word; do
-      emit_target "$word"
-    done < <(printf '%s\n' "$seg" | grep -oE '>{1,2}[[:space:]]*[^[:space:]<>]+' | sed -E 's/^>{1,2}[[:space:]]*//' || true)
-
     verb="${words[0]##*/}"
     ops=()
     skip=0
+    inplace=0
     for ((i = 1; i < ${#words[@]}; i++)); do
       word="${words[$i]}"
       if [ "$skip" -eq 1 ]; then
         skip=0
         continue
       fi
+      # Redirects: `>` or `2>>` alone takes the next word as its target, an
+      # attached one (`>out.ts`) the rest of the word. `2>&1` and `>&2` never
+      # get here with a target: the split on `&` leaves nothing after `>`.
+      if [[ "$word" =~ ^[0-9]*\>{1,2}$ ]]; then
+        if [ $((i + 1)) -lt "${#words[@]}" ]; then
+          emit_target "$(decode_word "${kwords[$((i + 1))]}")"
+        fi
+        skip=1
+        continue
+      fi
+      if [[ "$word" =~ ^[0-9]*\>{1,2}(.+)$ ]]; then
+        emit_target "$(decode_word "$(printf '%s' "${kwords[$i]}" | sed -E 's/^[0-9]*>{1,2}//')")"
+        continue
+      fi
       case "$word" in
-        *'>'|*'<') skip=1; continue ;;
-        *'>'*|*'<'*|-*) continue ;;
+        *'>'*)
+          # Attached mid-word (`x>out.ts`): only an unquoted target is readable.
+          [[ "${word##*>}" == *Q* ]] || emit_target "${word##*>}"
+          continue
+          ;;
+        '<'|*'<') skip=1; continue ;;
+        *'<'*) continue ;;
+        -*)
+          # -i anywhere among the options, alone or bundled (-ni, -pi,
+          # -i.bak). Perl's -M/-m take a module name, which may hold an i.
+          if { [ "$verb" = sed ] && { [[ "$word" =~ ^-[a-zA-Z]*i ]] || [[ "$word" == --in-place* ]]; }; } \
+              || { [ "$verb" = perl ] && [[ ! "$word" =~ ^-[Mm] ]] && [[ "$word" =~ ^-[a-zA-Z]*i ]]; }; then
+            inplace=1
+          fi
+          case "$verb:$word" in
+            # Options that take the next word as their value. patch -o names
+            # the file it writes.
+            patch:-o|patch:--output)
+              if [ $((i + 1)) -lt "${#words[@]}" ]; then
+                emit_target "$(decode_word "${kwords[$((i + 1))]}")"
+              fi
+              skip=1
+              ;;
+            patch:-[idprBDFVYzg]|install:-[mogS]) skip=1 ;;
+          esac
+          continue
+          ;;
       esac
-      ops+=("$word")
+      ops+=("$(decode_word "${kwords[$i]}")")
     done
     [ "${#ops[@]}" -gt 0 ] || continue
     last="${ops[${#ops[@]}-1]}"
 
     case "$verb" in
-      sed)
-        printf '%s\n' "$seg" | grep -qE '^sed([[:space:]]+-[^[:space:]]+)*[[:space:]]+(-[a-zA-Z]*i|--in-place)' || continue
-        for word in "${ops[@]}"; do emit_target "$word" must-exist; done
-        ;;
-      perl)
-        printf '%s\n' "$seg" | grep -qE '^perl([[:space:]]+-[^[:space:]]+)*[[:space:]]+-[a-zA-Z]*i' || continue
+      sed|perl)
+        # The script is an operand too unless -e gave it; it is not a file.
+        [ "$inplace" -eq 1 ] || continue
         for word in "${ops[@]}"; do emit_target "$word" must-exist; done
         ;;
       tee)
@@ -238,10 +279,12 @@ bash_write_targets() {
         fi
         ;;
       patch)
+        # patch [options] [originalfile [patchfile]]
         emit_target "${ops[0]}" must-exist
         ;;
     esac
-  done < <(printf '%s' "$1" | sanitize_command | split_segments)
+  done < <(printf '%s' "$1" | sanitize_command | split_segments) \
+       3< <(printf '%s' "$1" | sanitize_command keep | split_segments)
   return 0
 }
 
@@ -407,10 +450,7 @@ elif [ -n "$COMMAND" ]; then
   # Cheap gate before the full scan: a write verb or a redirect at some
   # segment. Most Bash calls stop here.
   WRITE_PATTERNS=(
-    '^sed[[:space:]]'
-    '^perl[[:space:]]+-'
-    '^patch([[:space:]]|$)'
-    '^(tee|mv|cp|rsync|install)[[:space:]]'
+    '^([^[:space:]]*/)?(sed|perl|tee|mv|cp|rsync|install|patch)([[:space:]]|$)'
     '>{1,2}[[:space:]]*[^&[:space:]]'
   )
   [ -n "$(find_matching_segment "$COMMAND" "${WRITE_PATTERNS[@]}")" ] || exit 0

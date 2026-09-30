@@ -197,11 +197,24 @@ same_repo() {
   fi
 }
 
+# A checkout nested inside the cwd's tree that is not a checkout of this
+# repository (a submodule, whose common dir is .git/modules/<name>) is
+# verified through the cwd's checkout, whose checks may build or test it. Its
+# root still gets its `verified` line (NESTED_ROOTS).
+NESTED_ROOTS=()
 if [ -n "$SESSION_ID" ]; then
   if [ -f "$LEDGER" ]; then
     while IFS= read -r root; do
-      if [ -d "$root" ] && same_repo "$root"; then
+      [ -d "$root" ] || continue
+      if same_repo "$root"; then
         add_verify_root "$root"
+      else
+        case "$root/" in
+          "$ORIG_ROOT"/*)
+            add_verify_root "$ORIG_ROOT"
+            NESTED_ROOTS+=("$root")
+            ;;
+        esac
       fi
     done < <(armed_roots)
   fi
@@ -444,7 +457,7 @@ finish_run() {
   local r
   rm -f "$LEGACY_MARKER"
   if [ -f "$LEDGER" ]; then
-    for r in "${VERIFY_ROOTS[@]}"; do
+    for r in "${VERIFY_ROOTS[@]}" ${NESTED_ROOTS[@]+"${NESTED_ROOTS[@]}"}; do
       printf 'verified\t%s\t-\n' "$r" >> "$LEDGER"
     done
   fi
@@ -467,7 +480,8 @@ CLEANUP_CAP_SECONDS=30
 CAP_SENTINEL=$(mktemp "${TMPDIR:-/tmp}/.myspec-cap.XXXXXX")
 rm -f "$CAP_SENTINEL"
 CHECK_LOG=""
-trap 'finish_run; rm -f "$CAP_SENTINEL" ${CHECK_LOG:+"$CHECK_LOG"}' EXIT
+CHECK_RUN_LOG=""
+trap 'finish_run; rm -f "$CAP_SENTINEL" ${CHECK_LOG:+"$CHECK_LOG"} ${CHECK_RUN_LOG:+"$CHECK_RUN_LOG"} ${FAILED_LOGS[@]+"${FAILED_LOGS[@]}"}' EXIT
 
 # run_with_cap <seconds> <command>: runs it under the cap and kills the whole
 # process group at the deadline. Killing only the direct child is not enough:
@@ -542,8 +556,10 @@ capped() {
   [ -f "$CAP_SENTINEL" ] || { [ "$1" -eq 124 ] && [ "$2" -ge "$3" ]; }
 }
 
-# run_capped <seconds> <command> <run id>: runs <command> from the repo root
-# under run_with_cap. Sets RUN_EXIT, RUN_ELAPSED and RUN_OUTPUT.
+# run_capped <seconds> <command> <run id> [keep]: runs <command> from the repo
+# root under run_with_cap. Sets RUN_EXIT, RUN_ELAPSED and RUN_OUTPUT. With
+# keep, the output file stays and RUN_LOG names it: the caller removes it, or
+# keeps a failed check's log for attribution to read.
 # Output goes to a file, not a $(...) capture: a process that escapes the
 # group kill (it called setsid, or it is a detaching daemon) would otherwise
 # hold the pipe open and keep the hook waiting until it exits on its own,
@@ -559,7 +575,12 @@ run_capped() {
     >"$CHECK_LOG" 2>&1 </dev/null && RUN_EXIT=0 || RUN_EXIT=$?
   RUN_ELAPSED=$(( $(date +%s) - start ))
   RUN_OUTPUT=$(cat "$CHECK_LOG")
-  rm -f "$CHECK_LOG"
+  RUN_LOG=""
+  if [ -n "${4:-}" ]; then
+    RUN_LOG="$CHECK_LOG"
+  else
+    rm -f "$CHECK_LOG"
+  fi
   CHECK_LOG=""
 }
 
@@ -573,9 +594,13 @@ run_capped() {
 # matched by its full repo-relative path, which errs toward blocking too: a
 # package-relative path in a monorepo tool's output does not match.
 
-# session_files -> repo-relative paths this session wrote in this checkout.
+# session_files -> repo-relative paths this session wrote in this checkout,
+# including those in a checkout nested inside it (a submodule).
 session_files() {
-  R="$ROOT_KEY" awk -F'\t' '$2 == ENVIRON["R"] && ($1 == "code" || $1 == "file") { print $3 }' "$LEDGER" | sort -u
+  R="$ROOT_KEY" awk -F'\t' '
+    $1 != "code" && $1 != "file" { next }
+    $2 == ENVIRON["R"] { print $3; next }
+    index($2, ENVIRON["R"] "/") == 1 { print substr($2, length(ENVIRON["R"]) + 2) "/" $3 }' "$LEDGER" | sort -u
 }
 
 # changed_files -> uncommitted and untracked paths, both sides of a rename.
@@ -632,11 +657,18 @@ names_in() {
     }' "$2" "$3"
 }
 
+# join_lines <max> -> the first <max> lines of stdin joined with ", ". It
+# reads all of stdin: `head` would exit early, and under pipefail the
+# writer's SIGPIPE would become the hook's own exit, with no decision printed.
+join_lines() {
+  awk -v max="$1" 'NR <= max { printf "%s%s", (NR > 1 ? ", " : ""), $0 }'
+}
+
 # short_list <file> <max> -> "a, b, c and N more"
 short_list() {
   local total list
   total=$(grep -c . "$1" || true)
-  list=$(head -n "$2" "$1" | paste -sd ',' - | sed 's/,/, /g')
+  list=$(join_lines "$2" < "$1")
   if [ "$total" -gt "$2" ]; then
     list="$list and $((total - $2)) more"
   fi
@@ -648,29 +680,27 @@ short_list() {
 # when every uncommitted change there is this session's) and ATTRIBUTION_WARN=1
 # when its failures should warn instead of block.
 attribute_failures() {
-  local tfile ffile ofile i own foreign where lines="" unknown=0 owned=0
+  local tfile ffile i own foreign where lines="" unknown=0 owned=0
   ATTRIBUTION=""
   ATTRIBUTION_WARN=0
   tfile=$(mktemp "${TMPDIR:-/tmp}/.myspec-attr.XXXXXX")
   ffile=$(mktemp "${TMPDIR:-/tmp}/.myspec-attr.XXXXXX")
-  ofile=$(mktemp "${TMPDIR:-/tmp}/.myspec-attr.XXXXXX")
   session_files > "$tfile"
   # .claude/state/ is per-checkout hook state, not anyone's work. At most 1000
   # paths take part: past that, a failure matches nothing, which blocks.
-  changed_files | grep -v '^\.claude/state/' | sort -u | grep -vxF -f "$tfile" | head -n 1000 > "$ffile" || true
+  changed_files | grep -v '^\.claude/state/' | sort -u | grep -vxF -f "$tfile" | awk 'NR <= 1000' > "$ffile" || true
   if [ ! -s "$ffile" ]; then
-    rm -f "$tfile" "$ffile" "$ofile"
+    rm -f "$tfile" "$ffile"
     return 0
   fi
   for ((i = ROOT_FAILED_START; i < ${#FAILED_CHECKS[@]}; i++)); do
-    printf '%s\n' "${FAILED_FULL[$i]}" > "$ofile"
-    own=$(names_in base "$tfile" "$ofile" | head -n 5 | paste -sd ',' - | sed 's/,/, /g')
+    own=$(names_in base "$tfile" "${FAILED_LOGS[$i]}" | join_lines 5)
     if [ -n "$own" ]; then
       owned=1
       lines="$lines"$'\n'"- ${FAILED_CHECKS[$i]} names files this session wrote: $own"
       continue
     fi
-    foreign=$(names_in full "$ffile" "$ofile" | head -n 5 | paste -sd ',' - | sed 's/,/, /g')
+    foreign=$(names_in full "$ffile" "${FAILED_LOGS[$i]}" | join_lines 5)
     if [ -n "$foreign" ]; then
       lines="$lines"$'\n'"- ${FAILED_CHECKS[$i]} names only files changed outside this session: $foreign"
     else
@@ -684,12 +714,14 @@ attribute_failures() {
   where="This checkout"
   [ "$ROOT_KEY" = "$ORIG_ROOT" ] || where="The checkout at $ROOT_KEY"
   ATTRIBUTION="$where has uncommitted changes this session did not write ($(short_list "$ffile" 10)), so a failure may not be yours.$lines"
-  rm -f "$tfile" "$ffile" "$ofile"
+  rm -f "$tfile" "$ffile"
 }
 
 # Run each required check, once per checkout to verify.
 FAILED_CHECKS=()
-FAILED_FULL=()
+# The output file of each failed check, parallel to FAILED_CHECKS, for
+# attribution to read; removed on exit.
+FAILED_LOGS=()
 TIMED_OUT_CHECKS=()
 FAILED_OUTPUT=()
 # A failure blocks unless its checkout carries a live feature-implement marker
@@ -708,6 +740,14 @@ ROOT_FAILURES=${#FAILED_OUTPUT[@]}
 ROOT_FAILED_START=${#FAILED_CHECKS[@]}
 ROOT_TIMED_START=${#TIMED_OUT_CHECKS[@]}
 ROOT_KEY="$REPO_ROOT"
+# The files this session wrote in this checkout, one repo-relative path per
+# line, for a check that scopes itself to them (a per-file linter). Empty
+# when a legacy marker armed the gate.
+MYSPEC_SESSION_FILES=""
+if [ "$ATTRIBUTE" -eq 1 ] && [ -f "$LEDGER" ]; then
+  MYSPEC_SESSION_FILES=$(session_files)
+fi
+export MYSPEC_SESSION_FILES
 
 # Base ref for diff-scoped checks. A repo whose lint or type-check is already
 # red on the default branch cannot use a whole-repo command as a gate — it
@@ -786,7 +826,8 @@ for i in $(seq 0 $((CHECKS_COUNT - 1))); do
   # Exported to the check and to its cleanup, so a wrapper that starts work
   # the group kill cannot reach can tag it and the cleanup can find it.
   RUN_ID="myspec-$(date +%s)-$$-$i"
-  run_capped "$CHECK_CAP_SECONDS" "$COMMAND" "$RUN_ID"
+  run_capped "$CHECK_CAP_SECONDS" "$COMMAND" "$RUN_ID" keep
+  CHECK_RUN_LOG=$RUN_LOG
   EXIT_CODE=$RUN_EXIT
   OUTPUT=$RUN_OUTPUT
 
@@ -814,9 +855,15 @@ for i in $(seq 0 $((CHECKS_COUNT - 1))); do
       FAILED_OUTPUT+=("[$NAME timed out after ${CHECK_CAP_SECONDS}s] $COMMAND was killed before it finished, so its result is unknown. This is not a test failure. $CLEANUP_NOTE Then run the check directly and report its real exit code; if it passes but is slow, reduce its runtime (narrow what it runs). Do not raise the cap. Output so far:"$'\n'"$TRUNCATED")
     else
       FAILED_CHECKS+=("$NAME")
-      FAILED_FULL+=("$OUTPUT")
+      FAILED_LOGS+=("$CHECK_RUN_LOG")
+      CHECK_RUN_LOG=""
       FAILED_OUTPUT+=("[$NAME] $COMMAND failed:"$'\n'"$TRUNCATED")
     fi
+  fi
+  # A passed or timed-out check's log is not needed any more.
+  if [ -n "$CHECK_RUN_LOG" ]; then
+    rm -f "$CHECK_RUN_LOG"
+    CHECK_RUN_LOG=""
   fi
 done
 if [ "${#FAILED_OUTPUT[@]}" -gt "$ROOT_FAILURES" ]; then
