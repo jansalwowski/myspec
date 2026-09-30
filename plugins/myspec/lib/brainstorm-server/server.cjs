@@ -92,7 +92,7 @@ function preferredPort() {
     try {
       const p = Number(fs.readFileSync(PORT_FILE, 'utf-8').trim());
       if (Number.isInteger(p) && p > 1023 && p < 65536) return p;
-    } catch (e) { /* no prior port recorded */ }
+    } catch { /* no prior port recorded */ }
   }
   return randomPort();
 }
@@ -118,7 +118,7 @@ function generateToken() {
 }
 
 function chmodOwnerOnly(file) {
-  try { fs.chmodSync(file, 0o600); } catch (e) { /* best effort */ }
+  try { fs.chmodSync(file, 0o600); } catch { /* best effort */ }
 }
 
 function initialToken() {
@@ -132,7 +132,7 @@ function initialToken() {
         chmodOwnerOnly(TOKEN_FILE);
         return { value: t, source: 'file' };
       }
-    } catch (e) { /* no prior token recorded */ }
+    } catch { /* no prior token recorded */ }
   }
   return { value: generateToken(), source: 'generated' };
 }
@@ -259,7 +259,7 @@ function isRegularFileInsideContentDir(filePath) {
     if (stat.nlink !== 1) return false;
     realContentDir = fs.realpathSync(CONTENT_DIR);
     realFilePath = fs.realpathSync(filePath);
-  } catch (e) {
+  } catch {
     return false;
   }
   return realFilePath.startsWith(realContentDir + path.sep);
@@ -413,7 +413,7 @@ function handleUpgrade(req, socket) {
       let result;
       try {
         result = decodeFrame(buffer);
-      } catch (e) {
+      } catch {
         socket.end(encodeFrame(OPCODES.CLOSE, Buffer.alloc(0)));
         clients.delete(socket);
         return;
@@ -468,7 +468,7 @@ function handleMessage(text) {
 function broadcast(msg) {
   const frame = encodeFrame(OPCODES.TEXT, Buffer.from(JSON.stringify(msg)));
   for (const socket of clients) {
-    try { socket.write(frame); } catch (e) { clients.delete(socket); }
+    try { socket.write(frame); } catch { clients.delete(socket); }
   }
 }
 
@@ -486,14 +486,14 @@ function maybeOpenBrowser() {
   const cp = require('child_process');
   // Operator-provided launcher: run as given (this env var is trusted operator input).
   if (process.env.BRAINSTORM_OPEN_CMD) {
-    try { cp.exec(process.env.BRAINSTORM_OPEN_CMD + ' ' + JSON.stringify(url), () => {}); } catch (e) { /* best effort */ }
+    try { cp.exec(process.env.BRAINSTORM_OPEN_CMD + ' ' + JSON.stringify(url), () => {}); } catch { /* best effort */ }
     return;
   }
   // Platform launchers: pass the URL as an argv element via execFile (no shell),
   // so a url-host containing shell metacharacters can't inject a command.
   const launcher = browserLauncherForPlatform(url);
   if (!launcher) return; // headless: nothing to open
-  try { cp.execFile(launcher.bin, launcher.args, () => {}); } catch (e) { /* best effort */ }
+  try { cp.execFile(launcher.bin, launcher.args, () => {}); } catch { /* best effort */ }
 }
 
 // ========== Activity Tracking ==========
@@ -575,7 +575,7 @@ function startServer() {
     // Close any upgraded WebSocket sockets so server.close() can complete and
     // the process actually exits instead of lingering on an open connection.
     for (const socket of clients) {
-      try { socket.destroy(); } catch (e) { /* already gone */ }
+      try { socket.destroy(); } catch { /* already gone */ }
     }
     server.close(() => process.exit(0));
   }
@@ -619,12 +619,12 @@ function startServer() {
     // *different* port because someone else holds the preferred one; persisting
     // would overwrite the shared files and strand that other session's open tab.
     if (PORT_FILE && !triedFallback) {
-      try { fs.writeFileSync(PORT_FILE, String(PORT)); } catch (e) { /* best effort */ }
+      try { fs.writeFileSync(PORT_FILE, String(PORT)); } catch { /* best effort */ }
       if (TOKEN_FILE) {
         try {
           fs.writeFileSync(TOKEN_FILE, TOKEN, { mode: 0o600 });
           chmodOwnerOnly(TOKEN_FILE);
-        } catch (e) { /* best effort */ }
+        } catch { /* best effort */ }
       }
     }
     const info = JSON.stringify({

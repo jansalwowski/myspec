@@ -364,11 +364,6 @@ function hookBlocks(events) {
   return Object.fromEntries([...turns].map(([k, v]) => [k, v.size]).sort())
 }
 
-function mergeCounts(into, from) {
-  for (const [k, v] of Object.entries(from)) { into[k] = (into[k] ?? 0) + v }
-  return into
-}
-
 function sortedObject(o) {
   return Object.fromEntries(Object.entries(o).sort(([a], [b]) => a.localeCompare(b)))
 }
