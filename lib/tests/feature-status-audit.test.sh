@@ -81,6 +81,8 @@ features:
     status: complete
   - name: complete-zero-archive
     status: complete
+  - name: complete-superseded-archive
+    status: complete
   - name: complete-draft-docs
     status: complete
   - name: parent-ticked
@@ -111,6 +113,13 @@ YAML
 
   feature complete-zero-archive
   plan "$F/complete-zero-archive/plans/2026-02-01-plan.md" " " " " " " " "
+
+  feature complete-superseded-archive
+  plan "$F/complete-superseded-archive/plans/2026-03-01-v2-plan.md" x x
+  plan "$F/complete-superseded-archive/plans/2026-02-01-v1-plan.md" " " " " " "
+  sed -i.bak 's/^title: "Plan"$/title: "Plan"\
+status: superseded/' "$F/complete-superseded-archive/plans/2026-02-01-v1-plan.md"
+  rm -f "$F/complete-superseded-archive/plans/2026-02-01-v1-plan.md.bak"
 
   doc "$F/complete-draft-docs/spec.md" draft
   doc "$F/complete-draft-docs/tech-spec.md" '"draft"'
@@ -151,6 +160,8 @@ expect_no_line 'complete-done-plan .*MEDIUM' \
   "a fully ticked unarchived plan is not reported as open tasks"
 expect_line 'complete-zero-archive .*archived plans/2026-02-01-plan.md is 0/4 \[x\]' \
   "complete with an archived plan at 0/N is flagged"
+expect_no_line 'complete-superseded-archive ' \
+  "an archived plan marked status: superseded is not flagged at 0/N"
 expect_no_line 'healthy-complete ' \
   "complete with approved docs and a ticked archived plan reports nothing"
 
