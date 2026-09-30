@@ -47,16 +47,23 @@ run_hook() {  # run_hook <cwd> <session-id> <command> → stdout
 }
 
 check_in() {  # check_in <cwd> <want> <desc> <session-id> <command>
-  local cwd="$1" want="$2" desc="$3" sid="$4" cmd="$5" got out
+  local cwd="$1" want="$2" desc="$3" sid="$4" cmd="$5" got out rc
   out=$(run_hook "$cwd" "$sid" "$cmd")
+  rc=$?
 
-  if printf '%s' "$out" | grep -q '"block"'; then got=block; else got=allow; fi
+  # An allow is exit 0 with EMPTY stdout. Anything printed on allow is a
+  # defect: {"decision": "approve"} is the deprecated PreToolUse spelling of
+  # "allow", which skips the user's permission prompt (issue #158).
+  if printf '%s' "$out" | grep -q '"block"'; then got=block
+  elif [ "$rc" -eq 0 ] && [ -z "$out" ]; then got=allow
+  else got="noisy"; fi
 
   if [ "$got" = "$want" ]; then
     PASS=$((PASS + 1))
   else
     FAIL=$((FAIL + 1))
-    printf 'FAIL  want=%-5s got=%-5s  %s\n      cmd: %s\n' "$want" "$got" "$desc" "$cmd" >&2
+    printf 'FAIL  want=%-5s got=%-5s  %s\n      cmd: %s\n      rc=%s stdout: %s\n' \
+      "$want" "$got" "$desc" "$cmd" "$rc" "$out" >&2
   fi
 }
 
@@ -185,6 +192,14 @@ if [ -z "$(run_hook "$REPO" none-sess 'git status')" ]; then
 else
   FAIL=$((FAIL + 1))
   echo "FAIL  an allowed command must print nothing (approve would skip the permission prompt)" >&2
+fi
+OUT=$(printf '{"tool_input":{},"cwd":%s,"session_id":"none-sess"}' "$(printf '%s' "$REPO" | jq -Rs .)" | "$HOOK")
+RC=$?
+if [ "$RC" -eq 0 ] && [ -z "$OUT" ]; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  echo "FAIL  a payload with no command must pass silently (rc=$RC, stdout: $OUT)" >&2
 fi
 if run_hook "$REPO" none-sess 'git checkout develop' | jq -e '.hookSpecificOutput.permissionDecision == "deny" and .decision == "block"' >/dev/null; then
   PASS=$((PASS + 1))
