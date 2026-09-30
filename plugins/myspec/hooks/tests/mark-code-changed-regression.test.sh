@@ -26,7 +26,7 @@ git -C "$REPO" config user.name t
 git -C "$REPO" commit -q --allow-empty -m init
 printf '{"aiDir":".ai","frameworkVersion":"2.0.0"}\n' > "$REPO/.myspec.json"
 SID="mcr-$$"
-trap 'rm -rf "$ROOT"; rm -f /tmp/.myspec-code-changed-'"$SID"'-*' EXIT
+trap 'rm -rf "$ROOT"; rm -f /tmp/.myspec-session-writes-'"$SID"'-*' EXIT
 
 PASS=0
 FAIL=0
@@ -43,13 +43,13 @@ write() {  # write <sid> <file-path>
 for ext in mjs cjs sh bash; do
   sid="$SID-$ext"
   write "$sid" "$REPO/src/tool.$ext"
-  [ -f "/tmp/.myspec-code-changed-$sid" ] && ok || fail "a .$ext edit writes the Stop-hook marker"
+  grep -q "^code	" "/tmp/.myspec-session-writes-$sid" 2>/dev/null && ok || fail "a .$ext edit arms the Stop hook"
   [ -f "$REPO/.claude/state/sessions/$sid.md" ] && ok || fail "a .$ext edit creates the session log"
 done
 
 # --- control: a non-code file still does not count ----------------------------
 write "$SID-txt" "$REPO/src/notes.txt"
-[ ! -f "/tmp/.myspec-code-changed-$SID-txt" ] && ok || fail "a .txt edit writes no marker"
+! grep -q "^code	" "/tmp/.myspec-session-writes-$SID-txt" 2>/dev/null && ok || fail "a .txt edit does not arm the Stop hook"
 
 printf '%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

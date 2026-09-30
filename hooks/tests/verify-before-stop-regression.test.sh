@@ -34,7 +34,8 @@ git -C "$REPO" commit -q --allow-empty -m init
 SID="vbs-regression-$$"
 CHANGED="/tmp/.myspec-code-changed-$SID"
 RAN="$ROOT/ran"
-trap 'rm -rf "$ROOT"; rm -f "$CHANGED"' EXIT
+LEDGER="/tmp/.myspec-session-writes-$SID"
+trap 'rm -rf "$ROOT"; rm -f "$CHANGED" "$LEDGER"' EXIT
 
 PASS=0
 FAIL=0
@@ -70,9 +71,10 @@ printf '%s' "$R" | grep -qF '\' && fail "the report holds no literal backslash (
 printf '%s\n' "$R" | grep -qx 'ALPHA-OUT' && ok || fail "check output starts on its own line"
 printf '%s\n' "$R" | grep -qx 'BETA-OUT' && ok || fail "the second check's output is reported too"
 
-# --- (doctor) the checkout the session edited is the one verified ------------
+# --- (#201) the checkout the session edited is the one verified -------------
 # The worktree carries a marker file that makes its copy of the check fail;
-# the main checkout (the cwd) stays clean and passes.
+# the main checkout (the cwd) stays clean and passes. The ledger names the
+# checkouts the session wrote code in (docs/stop-gate.md).
 printf '{"checks":[{"name":"tree","command":"test ! -f BROKEN","required":true}]}\n' > "$REPO/.claude/verification.json"
 printf '.claude/state/\n' > "$REPO/.gitignore"
 git -C "$REPO" add -A && git -C "$REPO" commit -q -m checks
@@ -80,29 +82,39 @@ WT="$ROOT/wt"
 git -C "$REPO" worktree add -q -b wt "$WT"
 mkdir -p "$WT/src" "$REPO/.claude/state/sessions"
 touch "$WT/BROKEN" "$WT/src/a.ts"
-log_touched() {  # log_touched <path>...
-  { printf -- '---\nsession_id: %s\n---\n\n## Files touched\n' "$SID"
-    for p in "$@"; do printf -- '- `%s`\n' "$p"; done; } > "$REPO/.claude/state/sessions/$SID.md"
+wrote() {  # wrote <root> <rel>...: a fresh ledger of code writes
+  local root="$1" p
+  shift
+  : > "$LEDGER"
+  for p in "$@"; do printf 'code\t%s\t%s\n' "$root" "$p" >> "$LEDGER"; done
+}
+also_wrote() { printf 'code\t%s\t%s\n' "$1" "$2" >> "$LEDGER"; }
+run_ledger() {  # run_ledger -> hook stdout, armed by the ledger alone
+  rm -f "$CHANGED"
+  printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$REPO" | bash "$HOOK" 2>/dev/null
 }
 
-rm -f "$REPO/.claude/state/sessions/$SID.md"
+rm -f "$LEDGER"
 OUT=$(run_hook '')
-[ "$(decision "$OUT")" = approve ] && ok || fail "no session log: the cwd checkout is verified, as before (got: ${OUT:0:200})"
+[ "$(decision "$OUT")" = approve ] && ok || fail "legacy marker, no ledger: the cwd checkout is verified, as before (got: ${OUT:0:200})"
 
-log_touched "$WT/src/a.ts"
-OUT=$(run_hook '')
+wrote "$WT" src/a.ts
+OUT=$(run_ledger)
 [ "$(decision "$OUT")" = block ] && ok || fail "edits in a worktree verify the worktree, not the clean cwd checkout (got: ${OUT:0:200})"
 reason "$OUT" | grep -qF "[in $WT]" && ok || fail "the report names the checkout the check ran in"
 
 rm -f "$WT/BROKEN"
 touch "$REPO/BROKEN"
-log_touched "$WT/src/a.ts"
-OUT=$(run_hook '')
+wrote "$WT" src/a.ts
+OUT=$(run_ledger)
 [ "$(decision "$OUT")" = approve ] && ok || fail "a checkout the session never touched is not verified (got: ${OUT:0:200})"
 
-log_touched "$WT/src/a.ts" "src/b.ts"
-OUT=$(run_hook '')
+wrote "$WT" src/a.ts
+also_wrote "$REPO" src/b.ts
+OUT=$(run_ledger)
 [ "$(decision "$OUT")" = block ] && ok || fail "edits in both checkouts verify both (got: ${OUT:0:200})"
+OUT=$(run_ledger)
+[ "$(decision "$OUT")" = approve ] && ok || fail "a verified checkout is not re-run without a new write (got: ${OUT:0:200})"
 rm -f "$REPO/BROKEN"
 
 printf '%d passed, %d failed\n' "$PASS" "$FAIL"
