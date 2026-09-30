@@ -105,5 +105,31 @@ OUT=$(run_hook '')
 [ "$(decision "$OUT")" = block ] && ok || fail "edits in both checkouts verify both (got: ${OUT:0:200})"
 rm -f "$REPO/BROKEN"
 
+# --- #152: a marker naming another repository does not arm this gate --------
+# mark-code-changed.sh writes the edited file's repo root into the marker; an
+# edit in a sibling repo, made from this repo's cwd, must not run its checks.
+MARK_HOOK="$(dirname "$HOOK")/mark-code-changed.sh"
+SIB="$ROOT/sibling"
+mkdir -p "$SIB/src"
+git init -q -b main "$SIB"
+touch "$REPO/BROKEN"
+rm -f "$CHANGED" "$REPO/.claude/state/sessions/$SID.md"
+printf '{"session_id":"%s","tool_name":"Write","cwd":"%s","tool_input":{"file_path":"%s"}}' "$SID" "$REPO" "$SIB/src/app.js" \
+  | bash "$MARK_HOOK" >/dev/null 2>&1
+[ -f "$CHANGED" ] && ok || fail "a sibling-repo Write still writes the marker"
+OUT=$(printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$REPO" | bash "$HOOK" 2>/dev/null)
+[ "$(decision "$OUT")" = approve ] && ok || fail "a marker naming only a sibling repo does not arm this gate (got: ${OUT:0:200})"
+
+printf '%s\n' "$REPO" > "$CHANGED"
+touch "$WT/BROKEN"
+OUT=$(printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$WT" | bash "$HOOK" 2>/dev/null)
+[ "$(decision "$OUT")" = block ] && ok || fail "a marker naming the primary checkout arms the gate in its linked worktree (got: ${OUT:0:200})"
+rm -f "$WT/BROKEN"
+
+: > "$CHANGED"
+OUT=$(printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$REPO" | bash "$HOOK" 2>/dev/null)
+[ "$(decision "$OUT")" = block ] && ok || fail "an empty legacy marker still arms the gate (got: ${OUT:0:200})"
+rm -f "$REPO/BROKEN"
+
 printf '%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

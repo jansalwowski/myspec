@@ -4,7 +4,10 @@
 # changed in this session, and keeps the session's live log.
 #
 # Marker: /tmp/.myspec-code-changed-<session_id>, so verify-before-stop.sh only
-# runs verification when the current session actually modified code.
+# runs verification when the current session actually modified code. It holds
+# one line per repository the session edited (the primary checkout root), so an
+# edit in a sibling repository does not arm this repository's Stop gate. A file
+# outside every repository (/tmp, a scratchpad) is not a code change.
 #
 # Session log: .claude/state/sessions/<session_id>.md in the PRIMARY checkout
 # of the repository the edited file belongs to, created on the first code edit
@@ -28,7 +31,8 @@
 #
 # `## Files touched` is how a skill finds ITS OWN session among several: the
 # harness never exposes the session id to the model, but the paths it edited
-# are known to it. Fixture: hooks/tests/mark-code-changed.test.sh
+# are known to it. Tests: hooks/tests/mark-code-changed*.test.sh in the myspec
+# plugin repository (not installed into adopting projects).
 
 set -euo pipefail
 
@@ -38,7 +42,7 @@ fi
 
 INPUT=$(cat)
 
-CODE_EXT='(ts|tsx|vue|js|jsx|mjs|cjs|mts|cts|py|rb|go|java|php|rs|cs|swift|kt|sh|bash)'
+CODE_EXT='(ts|tsx|vue|js|jsx|mjs|cjs|mts|cts|py|rb|go|java|php|rs|cs|swift|kt|sh|bash|graphql|gql)'
 
 # Nearest existing directory at or above the edited file. PostToolUse runs after
 # the write, so the parent normally exists; walking up keeps resolution working
@@ -133,6 +137,23 @@ JSON
   return 1
 }
 
+# in_repo <path>: true unless an absolute path lies outside every repository
+# (/tmp, a scratchpad): inside a git work tree, or under RAW_ROOT for a
+# myspec project that is not a git repository.
+in_repo() {
+  local anchor
+  case "$1" in
+    /*) ;;
+    *) return 0 ;;
+  esac
+  anchor=$(anchor_dir_for_file "$1") || return 1
+  git -C "$anchor" rev-parse --show-toplevel >/dev/null 2>&1 && return 0
+  case "$1" in
+    "${RAW_ROOT:-}"/*) [ -n "${RAW_ROOT:-}" ] && return 0 ;;
+  esac
+  return 1
+}
+
 FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
 COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
@@ -151,6 +172,7 @@ if [ -n "$FILE_PATH" ]; then
   if ! RAW_ROOT="$(resolve_repo_root_raw "$FILE_PATH")"; then
     exit 0
   fi
+  in_repo "$FILE_PATH" || exit 0
 
   PATHS=("$FILE_PATH")
   CONTEXT="Auto-created on first code edit at \`$FILE_PATH\`."
@@ -192,9 +214,11 @@ elif [ -n "$COMMAND" ]; then
     local w="${1#./}"
     [[ "$w" =~ $CODE_PATH_RE ]] || return 0
     case "$w" in
-      /*) PATHS+=("$w") ;;
-      *) PATHS+=("$BASE_DIR/$w") ;;
+      /*) ;;
+      *) w="$BASE_DIR/$w" ;;
     esac
+    in_repo "$w" || return 0
+    PATHS+=("$w")
   }
 
   while IFS= read -r line; do
@@ -286,13 +310,20 @@ else
   exit 0
 fi
 
-touch "/tmp/.myspec-code-changed-${SESSION_ID}"
-
 # RAW_ROOT is the repository root as seen from the edit (a linked worktree
 # resolves to itself); REPO_ROOT is pinned to the primary checkout, where the
 # session store lives.
 if ! REPO_ROOT="$(main_worktree_root "$RAW_ROOT")"; then
   REPO_ROOT="$RAW_ROOT"
+fi
+
+# The marker names the repository, physical path, one line each, so the Stop
+# hook of a different repository sees no code change of its own. Written
+# before the .myspec.json gate: a repository without one still gets verified.
+MARKER="/tmp/.myspec-code-changed-${SESSION_ID}"
+MARKER_ROOT=$(cd "$REPO_ROOT" 2>/dev/null && pwd -P) || MARKER_ROOT="$REPO_ROOT"
+if ! grep -qxF -- "$MARKER_ROOT" "$MARKER" 2>/dev/null; then
+  printf '%s\n' "$MARKER_ROOT" >> "$MARKER"
 fi
 
 # Logs only in a myspec-managed project: an edit in an unrelated repository

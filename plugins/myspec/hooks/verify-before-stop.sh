@@ -149,6 +149,25 @@ if [ -z "$SESSION_ID" ] || [ ! -f "$MARKER_FILE" ]; then
   exit 0
 fi
 
+# The marker lists the primary checkout root of each repository the session
+# edited, so an edit in a sibling repository does not run this one's checks.
+# An empty marker comes from an older mark-code-changed.sh and still arms it.
+if grep -q '[^[:space:]]' "$MARKER_FILE" 2>/dev/null; then
+  MARKER_ROOT=""
+  if MARKER_COMMON=$(git -C "$REPO_ROOT" rev-parse --git-common-dir 2>/dev/null) \
+    && MARKER_COMMON=$(cd "$REPO_ROOT" && cd "$MARKER_COMMON" && pwd -P) \
+    && [ "$(basename "$MARKER_COMMON")" = ".git" ]; then
+    MARKER_ROOT=$(dirname "$MARKER_COMMON")
+  else
+    MARKER_ROOT=$(cd "$REPO_ROOT" && pwd -P)
+  fi
+  if ! grep -qxF -- "$MARKER_ROOT" "$MARKER_FILE"; then
+    # Code changed only in other repositories: nothing to verify here.
+    echo '{"decision": "approve"}'
+    exit 0
+  fi
+fi
+
 # Which checkout(s) to verify. The harness cwd is not necessarily where the
 # session's edits are: a session whose cwd is the main checkout can edit files
 # in a linked worktree (absolute paths, `cd <worktree> && ...`), and verifying
