@@ -1,6 +1,6 @@
 ---
 name: "triage"
-description: "Use when open myspec issues need triaging — labels, priority, repro on main, duplicates, splitting bundled reports, and batching ready issues for parallel work. Repo-local maintainer skill (not shipped with the plugin). Keywords: triage issues, issue backlog, label issues, what should I work on next, dedupe issues. Do NOT use to fix an issue or open a PR, or for downstream feature ideas (idea-intake)."
+description: "Use when open myspec issues need triaging — labels, priority, repro on main, duplicates, splitting bundled reports, and batching ready issues for parallel work — or when the open PR queue needs analysis: collisions, stacks, merge order (argument `prs`). Repo-local maintainer skill (not shipped with the plugin). Keywords: triage issues, issue backlog, label issues, what should I work on next, dedupe issues, PR queue, merge order. Do NOT use to fix an issue or open a PR, to review one PR's code (review-pr), or for downstream feature ideas (idea-intake)."
 ---
 
 # Triage
@@ -36,7 +36,7 @@ A change to a mirrored tree also touches `plugins/myspec/` (AGENTS.md "Mirrored 
 
 ### Step 1: Scope
 
-With issue numbers as arguments, triage those. Otherwise take the open issues that carry `status:needs-triage` or no `status:*` label:
+With `prs` as the argument, run [PR mode](#pr-mode) instead. With issue numbers as arguments, triage those. Otherwise take the open issues that carry `status:needs-triage` or no `status:*` label:
 
 ```bash
 gh issue list --state open --limit 200 --json number,title,labels,body,createdAt,comments,milestone
@@ -113,6 +113,25 @@ For each approved row, check that each command exits 0 and report any that fail:
 
 - Re-list the triaged issues and the new children. Each has exactly one `status:*` label, one `type:*` label and one priority, and none still carries `status:needs-triage` unless the user skipped it. `gh run list --workflow issue-triage.yml` shows a successful run for each child.
 - `git worktree remove --force <scratchpad>/triage-main`, then `git worktree prune`.
+
+## PR mode
+
+With `prs` as the argument, analyse the open PR queue instead of the issues. It reads everything and writes only after the approval in PR-mode step 5 below; issue-mode Steps 2–6 do not run. It never merges, approves, closes or pushes: `review-pr` reviews one PR's code, and a merge needs the maintainer's go per batch.
+
+1. **Load.** `gh pr list --state open --limit 100 --json number,title,body,headRefName,baseRefName,isDraft,mergeStateStatus,reviewDecision,labels,files,closingIssuesReferences,updatedAt,statusCheckRollup` must exit 0. With zero PRs, say so and stop. Also load the open `status:ready` issues.
+2. **Per PR**, record:
+   - **Stack.** A base other than `main` names a parent. Step 1 loads only open PRs, so look it up with `gh pr list --state all --head <base> --json number,state` (must exit 0). `OPEN`: the child waits for it. `MERGED`: propose retargeting the child with `gh api -X PATCH repos/<owner>/<repo>/pulls/<n> -f base=main` (AGENTS.md "Stacked PRs"). `CLOSED` or no PR: never retarget, because the child still carries the parent's unreviewed commits and retargeting puts them in front of main; report it for the maintainer to decide.
+   - **Merge state.** `mergeStateStatus` (`CLEAN`, `BEHIND`, `DIRTY`, `BLOCKED`, `UNSTABLE`, `HAS_HOOKS`, `DRAFT`, `UNKNOWN`), and failing checks by name from `statusCheckRollup`. `UNKNOWN` means GitHub has not computed it yet: re-read it with `gh pr view <n> --json mergeStateStatus` before ordering, and report it as unknown if it stays so.
+   - **Issues.** Each closing issue and its `status:*`. Note a PR that closes a `status:blocked` or `status:needs-repro` issue, and a `fix` PR that closes none.
+   - **Labels.** Run `node scripts/triage/pr-labels.mjs --title "<title>" --body-file <body> < <changed files>` and compare. A label it prints that the PR lacks means the `pr-labels` workflow didn't run or failed; check `gh run list --workflow pr-labels.yml`. A missing `type:*` or `area:*` the script doesn't print is by design (`chore`, `ci`, `refactor`, `test` titles get no type; root-only files get no area), so it is not a finding.
+   - **Companions.** `gh api --paginate repos/<owner>/<repo>/pulls/<n>/files | jq -s 'add // []' | node scripts/triage/pr-companions.mjs --body-file <body>`, with the body written to a file first.
+   - **Stale.** A draft, or no update in 7 days.
+3. **Across PRs**, find:
+   - **Collisions:** two open PRs whose changed files overlap, with the `plugins/myspec/` mirror paths dropped. List the shared files, because the second PR to merge rebases over them.
+   - **Duplicate work:** two PRs closing the same issue.
+   - **Ready work with no PR:** the `status:ready` issues that no open PR closes, grouped by `area:*` label. File-level work batches come from issue mode, which PR mode does not run.
+4. **Report** one table with these columns: `#`, title, base, merge state, failing checks, closed issues, labels, notes. Below it, list the collisions, then a merge order: a parent before its child, then P1 first, then `CLEAN` before `BEHIND` or `DIRTY`. Then list the ready issues that have no PR.
+5. **Approve and apply.** Call `AskUserQuestion` with three options: apply everything, apply a subset, or apply nothing. The possible writes are adding missing labels (through `gh api repos/<owner>/<repo>/issues/<n>/labels`, since `gh pr edit` fails with this repo's token), retargeting a child whose parent is `MERGED`, and commenting on colliding PRs to name the shared files. Each command must exit 0.
 
 ## Rules
 
