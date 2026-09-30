@@ -95,6 +95,7 @@ For each confirmed mockup, in order:
    - **Authoring idioms** from `mockup-design.md` (structure order, helper style, typing discipline — whatever the project mandates).
    - **Inline mock types** mirroring the real data model; realistic sample data drawn from `seed/` + `scenarios.md` when available — never Lorem ipsum.
    - **Static only** — no lifecycle/effect hooks, no network, no timers. Interaction state may be mocked with local reactive state when the surface's job is to demonstrate the interaction.
+   - **States via preview controls** — switch loading / empty / error / modal states with one `controls: <name>=<default>|<opt2>|...` title-header line per control (first option is the default). Read the value once with `new URLSearchParams(window.location.search).get('<name>')` and fall back to the default. Never render a state toggle inside the mockup: reviewers read it as design, and it pushes the content down.
    - **Modal surfaces** follow the project's modal mockup pattern from `mockup-design.md`, with all four dismissal paths wired (X + ESC + backdrop + Cancel).
 2. **Verify.** Run the configured `verify` command. Fix errors, re-run until clean. Not configured → skip with a note.
 3. **Compile-check.** If `preview` is configured, ensure the dev server is running (start in background if not). Run the configured `compileCheck` for the file — expect success; on failure read the dev-server log for the transform error and fix. Not configured → skip with a note.
@@ -171,10 +172,11 @@ Print the handoff list (if any):
 <!--
 title: {Feature name} · {Surface name}
 description: {One-sentence description of what's mocked}
+controls: state=success|loading|empty|error
 -->
 ```
 
-Use the comment syntax of the mockup's file format; keep the `title:` / `description:` keys — the default preview tooling parses them for navigation.
+Use the comment syntax of the mockup's file format; keep the `title:` / `description:` keys — the default preview tooling parses them for navigation, and renders each `controls:` line as a toolbar switch outside the frame.
 
 ### Sharing a component across mockups
 
@@ -194,6 +196,7 @@ When the same chrome surfaces in two or more features (navbar, footer, hero, pag
 - [ ] No custom fonts, no custom CSS variables, no re-theming — design-system defaults only
 - [ ] Realistic sample data mirroring the real data model, not Lorem ipsum; enum values copied, not invented
 - [ ] Title header present in every mockup file
+- [ ] States switch through `controls:` lines read from the URL — no state toggle rendered inside a mockup
 - [ ] Every navigational element is a real link with `href="#mock-path"` — no click-handler nav shims
 - [ ] Variants of the same surface differ in layout/IA only — same components, tokens, density
 - [ ] Every new mockup matches the reference mockup's structural idioms unless the user opted out

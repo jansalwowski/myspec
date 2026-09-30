@@ -55,7 +55,7 @@ Read without asking:
 |---|---|
 | **Spec Alignment** | Every spec.md AC traceable to a surface; every surface traceable to ≥1 AC. Spec ACs in no mockup → Critical. |
 | **Scope Discipline** | Every interactive element, settings toggle, secondary action justified by spec. Unjustified surfaces / buttons → High candidate for removal. |
-| **State Coverage** | For each data-driven surface, verify the three highest-leverage states are mocked or referenced: empty / loading / error. Missing empty or error state → Medium. |
+| **State Coverage** | For each data-driven surface, verify the three highest-leverage states are mocked or referenced: empty / loading / error. Missing empty or error state → Medium. States switched by a toggle rendered inside the mockup instead of `controls:` preview controls → Medium (reviewers read it as design; it shifts the layout). |
 
 #### B. Production Fidelity
 | Sub-dimension | Check |
@@ -231,6 +231,9 @@ count href="#mock-path" occurrences vs the inventory; unmapped mock-paths are ca
 
 # Modal missing dismissal (C. Modal Dismissal)
 for each modal surface, verify ALL of: X button, ESC handling, backdrop click, Cancel button
+
+# In-page mock state toggle (A. State Coverage)
+a segmented control, select, or button group in the mockup whose options name mock states (loading/empty/error/success, modal open) → move to a `controls:` line
 
 # Placeholder-as-label suspicion (D. Form Hygiene)
 any input with a placeholder and no associated visible label in the same surface

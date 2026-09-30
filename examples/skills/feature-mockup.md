@@ -35,7 +35,7 @@ Builds spec-validation mockups under `${aiDir}/features/{feature}/mockups/`: sta
    > 3. `PaymentMethods.vue` — AC7–AC9 · sibling: `admin/PaymentMethodList.vue` · states: empty / success
 
    User confirms "go".
-4. **Build loop** — per file: write (inline `interface Invoice` mirroring the schema, realistic seed data, one primary CTA, `href="#mock-path"` navigation), then `verify` (exit 0) and `compileCheck` (200). Emits `InvoiceList.vue · verify ✓ · compile ✓` per file.
+4. **Build loop** — per file: write (inline `interface Invoice` mirroring the schema, realistic seed data, one primary CTA, `href="#mock-path"` navigation), then `verify` (exit 0) and `compileCheck` (200). Emits `InvoiceList.vue · verify ✓ · compile ✓` per file. `InvoiceList.vue`'s four states come from a `controls: state=success|loading|empty|error` title-header line: the preview toolbar switches them outside the frame, and the mockup reads `new URLSearchParams(window.location.search).get('state')`, falling back to `success`. No state toggle is rendered inside the mockup.
 5. **Iterate** — user: "invoice rows need the amount right-aligned" → edit, re-verify that file only.
 6. **Wrap up** — no correction repeated 2×, so rule extraction is skipped silently; commit prompt (`mockup(billing-portal): 3 surfaces — InvoiceList, InvoiceDetail, PaymentMethods`); handoff list is empty.
 

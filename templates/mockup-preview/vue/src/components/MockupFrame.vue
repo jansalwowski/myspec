@@ -1,7 +1,10 @@
 <script setup lang="ts">
 import { Maximize2, Monitor, Smartphone, Tablet } from 'lucide-vue-next'
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute } from 'vue-router'
+
+import type { MockupControl } from '@/lib/discovery'
+import { navTree } from '@/lib/manifest'
 
 const props = defineProps<{
   feature: string
@@ -43,8 +46,50 @@ const breadcrumb = computed((): BreadcrumbItem[] => {
   return items
 })
 
+// State controls come from the mockup's `controls:` frontmatter lines. They
+// render in the toolbar, never inside the mockup, and reach the mockup as
+// query params on the iframe URL.
+const controls = computed<MockupControl[]>(() => {
+  for (const node of navTree) {
+    const entry = node.mockups.find((m) => m.sourcePath === props.sourcePath)
+    if (entry) {
+      return entry.frontmatter.controls ?? []
+    }
+  }
+  return []
+})
+
+const selections = ref<Record<string, string>>({})
+
+// Moving to another mockup starts from that mockup's defaults.
+watch(
+  () => props.sourcePath,
+  () => {
+    selections.value = {}
+  },
+)
+
+function selectedOption(control: MockupControl): string {
+  return selections.value[control.name] ?? control.options[0] ?? ''
+}
+
+function selectOption(control: MockupControl, option: string): void {
+  selections.value = { ...selections.value, [control.name]: option }
+}
+
+function controlButtonClass(control: MockupControl, option: string): string {
+  if (selectedOption(control) === option) {
+    return 'bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 shadow-sm'
+  }
+  return 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+}
+
 const iframeSrc = computed<string>(() => {
-  return `${window.location.origin}${window.location.pathname}?frame=1#${route.fullPath}`
+  const params = new URLSearchParams({ frame: '1' })
+  for (const control of controls.value) {
+    params.set(control.name, selectedOption(control))
+  }
+  return `${window.location.origin}${window.location.pathname}?${params.toString()}#${route.fullPath}`
 })
 
 type Viewport = 'mobile' | 'tablet' | 'desktop' | 'full'
@@ -91,6 +136,10 @@ const frameStyle = computed<string>(() => {
 })
 
 const isConstrained = computed<boolean>(() => activeOption.value.width !== null)
+
+// A mockup with controls always renders in the iframe: the selection travels
+// in the frame URL, and changing it reloads the frame.
+const useIframe = computed<boolean>(() => isConstrained.value || controls.value.length > 0)
 
 function viewportButtonClass(value: Viewport): string {
   if (viewport.value === value) {
@@ -162,10 +211,38 @@ onMounted(() => {
         </div>
       </div>
     </div>
-    <!-- Constrained: render in an iframe so CSS media queries fire on the constrained width -->
     <div
-      v-if="isConstrained"
-      class="flex flex-1 justify-center overflow-hidden bg-slate-100 p-4 dark:bg-slate-950"
+      v-if="controls.length > 0"
+      class="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-4 py-2"
+    >
+      <div
+        v-for="control in controls"
+        :key="control.name"
+        role="group"
+        :aria-label="control.name"
+        class="flex items-center gap-2"
+      >
+        <span class="font-mono text-xs text-slate-500 dark:text-slate-400">{{ control.name }}</span>
+        <div class="flex items-center gap-0.5 rounded-md bg-slate-200/70 p-0.5 dark:bg-slate-700/70">
+          <button
+            v-for="option in control.options"
+            :key="option"
+            type="button"
+            class="rounded px-2 py-1 text-xs font-medium transition-colors"
+            :class="controlButtonClass(control, option)"
+            :aria-pressed="selectedOption(control) === option"
+            @click="selectOption(control, option)"
+          >
+            {{ option }}
+          </button>
+        </div>
+      </div>
+    </div>
+    <!-- Iframe: constrained widths (so CSS media queries fire) and any mockup with controls -->
+    <div
+      v-if="useIframe"
+      class="flex flex-1 justify-center overflow-hidden bg-slate-100 dark:bg-slate-950"
+      :class="{ 'p-4': isConstrained }"
     >
       <iframe
         :src="iframeSrc"
@@ -175,7 +252,7 @@ onMounted(() => {
       />
     </div>
 
-    <!-- Full: render the slotted component directly (no iframe) -->
+    <!-- Full without controls: render the slotted component directly (no iframe) -->
     <div v-else class="flex-1 overflow-auto">
       <div class="h-full">
         <Suspense>
