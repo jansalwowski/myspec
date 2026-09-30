@@ -76,10 +76,14 @@ expect_eq "$(prl '.github/workflows/a.yml\nscripts/x.sh\nREADME.md\ndocs/a.md\ne
 expect_eq "$(prl 'skills/a/SKILL.md\n' --title 'Fix the thing')" "area:skills" "a non-conventional title gets no type"
 expect_eq "$(prl 'skills/a/SKILL.md\n' --title 'feature-plan: x')" "area:skills" "a component prefix is not a commit type"
 expect_eq "$(prl '' --title 'feat(skills)!: drop x')" "type:enhancement breaking" "! in the title is breaking"
-printf -- '- [x] Examples updated\n- [x] Breaking for consumers? yes\n' > "$TMP/body-yes"
-printf -- '- [ ] Breaking for consumers?\nNot breaking: [x] Breaking\n' > "$TMP/body-no"
-expect_eq "$(prl '' --title 'feat: x' --body-file "$TMP/body-yes")" "type:enhancement breaking" "ticked Breaking box"
-expect_eq "$(prl '' --title 'feat: x' --body-file "$TMP/body-no")" "type:enhancement" "unticked box, or a tick outside a list item, is not breaking"
+# The real template: ticking every Checks box as "done" is not a breaking claim.
+TPL="$REPO_ROOT/.github/pull_request_template.md"
+sed '/^## Breaking/,$!s/- \[ \]/- [x]/' "$TPL" > "$TMP/body-checks"
+sed 's/- \[ \]/- [x]/' "$TPL" > "$TMP/body-yes"
+printf -- '- [ ] Breaking: yes\nNot breaking: [x] Breaking: yes\n- [x] Breaking for consumers?\n' > "$TMP/body-no"
+expect_eq "$(prl '' --title 'feat: x' --body-file "$TMP/body-checks")" "type:enhancement" "ticked Checks boxes are not breaking"
+expect_eq "$(prl '' --title 'feat: x' --body-file "$TMP/body-yes")" "type:enhancement breaking" "ticked Breaking: yes box"
+expect_eq "$(prl '' --title 'feat: x' --body-file "$TMP/body-no")" "type:enhancement" "unticked box, a tick outside a list item, or the old wording is not breaking"
 expect_eq "$(prl '' --title 'fix: x' --issue-labels 'type:bug,P3,P1,breaking')" "type:bug breaking P1" "highest closing-issue priority, breaking inherited"
 expect_eq "$(prl '' --title 'fix: x' --issue-labels 'status:ready,area:hooks')" "type:bug" "issue status and area labels are not copied"
 

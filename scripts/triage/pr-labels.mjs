@@ -6,7 +6,7 @@
 // - type:*   from the Conventional Commit type in the title (AGENTS.md)
 // - area:*   from the changed files, by the path table in the /triage skill;
 //            plugins/myspec/ mirror files follow their source and add nothing
-// - breaking from `type!:` in the title, a ticked "Breaking" box in the body,
+// - breaking from `type!:` in the title, a ticked "Breaking: yes" box in the body,
 //            or a closing issue labelled breaking
 // - P1-P3    the highest priority among the closing issues
 //
@@ -64,7 +64,7 @@ for (const f of files) {
 }
 for (const [label] of AREAS) if (areas.has(label)) labels.push(label);
 
-const ticked = /^\s*[-*]\s+\[[xX]\]\s+Breaking\b/m.test(body);
+const ticked = /^\s*[-*]\s+\[[xX]\]\s+Breaking: yes\b/m.test(body);
 if ((head && head[3]) || ticked || issueLabels.includes('breaking')) labels.push('breaking');
 
 const priority = ['P1', 'P2', 'P3'].find((p) => issueLabels.includes(p));
