@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Regression fixture for scripts/triage/: the title classifier the
-# issue-triage workflow runs on every opened issue, and the label sync.
+# issue-triage workflow runs on every opened issue, the PR labeller the
+# pr-labels workflow runs on every PR, and the label sync.
 #
 # The classifier labels real issues without review, so a false area label is
 # worse than none: each case pairs a title that must match with a look-alike
@@ -59,6 +60,33 @@ expect_eq "$?" "2" "two titles is a usage error"
 # The real repo: titles of issues that shipped, so the tree lookup keeps working.
 expect_eq "$(node "$CLASSIFY" 'mark-code-changed.sh marks read-only Bash commands' | flat)" "area:hooks status:needs-triage" "real hook"
 expect_eq "$(node "$CLASSIFY" 'memory-doctor duplicate-id: a memory deleted' | flat)" "area:lib status:needs-triage" "real lib .mjs"
+
+# ── pr-labels.mjs ────────────────────────────────────────────────────────────
+
+PRL="$REPO_ROOT/scripts/triage/pr-labels.mjs"
+prl() { local files=$1; shift; printf '%b' "$files" | node "$PRL" "$@" | flat; }
+
+expect_eq "$(prl 'skills/feature-plan/SKILL.md\n' --title 'fix(feature-plan): x')" "type:bug area:skills" "fix with a scope"
+expect_eq "$(prl 'skills/a/SKILL.md\nplugins/myspec/skills/a/SKILL.md\n' --title 'feat: x')" "type:enhancement area:skills" "a mirror file adds no area:plugin"
+expect_eq "$(prl 'plugins/myspec/hooks.json\nplugins/myspec/.codex-plugin/plugin.json\n' --title 'chore: x')" "" "mirror-only files add nothing; chore has no type"
+expect_eq "$(prl '.claude-plugin/plugin.json\nplugins/myspec/upstream-sources.yml\n' --title 'chore(plugin): x')" "area:plugin" "non-mirror plugin files"
+expect_eq "$(prl 'hooks.json\nlib/a.mjs\nhooks/b.sh\n' --title 'refine: x')" "type:enhancement area:hooks area:lib" "areas in table order"
+expect_eq "$(prl 'blueprints/a.md\ntemplates/b\nframework-files/manifest.json\n' --title 'docs: x')" "type:docs area:framework-files" "framework-files group"
+expect_eq "$(prl '.github/workflows/a.yml\nscripts/x.sh\nREADME.md\ndocs/a.md\nexamples/a.md\n' --title 'ci: x')" "area:tooling" "README, docs and examples add no area"
+expect_eq "$(prl 'skills/a/SKILL.md\n' --title 'Fix the thing')" "area:skills" "a non-conventional title gets no type"
+expect_eq "$(prl 'skills/a/SKILL.md\n' --title 'feature-plan: x')" "area:skills" "a component prefix is not a commit type"
+expect_eq "$(prl '' --title 'feat(skills)!: drop x')" "type:enhancement breaking" "! in the title is breaking"
+printf -- '- [x] Examples updated\n- [x] Breaking for consumers? yes\n' > "$TMP/body-yes"
+printf -- '- [ ] Breaking for consumers?\nNot breaking: [x] Breaking\n' > "$TMP/body-no"
+expect_eq "$(prl '' --title 'feat: x' --body-file "$TMP/body-yes")" "type:enhancement breaking" "ticked Breaking box"
+expect_eq "$(prl '' --title 'feat: x' --body-file "$TMP/body-no")" "type:enhancement" "unticked box, or a tick outside a list item, is not breaking"
+expect_eq "$(prl '' --title 'fix: x' --issue-labels 'type:bug,P3,P1,breaking')" "type:bug breaking P1" "highest closing-issue priority, breaking inherited"
+expect_eq "$(prl '' --title 'fix: x' --issue-labels 'status:ready,area:hooks')" "type:bug" "issue status and area labels are not copied"
+
+printf '' | node "$PRL" >/dev/null 2>&1
+expect_eq "$?" "2" "missing --title is a usage error"
+printf '' | node "$PRL" --title x --bogus >/dev/null 2>&1
+expect_eq "$?" "2" "unknown argument is a usage error"
 
 # ── sync-labels.sh ───────────────────────────────────────────────────────────
 
