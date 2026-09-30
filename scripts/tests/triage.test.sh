@@ -88,6 +88,30 @@ expect_eq "$?" "2" "missing --title is a usage error"
 printf '' | node "$PRL" --title x --bogus >/dev/null 2>&1
 expect_eq "$?" "2" "unknown argument is a usage error"
 
+# ── pr-companions.mjs ────────────────────────────────────────────────────────
+
+PRC="$REPO_ROOT/scripts/triage/pr-companions.mjs"
+prc() { local json=$1; shift; printf '%s' "$json" | node "$PRC" "$@" | cut -d: -f1 | flat; }
+SK='{"filename":"skills/feature-plan/SKILL.md","patch":"@@ -1 +1 @@\n-name: x\n+name: y"}'
+DESC='{"filename":"skills/feature-plan/SKILL.md","patch":"@@ -2 +2 @@\n-description: Use when a\n+description: Use when b"}'
+EX='{"filename":"examples/skills/feature-plan.md"}'
+EV='{"filename":"evals/feature-plan-gate/case.yaml"}'
+printf -- '- [x] Examples in `examples/` updated, or checked and unaffected\n' > "$TMP/body-ex"
+
+expect_eq "$(prc "[$SK]")" "examples" "a skill change without examples warns"
+expect_eq "$(prc "[$SK,$EX]")" "" "an examples/ change satisfies it"
+expect_eq "$(prc "[$SK]" --body-file "$TMP/body-ex")" "" "a ticked Examples box satisfies it"
+expect_eq "$(prc "[$SK]" --body-file "$TMP/body-no")" "examples" "an unticked template does not"
+expect_eq "$(prc '[{"filename":"plugins/myspec/skills/feature-plan/SKILL.md"},{"filename":"skills/_shared/a.md"}]')" "" "mirror and _shared paths are not skills"
+expect_eq "$(prc "[$DESC,$EX]")" "eval" "a changed description without evals warns"
+expect_eq "$(prc "[$DESC,$EX,$EV]")" "" "an evals/ change satisfies it"
+expect_eq "$(prc '[{"filename":"skills/feature-plan/SKILL.md","patch":"+  description: nested"},'"$EX"']')" "" "an indented description key is not the frontmatter one"
+expect_eq "$(prc '[{"filename":"skills/feature-plan/SKILL.md"},'"$EX"']')" "" "a file without a patch warns nothing"
+printf '%s' "[$SK]" | node "$PRC" | grep -q 'feature-plan' && ok || fail "the warning names the skill"
+
+printf 'nope' | node "$PRC" >/dev/null 2>&1
+expect_eq "$?" "2" "non-JSON stdin is a usage error"
+
 # ── sync-labels.sh ───────────────────────────────────────────────────────────
 
 BIN="$TMP/bin"

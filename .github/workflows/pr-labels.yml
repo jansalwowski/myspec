@@ -4,6 +4,8 @@ name: PR labels
 # areas from the changed files, breaking and priority from the title, body and
 # the issues it closes (scripts/triage/pr-labels.mjs). No model call, so no API
 # spend. Labels are only added, never removed, so a label set by hand stays.
+# A second step warns (never fails) when a skill change lacks its examples/ or
+# evals/ companion (scripts/triage/pr-companions.mjs).
 #
 # pull_request_target, so a fork's PR gets a token that can label. It checks
 # out the base branch, never the PR's code, and reads the PR only through the
@@ -37,7 +39,8 @@ jobs:
         run: |
           set -euo pipefail
           owner=${GITHUB_REPOSITORY%/*} name=${GITHUB_REPOSITORY#*/}
-          gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$NUMBER/files" --jq '.[].filename' > files.txt
+          gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$NUMBER/files" | jq -s 'add // []' > files.json
+          jq -r '.[].filename' files.json > files.txt
           issue_labels=$(gh api graphql -F owner="$owner" -F name="$name" -F n="$NUMBER" -f query='
             query($owner: String!, $name: String!, $n: Int!) {
               repository(owner: $owner, name: $name) { pullRequest(number: $n) {
@@ -50,3 +53,13 @@ jobs:
           # repo's token (AGENTS.md "Stacked PRs").
           [ ! -s labels.txt ] || jq -R . labels.txt | jq -s '{labels: .}' \
             | gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$NUMBER/labels" --input - > /dev/null
+
+      - name: Warn on missing companion changes
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          printf '%s' "${BODY:-}" > body.txt
+          node scripts/triage/pr-companions.mjs --body-file body.txt < files.json > warnings.txt
+          while IFS= read -r w; do echo "::warning title=PR companions::$w"; echo "- $w" >> "$GITHUB_STEP_SUMMARY"; done < warnings.txt
+          [ -s warnings.txt ] || echo "no companion warnings"
