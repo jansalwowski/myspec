@@ -103,6 +103,32 @@ expect_no_log "$SID-7" "2>&1 is not a write"
 bashcmd "$SID-8" "$REPO" 'git apply fix.patch'
 expect_no_log "$SID-8" "a write verb with no visible code path creates no log"
 
+# --- only what a segment WRITES is recorded ----------------------------------
+bashcmd "$SID-20" "$REPO" 'cat src/a.ts 2>/dev/null'
+expect_no_log "$SID-20" "a read with stderr to /dev/null creates no log"
+[ ! -f "/tmp/.myspec-code-changed-$SID-20" ] && ok || fail "a read with stderr to /dev/null arms no Stop-hook marker"
+
+bashcmd "$SID-21" "$REPO" 'git log -- src/a.ts > /dev/null'
+expect_no_log "$SID-21" "a redirect to /dev/null is not a write"
+
+bashcmd "$SID-22" "$REPO" 'ls src/a.ts >/dev/null 2>&1'
+expect_no_log "$SID-22" "an fd dup plus /dev/null is not a write"
+
+bashcmd "$SID-23" "$REPO" 'grep -n foo src/a.ts > out.txt'
+expect_no_log "$SID-23" "a redirect into a non-code file does not record the code file read"
+
+bashcmd "$SID-24" "$REPO" 'cat src/a.ts > src/copy.ts'
+expect_log "$SID-24" "a redirect into a code file still creates the log"
+expect_in "$SID-24" '- `src/copy.ts`' "the redirect target is recorded"
+if grep -qF -- '- `src/a.ts`' "$STATE/$SID-24.md" 2>/dev/null; then fail "the file only read is not recorded"; else ok; fi
+
+bashcmd "$SID-25" "$REPO" 'cp src/a.ts src/lib/'
+expect_in "$SID-25" '- `src/lib/a.ts`' "cp into a directory records the destination file"
+if grep -qF -- '- `src/a.ts`' "$STATE/$SID-25.md" 2>/dev/null; then fail "cp does not record its source"; else ok; fi
+
+bashcmd "$SID-26" "$REPO" 'cd src && sed -i "" -e "s/a/b/" g.ts'
+expect_in "$SID-26" '- `src/g.ts`' "a relative path after cd resolves against the new directory"
+
 # --- an edit inside a linked worktree logs in the PRIMARY checkout -----------
 git -C "$REPO" worktree add -q "$REPO/.claude/worktrees/wt-a" -b wt-a
 WT="$REPO/.claude/worktrees/wt-a"
@@ -112,6 +138,10 @@ expect_log "$SID-9" "worktree edit logs in the main checkout"
 [ ! -e "$WT/.claude/state" ] && ok || fail "no state tree grows inside the worktree"
 expect_in "$SID-9" 'worktree: "wt-a"' "worktree marker names the linked worktree"
 expect_in "$SID-9" '- `.claude/worktrees/wt-a/src/w.ts`' "path is recorded relative to the main checkout"
+
+bashcmd "$SID-27" "$WT" 'echo x > src/v.ts'
+expect_in "$SID-27" '- `.claude/worktrees/wt-a/src/v.ts`' "a relative Bash write in a worktree records the worktree file"
+expect_in "$SID-27" 'worktree: "wt-a"' "and marks the worktree"
 
 # --- a 1.x log without the section gains it on the next edit ----------------
 mkdir -p "$STATE"

@@ -74,7 +74,7 @@ check block "branch force rename"      'git branch -M old new'
 check block "branch copy"              'git branch -c old new'
 check block "branch --move"            'git branch --move old new'
 check block "branch --copy"            'git branch --copy old new'
-check block "after &&"                 'cd /tmp && git checkout develop'
+check block "after && (cd inside main)"  'cd .claude && git checkout develop'
 check block "after ;"                  'echo hi; git merge develop'
 check block "after |"                  'true | git checkout develop'
 check block "inside then"              'if true; then git checkout develop; fi'
@@ -136,6 +136,63 @@ check allow "cd into a worktree, then switch" "cd $WT && git checkout develop"
 check allow "git -C a worktree, delete"       "git -C $WT branch -d feat/x"
 check block "same verb, no worktree named"    'git checkout develop'
 
+# --- resolved per segment: the cwd, then each cd, then git -C / --git-dir -----
+check allow "cd outside any repo, then checkout"   'cd /tmp && git checkout develop'
+check block "worktree only mentioned, then checkout" "ls $WT; git checkout develop"
+check block "cd scoped to its subshell"            "(cd $WT && git status); git checkout develop"
+check_in "$WT" block "cd from a worktree into main"   none-sess "cd $REPO && git checkout develop"
+check_in "$WT" block "git -C main from a worktree"    none-sess "git -C $REPO checkout develop"
+check_in "$WT" block "--git-dir of main from a worktree" none-sess "git --git-dir=$REPO/.git checkout develop"
+check_in "$WT" allow "relative cd staying in the worktree" none-sess "cd . && git checkout develop"
+
+# --- launchers and git global options are looked through ----------------------
+check block "git -C main"               "git -C $REPO checkout develop"
+check block "git -c key=value"          'git -c core.x=1 checkout develop'
+check block "git --no-pager"            'git --no-pager checkout develop'
+check block "git -P and -c together"    'git -P -c a.b=c switch develop'
+check block "env prefix command"        'env git checkout develop'
+check block "env with assignment"       'env GIT_TRACE=1 git merge develop'
+check block "command prefix"            'command git checkout develop'
+check block "absolute git binary"       '/usr/bin/git checkout develop'
+check block "bash -c payload"           "bash -c 'git checkout develop'"
+check block "sh -lc payload after cd"   "sh -lc 'cd . && git rebase develop'"
+check block "eval payload"              'eval "git checkout develop"'
+check allow "bash -c payload in worktree" "bash -c 'cd $WT && git checkout develop'"
+check allow "command -v is a lookup"    'command -v git'
+check allow "bash -c prose only"        "bash -c 'echo git checkout develop'"
+
+# --- an operation already in progress may be resumed or unwound -------------
+check allow "rebase --continue"         'git rebase --continue'
+check allow "rebase --abort"            'git rebase --abort'
+check allow "rebase --skip"             'git rebase --skip'
+check allow "merge --abort"             'git merge --abort'
+check allow "merge --continue"          'git merge --continue'
+check allow "editor-less continue"      'GIT_EDITOR=true git rebase --continue'
+check allow "continue via -c"           'git -c core.editor=true rebase --continue'
+check block "rebase --onto is not a resume" 'git rebase --onto main develop'
+check block "continue plus a new rebase" 'git rebase --continue && git rebase main'
+
+# --- pull and branch -f move the checked-out branch or a ref -----------------
+check block "pull"                      'git pull'
+check block "pull --rebase"             'git pull --rebase origin develop'
+check block "branch -f"                 'git branch -f feat/x HEAD~1'
+check block "branch --force"            'git branch --force feat/x origin/feat/x'
+check allow "fetch is not pull"         'git fetch origin'
+
+# --- output contract: silence on allow, deny on block -------------------------
+if [ -z "$(run_hook "$REPO" none-sess 'git status')" ]; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  echo "FAIL  an allowed command must print nothing (approve would skip the permission prompt)" >&2
+fi
+if run_hook "$REPO" none-sess 'git checkout develop' | jq -e '.hookSpecificOutput.permissionDecision == "deny" and .decision == "block"' >/dev/null; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1))
+  echo "FAIL  a block must carry permissionDecision deny plus the legacy decision block" >&2
+fi
+
 # --- gate A escape hatch, and gate A holds in develop mode too ---------------
 check allow "documented bypass"        'MYSPEC_ALLOW_BRANCH_OPS=1 git checkout develop'
 mark dev-sess develop 60
@@ -160,7 +217,7 @@ check_in "$REPO" block "pip install"          wt-sess 'pip install -r requiremen
 check_in "$REPO" block "cargo build"          wt-sess 'cargo build --release'
 check_in "$REPO" block "push"                 wt-sess 'git push origin HEAD'
 check_in "$REPO" block "worktree prune"       wt-sess 'git worktree prune'
-check_in "$REPO" block "after &&"             wt-sess 'cd /tmp && yarn build'
+check_in "$REPO" block "after && (cd inside main)" wt-sess 'cd .claude && yarn build'
 check_in "$REPO" block "project blockInMain"  wt-sess 'make deploy'
 
 # --- gate B, worktree mode: these stay allowed on purpose --------------------

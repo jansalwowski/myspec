@@ -21,7 +21,11 @@
 #   aiDir                       doc tree; edits there never trigger the prompt
 #   isolation.worktreeRoot      where worktrees live (default .claude/worktrees)
 #
-# Output contract: {"decision": "block", "reason": "..."} or {"decision": "approve"}
+# Output contract: a block prints the PreToolUse deny form plus the legacy
+# fields older hosts read ({"hookSpecificOutput": {"permissionDecision":
+# "deny", ...}, "decision": "block", "reason": "..."}). An allowed edit prints
+# NOTHING: {"decision": "approve"} is the deprecated PreToolUse spelling of
+# permissionDecision "allow", which skips the user's permission prompt.
 
 set -euo pipefail
 
@@ -29,12 +33,13 @@ OWN_TTL=28800      # 8h — a session's own decision stays valid this long
 INHERIT_TTL=14400  # 4h — window in which a subagent inherits a parent's decision
 
 approve() {
-  echo '{"decision": "approve"}'
   exit 0
 }
 
 block() {
-  printf '{"decision": "block", "reason": %s}\n' "$(printf '%s' "$1" | jq -Rs .)"
+  local reason
+  reason=$(printf '%s' "$1" | jq -Rs .)
+  printf '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": %s}, "decision": "block", "reason": %s}\n' "$reason" "$reason"
   exit 0
 }
 

@@ -123,6 +123,20 @@ printf '{"aiDir":"docs/ai","frameworkVersion":"2.0.0"}\n' > "$REPO/.myspec.json"
 check allow "no decision, configured aiDir doc"  new-sess "$REPO/docs/ai/features/x/spec.md"
 check block "no decision, the old .ai path is source now" new-sess "$REPO/.ai/thing.js"
 
+# --- output contract: silence on allow, deny on block -------------------------
+rm -f "$REPO/.claude/state/isolation/"*.json
+if run_hook "$REPO" new-sess "$REPO/components/Foo.vue" | jq -e '.hookSpecificOutput.permissionDecision == "deny" and .decision == "block"' >/dev/null; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); echo "FAIL  a block must carry permissionDecision deny plus the legacy decision block" >&2
+fi
+mark dev-sess develop 60
+if [ -z "$(run_hook "$REPO" dev-sess "$REPO/components/Foo.vue")" ]; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); echo "FAIL  an allowed edit must print nothing (approve would skip the permission prompt)" >&2
+fi
+
 # --- not a myspec project: the hook stays out of the way ----------------------
 OTHER="$ROOT/other"
 git init -q -b main "$OTHER"

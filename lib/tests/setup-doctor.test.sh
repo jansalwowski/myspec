@@ -296,6 +296,7 @@ printf 'features:\n    - name: misindented\n      status: complete\n' > "$REPO/a
   echo '# Fixture'
   echo
   echo 'Rules live in `.claude/rules/nope.md`. Route to `/myspec:not-a-skill`.'
+  echo 'Run `/bootstrap` first; `/deps-check` weekly; `/vue-component` for components.'
   head -c 4000 /dev/zero | tr '\0' 'x'
 } > "$REPO/CLAUDE.md"
 
@@ -320,6 +321,7 @@ expect_line 'ERROR features-index-unreadable: ai/features/index.yaml:2' "a mis-i
 expect_line 'ERROR framework-drift: ai/anti-patterns.md: header above' "a changed marker-merge header is drift, since update owns the header"
 expect_line 'WARN +over-budget: CLAUDE.md' "an oversized project CLAUDE.md is a warning"
 expect_line 'WARN +dead-path-ref: CLAUDE.md' "a dead path reference in a project file is a warning"
+expect_no_line 'references /(bootstrap|deps-check|vue-component),' "a slash command is not a dead path reference"
 expect_line 'WARN +dead-skill-ref: CLAUDE.md' "a reference to a skill the plugin does not ship is a warning"
 expect_line 'WARN +topology-missing: .myspec.json' "a topologyFile pointing at nothing is a warning, not a blocker"
 expect_line 'bootstrap and the reuse audit fall back to guessing' "the topology finding says what it breaks"

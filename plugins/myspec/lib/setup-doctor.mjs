@@ -1278,9 +1278,13 @@ function deadPathRefs(source) {
     // A trailing slash is how prose names a location ("ideas live under
     // `ai/ideas/`"), and `..` covers both parent traversal and the `foo/...`
     // ellipsis. Neither is a reference to a file that ought to exist.
+    // A lone `/word` is a slash command (`/bootstrap`, `/deps-check`) — a
+    // project skill, command, or plugin skill — not a path. Joined to the
+    // root it always has an existing parent, so every one used to be flagged.
     const looksLikePath = raw.includes('/')
       && PATH_SHAPE.test(raw)
       && !/^https?:/.test(raw)
+      && !/^\/[^/]+$/.test(raw)
       && !raw.endsWith('/')
       && !raw.includes('..');
 

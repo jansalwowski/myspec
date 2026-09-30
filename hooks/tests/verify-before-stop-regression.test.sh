@@ -8,6 +8,10 @@
 #            names with a multi-char IFS (only its first character is used)
 #            and wrote "\n" inside double quotes, so the agent got
 #            "a,b" and literal backslashes instead of "a, b" and separators.
+#   (doctor) Checks ran in the cwd's checkout only, so a session whose cwd was
+#            the clean main checkout but whose edits were in a linked worktree
+#            verified the untouched tree and passed. The checkouts to verify
+#            now come from the session log's `## Files touched`.
 #
 # Usage: verify-before-stop-regression.test.sh [path-to-hook]
 
@@ -65,6 +69,41 @@ printf '%s\n' "$R" | grep -qx -- '---' && ok || fail "per-check sections are sep
 printf '%s' "$R" | grep -qF '\' && fail "the report holds no literal backslash (got: $(printf '%s' "$R" | grep -F '\' | head -1))" || ok
 printf '%s\n' "$R" | grep -qx 'ALPHA-OUT' && ok || fail "check output starts on its own line"
 printf '%s\n' "$R" | grep -qx 'BETA-OUT' && ok || fail "the second check's output is reported too"
+
+# --- (doctor) the checkout the session edited is the one verified ------------
+# The worktree carries a marker file that makes its copy of the check fail;
+# the main checkout (the cwd) stays clean and passes.
+printf '{"checks":[{"name":"tree","command":"test ! -f BROKEN","required":true}]}\n' > "$REPO/.claude/verification.json"
+printf '.claude/state/\n' > "$REPO/.gitignore"
+git -C "$REPO" add -A && git -C "$REPO" commit -q -m checks
+WT="$ROOT/wt"
+git -C "$REPO" worktree add -q -b wt "$WT"
+mkdir -p "$WT/src" "$REPO/.claude/state/sessions"
+touch "$WT/BROKEN" "$WT/src/a.ts"
+log_touched() {  # log_touched <path>...
+  { printf -- '---\nsession_id: %s\n---\n\n## Files touched\n' "$SID"
+    for p in "$@"; do printf -- '- `%s`\n' "$p"; done; } > "$REPO/.claude/state/sessions/$SID.md"
+}
+
+rm -f "$REPO/.claude/state/sessions/$SID.md"
+OUT=$(run_hook '')
+[ "$(decision "$OUT")" = approve ] && ok || fail "no session log: the cwd checkout is verified, as before (got: ${OUT:0:200})"
+
+log_touched "$WT/src/a.ts"
+OUT=$(run_hook '')
+[ "$(decision "$OUT")" = block ] && ok || fail "edits in a worktree verify the worktree, not the clean cwd checkout (got: ${OUT:0:200})"
+reason "$OUT" | grep -qF "[in $WT]" && ok || fail "the report names the checkout the check ran in"
+
+rm -f "$WT/BROKEN"
+touch "$REPO/BROKEN"
+log_touched "$WT/src/a.ts"
+OUT=$(run_hook '')
+[ "$(decision "$OUT")" = approve ] && ok || fail "a checkout the session never touched is not verified (got: ${OUT:0:200})"
+
+log_touched "$WT/src/a.ts" "src/b.ts"
+OUT=$(run_hook '')
+[ "$(decision "$OUT")" = block ] && ok || fail "edits in both checkouts verify both (got: ${OUT:0:200})"
+rm -f "$REPO/BROKEN"
 
 printf '%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

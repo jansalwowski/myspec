@@ -13,6 +13,9 @@
 #            the field check rejected the framework's own templates (topic/
 #            started sessions, id/date memories, type indexes); the
 #            frontmatter-less ideas/ seed docs were not exempt.
+#   (doctor) `grep "^---"` matched anywhere and awk took the first `---`
+#            block, so body text first and a later block holding title/updated
+#            passed. Frontmatter must open on line 1.
 #
 # Usage: validate-frontmatter-regression.test.sh [path-to-hook]
 
@@ -134,6 +137,23 @@ F="$REPO/.ai/memory/index.md"
 printf -- '---\ntype: index\nupdated: 2026-01-01\n---\nbody\n' > "$F"
 run "$REPO" "$F"
 expect_quiet "type-index frontmatter (type/updated) passes"
+
+# --- (doctor): frontmatter must open on line 1 ---------------------------------
+F="$REPO/.ai/features/x/late-block.md"
+printf -- '# Title\n\nbody first\n\n---\ntitle: Late\nupdated: 2026-01-01\n---\n' > "$F"
+run "$REPO" "$F"
+expect_block "a --- block after body text is not frontmatter"
+reason | grep -q 'line 1' && ok || fail "the block says frontmatter must start on line 1 (got: $(reason | head -2))"
+
+F="$REPO/.ai/features/x/unclosed.md"
+printf -- '---\ntitle: Open\nupdated: 2026-01-01\nbody with no closing fence\n' > "$F"
+run "$REPO" "$F"
+expect_block "a frontmatter fence that never closes blocks"
+
+F="$REPO/.ai/features/x/crlf.md"
+printf -- '---\r\ntitle: Win\r\nupdated: 2026-01-01\r\n---\r\nbody\r\n' > "$F"
+run "$REPO" "$F"
+expect_quiet "CRLF frontmatter on line 1 passes"
 
 # --- 4eb8ccb: ideas/ seed docs are exempt --------------------------------------
 mkdir -p "$REPO/.ai/ideas"

@@ -172,27 +172,114 @@ elif [ -n "$COMMAND" ]; then
   # shellcheck source=/dev/null
   . "$LIB"
 
-  # A write verb at command position. `2>&1` never matches the redirect form:
-  # the scanner splits segments on `&`, leaving `2>` with nothing after it.
-  WRITE_PATTERNS=(
-    '^sed[[:space:]]+(-[a-zA-Z]*i|--in-place)'
-    '^perl[[:space:]]+-[a-zA-Z]*i'
-    '^git[[:space:]]+apply([[:space:]]|$)'
-    '^patch([[:space:]]|$)'
-    '^(tee|mv|cp|rsync|install)[[:space:]]'
-    '>{1,2}[[:space:]]*[^&[:space:]]'
-  )
+  # Paths come only from what a segment WRITES: the target of a `>`/`>>`
+  # redirect, or the file arguments of a write verb at command position (sed -i,
+  # perl -i, tee, mv, patch, git apply; for cp/rsync/install the destination).
+  # A redirect to /dev/null or an fd dup (`2>&1`, `>&2`) writes nothing, and a
+  # code path elsewhere in the command (`cat src/a.ts 2>/dev/null`, `git log --
+  # src/a.ts > /dev/null`) is only read. Collecting from the whole command once
+  # a write pattern matched anywhere logged read-only sessions and armed the
+  # Stop hook's full verification on them. Relative paths resolve against the
+  # cwd (and any literal `cd` before them), so a write inside a linked worktree
+  # records the worktree file, not a same-named one in the main checkout.
+  CODE_PATH_RE="^[A-Za-z0-9_@./-]+\.${CODE_EXT}\$"
 
-  SEGMENT=$(find_matching_segment "$COMMAND" "${WRITE_PATTERNS[@]}")
-  [ -n "$SEGMENT" ] || exit 0
+  BASE_DIR=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
+  [ -n "$BASE_DIR" ] && [ -d "$BASE_DIR" ] || BASE_DIR="$PWD"
+  BASE_DIR=$(cd "$BASE_DIR" && pwd -P)
 
-  # Code-file paths named outside quotes and heredoc bodies. A quoted or
-  # variable path is invisible here, which errs toward not marking.
-  while IFS= read -r p; do
-    [ -n "$p" ] && PATHS+=("$p")
-  done < <(printf '%s' "$COMMAND" | sanitize_command | grep -oE "[A-Za-z0-9_@./-]+\.${CODE_EXT}([[:space:]]|$)" | sed 's/[[:space:]]*$//' | sort -u)
+  add_path() {  # add_path <word>
+    local w="${1#./}"
+    [[ "$w" =~ $CODE_PATH_RE ]] || return 0
+    case "$w" in
+      /*) PATHS+=("$w") ;;
+      *) PATHS+=("$BASE_DIR/$w") ;;
+    esac
+  }
+
+  while IFS= read -r line; do
+    segment=$(strip_command_prefix "${line#*$'\t'}")
+    words=()
+    read -r -a words <<< "$segment" || true
+    [ "${#words[@]}" -gt 0 ] || continue
+
+    # A literal `cd` moves the base for relative paths after it.
+    if [ "${words[0]}" = cd ]; then
+      if [ "${#words[@]}" -ge 2 ] && NEXT_DIR=$(cd "$BASE_DIR" 2>/dev/null && cd "${words[1]}" 2>/dev/null && pwd -P); then
+        BASE_DIR="$NEXT_DIR"
+      fi
+      continue
+    fi
+
+    # Redirect targets. `[0-9]*` covers `2>`; the scanner already split
+    # `&>` and `>&N` on the `&`, leaving no target after the `>`.
+    while IFS= read -r redirect; do
+      target="${redirect##*[>|]}"
+      target="${target#"${target%%[![:space:]]*}"}"
+      case "$target" in
+        /dev/*|'') ;;
+        *) add_path "$target" ;;
+      esac
+    done < <(printf '%s' "$segment" | grep -oE '>{1,2}\|?[[:space:]]*[^[:space:]<>|]+' || true)
+
+    # Write verbs: their file arguments.
+    verb="${words[0]##*/}"
+    args=("${words[@]:1}")
+    case "$verb" in
+      sed)
+        printf '%s' "$segment" | grep -qE '^[^[:space:]]*sed[[:space:]]+(.*[[:space:]])?(-[a-zA-Z]*i|--in-place)' || args=() ;;
+      perl)
+        printf '%s' "$segment" | grep -qE '^[^[:space:]]*perl[[:space:]]+(.*[[:space:]])?-[a-zA-Z]*i' || args=() ;;
+      tee|mv|patch) ;;
+      git)
+        [ "${words[1]:-}" = apply ] || args=() ;;
+      cp|rsync|install)
+        # Only the destination is written; into a directory, as <dir>/<name>.
+        dest=""
+        sources=()
+        for w in ${args[@]+"${args[@]}"}; do
+          case "$w" in
+            *'>'*|'<'*) break ;;
+            -*) ;;
+            *) [ -z "$dest" ] || sources+=("$dest"); dest="$w" ;;
+          esac
+        done
+        args=()
+        if [ -n "$dest" ]; then
+          if [[ "${dest#./}" =~ $CODE_PATH_RE ]]; then
+            args=("$dest")
+          else
+            for w in ${sources[@]+"${sources[@]}"}; do
+              [[ "$w" =~ $CODE_PATH_RE ]] && args+=("${dest%/}/${w##*/}")
+            done
+          fi
+        fi ;;
+      *) args=() ;;
+    esac
+    for w in ${args[@]+"${args[@]}"}; do
+      case "$w" in
+        -*) ;;
+        *) add_path "$w" ;;
+      esac
+    done
+  done < <(printf '%s' "$COMMAND" | sanitize_command | split_segments)
 
   [ "${#PATHS[@]}" -gt 0 ] || exit 0
+
+  # Dedupe, keeping order.
+  UNIQUE=()
+  for p in "${PATHS[@]}"; do
+    case " ${UNIQUE[*]-} " in
+      *" $p "*) ;;
+      *) UNIQUE+=("$p") ;;
+    esac
+  done
+  PATHS=("${UNIQUE[@]}")
+
+  # Anchor on the written file, as the Write branch does.
+  if ANCHORED_ROOT="$(resolve_repo_root_raw "${PATHS[0]}")"; then
+    RAW_ROOT="$ANCHORED_ROOT"
+  fi
 
   CONTEXT="Auto-created on a Bash write: \`$(printf '%s' "$COMMAND" | tr '\n' ' ' | head -c 120)\`."
 else
