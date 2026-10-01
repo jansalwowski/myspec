@@ -72,7 +72,7 @@ Use `/reload-plugins` after making changes.
 
 Run `scripts/install-git-hooks.sh` once per clone. It sets up two hooks:
 
-- **pre-commit:** lints staged skills.
+- **pre-commit:** lints staged skills, and staged `lib/` JS with ESLint (skipped with a notice when ESLint can't run).
 - **pre-push:** runs the eval cases for the skills you changed. These evals run on your Claude Code login and only report; they never block the push. Skip them with `MYSPEC_SKIP_EVALS=1`.
 
 See [evals/README.md](evals/README.md) and the Quality gates section of [AGENTS.md](AGENTS.md).

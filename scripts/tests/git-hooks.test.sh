@@ -230,5 +230,44 @@ git add hooks/broken.sh
 in_repo git commit -qm "fixed hook"
 expect_exit 0 "a hook script that parses passes"
 
+# JS lint (#208). A stub stands in for scripts/lint-js.sh so the suite stays
+# offline: it flags any file containing unusedVar the way eslint does (absolute
+# path, exit 1), and fails its --version probe when STUB_ESLINT_DOWN is set.
+# A fake npx on PATH satisfies the hook's npx check without a node install.
+mkdir -p "$TMP/bin"
+printf '#!/bin/sh\nexit 0\n' > "$TMP/bin/npx"
+chmod +x "$TMP/bin/npx"
+cat > scripts/lint-js.sh <<'STUB'
+#!/usr/bin/env bash
+if [ "${1:-}" = --version ]; then
+  [ -z "${STUB_ESLINT_DOWN:-}" ] || exit 127
+  echo v0; exit 0
+fi
+rc=0
+for f in "$@"; do
+  if grep -q unusedVar "$f"; then
+    printf '%s\n  1:7  error  unusedVar is defined but never used  no-unused-vars\n' "$(pwd -P)/$f"
+    rc=1
+  fi
+done
+exit $rc
+STUB
+git add scripts/lint-js.sh && git commit -q --no-verify -m "stub js lint"
+mkdir -p lib plugins/myspec/lib
+echo 'const unusedVar = 1' > lib/bad.mjs
+git add lib/bad.mjs
+PATH="$TMP/bin:$PATH" in_repo git commit -qm "bad lib js"
+expect_exit 1 "a staged lib JS file with an eslint finding blocks the commit"
+expect_line "^lib/bad\.mjs$" "the finding is shown with a repo-relative path"
+STUB_ESLINT_DOWN=1 PATH="$TMP/bin:$PATH" in_repo git commit -qm "eslint unavailable"
+expect_exit 0 "when eslint cannot run, the commit is not blocked"
+expect_line "eslint could not run .*JS lint skipped" "the skip is announced"
+git reset -q
+echo 'export const used = 1' > plugins/myspec/lib/ok.mjs
+git add plugins/myspec/lib/ok.mjs
+PATH="$TMP/bin:$PATH" in_repo git commit -qm "clean mirror js"
+expect_exit 0 "a clean staged mirror lib JS file passes"
+expect_no_line "lib/bad\.mjs" "an unstaged lib JS file is not linted"
+
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

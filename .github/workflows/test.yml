@@ -37,6 +37,20 @@ jobs:
           done
           exit $status
 
+  js-lint:
+    name: eslint on shipped JS
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # Pinned versions live in the script; it covers lib/ and plugins/myspec/lib/.
+      - name: eslint:recommended on lib/ and its mirror
+        run: scripts/lint-js.sh
+
   stack-agnostic:
     name: no localhost ports in skills or examples
     runs-on: ubuntu-latest

@@ -194,7 +194,7 @@ class YamlRefusal extends Error {
 }
 
 function parseYaml(text) {
-  const lines = text.replace(/^﻿/, '').split(/\r?\n/)
+  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/)
   const doc = {}
   const stack = [{ indent: 0, node: doc, parentNode: null, key: null }]
   const topLevelKeys = new Set()
@@ -346,7 +346,7 @@ function parseScalar(raw, lineNo) {
   if (v.startsWith('[') && v.endsWith(']')) {
     const inner = v.slice(1, -1).trim()
     if (inner === '') { return [] }
-    return splitInline(inner, lineNo).map(s => parseScalar(s, lineNo))
+    return splitInline(inner).map(s => parseScalar(s, lineNo))
   }
   if (v === 'true') { return true }
   if (v === 'false') { return false }
@@ -355,7 +355,7 @@ function parseScalar(raw, lineNo) {
 }
 
 // Split an inline list on commas that are not inside quotes.
-function splitInline(inner, lineNo) {
+function splitInline(inner) {
   const out = []
   let buf = ''
   let quote = null

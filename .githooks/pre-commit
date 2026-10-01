@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # pre-commit: static skill lint on staged SKILL.md files, `bash -n` on staged
-# hook scripts. Free and fast: nothing runs when neither kind is staged.
+# hook scripts, eslint (scripts/lint-js.sh) on staged lib/ JS. Nothing runs
+# when none of those is staged. eslint comes through npx, so when it cannot
+# run (offline, no node) the JS lint is skipped with a notice, not blocked.
 #
 # What is checked is what gets committed: the index is materialised into a
 # temp dir and linted there, so an unstaged edit can neither hide a staged
@@ -19,15 +21,18 @@ cd "$root" || exit 0
 
 skills=()
 shells=()
+jsfiles=()
 while IFS= read -r -d '' f; do
   if [[ "$f" =~ ^(plugins/[^/]+/|\.claude/)?skills/[^/]+/SKILL\.md$ ]]; then
     skills+=("$f")
   elif [[ "$f" =~ ^(plugins/[^/]+/)?hooks/.*\.sh$ ]]; then
     shells+=("$f")
+  elif [[ "$f" =~ ^(plugins/[^/]+/)?lib/.*\.(mjs|cjs|js)$ ]]; then
+    jsfiles+=("$f")
   fi
 done < <(git diff --cached --name-only --diff-filter=ACMR -z)
 
-[ ${#skills[@]} -eq 0 ] && [ ${#shells[@]} -eq 0 ] && exit 0
+[ ${#skills[@]} -eq 0 ] && [ ${#shells[@]} -eq 0 ] && [ ${#jsfiles[@]} -eq 0 ] && exit 0
 
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/pre-commit-index.XXXXXX") || { echo "pre-commit: mktemp failed; checks skipped" >&2; exit 0; }
 trap 'rm -rf "$tmp"' EXIT
@@ -62,6 +67,33 @@ if [ ${#skills[@]} -gt 0 ]; then
     if [ "$rc" -ne 0 ]; then
       [ "$rc" -eq 1 ] || echo "pre-commit: lint-skills exited $rc (usage or internal error)" >&2
       status=1
+    fi
+  fi
+fi
+
+if [ ${#jsfiles[@]} -gt 0 ]; then
+  # Prefer the staged script and config; fall back to the working tree's.
+  jslint="$tmp/scripts/lint-js.sh"
+  [ -f "$jslint" ] || jslint="$root/scripts/lint-js.sh"
+  # eslint prints absolute paths, resolved through symlinks ($TMPDIR on macOS).
+  rtmp=$(cd "$tmp" && pwd -P)
+  if [ ! -f "$jslint" ]; then
+    echo "pre-commit: scripts/lint-js.sh not found; JS lint skipped" >&2
+  elif ! command -v npx >/dev/null 2>&1; then
+    echo "pre-commit: npx not found; JS lint skipped" >&2
+  elif ! (cd "$rtmp" && bash "$jslint" --version) >/dev/null 2>&1; then
+    echo "pre-commit: eslint could not run (offline?); JS lint skipped" >&2
+  else
+    out=$(cd "$rtmp" && bash "$jslint" "${jsfiles[@]}" 2>&1)
+    rc=$?
+    out=${out//$rtmp\//}
+    out=${out//$tmp\//}
+    if [ "$rc" -eq 1 ]; then
+      printf '%s\n' "$out" >&2
+      status=1
+    elif [ "$rc" -ne 0 ]; then
+      printf '%s\n' "$out" >&2
+      echo "pre-commit: eslint exited $rc (config or internal error); JS lint skipped" >&2
     fi
   fi
 fi
