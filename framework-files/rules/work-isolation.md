@@ -17,7 +17,7 @@ paths:
   - test/**
   - spec/**
   - package.json
-updated: 2026-09-03
+updated: 2026-10-01
 ---
 
 # Work Isolation (develop vs worktree)
@@ -34,7 +34,7 @@ On the block, call `AskUserQuestion` with one question — `header: "Isolation"`
 .claude/lib/set-isolation.sh <session_id> develop|worktree
 ```
 
-The session id is embedded in the block message. Mark one option `(Recommended)` from the heuristic below; presenting them as equals wastes the prompt.
+The session id is embedded in the block message, and that is its only source. Never take one from `.claude/state/sessions/` filenames: every session in the checkout has a file there, and nothing shows which is yours. `set-isolation.sh` refuses to change a live decision already recorded under an id; if the user really changed the answer, `--reset` it first. Mark one option `(Recommended)` from the heuristic below; presenting them as equals wastes the prompt.
 
 | Recommend `develop` | Recommend `Worktree` |
 |---|---|
@@ -46,7 +46,7 @@ The session id is embedded in the block message. Mark one option `(Recommended)`
 
 Do not ask about a PR here. That question belongs at the end, when the size of the change is known.
 
-**Subagents cannot prompt.** Decide before dispatching. A subagent that hits the gate must stop and report back, not ask. Subagents inherit the newest decision from the last 4h; `isolation: "worktree"` subagents are exempt by construction.
+**Subagents cannot prompt.** Decide before dispatching. A subagent that hits the gate must stop and report back, not ask. A subagent (its hook input carries `agent_id` or `agent_type`) with no decision of its own inherits the newest decision from the last 4h. A top-level session never inherits another session's answer; it is asked. `isolation: "worktree"` subagents edit inside their worktree, which needs no decision, but an edit from a worktree back into the main checkout is gated like any other.
 
 ## develop mode
 
@@ -64,7 +64,7 @@ Provisioning links each `isolation.provision.symlink` entry (default `node_modul
 
 Absolute paths and `git -C <worktree>` for every git call. Write files with the Write tool. The Stop hook refuses to verify a tree whose dependency directory (`node_modules`, `vendor`, `.venv`, or a configured entry) is a symlink into a checkout with different lockfiles (or none), or loads that checkout's own source, unless `.myspec.json` sets `isolation.allowLinkedModules: true` — right for repos whose worktrees share the main checkout's dependencies by construction, wrong for dependency work.
 
-`guard-worktree-context.sh` enforces the split for Bash: while this session is in worktree mode, builds, installs, e2e runs, `lint:fix`, `git push` and `git worktree prune` are blocked in the main checkout (`isolation.blockInMain` adds project patterns). Lint, dev servers, unit tests and read-only git stay allowed. When the main checkout genuinely is the right place — refreshing the symlinked `node_modules`, say — prefix the command with `MYSPEC_ALLOW_MAIN_CHECKOUT=1`.
+`guard-worktree-context.sh` enforces the split for Bash: while this session is in worktree mode, builds (`build:<target>` scripts included), installs, e2e runs, `lint:fix`, `docker compose exec`, `git push` and `git worktree prune` are blocked in the main checkout (`isolation.blockInMain` adds project patterns). Lint, dev servers, unit tests and read-only git (`git worktree prune --dry-run` included) stay allowed. When the main checkout genuinely is the right place — refreshing the symlinked `node_modules`, say — prefix the command with `MYSPEC_ALLOW_MAIN_CHECKOUT=1`.
 
 A PR is always opened when the work is done — the user cannot inspect a worktree in the IDE.
 

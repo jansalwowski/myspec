@@ -111,7 +111,7 @@ it: report `setup health: not checked — run /myspec:update`.
 
 ### 4. Check for Active Sessions
 
-List `.claude/state/sessions/*.md` — the primary checkout's, gitignored. Your own session, if one exists yet, is the file whose `## Files touched` lists a path you edited.
+List `.claude/state/sessions/*.md` — the primary checkout's, gitignored. Your own session, if one exists yet, is the file whose `## Files touched` lists a path you edited. These files belong to every session in the checkout, so never take a session id from one for `.claude/lib/set-isolation.sh`: that id comes only from the isolation hook's block message.
 
 For each file, compare its mtime to the current epoch.
 
