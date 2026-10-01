@@ -40,9 +40,10 @@ fi
 
 # Installed size: init/update substitute ${aiDir}; .ai is the default.
 # shellcheck disable=SC2016 # ${aiDir} is the literal placeholder
-BYTES=$(sed's#${aiDir}#.ai#g' "$RULE" | wc -c | tr -d ' ')
+BYTES=$(sed 's#${aiDir}#.ai#g' "$RULE" | wc -c | tr -d ' ')
 TOKENS=$(( (BYTES + 2) / 4 ))
-if [ "$TOKENS" -le "$CORE_CAP" ]; then
+# A zero size means the measurement itself failed; never read it as "under the cap".
+if [ "$BYTES" -gt 0 ] && [ "$TOKENS" -le "$CORE_CAP" ]; then
   ok
 else
   fail "the work-isolation core is ~$TOKENS tokens; the cap is $CORE_CAP (move procedure to framework-files/work-isolation.md)"
