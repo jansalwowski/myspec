@@ -245,10 +245,10 @@
     "DO_NOT_TRACK": {
       "kind": "override",
       "key": "feedback.metrics",
-      "match": "^(?:[^0].*|0.+)$",
+      "match": "^(?!(?:0|false|FALSE)$).+",
       "value": false,
       "issue": ["exists"],
-      "description": "The cross-tool opt-out: any value but empty or 0 turns field metrics off."
+      "description": "The cross-tool opt-out: any value but empty, 0, false or FALSE turns field metrics off, as in hooks/record-session-metrics.sh."
     },
     "MYSPEC_DISABLE_FRICTION_REPORT": {
       "kind": "override",

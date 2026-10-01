@@ -15,7 +15,8 @@
 #
 # Off when any of these holds (the scan also checks .myspec.json
 # "feedback": { "metrics": false }):
-#   MYSPEC_DISABLE_METRICS=1, DO_NOT_TRACK set to anything but empty or 0,
+#   MYSPEC_DISABLE_METRICS=1, DO_NOT_TRACK set to anything but empty, 0,
+#   false or FALSE (lib/myspec-config.schema.json matches the same values),
 #   node or jq missing, no transcript in the payload.
 #
 # MYSPEC_METRICS_CAP_SECONDS may lower the cap (the tests use it); a value

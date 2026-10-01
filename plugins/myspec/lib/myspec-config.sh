@@ -65,10 +65,14 @@ fi
 
 # file_args <name> <path> -> jq args binding $<name> to the file's text and
 # $<name>_exists to whether it exists (a missing file is not an unreadable one).
+# A file that exists but cannot be read binds empty text, which parse() then
+# ignores and names, as the Node reader does; --rawfile on it would abort.
 FILE_ARGS=()
 file_args() {
-  if [ -f "$2" ]; then
+  if [ -f "$2" ] && [ -r "$2" ]; then
     FILE_ARGS+=(--rawfile "$1" "$2" --argjson "$1_exists" true)
+  elif [ -e "$2" ]; then
+    FILE_ARGS+=(--arg "$1" "" --argjson "$1_exists" true)
   else
     FILE_ARGS+=(--arg "$1" "" --argjson "$1_exists" false)
   fi
