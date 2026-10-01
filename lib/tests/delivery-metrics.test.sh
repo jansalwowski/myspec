@@ -350,6 +350,7 @@ MD
   commit 2025-05-01 "docs(hist-fail-pass): conformance"
   conformance_hist hist-pass complete conformant
   # a history example inside a fence is not the report's history
+  # shellcheck disable=SC2016 # literal text, not an expansion
   printf '\n```markdown\n## Verdict history\n\n| Reviewed | Head | Verdict |\n|---|---|---|\n| 2025-01-01 | x | gaps |\n```\n' > "$ROOT/conf-fence.md"
   { head -n 7 "$F/hist-pass/conformance-report.md"; cat "$ROOT/conf-fence.md"; tail -n +8 "$F/hist-pass/conformance-report.md"; } > "$ROOT/conf-report.md"
   mv "$ROOT/conf-report.md" "$F/hist-pass/conformance-report.md"

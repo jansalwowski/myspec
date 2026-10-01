@@ -103,6 +103,7 @@ printf 'no frontmatter\n' > "$REPO2/docs/ai/features/y/spec.md"
 run "$REPO2" "$REPO2/docs/ai/features/y/spec.md"
 expect_block "a doc under a custom aiDir is validated"
 reason | grep -qF 'docs/ai/.templates/' && ok || fail "the block names the resolved aiDir (got: $(reason | tail -1))"
+# shellcheck disable=SC2016 # literal text, not an expansion
 reason | grep -qF '${aiDir}' && fail "the block does not print a literal \${aiDir}" || ok
 
 # --- 64b7f2c: a doc written in a linked worktree, cwd on the main checkout ------

@@ -142,10 +142,10 @@ emit_target() {
     ''|Q|-|*'$'*|*'`'*|*:*|/dev/*) return 0 ;;
   esac
   if [ -z "${3:-}" ] && [[ "$w" == *[\*\?\[]* ]]; then
-    # shellcheck disable=SC2015 # a failed cd or an empty glob both mean no targets
+    # A failed cd or an empty glob both mean no targets.
     while IFS= read -r p; do
       emit_target "$p" "${2:-}" no-glob
-    done < <(cd "$BASE_DIR" 2>/dev/null && compgen -G "$w" || true)
+    done < <(cd "$BASE_DIR" 2>/dev/null && { compgen -G "$w" || true; })
     return 0
   fi
   p=$(physical_path "$w") || return 0

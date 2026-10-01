@@ -137,6 +137,7 @@ else
 fi
 
 # The variable can lower the cap, never raise it.
+# shellcheck disable=SC2016 # literal text, not an expansion
 grep -q '"$MYSPEC_METRICS_CAP_SECONDS" -lt "$CAP_SECONDS"' "$HOOK" && ok || fail "the cap variable only lowers the cap"
 bash -n "$HOOK" && ok || fail "bash -n"
 

@@ -12,7 +12,7 @@ set -uo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 SRC=$(cd "$HERE/../.." && pwd)
-for f in scripts/lint-skills.mjs scripts/install-git-hooks.sh .githooks/pre-commit; do
+for f in scripts/lint-skills.mjs scripts/lint-sh.sh scripts/install-git-hooks.sh .githooks/pre-commit; do
   [ -f "$SRC/$f" ] || { echo "FATAL: missing $SRC/$f" >&2; exit 1; }
 done
 
@@ -45,7 +45,7 @@ bad_skill() {
 }
 
 mkdir -p "$REPO/scripts" "$REPO/.githooks" "$REPO/skills" "$REPO/hooks"
-cp "$SRC/scripts/lint-skills.mjs" "$SRC/scripts/install-git-hooks.sh" "$REPO/scripts/"
+cp "$SRC/scripts/lint-skills.mjs" "$SRC/scripts/lint-sh.sh" "$SRC/scripts/install-git-hooks.sh" "$REPO/scripts/"
 cp "$SRC/.githooks/pre-commit" "$REPO/.githooks/"
 cd "$REPO" || exit 1
 git init -q -b main .
@@ -219,6 +219,24 @@ git add skills/nested/references/SKILL.md
 in_repo git commit -qm "not a skill entry point"
 expect_exit 0 "a SKILL.md deeper than skills/<name>/ is not treated as a skill"
 
+# ShellCheck (#209). A stub stands in for shellcheck through $SHELLCHECK, so no
+# case depends on which version (if any) the machine has: it flags any file
+# containing SC_BAD, printing the path it was given, and exits 1; a file
+# containing SC_UNREADABLE makes it exit 2 the way an unopenable file does.
+mkdir -p "$TMP/scbin"
+cat > "$TMP/scbin/shellcheck" <<'STUB'
+#!/bin/sh
+[ "$1" = --version ] && { printf 'ShellCheck stub\nversion: 0.0.0\n'; exit 0; }
+rc=0
+for f in "$@"; do
+  if grep -q SC_BAD "$f"; then echo "In $f line 2: SC_BAD is unused"; [ "$rc" -gt 1 ] || rc=1; fi
+  if grep -q SC_UNREADABLE "$f"; then echo "$f: openBinaryFile: does not exist" >&2; rc=2; fi
+done
+exit $rc
+STUB
+chmod +x "$TMP/scbin/shellcheck"
+export SHELLCHECK="$TMP/scbin/shellcheck"
+
 # 4334ff1: an apostrophe inside $(cat <<EOF ...) breaks the parse.
 printf '#!/usr/bin/env bash\nmsg=$(cat <<EOF\nit'"'"'s broken\nEOF\n' > hooks/broken.sh
 git add hooks/broken.sh
@@ -230,29 +248,40 @@ git add hooks/broken.sh
 in_repo git commit -qm "fixed hook"
 expect_exit 0 "a hook script that parses passes"
 
-# ShellCheck (#209). A stub on PATH stands in for shellcheck, so the result does
-# not depend on which version (if any) the machine has: it flags any file
-# containing SC_BAD, printing the path it was given, and exits 1.
-mkdir -p "$TMP/scbin"
-cat > "$TMP/scbin/shellcheck" <<'STUB'
-#!/bin/sh
-rc=0
-for f in "$@"; do
-  if grep -q SC_BAD "$f"; then echo "In $f line 2: SC_BAD is unused"; rc=1; fi
-done
-exit $rc
-STUB
-chmod +x "$TMP/scbin/shellcheck"
 mkdir -p lib
 printf '#!/usr/bin/env bash\nSC_BAD=1\n' > lib/lintme.sh
 git add lib/lintme.sh
-PATH="$TMP/scbin:$PATH" in_repo git commit -qm "shellcheck finding in lib"
+in_repo git commit -qm "shellcheck finding in lib"
 expect_exit 1 "a staged lib shell script with a shellcheck finding blocks the commit"
 expect_line "^In lib/lintme\.sh line 2" "the shellcheck finding is shown with a repo-relative path"
 printf '#!/usr/bin/env bash\necho fine\n' > lib/lintme.sh
 git add lib/lintme.sh
-PATH="$TMP/scbin:$PATH" in_repo git commit -qm "clean lib script"
+in_repo git commit -qm "clean lib script"
 expect_exit 0 "a clean staged lib shell script passes"
+
+printf '#!/usr/bin/env bash\nSC_BAD=1\n' > lib/lintme.sh
+printf '#!/usr/bin/env bash\n# SC_UNREADABLE\n' > lib/gone.sh
+git add lib/lintme.sh lib/gone.sh
+in_repo git commit -qm "shellcheck exits 2"
+expect_exit 1 "a shellcheck exit of 2 blocks the commit instead of skipping the lint"
+expect_line "^In lib/lintme\.sh line 2" "findings printed alongside an exit of 2 are shown"
+git rm -q --cached lib/gone.sh; rm lib/gone.sh
+
+mkdir -p plugins/myspec/lib
+cp lib/lintme.sh plugins/myspec/lib/lintme.sh
+git add lib/lintme.sh plugins/myspec/lib/lintme.sh
+in_repo git commit -qm "finding in a script and its mirror"
+expect_exit 1 "a finding in a script staged with its mirror blocks the commit"
+[ "$(grep -c 'SC_BAD is unused' <<<"$OUTPUT")" -eq 1 ] && ok || fail "the mirror is not linted a second time"
+
+SHELLCHECK="$TMP/no-such-shellcheck" in_repo git commit -qm "no shellcheck installed"
+expect_exit 0 "without shellcheck the commit goes through"
+expect_line "shellcheck not found; shell lint skipped" "the skip is announced"
+printf '#!/usr/bin/env bash\necho fine\n' > lib/lintme.sh
+cp lib/lintme.sh plugins/myspec/lib/lintme.sh
+git add lib/lintme.sh plugins/myspec/lib/lintme.sh
+in_repo git commit -qm "clean again"
+expect_exit 0 "the cleaned script and mirror pass"
 
 # JS lint (#208). A stub stands in for scripts/lint-js.sh so the suite stays
 # offline: it flags any file containing unusedVar the way eslint does (absolute

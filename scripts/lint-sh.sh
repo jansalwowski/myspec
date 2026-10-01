@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# ShellCheck the shell this plugin ships (#209): hooks/ and lib/ plus their
-# plugins/myspec/ mirrors, tests included. `bash -n` only proves a script
-# parses; ShellCheck catches unused variables, quoting and $? mistakes.
+# ShellCheck the shell this plugin ships (#209): hooks/ and lib/, tests
+# included. `bash -n` only proves a script parses; ShellCheck catches unused
+# variables, quoting and $? mistakes. The plugins/myspec/ mirrors are skipped:
+# sync-check.yml keeps them byte-identical, so linting them only doubles every
+# finding.
 #
 # Runs at ShellCheck's default severity (style). Suppressions are inline
 # `# shellcheck disable=SCxxxx # reason` directives, plus the .shellcheckrc in
@@ -24,7 +26,7 @@ sc=${SHELLCHECK:-shellcheck}
 if [ $# -eq 0 ]; then
   while IFS= read -r f; do
     set -- "$@" "$f"
-  done < <(find hooks lib plugins/myspec/hooks plugins/myspec/lib -name '*.sh' -type f 2>/dev/null | LC_ALL=C sort)
+  done < <(find hooks lib -name '*.sh' -type f 2>/dev/null | LC_ALL=C sort)
 fi
 [ $# -gt 0 ] || { echo "lint-sh: no shell scripts found" >&2; exit 2; }
 

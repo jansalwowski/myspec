@@ -59,6 +59,7 @@ build_fixture() {
   rm -rf "$REPO"
   mkdir -p "$REPO"
   (cd "$REPO" && git init -q -b main .)
+  # shellcheck disable=SC2016 # literal text, not an expansion
   node -e '
 const {readFileSync,writeFileSync,mkdirSync,copyFileSync,chmodSync}=require("fs");
 const {join,dirname}=require("path");
@@ -133,6 +134,7 @@ expect_no_line '^ERROR' "the blocking groups report no errors on a clean install
 # the relative one, and update must not treat it as unwired: the two spellings
 # name the same file, so a literal comparison would wire each hook a second time.
 cp "$REPO/.claude/settings.json" "$ROOT/settings-projectdir.json"
+# shellcheck disable=SC2016 # literal text, not an expansion
 set_json .claude/settings.json '
 const walk = (n) => {
   if (Array.isArray(n)) { n.forEach(walk); return; }
@@ -153,6 +155,7 @@ expect_no_line 'wiring-incomplete' "a relative command matches the template's \$
 # An interpreter may lead the command; the script is then token 1. Such a
 # command does not exec the file, so a mode 644 script there is correct and
 # calling it an error would block every session: the stop hook runs this group.
+# shellcheck disable=SC2016 # literal text, not an expansion
 set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/verify-before-stop.sh\""'
 chmod 644 "$REPO/.claude/hooks/verify-before-stop.sh"
 
@@ -172,6 +175,7 @@ chmod 755 "$REPO/.claude/hooks/verify-before-stop.sh"
 
 # The braced spelling resolves too. The template writes the bare one, so no
 # other case in the suite would catch a broken \${CLAUDE_PROJECT_DIR} branch.
+# shellcheck disable=SC2016 # literal text, not an expansion
 set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "${CLAUDE_PROJECT_DIR}/.claude/hooks/verify-before-stop.sh"'
 
 run_doctor wiring
@@ -198,6 +202,7 @@ expect_line 'WARN +hook-unregistered: .claude/hooks/verify-before-stop.sh' "a me
 expect_line 'wiring-incomplete' "a mentioned hook path does not satisfy the template pair"
 
 # A variable this process cannot expand is unresolvable, not missing.
+# shellcheck disable=SC2016 # literal text, not an expansion
 set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "\"$CLAUDE_PLUGIN_ROOT\"/hooks/verify-before-stop.sh"'
 
 run_doctor wiring
@@ -206,6 +211,7 @@ expect_no_line 'hook-missing' "an unexpandable variable in a hook path is not re
 set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = ".claude/hooks/verify-before-stop.sh"'
 
 # A genuinely absent hook must still be caught, in either spelling.
+# shellcheck disable=SC2016 # literal text, not an expansion
 set_json .claude/settings.json 'd.hooks.Stop[0].hooks.push({type:"command",command:"\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/ghost.sh"})'
 
 run_doctor wiring
@@ -295,7 +301,9 @@ printf 'features:\n    - name: misindented\n      status: complete\n' > "$REPO/a
 {
   echo '# Fixture'
   echo
+  # shellcheck disable=SC2016 # literal text, not an expansion
   echo 'Rules live in `.claude/rules/nope.md`. Route to `/myspec:not-a-skill`.'
+  # shellcheck disable=SC2016 # literal text, not an expansion
   echo 'Run `/bootstrap` first; `/deps-check` weekly; `/vue-component` for components.'
   head -c 4000 /dev/zero | tr '\0' 'x'
 } > "$REPO/CLAUDE.md"
@@ -455,6 +463,7 @@ expect_exit 0 "a pending marker-less rename does not fail the run"
 
 # Both names present and the old one is the marker-less stub: there is no
 # project section to merge, so the fix is deleting the stub.
+# shellcheck disable=SC2016 # literal text, not an expansion
 sed 's/\${aiDir}/ai/g' "$PLUGIN/framework-files/anti-patterns.md" > "$REPO/ai/anti-patterns.md"
 
 run_doctor install
@@ -472,6 +481,7 @@ expect_line 'ERROR marker-missing: ai/anti-patterns.md' "the moved marker-less f
 expect_line 'run: /myspec:update' "marker-missing points at update, which now offers the choices"
 
 # Answer "prepend": plugin framework-owned region above the stub. Clean.
+# shellcheck disable=SC2016 # literal text, not an expansion
 node -e '
 const fs=require("fs");
 const src=fs.readFileSync(process.argv[1],"utf8").split("${aiDir}").join("ai");
@@ -503,6 +513,7 @@ expect_no_line 'framework-renamed' "a pinned moved file leaves no rename finding
 
 FAKE="$ROOT/plugin-removed"
 mkdir -p "$FAKE/framework-files"
+# shellcheck disable=SC2016 # literal text, not an expansion
 node -e '
 const fs=require("fs");
 const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
@@ -537,6 +548,7 @@ expect_line 'WARN +myspec-schema-stale: .myspec.json has no migrations list' "a 
 # the corruption was invisible and survived every later update (issue #74).
 
 build_fixture
+# shellcheck disable=SC2016 # literal text, not an expansion
 node -e '
 const {readFileSync,writeFileSync}=require("fs");const {join}=require("path");
 const root=process.argv[1];
@@ -631,6 +643,7 @@ expect_no_line 'WARN +over-budget: .claude/rules/workflow.md' "a managed file is
 # quietly replaces the gate with something narrower.
 
 build_fixture
+# shellcheck disable=SC2016 # literal text, not an expansion
 set_json .claude/verification.json 'd.checks[0].command = ""; d.checks[0].diffCommand = "files=$(git diff --name-only \"$MYSPEC_BASE_REF\"); [ -z \"$files\" ] || npx eslint $files"; d.checks[1].command = "tsc --noEmit"; d.checks[2].command = "npm test"'
 
 run_doctor schema

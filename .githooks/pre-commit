@@ -53,19 +53,29 @@ for f in ${shells[@]+"${shells[@]}"}; do
   fi
 done
 
-if [ ${#shells[@]} -gt 0 ]; then
-  # CI pins the version (test.yml); here any installed shellcheck will do.
-  # Run from the export so the staged tests/.shellcheckrc files apply and
-  # findings print as repo paths.
-  if ! command -v shellcheck >/dev/null 2>&1; then
+# The plugins/ mirrors are byte-identical to hooks/ and lib/ (sync-check.yml),
+# so ShellCheck sees each script once; bash -n above still parses both.
+sclist=()
+for f in ${shells[@]+"${shells[@]}"}; do
+  [[ "$f" == plugins/* ]] || sclist+=("$f")
+done
+
+if [ ${#sclist[@]} -gt 0 ]; then
+  # Same entry point as CI (test.yml), which pins the version; here the
+  # shellcheck on PATH, or $SHELLCHECK, will do. Run from the export so the
+  # staged tests/.shellcheckrc files apply and findings print as repo paths.
+  # No working-tree fallback: lint-sh.sh lints relative to its own checkout.
+  shlint="$tmp/scripts/lint-sh.sh"
+  if ! command -v "${SHELLCHECK:-shellcheck}" >/dev/null 2>&1; then
     echo "pre-commit: shellcheck not found; shell lint skipped" >&2
+  elif [ ! -f "$shlint" ]; then
+    echo "pre-commit: scripts/lint-sh.sh not found; shell lint skipped" >&2
   else
-    (cd "$tmp" && shellcheck "${shells[@]}") >&2
-    rc=$?
-    if [ "$rc" -eq 1 ]; then
+    # Any non-zero exit blocks: ShellCheck exits 2 when one file cannot be
+    # read but still reports findings in the rest.
+    if ! (cd "$tmp" && bash "$shlint" "${sclist[@]}") >&2; then
+      echo "pre-commit: shellcheck failed on staged shell scripts" >&2
       status=1
-    elif [ "$rc" -ne 0 ]; then
-      echo "pre-commit: shellcheck exited $rc (usage or internal error); shell lint skipped" >&2
     fi
   fi
 fi

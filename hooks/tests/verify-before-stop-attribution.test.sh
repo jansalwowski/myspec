@@ -134,6 +134,7 @@ OUT=$(stop 10)
 ran && fail "a warned run counts as verified: no re-run without a new write" || ok
 
 # Absolute paths in the output are the same file.
+# shellcheck disable=SC2016 # literal text, not an expansion
 set_checks 'grep -q BROKEN other.ts && echo "$PWD/other.ts:2:1 error" && exit 1 || true'
 mark_write 11 "$REPO/app.ts"
 OUT=$(stop 11)

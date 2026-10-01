@@ -52,6 +52,7 @@ doc() {             # doc <path> <status>   — spec/tech-spec with frontmatter 
 plan() {            # plan <path> <marks...>   — one task line per mark (" ", "x", "~")
   mkdir -p "$(dirname "$1")"
   {
+    # shellcheck disable=SC2016 # literal text, not an expansion
     printf -- '---\ntitle: "Plan"\n---\n\n## Task Status\n\n| Status | Meaning |\n|---|---|\n| `[ ]` | Todo |\n| - [ ] | table cell |\n\n```markdown\n- [ ] **Step 1: fenced example**\n```\n\n### Task 1: Thing\n\n'
     for m in "$@"; do printf -- '- [%s] **Step**\n' "$m"; done
   } > "$1"

@@ -76,6 +76,7 @@ expect_in() {  # expect_in <sid> <fixed-string> <desc>
 write "$SID-1" "$REPO" "$REPO/src/a.ts"
 expect_log "$SID-1" "first code edit creates the log"
 expect_in "$SID-1" "session_id: $SID-1" "log carries the session id"
+# shellcheck disable=SC2016 # literal text, not an expansion
 expect_in "$SID-1" '- `src/a.ts`' "first path recorded under Files touched"
 expect_in "$SID-1" 'Auto-created on first code edit' "context names the trigger"
 if grep -q '^cwd:' "$STATE/$SID-1.md"; then fail "no cwd: placeholder is written any more"; else ok; fi
@@ -84,7 +85,9 @@ ledger_has "$SID-1" code "$REPO" src/a.ts && ok || fail "the ledger records the 
 
 write "$SID-1" "$REPO" "$REPO/src/b.ts"
 write "$SID-1" "$REPO" "$REPO/src/a.ts"
+# shellcheck disable=SC2016 # literal text, not an expansion
 expect_in "$SID-1" '- `src/b.ts`' "second path appended"
+# shellcheck disable=SC2016 # literal text, not an expansion
 [ "$(grep -cF -- '- `src/a.ts`' "$STATE/$SID-1.md")" -eq 1 ] && ok || fail "a repeated path is recorded once"
 [ "$(grep -c '^## Files touched' "$STATE/$SID-1.md")" -eq 1 ] && ok || fail "the Files touched heading is not duplicated"
 
@@ -99,10 +102,12 @@ printf 'a\n' > "$REPO/src/c.ts"
 bashcmd "$SID-3" "$REPO" "sed -i '' 's/a/b/' src/c.ts"
 expect_log "$SID-3" "sed -i on a code file creates the log"
 expect_in "$SID-3" 'Auto-created on a Bash write' "context names the Bash trigger"
+# shellcheck disable=SC2016 # literal text, not an expansion
 expect_in "$SID-3" '- `src/c.ts`' "the sed target is recorded"
 
 bashcmd "$SID-4" "$REPO" 'echo "x" >> src/d.ts'
 expect_log "$SID-4" "a redirect into a code file creates the log"
+# shellcheck disable=SC2016 # literal text, not an expansion
 expect_in "$SID-4" '- `src/d.ts`' "the redirect target is recorded"
 
 bashcmd "$SID-5" "$REPO" $'cat > notes.md <<\'EOF\'\nsee src/a.ts for details\nEOF'
@@ -134,6 +139,7 @@ done
 
 # --- only the write target is recorded, not every code path in the command -----
 bashcmd "$SID-30" "$REPO" 'node scripts/gen.mjs src/router.js > src/out.ts'
+# shellcheck disable=SC2016 # literal text, not an expansion
 expect_in "$SID-30" '- `src/out.ts`' "the redirect target is recorded"
 TOUCHED=$(sed -n '/^## Files touched/,$p' "$STATE/$SID-30.md")
 if printf '%s' "$TOUCHED" | grep -qF -e 'scripts/gen.mjs' -e 'src/router.js'; then
@@ -193,16 +199,21 @@ expect_no_log "$SID-43" "a redirect into a non-code file does not record the cod
 
 bashcmd "$SID-44" "$REPO" 'cat src/a.ts > src/copy.ts'
 expect_log "$SID-44" "a redirect into a code file still creates the log"
+# shellcheck disable=SC2016 # literal text, not an expansion
 expect_in "$SID-44" '- `src/copy.ts`' "the redirect target is recorded"
+# shellcheck disable=SC2016 # literal text, not an expansion
 if grep -qF -- '- `src/a.ts`' "$STATE/$SID-44.md" 2>/dev/null; then fail "the file only read is not recorded"; else ok; fi
 
 mkdir -p "$REPO/src/lib"
 bashcmd "$SID-45" "$REPO" 'cp src/a.ts src/lib/'
+# shellcheck disable=SC2016 # literal text, not an expansion
 expect_in "$SID-45" '- `src/lib/a.ts`' "cp into a directory records the destination file"
+# shellcheck disable=SC2016 # literal text, not an expansion
 if grep -qF -- '- `src/a.ts`' "$STATE/$SID-45.md" 2>/dev/null; then fail "cp does not record its source"; else ok; fi
 
 printf 'a\n' > "$REPO/src/g.ts"
 bashcmd "$SID-46" "$REPO" 'cd src && sed -i "" -e "s/a/b/" g.ts'
+# shellcheck disable=SC2016 # literal text, not an expansion
 expect_in "$SID-46" '- `src/g.ts`' "a relative path after cd resolves against the new directory"
 
 bashcmd "$SID-48" "$REPO" '(cd src && echo x > sub.ts); echo x > top.ts'
@@ -236,6 +247,7 @@ ledger_has "$SID-59" code "$REPO" src/r8.ts && ok || fail "a quoted cd target mo
 bashcmd "$SID-60" "$REPO" 'echo "a > b.ts" > src/r9.ts'
 ledger_has "$SID-60" code "$REPO" src/r9.ts && ok || fail "the real redirect target is recorded"
 [ "$(wc -l < "/tmp/.myspec-session-writes-$SID-60")" -eq 1 ] && ok || fail "a > inside quotes is not a redirect"
+# shellcheck disable=SC2016 # literal text, not an expansion
 bashcmd "$SID-61" "$REPO" 'sed -i "" "s/a/b/" "$F" src/r10.ts'
 ledger_has "$SID-61" code "$REPO" src/r10.ts && ok || fail "a variable operand does not hide the literal one after it"
 
@@ -247,9 +259,11 @@ write "$SID-9" "$WT" "$WT/src/w.ts"
 expect_log "$SID-9" "worktree edit logs in the main checkout"
 [ ! -e "$WT/.claude/state" ] && ok || fail "no state tree grows inside the worktree"
 expect_in "$SID-9" 'worktree: "wt-a"' "worktree marker names the linked worktree"
+# shellcheck disable=SC2016 # literal text, not an expansion
 expect_in "$SID-9" '- `.claude/worktrees/wt-a/src/w.ts`' "path is recorded relative to the main checkout"
 
 bashcmd "$SID-47" "$WT" 'echo x > src/v.ts'
+# shellcheck disable=SC2016 # literal text, not an expansion
 expect_in "$SID-47" '- `.claude/worktrees/wt-a/src/v.ts`' "a relative Bash write in a worktree records the worktree file"
 expect_in "$SID-47" 'worktree: "wt-a"' "and marks the worktree"
 ledger_has "$SID-47" code "$WT" src/v.ts && ok || fail "the ledger keys a worktree write by the worktree's root"
@@ -259,6 +273,7 @@ mkdir -p "$STATE"
 printf -- '---\nsession_id: %s-10\nstatus: active\n---\n\n# old\n\n## Outcome\n' "$SID" > "$STATE/$SID-10.md"
 write "$SID-10" "$REPO" "$REPO/src/f.ts"
 expect_in "$SID-10" '## Files touched' "an older log gains the section"
+# shellcheck disable=SC2016 # literal text, not an expansion
 expect_in "$SID-10" '- `src/f.ts`' "and the path"
 
 # --- not a myspec project: marker, but no log -----------------------------------

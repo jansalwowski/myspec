@@ -310,6 +310,7 @@ expect_out ".ai/memory/semantic/index.md: backfilled hook: 4 file(s) [0 from hea
 expect_out "rewrote 1 index file(s)" "backfill regenerates only the index whose table moved"
 
 expect_file "$MEM/procedural/P001-token-refresh.md" 'hook: "token refresh, use \"quoted\" text"' "P001 hook from the row, quotes escaped for YAML"
+# shellcheck disable=SC2016 # literal text, not an expansion
 expect_file "$MEM/procedural/p002-mongoose-guard.md" 'hook: "guard `mongoose.models.X || model(...)`"' "p002 hook has the cell escaping undone"
 expect_file "$MEM/semantic/S001-flow.md" 'hook: "flow anchors — first fact"' "S001 hook from the row"
 expect_file "$MEM/semantic/S004-map.md" 'hook: "map anchor fact"' "S004 hook from the row"
@@ -346,6 +347,7 @@ expect_file "$MEM/episodic/index.md" '> **Agent**: Scan "Hook" for events relate
 # ------------------------------------------------- (b) lowercase + slugless rows
 
 expect_file "$IDX" '| [P001](P001-token-refresh.md) | token refresh, use "quoted" text | src/utils/errorLink.js |' "P001 row: linked, flow anchor"
+# shellcheck disable=SC2016 # literal text, not an expansion
 expect_file "$IDX" '| [P002](p002-mongoose-guard.md) | guard `mongoose.models.X \|\| model(...)` | server/models/FeatureFlag.js |' "p002 row: uppercase ID, lowercase target, block-map anchor, single escaping"
 expect_file "$IDX" '| [P003](P003.md) | P003: Slugless memory | --- |' "P003 row: slugless target, heading hook, no anchor"
 
@@ -391,6 +393,7 @@ expect_file "$IDX" "updated: 2020-01-01" "updated: untouched when the table did 
 
 run
 run
+# shellcheck disable=SC2016 # literal text, not an expansion
 expect_file "$IDX" 'guard `mongoose.models.X \|\| model(...)`' "escaped pipes intact after two more regenerations"
 expect_no_file "$IDX" '\\|' "pipes never double-escaped"
 

@@ -108,6 +108,7 @@ check block "case variant of checked-out name" 'git branch -D WT-A'
 check block "names after --"                   'git branch -D -- wt-a'
 check block "delete ok, then rename"           'git branch -D feat/x && git branch -m a b'
 check block "quoted name cannot be resolved"   'git branch -D "wt-a"'
+# shellcheck disable=SC2016 # literal text, not an expansion
 check block "variable name cannot be resolved" 'git branch -D $BR'
 check block "@{-1} cannot be resolved"         'git branch -d @{-1}'
 check block "delete with unknown flag"         'git branch -d --edit-description wt-a'

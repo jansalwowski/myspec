@@ -181,12 +181,12 @@ HEAVY_PATTERNS=(
 resolve_dir() {
   local base="$1" word
   word=$(decode_word "$2")
-  # shellcheck disable=SC2088 # the ~/ branch matches a literal ~/ in the command text, then expands it by hand
   case "$word" in
     '') word="${HOME:-}" ;;
     -|*'$'*|*'`'*|*'*'*|*'?'*) return 1 ;;
-    '~') word="${HOME:-}" ;;
-    '~/'*) word="${HOME:-}/${word#\~/}" ;;
+    # \~ matches a literal ~ in the command text, expanded here by hand.
+    \~) word="${HOME:-}" ;;
+    \~/*) word="${HOME:-}/${word#\~/}" ;;
     /*) ;;
     *) word="$base/$word" ;;
   esac
