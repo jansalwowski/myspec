@@ -6,25 +6,45 @@
 # re-invented the same workaround inside its prompt).
 #
 # Usage:
-#   .claude/lib/worktree-provision.sh <worktree-path> [--base <ref>] [--main <path>] [--no-symlink]
+#   .claude/lib/worktree-provision.sh <worktree-path> [--base <ref>] [--main <path>] [--no-symlink] [--no-install]
 #
-# What it does, from the MAIN checkout into the worktree:
-#   - symlinks each entry of `isolation.provision.symlink` (default:
-#     node_modules) that exists in the main checkout and is absent in the
-#     worktree, and lists it in the worktree's info/exclude so it is never
-#     staged
-#   - copies each entry of `isolation.provision.copy` (default: .eslintcache)
-#     the same way — a copy, not a link, for anything a build writes to
-#   - SKIPS a symlink entry when the branch changes one of the lockfiles
-#     that pin it relative to --base: a symlinked tree then describes the
-#     wrong dependencies, and the right answer is a real install. Which
-#     lockfiles pin which entry is the dependency-lockfile map below. Also
-#     skips a tree that loads the project's own source from the main checkout
-#     (a Composer vendor, a .venv with an editable install): through a link,
-#     the worktree's checks would run the main checkout's code.
-#   - SKIPS every symlink entry under --no-symlink: a step that writes into
-#     a linked directory (code generation into node_modules, vendor, .venv,
-#     ...) would write through the link into the source checkout (issue #93)
+# Settings are .myspec.json `isolation.provision`, read through
+# myspec-config.sh: from the worktree when it has a .myspec.json (the
+# branch's own settings), else from the main checkout. In order:
+#   1. symlink: links each entry (default: node_modules) that exists in the
+#      main checkout and is absent in the worktree, and lists it in the
+#      worktree's info/exclude so it is never staged. An entry is SKIPPED
+#      - when the branch changes one of the lockfiles that pin it relative
+#        to --base: a linked tree then describes the wrong dependencies
+#        (which lockfiles pin which entry is the dependency-lockfile map);
+#      - when the tree loads the project's own source from the main checkout
+#        (a Composer vendor, a .venv with an editable install, workspace
+#        links): through a link, the worktree's checks would run the main
+#        checkout's code;
+#      - under --no-symlink: a step that writes into a linked directory
+#        (code generation into node_modules, vendor, .venv, ...) would write
+#        through the link into the source checkout (issue #93);
+#      - when it is a dependency tree (DEP_DIRS) and `install` is set: the
+#        install builds that tree in the worktree, and through a link it
+#        would write into the main checkout;
+#      - when it is a dependency tree, the repo declares a workspace
+#        (WORKSPACE_MARKERS) and `install` is unset: the linked tree's
+#        workspace links resolve into the main checkout (#229).
+#   2. copy: copies each entry (default: .eslintcache), a file or a
+#      directory (#222), for anything a build writes to. {"path": "vendor",
+#      "mode": "clone"} makes a copy-on-write clone where the filesystem
+#      supports one (--reflink=auto on Btrfs/XFS, cp -c on APFS) and falls
+#      back to a plain copy.
+#   3. clean: deletes the untracked files and directories in the worktree
+#      that match a repo-relative glob (#193), e.g. **/*.tsbuildinfo, so the
+#      first incremental check there is cold. It never follows or deletes a
+#      link.
+#   4. install: runs a command, or each {run, cwd, when} step, in the
+#      worktree (#230). cwd is repo-relative (default the root); a step runs
+#      only when every repo-relative path in `when` exists. Each step sees
+#      MYSPEC_WORKTREE and MYSPEC_MAIN_CHECKOUT exported. A failing step
+#      stops provisioning with exit 1 and is never retried. --no-install
+#      skips every step, prints each one, and links as if install were unset.
 #
 # Never symlink a build output directory (.nuxt, dist, .next): a later build in
 # the worktree would write through into the main checkout. Copy the single
@@ -34,28 +54,32 @@
 # lockfiles that pin it are byte-identical to the checkout the link points
 # into (the case this script links), unless `.myspec.json` sets
 # isolation.allowLinkedModules: true (or the session sets
-# MYSPEC_ALLOW_LINKED_MODULES=1).
+# MYSPEC_ALLOW_LINKED_MODULES=1). A tree `install` built is a real directory
+# and passes as is.
 # Recipe: skills/_shared/worktree-provisioning.md
 
 set -euo pipefail
 
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 WORKTREE=""
 BASE=""
 MAIN=""
 NO_SYMLINK=0
+NO_INSTALL=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --base) BASE="${2:-}"; shift 2 ;;
     --main) MAIN="${2:-}"; shift 2 ;;
     --no-symlink) NO_SYMLINK=1; shift ;;
+    --no-install) NO_INSTALL=1; shift ;;
     -*) echo "worktree-provision: unknown argument '$1'" >&2; exit 1 ;;
     *) WORKTREE="$1"; shift ;;
   esac
 done
 
 if [ -z "$WORKTREE" ] || [ ! -d "$WORKTREE" ]; then
-  echo "usage: worktree-provision.sh <worktree-path> [--base <ref>] [--main <path>] [--no-symlink]" >&2
+  echo "usage: worktree-provision.sh <worktree-path> [--base <ref>] [--main <path>] [--no-symlink] [--no-install]" >&2
   exit 1
 fi
 
@@ -222,14 +246,117 @@ tree_loads_checkout() {
 }
 # END dependency-lockfile map
 
-COPY=()
+# A repo-root file that declares a workspace: its dependency trees hold
+# workspace links that resolve into the checkout holding them, so a link from
+# the main checkout loads the main checkout's packages (#229). An entry is a
+# file, or file:text when the file must also contain that fixed text. Data, so
+# another ecosystem is one more entry.
+WORKSPACE_MARKERS='pnpm-workspace.yaml lerna.json package.json:"workspaces" go.work Cargo.toml:[workspace] pyproject.toml:[tool.uv.workspace]'
 
-if [ -f "$MAIN/.myspec.json" ] && command -v jq >/dev/null 2>&1; then
-  while IFS= read -r entry; do [ -n "$entry" ] && COPY+=("$entry"); done \
-    < <(jq -r '.isolation.provision.copy // [".eslintcache"] | .[] | select(type == "string")' "$MAIN/.myspec.json" 2>/dev/null)
+# workspace_marker <checkout> -> the first marker file found, or nothing.
+workspace_marker() {
+  local m f text
+  local -a markers
+  read -ra markers <<< "$WORKSPACE_MARKERS"
+  for m in "${markers[@]}"; do
+    f="${m%%:*}"
+    if [ "$f" = "$m" ]; then
+      [ -f "$1/$f" ] && { printf '%s\n' "$f"; return 0; }
+    else
+      text="${m#*:}"
+      grep -qsF -- "$text" "$1/$f" && { printf '%s\n' "$f"; return 0; }
+    fi
+  done
+  return 0
+}
+
+# is_dep_dir <entry> -> 0 when the entry is a DEP_DIRS tree, at the root or
+# nested (apps/web/node_modules).
+is_dep_dir() {
+  local p
+  local -a deps
+  read -ra deps <<< "$DEP_DIRS"
+  for p in "${deps[@]}"; do
+    # shellcheck disable=SC2254 # $p is a pattern on purpose (vendor-bin/*/vendor)
+    case "$1" in $p|*/$p) return 0 ;; esac
+  done
+  return 1
+}
+
+# clone_tree <src> <dst> -> a copy-on-write clone where the filesystem has
+# one; returns 1, leaving nothing at <dst>, when neither clone flag works.
+# GNU cp's --reflink=auto copies plainly where it cannot clone. /bin/cp, not
+# cp: `cp` is shadowed by a shell alias in some environments.
+clone_tree() {
+  /bin/cp --reflink=auto -pR "$1" "$2" 2>/dev/null && return 0
+  rm -rf "$2"
+  /bin/cp -c -pR "$1" "$2" 2>/dev/null && return 0
+  rm -rf "$2"
+  return 1
+}
+
+# glob_regex <glob> -> an anchored ERE: ** crosses directories, * and ? stay
+# within one, everything else is literal.
+glob_regex() {
+  local g="$1" re="" c i=0
+  while [ "$i" -lt "${#g}" ]; do
+    c="${g:$i:1}"
+    if [ "$c" = "*" ] && [ "${g:$i:3}" = "**/" ]; then re="$re(.*/)?"; i=$((i + 3)); continue; fi
+    if [ "$c" = "*" ] && [ "${g:$i:2}" = "**" ]; then re="$re.*"; i=$((i + 2)); continue; fi
+    case "$c" in
+      "*") re="${re}[^/]*" ;;
+      "?") re="${re}[^/]" ;;
+      [][.+^\$\(\)\{\}\|\\]) re="$re\\$c" ;;
+      *) re="$re$c" ;;
+    esac
+    i=$((i + 1))
+  done
+  printf '^%s$\n' "$re"
+}
+
+# repo_relative <path> -> 0 when the path stays inside the checkout.
+repo_relative() {
+  case "/$1/" in
+    //*|*/../*) return 1 ;;
+  esac
+  [ "${1#/}" = "$1" ]
+}
+
+# Settings, through the one reader. Without jq the defaults apply, as before.
+SETTINGS_ROOT="$MAIN"
+[ -f "$WORKTREE/.myspec.json" ] && SETTINGS_ROOT="$WORKTREE"
+HAVE_JQ=1
+command -v jq >/dev/null 2>&1 || HAVE_JQ=0
+setting() {
+  bash "$HERE/myspec-config.sh" get "$1" --root "$SETTINGS_ROOT" \
+    || { echo "worktree-provision: cannot read $1 (is $HERE/myspec-config.sh installed?)" >&2; exit 1; }
+}
+
+SYMLINK_CFG=$(mktemp)
+trap 'rm -f "$SYMLINK_CFG"' EXIT
+COPY_LINES=$'.eslintcache\tcopy'
+CLEAN_GLOBS=""
+INSTALL_STEPS=""
+if [ "$HAVE_JQ" -eq 1 ]; then
+  jq -n --argjson s "$(setting isolation.provision.symlink)" '{isolation: {provision: {symlink: $s}}}' > "$SYMLINK_CFG"
+  COPY_LINES=$(setting isolation.provision.copy | jq -r '.[]
+    | if type == "string" then [., "copy"]
+      elif type == "object" and (.path | type) == "string" then [.path, (.mode // "copy" | tostring)]
+      else empty end
+    | @tsv')
+  CLEAN_GLOBS=$(setting isolation.provision.clean | jq -r '.[] | select(type == "string" and . != "")')
+  # One compact JSON step per line; a malformed one is kept, to stop on.
+  INSTALL_STEPS=$(setting isolation.provision.install | jq -c '
+    if . == null then empty elif type == "string" then {run: .} else .[] end
+    | if type == "string" then {run: .} else . end')
 else
-  COPY=(.eslintcache)
+  rm -f "$SYMLINK_CFG"
+  echo "worktree-provision: jq not found — using the default symlink and copy lists; clean and install need jq"
 fi
+
+INSTALL_ACTIVE=0
+[ -n "$INSTALL_STEPS" ] && [ "$NO_INSTALL" -eq 0 ] && INSTALL_ACTIVE=1
+WORKSPACE=$(workspace_marker "$WORKTREE")
 
 EXCLUDE_FILE=$(git -C "$WORKTREE" rev-parse --git-path info/exclude)
 mkdir -p "$(dirname "$EXCLUDE_FILE")"
@@ -249,8 +376,11 @@ fi
 
 LINKED=0
 COPIED=0
+CLEANED=0
+INSTALLED=0
 MAIN_REAL=$(cd "$MAIN" && pwd -P)
 
+# --- 1. symlink ---------------------------------------------------------------
 while IFS= read -r line; do
   [ -n "$line" ] || continue
   entry="${line%%$'\t'*}"
@@ -275,22 +405,122 @@ while IFS= read -r line; do
     continue
   fi
   if [ -e "$MAIN/$entry" ] && [ ! -e "$WORKTREE/$entry" ]; then
+    if is_dep_dir "$entry" && [ "$INSTALL_ACTIVE" -eq 1 ]; then
+      echo "worktree-provision: install is set — not linking $entry; the install steps build it in the worktree"
+      continue
+    fi
+    if is_dep_dir "$entry" && [ -n "$WORKSPACE" ]; then
+      echo "worktree-provision: $WORKSPACE declares a workspace — not linking $entry; set isolation.provision.install or run a real install in the worktree"
+      continue
+    fi
     mkdir -p "$(dirname "$WORKTREE/$entry")"
     ln -s "$MAIN/$entry" "$WORKTREE/$entry"
     exclude "$entry"
     LINKED=$(( LINKED + 1 ))
   fi
-done < <(symlink_entries "$MAIN/.myspec.json")
+done < <(symlink_entries "$SYMLINK_CFG")
 
-for entry in ${COPY[@]+"${COPY[@]}"}; do
+# --- 2. copy ------------------------------------------------------------------
+while IFS=$'\t' read -r entry mode; do
+  while [ "${entry#./}" != "$entry" ]; do entry="${entry#./}"; done
   entry="${entry%/}"
-  if [ -f "$MAIN/$entry" ] && [ ! -e "$WORKTREE/$entry" ]; then
-    mkdir -p "$(dirname "$WORKTREE/$entry")"
-    # /bin/cp, not cp — `cp` is shadowed by a shell alias in some environments.
-    /bin/cp -p "$MAIN/$entry" "$WORKTREE/$entry"
-    exclude "$entry"
-    COPIED=$(( COPIED + 1 ))
+  [ -n "$entry" ] || continue
+  if ! repo_relative "$entry"; then
+    echo "worktree-provision: copy entry $entry leaves the checkout — skipped"
+    continue
   fi
-done
+  if [ ! -e "$MAIN/$entry" ] || [ -e "$WORKTREE/$entry" ]; then continue; fi
+  mkdir -p "$(dirname "$WORKTREE/$entry")"
+  case "$mode" in
+    clone)
+      if clone_tree "$MAIN/$entry" "$WORKTREE/$entry"; then
+        echo "worktree-provision: cloned $entry"
+      else
+        /bin/cp -pR "$MAIN/$entry" "$WORKTREE/$entry"
+        echo "worktree-provision: no copy-on-write clone on this filesystem — copied $entry"
+      fi
+      ;;
+    *)
+      [ "$mode" = "copy" ] || echo "worktree-provision: unknown copy mode '$mode' for $entry — copying it"
+      /bin/cp -pR "$MAIN/$entry" "$WORKTREE/$entry"
+      ;;
+  esac
+  exclude "$entry"
+  COPIED=$(( COPIED + 1 ))
+done <<< "$COPY_LINES"
 
-echo "worktree-provision: $LINKED symlinked, $COPIED copied into $WORKTREE"
+# --- 3. clean -----------------------------------------------------------------
+REGEXES=()
+while IFS= read -r glob; do
+  [ -n "$glob" ] || continue
+  if ! repo_relative "$glob"; then
+    echo "worktree-provision: clean glob $glob leaves the checkout — skipped"
+    continue
+  fi
+  REGEXES+=("$(glob_regex "${glob#./}")")
+done <<< "$CLEAN_GLOBS"
+if [ "${#REGEXES[@]}" -gt 0 ]; then
+  REMOVED=""
+  # Links are pruned, never printed: a clean never deletes a link or through one.
+  while IFS= read -r -d '' path; do
+    rel="${path#"$WORKTREE"/}"
+    [ -n "$REMOVED" ] && case "$rel/" in "$REMOVED"/*) continue ;; esac
+    for re in "${REGEXES[@]}"; do
+      [[ "$rel" =~ $re ]] || continue
+      if [ -n "$(git -C "$WORKTREE" ls-files -- ":(literal)$rel" | head -n 1)" ]; then
+        echo "worktree-provision: not cleaning $rel — it is tracked"
+      else
+        rm -rf "$path"
+        CLEANED=$(( CLEANED + 1 ))
+        REMOVED="$rel"
+      fi
+      break
+    done
+  done < <(find "$WORKTREE" -mindepth 1 \( -path "$WORKTREE/.git" -o -type l \) -prune -o -print0 2>/dev/null)
+fi
+
+# --- 4. install ---------------------------------------------------------------
+N=0
+while IFS= read -r step; do
+  [ -n "$step" ] || continue
+  N=$(( N + 1 ))
+  if ! printf '%s' "$step" | jq -e 'type == "object" and (.run | type) == "string" and .run != ""
+      and ((.cwd // ".") | type) == "string"
+      and ((.when // []) | type == "string" or (type == "array" and all(.[]; type == "string")))' >/dev/null; then
+    echo "worktree-provision: install step $N is malformed: $step — needs {\"run\": \"<command>\", \"cwd\": \"<dir>\", \"when\": [\"<path>\"]}; provisioning stopped" >&2
+    exit 1
+  fi
+  run=$(printf '%s' "$step" | jq -r '.run')
+  cwd=$(printf '%s' "$step" | jq -r '.cwd // "." | if . == "" then "." else . end')
+  if [ "$NO_INSTALL" -eq 1 ]; then
+    echo "worktree-provision: --no-install — skipped install step $N in $cwd: $run"
+    continue
+  fi
+  missing=""
+  while IFS= read -r need; do
+    [ -n "$need" ] || continue
+    if ! repo_relative "$need" || [ ! -e "$WORKTREE/$need" ]; then missing="$need"; break; fi
+  done < <(printf '%s' "$step" | jq -r '.when // [] | if type == "string" then . else .[] end')
+  if [ -n "$missing" ]; then
+    echo "worktree-provision: $missing not found — skipped install step $N: $run"
+    continue
+  fi
+  if ! repo_relative "$cwd" || [ ! -d "$WORKTREE/$cwd" ]; then
+    echo "worktree-provision: install step $N cwd $cwd is not a directory in the worktree; provisioning stopped" >&2
+    exit 1
+  fi
+  echo "worktree-provision: install step $N in $cwd: $run"
+  status=0
+  (
+    cd "$WORKTREE/$cwd"
+    export MYSPEC_WORKTREE="$WORKTREE" MYSPEC_MAIN_CHECKOUT="$MAIN"
+    bash -c "$run"
+  ) || status=$?
+  if [ "$status" -ne 0 ]; then
+    echo "worktree-provision: install step $N failed (exit $status) in $cwd: $run — provisioning stopped; fix the step and rerun, or rerun with --no-install and install by hand" >&2
+    exit 1
+  fi
+  INSTALLED=$(( INSTALLED + 1 ))
+done <<< "$INSTALL_STEPS"
+
+echo "worktree-provision: $LINKED symlinked, $COPIED copied, $CLEANED cleaned, $INSTALLED installed into $WORKTREE"

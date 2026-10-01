@@ -222,5 +222,150 @@ printf '#!/bin/sh\necho "find: bad option" >&2\nexit 1\n' > "$FAILSHIM/find"
 chmod +x "$FAILSHIM/find"
 tlc "$ROOT/lc-inside/node_modules" "$ROOT/lc-inside" "$FAILSHIM" && ok || fail "links: a failing find makes the tree count as loading the checkout"
 
+# --- install, copy, clean (#230, #222, #193) ---------------------------------
+# Install steps are fake commands that leave marker files, so no network is
+# needed. Each fixture commits its .myspec.json, so the worktree carries it.
+
+# wt_for <main> <name> -> a fresh worktree of main
+wt_for() {
+  git -C "$1" worktree add -q -b "$2" "$ROOT/$2" main
+  printf '%s\n' "$ROOT/$2"
+}
+
+# A single command runs in the root with both variables exported.
+# shellcheck disable=SC2016 # expanded by the shell that runs it, not here
+M=$(new_main inst1 '{"isolation":{"provision":{"symlink":[],"install":"printf \"%s\\n%s\\n\" \"$MYSPEC_WORKTREE\" \"$MYSPEC_MAIN_CHECKOUT\" > env.marker; pwd -P > cwd.marker"}}}')
+commit_all "$M" init
+W=$(wt_for "$M" inst1-wt)
+out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
+[ "$st" -eq 0 ] && ok || fail "install: a passing command exits 0 (got $st: $out)"
+[ "$(sed -n 1p "$W/env.marker" 2>/dev/null)" = "$W" ] && ok || fail "install: MYSPEC_WORKTREE is the worktree"
+[ "$(sed -n 2p "$W/env.marker" 2>/dev/null)" = "$M" ] && ok || fail "install: MYSPEC_MAIN_CHECKOUT is the main checkout"
+[ "$(cat "$W/cwd.marker" 2>/dev/null)" = "$W" ] && ok || fail "install: the default cwd is the worktree root"
+printf '%s' "$out" | grep -qF "1 installed" && ok || fail "install: the summary counts the step"
+
+# Steps with cwd and when, in a polyglot layout; a step whose when is missing is skipped.
+M=$(new_main inst2 '{"isolation":{"provision":{"symlink":[],"install":[
+  {"run":"pwd -P > api.marker","cwd":"api","when":["api/composer.lock"]},
+  {"run":"touch web.marker","when":["pnpm-lock.yaml"]},
+  {"run":"touch go.marker","cwd":"worker","when":"worker/go.sum"}]}}}')
+mkdir -p "$M/api" "$M/worker"; printf 'v1\n' > "$M/api/composer.lock"; printf 'v1\n' > "$M/worker/go.sum"
+commit_all "$M" init
+W=$(wt_for "$M" inst2-wt)
+out=$(bash "$SCRIPT" "$W" --base main 2>&1)
+[ "$(cat "$W/api/api.marker" 2>/dev/null)" = "$W/api" ] && ok || fail "install: a step runs in its cwd"
+[ -e "$W/worker/go.marker" ] && ok || fail "install: a string when is one path"
+[ ! -e "$W/web.marker" ] && ok || fail "install: a step whose when path is missing does not run"
+printf '%s' "$out" | grep -qF "pnpm-lock.yaml not found — skipped install step 2" && ok || fail "install: the skipped step is named (got: $out)"
+
+# A failing step stops provisioning, reports, and runs nothing after it.
+M=$(new_main inst3 '{"isolation":{"provision":{"symlink":[],"install":[{"run":"touch first.marker"},{"run":"exit 3"},{"run":"touch third.marker"}]}}}')
+commit_all "$M" init
+W=$(wt_for "$M" inst3-wt)
+out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
+[ "$st" -ne 0 ] && ok || fail "install: a failing step exits non-zero"
+[ -e "$W/first.marker" ] && [ ! -e "$W/third.marker" ] && ok || fail "install: steps after a failure do not run"
+printf '%s' "$out" | grep -qF "install step 2 failed (exit 3)" && ok || fail "install: the failure names the step and exit (got: $out)"
+
+# A malformed step stops provisioning before anything runs.
+M=$(new_main inst4 '{"isolation":{"provision":{"symlink":[],"install":[{"run":"touch ok.marker"},{"cwd":"api"}]}}}')
+commit_all "$M" init
+W=$(wt_for "$M" inst4-wt)
+out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
+[ "$st" -ne 0 ] && printf '%s' "$out" | grep -qF "install step 2 is malformed" && ok || fail "install: a malformed step stops provisioning (got $st: $out)"
+
+# install set: the dependency tree is not linked (install builds it); other links are.
+M=$(new_main inst5 '{"isolation":{"provision":{"symlink":["node_modules",".env"],"install":"mkdir node_modules && touch node_modules/built.marker"}}}')
+mkdir -p "$M/node_modules/pkg"; printf 'X=1\n' > "$M/.env"; printf '.env\n' >> "$M/.gitignore"; printf 'v1\n' > "$M/package-lock.json"
+commit_all "$M" init
+W=$(wt_for "$M" inst5-wt)
+out=$(bash "$SCRIPT" "$W" --base main 2>&1)
+[ -d "$W/node_modules" ] && [ ! -L "$W/node_modules" ] && [ -e "$W/node_modules/built.marker" ] && ok \
+  || fail "install: with install set, node_modules is built in the worktree, not linked"
+[ ! -e "$M/node_modules/built.marker" ] && ok || fail "install: nothing is written into the main checkout"
+[ -L "$W/.env" ] && ok || fail "install: a non-dependency entry is still linked"
+printf '%s' "$out" | grep -qF "install is set — not linking node_modules" && ok || fail "install: the skipped link is named"
+
+# --no-install prints each skipped step, runs none, and links as if install were unset.
+W=$(wt_for "$M" inst5-noinst)
+out=$(bash "$SCRIPT" "$W" --base main --no-install 2>&1)
+[ ! -e "$W/node_modules/built.marker" ] && ok || fail "--no-install: no step runs"
+printf '%s' "$out" | grep -qF -- "--no-install — skipped install step 1 in .: mkdir node_modules" && ok || fail "--no-install: the step is printed (got: $out)"
+[ -L "$W/node_modules" ] && ok || fail "--no-install: node_modules is linked as before"
+
+# A workspace config with install unset: the dependency tree is not linked, with advice.
+for marker in 'pnpm-workspace.yaml:packages: []' 'package.json:{"workspaces":["packages/*"]}' 'go.work:go 1.22'; do
+  file="${marker%%:*}"
+  M=$(new_main "ws-${file%%.*}" '{"isolation":{"provision":{"symlink":["node_modules","vendor"]}}}')
+  mkdir -p "$M/node_modules/pkg" "$M/vendor/pkg"; printf '%s\n' "${marker#*:}" > "$M/$file"
+  commit_all "$M" init
+  W=$(wt_for "$M" "ws-${file%%.*}-wt")
+  out=$(bash "$SCRIPT" "$W" --base main 2>&1)
+  [ ! -e "$W/node_modules" ] && [ ! -e "$W/vendor" ] && ok || fail "workspace $file: dependency trees are not linked"
+  printf '%s' "$out" | grep -qF "$file declares a workspace — not linking node_modules; set isolation.provision.install or run a real install" && ok \
+    || fail "workspace $file: the advice is printed (got: $out)"
+done
+# A package.json without workspaces is no workspace.
+M=$(new_main ws-none '{"isolation":{"provision":{"symlink":["node_modules"]}}}')
+mkdir -p "$M/node_modules/pkg"; printf '{"name":"app"}\n' > "$M/package.json"; commit_all "$M" init
+W=$(wt_for "$M" ws-none-wt)
+bash "$SCRIPT" "$W" --base main >/dev/null 2>&1
+[ -L "$W/node_modules" ] && ok || fail "workspace: a plain package.json still links node_modules"
+
+# The worktree's own .myspec.json wins over the main checkout's uncommitted one.
+M=$(new_main ownsettings '{"isolation":{"provision":{"symlink":[]}}}')
+commit_all "$M" init
+printf '{"isolation":{"provision":{"symlink":[],"install":"touch main-setting.marker"}}}\n' > "$M/.myspec.json"
+W=$(wt_for "$M" ownsettings-wt)
+bash "$SCRIPT" "$W" --base main >/dev/null 2>&1
+[ ! -e "$W/main-setting.marker" ] && ok || fail "settings: the worktree's own .myspec.json is read"
+
+# A directory copies; clone mode clones or copies, never links.
+M=$(new_main copydir '{"isolation":{"provision":{"symlink":[],"copy":[".cache-dir",{"path":"vendor","mode":"clone"},{"path":"deps","mode":"bogus"}]}}}')
+mkdir -p "$M/.cache-dir/sub" "$M/vendor/acme/lib" "$M/deps"
+printf 'c\n' > "$M/.cache-dir/sub/f"; printf '<?php\n' > "$M/vendor/acme/lib/a.php"; printf 'd\n' > "$M/deps/x"
+printf '.cache-dir\ndeps\n' >> "$M/.gitignore"; commit_all "$M" init
+W=$(wt_for "$M" copydir-wt)
+out=$(bash "$SCRIPT" "$W" --base main 2>&1)
+[ -f "$W/.cache-dir/sub/f" ] && [ ! -L "$W/.cache-dir" ] && ok || fail "copy: a directory entry is copied"
+[ -f "$W/vendor/acme/lib/a.php" ] && [ ! -L "$W/vendor" ] && ok || fail "copy: a clone-mode tree is a real directory"
+printf '%s' "$out" | grep -qE "(cloned vendor|no copy-on-write clone on this filesystem — copied vendor)" && ok || fail "copy: clone mode says what it did (got: $out)"
+[ -f "$W/deps/x" ] && printf '%s' "$out" | grep -qF "unknown copy mode 'bogus' for deps — copying it" && ok || fail "copy: an unknown mode copies and says so"
+grep -qxF vendor "$(git -C "$W" rev-parse --git-path info/exclude)" && ok || fail "copy: a copied tree is listed in info/exclude"
+printf '<?php // edited\n' > "$W/vendor/acme/lib/a.php"
+[ "$(cat "$M/vendor/acme/lib/a.php")" = "<?php" ] && ok || fail "copy: editing the clone leaves the main checkout alone"
+
+# Clone fallback: where neither --reflink=auto nor -c works, a plain copy.
+SHIMDIR="$ROOT/cp-shim"
+mkdir -p "$SHIMDIR/lib"
+# shellcheck disable=SC2016 # expanded by the shell that runs it, not here
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in -c|--reflink*) echo "cp: illegal option" >&2; exit 64 ;; esac; done\nexec /bin/cp "$@"\n' > "$SHIMDIR/cp"
+chmod +x "$SHIMDIR/cp"
+sed "s#/bin/cp #$SHIMDIR/cp #g" "$SCRIPT" > "$SHIMDIR/lib/worktree-provision.sh"
+cp "$(dirname "$SCRIPT")/myspec-config.sh" "$(dirname "$SCRIPT")/myspec-config.schema.json" "$SHIMDIR/lib/"
+W=$(wt_for "$M" copydir-fallback)
+out=$(bash "$SHIMDIR/lib/worktree-provision.sh" "$W" --base main 2>&1)
+[ -f "$W/vendor/acme/lib/a.php" ] && printf '%s' "$out" | grep -qF "no copy-on-write clone on this filesystem — copied vendor" && ok \
+  || fail "copy: clone mode falls back to a plain copy (got: $out)"
+
+# clean deletes untracked matches, keeps tracked ones, and never touches a link.
+M=$(new_main clean '{"isolation":{"provision":{"symlink":["node_modules"],"copy":["build"],"clean":["**/*.tsbuildinfo",".mypy_cache/**","./tmp-cache"]}}}')
+mkdir -p "$M/build/app" "$M/node_modules/pkg" "$M/packages/ui"
+printf 'x\n' > "$M/build/app/tsconfig.tsbuildinfo"; printf 'x\n' > "$M/build/keep.txt"
+printf 'x\n' > "$M/node_modules/pkg/linked.tsbuildinfo"
+printf 'x\n' > "$M/packages/ui/tracked.tsbuildinfo"
+printf 'build\n' >> "$M/.gitignore"; commit_all "$M" init
+W=$(wt_for "$M" clean-wt)
+mkdir -p "$W/.mypy_cache/3.12" "$W/tmp-cache"; printf 'x\n' > "$W/.mypy_cache/3.12/m.json"; printf 'x\n' > "$W/root.tsbuildinfo"
+out=$(bash "$SCRIPT" "$W" --base main 2>&1)
+[ ! -e "$W/build/app/tsconfig.tsbuildinfo" ] && [ -e "$W/build/keep.txt" ] && ok || fail "clean: a copied match is deleted, the rest kept"
+[ ! -e "$W/root.tsbuildinfo" ] && ok || fail "clean: ** matches at the root"
+[ ! -e "$W/.mypy_cache/3.12/m.json" ] && ok || fail "clean: dir/** deletes what is under it"
+[ ! -e "$W/tmp-cache" ] && ok || fail "clean: a directory glob deletes the directory"
+[ -e "$W/packages/ui/tracked.tsbuildinfo" ] && printf '%s' "$out" | grep -qF "not cleaning packages/ui/tracked.tsbuildinfo — it is tracked" && ok \
+  || fail "clean: a tracked match is kept and named (got: $out)"
+[ -L "$W/node_modules" ] && [ -e "$M/node_modules/pkg/linked.tsbuildinfo" ] && ok || fail "clean: never deletes through a link"
+[ -z "$(git -C "$W" status --porcelain)" ] && ok || fail "clean: the worktree stays clean"
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
