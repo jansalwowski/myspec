@@ -156,5 +156,63 @@ else
   FAIL=$((FAIL + 1)); echo "FAIL  a repo without .myspec.json must pass silently (rc=$RC, stdout: $OUT)" >&2
 fi
 
+# --- cwd and agent identity ---------------------------------------------------
+# check_as <want> <desc> <cwd> <session-id> <file> [extra input fields as JSON]
+check_as() {
+  local want="$1" desc="$2" cwd="$3" sid="$4" file="$5" extra='{}' got out rc
+  [ "$#" -lt 6 ] || extra="$6"
+  out=$(jq -cn --arg f "$file" --arg c "$cwd" --arg s "$sid" --argjson x "$extra" \
+    '{tool_input: {file_path: $f}, cwd: $c, session_id: $s} + $x' | "$HOOK")
+  rc=$?
+  if printf '%s' "$out" | grep -q '"block"'; then got=block
+  elif [ "$rc" -eq 0 ] && [ -z "$out" ]; then got=allow
+  else got="noisy"; fi
+  if [ "$got" = "$want" ]; then
+    PASS=$((PASS + 1))
+  else
+    FAIL=$((FAIL + 1))
+    printf 'FAIL  want=%-5s got=%-5s  %s (%s)\n      rc=%s stdout: %s\n' \
+      "$want" "$got" "$desc" "$file" "$rc" "$out" >&2
+  fi
+}
+
+printf '{"aiDir":".ai","frameworkVersion":"2.0.0"}\n' > "$REPO/.myspec.json"
+cp "$REPO/.myspec.json" "$REPO/.claude/worktrees/wt-a/.myspec.json"
+WTA="$REPO/.claude/worktrees/wt-a"
+
+# Issue #224: a cwd inside a linked worktree says nothing about the edited
+# file. A main-checkout path is still judged against the session's answer.
+rm -f "$REPO/.claude/state/isolation/"*.json
+mark wt-sess worktree 60
+check_as block "cwd in worktree, worktree mode, main-checkout file" "$WTA" wt-sess "$REPO/components/Foo.vue"
+check_as block "cwd in worktree, worktree mode, main-checkout doc"  "$WTA" wt-sess "$REPO/.ai/features/x/spec.md"
+check_as allow "cwd in worktree, worktree mode, worktree file"      "$WTA" wt-sess "$WTA/components/Foo.vue"
+check_as allow "cwd in worktree, relative path stays in the worktree" "$WTA" wt-sess "components/Foo.vue"
+check_as allow "cwd in worktree, main-checkout session log"         "$WTA" wt-sess "$REPO/.claude/state/sessions/abc.md"
+mark dev-sess develop 60
+check_as allow "cwd in worktree, develop mode, main-checkout file"  "$WTA" dev-sess "$REPO/components/Foo.vue"
+rm -f "$REPO/.claude/state/isolation/"*.json
+check_as block "cwd in worktree, no decision, main-checkout source" "$WTA" new-sess "$REPO/components/Foo.vue"
+
+# Issue #146: only a subagent inherits the newest marker. A top-level session
+# (no agent_id / agent_type) with no marker of its own is asked.
+rm -f "$REPO/.claude/state/isolation/"*.json
+mark other-sess worktree 60
+check_as allow "top-level, another session chose worktree, doc edit" "$REPO" fresh-sess "$REPO/.ai/features/x/spec.md"
+check_as block "top-level, another session chose worktree, source asks"  "$REPO" fresh-sess "$REPO/components/Foo.vue"
+if jq -cn --arg f "$REPO/components/Foo.vue" --arg c "$REPO" '{tool_input: {file_path: $f}, cwd: $c, session_id: "fresh-sess"}' | "$HOOK" | grep -qF 'no work-isolation decision'; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); echo "FAIL  a top-level session without a marker must get the ask, not an inherited block" >&2
+fi
+check_as block "subagent (agent_id) inherits worktree"      "$REPO" child-sess "$REPO/.ai/features/x/spec.md" '{"agent_id":"a1","agent_type":"general-purpose"}'
+check_as block "subagent (agent_type only) inherits worktree" "$REPO" child-sess "$REPO/.ai/features/x/spec.md" '{"agent_type":"myspec:probe-executor"}'
+rm -f "$REPO/.claude/state/isolation/"*.json
+mark other-sess develop 60
+check_as block "top-level, another session chose develop, source asks" "$REPO" fresh-sess "$REPO/components/Foo.vue"
+check_as allow "subagent inherits develop"                  "$REPO" child-sess "$REPO/components/Foo.vue" '{"agent_id":"a1"}'
+check_as allow "subagent sharing the parent id uses it"     "$REPO" other-sess "$REPO/components/Foo.vue" '{"agent_id":"a1"}'
+check_as block "empty agent_id is not a subagent"           "$REPO" fresh-sess "$REPO/components/Foo.vue" '{"agent_id":""}'
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
