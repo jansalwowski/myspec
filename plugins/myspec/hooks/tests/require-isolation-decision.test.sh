@@ -103,11 +103,17 @@ check block "no decision, config file"     new-sess "$REPO/vite.config.js"
 # The ask names the session id, the worktree root, and the detected base branch
 # (no remote here, so the documented fallback).
 OUT=$(run_hook "$REPO" new-sess "$REPO/components/Foo.vue")
-for needle in 'set-isolation.sh new-sess develop' '.claude/worktrees/' 'work-isolation.md'; do
+for needle in 'set-isolation.sh new-sess develop' '.claude/worktrees/' '.ai/work-isolation.md'; do
   if printf '%s' "$OUT" | grep -qF -- "$needle"; then PASS=$((PASS + 1)); else FAIL=$((FAIL + 1)); echo "FAIL  ask does not mention: $needle" >&2; fi
 done
+# The always-loaded rule is only the contract since #226; the heuristic and the
+# procedure live in the aiDir reference file, so no block may send the model
+# back to the rule for them.
+if printf '%s' "$OUT" | grep -qF '.claude/rules/work-isolation.md'; then FAIL=$((FAIL + 1)); echo "FAIL  ask cites the rule, not the procedure file" >&2; else PASS=$((PASS + 1)); fi
 mark wt-sess worktree 60
-if run_hook "$REPO" wt-sess "$REPO/components/Foo.vue" | grep -qF 'origin/main'; then PASS=$((PASS + 1)); else FAIL=$((FAIL + 1)); echo "FAIL  worktree block does not name the base branch fallback" >&2; fi
+OUT=$(run_hook "$REPO" wt-sess "$REPO/components/Foo.vue")
+if printf '%s' "$OUT" | grep -qF 'origin/main'; then PASS=$((PASS + 1)); else FAIL=$((FAIL + 1)); echo "FAIL  worktree block does not name the base branch fallback" >&2; fi
+if printf '%s' "$OUT" | grep -qF 'Full procedure: .ai/work-isolation.md'; then PASS=$((PASS + 1)); else FAIL=$((FAIL + 1)); echo "FAIL  worktree block does not cite the procedure file" >&2; fi
 
 # --- per-checkout state and the session archive are pinned to the main checkout
 mark wt-sess worktree 60

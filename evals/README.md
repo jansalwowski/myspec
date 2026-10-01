@@ -110,7 +110,7 @@ Two cases started in `capability` and moved to `regression` once a description f
 
 ## Project instructions
 
-A real myspec project loads its `CLAUDE.md` and the always-loaded rules in `.claude/rules/` (`workflow.md`, `memory-system.md`, `auto-memory-style.md`) into every session, and some routing lives there: `memory-system.md` sends "remember …" to memorize and a new session to bootstrap. The eval harness loads neither. It starts the agent with `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1` and `--setting-sources user`, and no case field or setting turns that off. So each case carries its instructions as `execution.append_system_prompt` in `case.yaml`, generated from what its scaffold writes:
+A real myspec project loads its `CLAUDE.md` and the always-loaded rules in `.claude/rules/` (`workflow.md`, `memory-system.md`, `auto-memory-style.md`, `work-isolation.md`) into every session, and some routing lives there: `memory-system.md` sends "remember …" to memorize and a new session to bootstrap. The eval harness loads neither. It starts the agent with `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1` and `--setting-sources user`, and no case field or setting turns that off. So each case carries its instructions as `execution.append_system_prompt` in `case.yaml`, generated from what its scaffold writes:
 
 ```bash
 evals/_fixtures/project-instructions.sh            # rewrite the generated block in every case.yaml

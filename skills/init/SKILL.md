@@ -115,6 +115,7 @@ ${aiDir}/
 Also create these framework files in `${aiDir}/`:
 - `anti-patterns.md` ← copy from `framework-files/anti-patterns.md`
 - `pre-flight.md` ← copy from `framework-files/pre-flight.md`
+- `work-isolation.md` ← copy from `framework-files/work-isolation.md` (the procedure the isolation hooks' block messages cite; the always-loaded rule of the same name is only its contract)
 
 Replace `${aiDir}` placeholders with the configured value in the **documents** copied above — the `${aiDir}/` tree and `.claude/rules/`. **Never in `.claude/hooks/` or `.claude/lib/`:** those resolve `aiDir` at runtime and carry `${aiDir}` as live shell and JS template-literal syntax, so substituting there freezes their paths to this project's value and breaks any helper that takes `aiDir` as an argument. Copy them byte-for-byte.
 
@@ -237,7 +238,7 @@ Next steps:
 - [ ] `${aiDir}/memory/sessions/archive/` created (no `active/` — live logs live in `.claude/state/sessions/`)
 - [ ] `${aiDir}/ideas/` directory with instructions files and `processed/`
 - [ ] `${aiDir}/anti-patterns.md` created (framework anti-pattern index — distinct from `${aiDir}/memory/index.md`, the Layer 1 memory index)
-- [ ] `${aiDir}/pre-flight.md` created
+- [ ] `${aiDir}/pre-flight.md` and `${aiDir}/work-isolation.md` created
 - [ ] `${aiDir}` binding written to `AGENTS.md` (or `CLAUDE.md`) between `myspec:paths` markers
 - [ ] If hooks enabled: `.claude/hooks/` has 8 scripts, all executable
 - [ ] If hooks enabled: `.claude/lib/` has every helper in `manifest.json`'s `lib` block, all executable

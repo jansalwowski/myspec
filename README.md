@@ -228,7 +228,7 @@ This updates framework-owned files while preserving your project customizations.
 
 ## Framework rules shipped to `.claude/rules/`
 
-`init` (first-time) and `update` (subsequent) install eight rule files into the consuming project's `.claude/rules/` directory. Three load on every turn (`workflow.md`, `memory-system.md`, `auto-memory-style.md`); the other five carry `paths:` frontmatter and load only for matching work:
+`init` (first-time) and `update` (subsequent) install eight rule files into the consuming project's `.claude/rules/` directory. Four load on every turn (`workflow.md`, `memory-system.md`, `auto-memory-style.md`, `work-isolation.md`); the other four carry `paths:` frontmatter and load only for matching work:
 
 | File | Governs |
 |------|---------|
@@ -239,7 +239,7 @@ This updates framework-owned files while preserving your project customizations.
 | `skill-optimization.md` | Skill-authoring meta-rules (frontmatter, naming, token efficiency) |
 | `paths.md` | Path portability — `${aiDir}` placeholder, `<repo_root>`/`<encoded_cwd>` forms, no absolute paths in shared artifacts |
 | `skill-self-test.md` | Skill `dependencies:` validation (declared packages/paths must exist) |
-| `work-isolation.md` | The develop-vs-worktree decision, the two hooks that enforce it, worktree provisioning, promotion of develop-mode work to a PR (path-gated to source trees) |
+| `work-isolation.md` | The develop-vs-worktree contract in about 150 tokens: the user decides before the first source edit, two hooks enforce it, and the session id comes only from a block message. The procedure (the question, worktree creation and provisioning, promotion of develop-mode work to a PR) is `${aiDir}/work-isolation.md`, which the block messages cite |
 
 The two memory rules cover different stores and do not overlap. `memory-system.md` is for the myspec-managed system in `${aiDir}/memory/`; `auto-memory-style.md` is for the harness-managed user-level store.
 
@@ -259,5 +259,6 @@ ${aiDir}/                       # AI documentation directory (.ai or ai)
   plans/                        # Implementation plans
   anti-patterns.md              # Framework anti-pattern index (project section appended by setup)
   pre-flight.md                 # Pre-work checklist
+  work-isolation.md             # Develop-vs-worktree procedure the isolation hooks cite
   INDEX.md                      # Documentation index
 ```

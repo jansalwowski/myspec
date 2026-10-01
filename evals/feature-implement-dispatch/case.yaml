@@ -95,6 +95,14 @@ execution:
     | Age policy | mtime < 1h: live, never touch. 1–6h: ambiguous — report and route to `/myspec:session-clean`. > 6h: sweep as `abandoned` |
     | Ownership | Own → `/myspec:session-complete`; others' → `/myspec:session-clean` or bootstrap's > 6h sweep |
 
+    Contents of .claude/rules/work-isolation.md (project instructions, checked into the codebase):
+
+    # Work Isolation
+
+    Before the first source edit, the user picks `develop` (edit this checkout) or `Worktree` (linked worktree, PR at the end); never pick for them. `require-isolation-decision.sh` and `guard-worktree-context.sh` enforce it. A block message says what to do next; the full procedure is `.ai/work-isolation.md`.
+
+    Your session id comes only from a block message. Never take one from `.claude/state/sessions/`: every session has a file there.
+
     Contents of .claude/rules/workflow.md (project instructions, checked into the codebase):
 
     # AI-First Development Workflow

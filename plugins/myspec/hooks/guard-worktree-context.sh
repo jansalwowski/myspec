@@ -234,6 +234,18 @@ classify() {
   CLS_ROOT="$top"
 }
 
+# procedure_doc <main root> -> where init/update install the isolation
+# procedure (manifest `files` entry work-isolation.md, under the aiDir). Block
+# messages cite it so the full procedure is read only when a block fires.
+procedure_doc() {
+  local ai=""
+  if [ -f "$1/.myspec.json" ]; then
+    ai=$(jq -r '.aiDir // empty' "$1/.myspec.json" 2>/dev/null || printf '')
+  fi
+  ai="${ai%/}"
+  printf '%s/work-isolation.md' "${ai:-.ai}"
+}
+
 # --- gate A: `git branch` delete / force ---------------------------------------
 
 # branch_verdict <normalized segment> <main root> -> block reason, or nothing.
@@ -278,7 +290,7 @@ branch_verdict() {
   if [ "$is_delete" != 1 ]; then
     # `branch -f <name> [<start>]` moves an existing branch ref.
     if [ "$is_force" = 1 ]; then
-      printf 'BLOCKED: git branch -f rewrites a branch ref on the main checkout. Do the work in a linked worktree (see .claude/rules/work-isolation.md). Blocked: %s' "$(printf '%s' "$segment" | head -c 200)"
+      printf 'BLOCKED: git branch -f rewrites a branch ref on the main checkout. Do the work in a linked worktree (procedure: %s). Blocked: %s' "$(procedure_doc "$root")" "$(printf '%s' "$segment" | head -c 200)"
     fi
     return 0
   fi
@@ -381,7 +393,9 @@ $where
 
 Blocked: $(printf '%s' "$2" | head -c 160)
 
-If the main checkout really is the right place (refreshing the symlinked node_modules, for example), re-run it prefixed with MYSPEC_ALLOW_MAIN_CHECKOUT=1."
+If the main checkout really is the right place (refreshing the symlinked node_modules, for example), re-run it prefixed with MYSPEC_ALLOW_MAIN_CHECKOUT=1.
+
+Full procedure: $(procedure_doc "$root")"
 }
 
 matches_any() {  # matches_any <segment> <pattern>...
@@ -405,7 +419,7 @@ check_segment() {
         && ! printf '%s' "$segment" | grep -qE -- "$BRANCH_CARVE_OUT"; then
       classify "$dir" "$gitdir"
       if [ -n "$CLS_ROOT" ]; then
-        block "BLOCKED: Branch-mutating git commands are not allowed on the main checkout. Do the work in a linked worktree (see .claude/rules/work-isolation.md) or pass isolation: \"worktree\" in your Agent tool call. If you need to restore a file, use \`git restore <file>\` not \`git checkout\`. Blocked: $(printf '%s' "$segment" | head -c 200)"
+        block "BLOCKED: Branch-mutating git commands are not allowed on the main checkout. Do the work in a linked worktree (procedure: $(procedure_doc "$CLS_ROOT")) or pass isolation: \"worktree\" in your Agent tool call. If you need to restore a file, use \`git restore <file>\` not \`git checkout\`. Blocked: $(printf '%s' "$segment" | head -c 200)"
       fi
     fi
 
