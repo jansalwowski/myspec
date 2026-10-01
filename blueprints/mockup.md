@@ -82,7 +82,9 @@ myspec_version: {frameworkVersion from .myspec.json at generation time — lets 
 <hard guards from Q2–Q4 and Q11 as a table: design-baseline discipline, token rules, import discipline, idioms promoted to guards>
 
 ## Style baseline
-<from Q2 + Q11 as a table: density, spacing scale, modal mockup pattern, sample-data rules, icon library>
+<from Q2 + Q11 as a table: density, spacing scale, modal mockup pattern, sample-data rules, icon library. Always include these two rows, adapted to the file format's comment syntax:>
+| Frontmatter | `title:` + `description:`, plus one `controls: <name>=<default>\|<opt2>\|...` line per state switch. One control per line; the first option is the default. |
+| States & modals | Switch loading / empty / error / modal states through preview controls, never a toggle rendered inside the mockup (reviewers read it as design, and it pushes the content down). Read the value once with `new URLSearchParams(window.location.search).get('<name>')` and fall back to the default. Preview tooling without a controls toolbar: append `<name>=<value>` to the frame URL by hand. |
 
 ## Imports
 
@@ -102,7 +104,8 @@ myspec_version: {frameworkVersion from .myspec.json at generation time — lets 
 <from Q10: canonical reference mockups (admin / end-user), plus the rule: new mockups copy structural idioms from the reference unless the user explicitly opts out>
 
 ## Detection patterns
-<from Q12, one per line: pattern (regex or description) · severity · mechanical fix if any — or "(none configured)">
+<from Q12, one per line: pattern (regex or description) · severity · mechanical fix if any. Always include this line first:>
+- In-page mock state toggle: a segmented control, select, tab row or button group inside the mockup whose options name mock states (loading, empty, error, success, a modal open/closed) · Medium · move it to a `controls:` frontmatter line and read the value from the URL (*States & modals*)
 
 ## Repeated user feedback
 

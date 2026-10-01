@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink, RouterView, useRoute } from 'vue-router'
 
 import MockupFrame from '@/components/MockupFrame.vue'
@@ -77,23 +77,31 @@ const currentSlug = computed((): string | null => {
 
 const showSidenav = computed((): boolean => currentFeature.value !== null)
 
+function applyTheme(dark: boolean): void {
+  isDark.value = dark
+  document.documentElement.classList.toggle('dark', dark)
+}
+
 function toggleTheme(): void {
-  isDark.value = !isDark.value
-  if (isDark.value) {
-    document.documentElement.classList.add('dark')
-    localStorage.setItem(THEME_KEY, 'dark')
-  } else {
-    document.documentElement.classList.remove('dark')
-    localStorage.setItem(THEME_KEY, 'light')
+  applyTheme(!isDark.value)
+  localStorage.setItem(THEME_KEY, isDark.value ? 'dark' : 'light')
+}
+
+// The iframe is a separate document: the parent's toggle reaches it only
+// through the `storage` event, which fires in every other same-origin window.
+function onStorage(event: StorageEvent): void {
+  if (event.key === THEME_KEY) {
+    applyTheme(event.newValue === 'dark')
   }
 }
 
 onMounted(() => {
-  const saved = localStorage.getItem(THEME_KEY)
-  if (saved === 'dark') {
-    isDark.value = true
-    document.documentElement.classList.add('dark')
-  }
+  applyTheme(localStorage.getItem(THEME_KEY) === 'dark')
+  window.addEventListener('storage', onStorage)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('storage', onStorage)
 })
 </script>
 

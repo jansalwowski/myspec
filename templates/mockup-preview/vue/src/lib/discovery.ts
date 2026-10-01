@@ -1,8 +1,20 @@
 import { FEATURES_ROOT_MARKER } from '@/config'
 
+/**
+ * A preview-toolbar control declared in frontmatter as
+ * `controls: <name>=<opt1>|<opt2>|...` (one control per line). The first
+ * option is the default. The selection reaches the mockup as a query param:
+ * `new URLSearchParams(window.location.search).get('<name>')`.
+ */
+export interface MockupControl {
+  name: string
+  options: string[]
+}
+
 export interface MockupFrontmatter {
   title?: string
   description?: string
+  controls?: MockupControl[]
 }
 
 export interface MockupEntry {
@@ -34,6 +46,33 @@ export type NavTree = FeatureNode[]
 
 const FRONTMATTER_REGEX = /^\s*<!--\s*([\s\S]*?)\s*-->/
 
+const CONTROL_NAME_REGEX = /^[A-Za-z][\w-]*$/
+
+// `frame` is the preview's own iframe flag, so a control may not claim it.
+const RESERVED_CONTROL_NAMES = new Set(['frame'])
+
+export function parseControl(value: string): MockupControl | null {
+  const eqIndex = value.indexOf('=')
+  if (eqIndex === -1) {
+    return null
+  }
+  const name = value.slice(0, eqIndex).trim()
+  if (!CONTROL_NAME_REGEX.test(name) || RESERVED_CONTROL_NAMES.has(name)) {
+    return null
+  }
+  const options: string[] = []
+  for (const raw of value.slice(eqIndex + 1).split('|')) {
+    const option = raw.trim()
+    if (option.length > 0 && !options.includes(option)) {
+      options.push(option)
+    }
+  }
+  if (options.length === 0) {
+    return null
+  }
+  return { name, options }
+}
+
 export function parseFrontmatter(source: string): MockupFrontmatter {
   const match = FRONTMATTER_REGEX.exec(source)
   if (!match) {
@@ -60,6 +99,19 @@ export function parseFrontmatter(source: string): MockupFrontmatter {
       result.title = value
     } else if (key === 'description') {
       result.description = value
+    } else if (key === 'controls') {
+      const control = parseControl(value)
+      if (control === null) {
+        console.warn(`[mockups] ignoring malformed controls line: ${line.trim()}`)
+        continue
+      }
+      const controls = result.controls ?? []
+      if (controls.some((c) => c.name === control.name)) {
+        console.warn(`[mockups] ignoring duplicate control: ${control.name}`)
+        continue
+      }
+      controls.push(control)
+      result.controls = controls
     }
   }
 

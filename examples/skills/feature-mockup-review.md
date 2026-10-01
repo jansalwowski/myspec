@@ -36,9 +36,10 @@ Audits mockups in `${aiDir}/features/{feature}/mockups/` across five groups: Cov
    | High | E · Repeated user feedback | Confirm names entity | PaymentMethods.vue | 61 | Delete confirm says "Delete this item?" — project rule requires the entity name |
    | Medium | E · Detection patterns | Raw palette on chrome | InvoiceList.vue | 42 | `bg-gray-50` on the list header → semantic token |
    | Medium | D · Form Hygiene | Placeholder-as-label | PaymentMethods.vue | 33 | "Card nickname" placeholder acts as the label |
+   | Medium | A · State Coverage | In-page state toggle | PaymentMethods.vue | 12-20 | Empty/success segmented control renders above the list → move to `controls: state=success\|empty` and read it from the URL |
 
 3. **Deterministic batch** — the ESC/backdrop handlers, the token substitution, and the label split are presented as one numbered list; user approves the batch in a single `AskUserQuestion`. Each edit is followed by `verify` (exit 0) + `compileCheck` (200).
-4. **Judgement fix** — the confirm-modal copy change is presented individually with a diff and `[requires confirmation]`; user approves.
+4. **Judgement fixes** — the in-page state toggle (moved to a `controls:` line, value read from the URL) and the confirm-modal copy change are each presented individually with a diff and `[requires confirmation]`; user approves.
 5. **The Critical** is a coverage gap, so it is **not fixed inline** — it goes to handoff:
 
    > ### New mockup files needed (Spec/Coverage gaps)

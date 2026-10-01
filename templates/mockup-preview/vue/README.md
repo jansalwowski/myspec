@@ -76,6 +76,34 @@ an iframe so media queries fire) and light/dark theme.
 Missing `title`/`description` logs a console warning; if `title` is absent the
 filename is used as the display name.
 
+## State controls
+
+Switch a mockup's loading / empty / error / modal states from the frame
+toolbar instead of a toggle rendered inside the mockup, where reviewers read it
+as part of the design and it pushes the real content down. Declare one control
+per frontmatter line; the first option is the default:
+
+```vue
+<!--
+title: Invoice list
+description: Customer invoice history
+controls: state=success|loading|empty|error
+controls: modal=none|refund
+-->
+```
+
+The toolbar shows a segmented button row per control and passes the selection
+to the frame URL (`?frame=1&state=empty&modal=none`). Selections reset when you
+move to another mockup. The mockup reads each value once and falls back to its
+default:
+
+```ts
+const state = new URLSearchParams(window.location.search).get('state') ?? 'success'
+```
+
+A mockup with controls always renders in the iframe, including the *Full*
+viewport. Control names start with a letter; `frame` is reserved.
+
 ## Sharing components across mockups
 
 Shared scaffolding lives in `_`-prefixed files (`_Navbar.vue`, or grouped under
