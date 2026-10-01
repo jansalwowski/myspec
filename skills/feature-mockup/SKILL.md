@@ -172,11 +172,11 @@ Print the handoff list (if any):
 <!--
 title: {Feature name} · {Surface name}
 description: {One-sentence description of what's mocked}
-controls: state=success|loading|empty|error
+controls: {name}={default}|{option}|...
 -->
 ```
 
-Use the comment syntax of the mockup's file format; keep the `title:` / `description:` keys — the default preview tooling parses them for navigation, and renders each `controls:` line as a toolbar switch outside the frame.
+Use the comment syntax of the mockup's file format; keep the `title:` / `description:` keys — the default preview tooling parses them for navigation, and renders each `controls:` line as a toolbar switch outside the frame. Add a `controls:` line only for a state the mockup reads from the URL; a mockup with one state has none.
 
 ### Sharing a component across mockups
 
