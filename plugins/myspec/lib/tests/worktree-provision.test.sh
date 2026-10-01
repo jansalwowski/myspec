@@ -274,6 +274,14 @@ W=$(wt_for "$M" inst4-wt)
 out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
 [ "$st" -ne 0 ] && printf '%s' "$out" | grep -qF "install step 2 is malformed" && ok || fail "install: a malformed step stops provisioning (got $st: $out)"
 
+# A step that reads stdin gets /dev/null, not the remaining step list (PR #242 review).
+M=$(new_main inst-stdin '{"isolation":{"provision":{"symlink":[],"install":[{"run":"cat"},{"run":"touch second.marker"}]}}}')
+commit_all "$M" init
+W=$(wt_for "$M" inst-stdin-wt)
+out=$(bash "$SCRIPT" "$W" --base main 2>&1)
+[ -e "$W/second.marker" ] && ok || fail "install: a step reading stdin does not swallow the next step (got: $out)"
+printf '%s' "$out" | grep -qF "2 installed" && ok || fail "install: both steps are counted (got: $out)"
+
 # install set: the dependency tree is not linked (install builds it); other links are.
 M=$(new_main inst5 '{"isolation":{"provision":{"symlink":["node_modules",".env"],"install":"mkdir node_modules && touch node_modules/built.marker"}}}')
 mkdir -p "$M/node_modules/pkg"; printf 'X=1\n' > "$M/.env"; printf '.env\n' >> "$M/.gitignore"; printf 'v1\n' > "$M/package-lock.json"
@@ -293,24 +301,33 @@ out=$(bash "$SCRIPT" "$W" --base main --no-install 2>&1)
 printf '%s' "$out" | grep -qF -- "--no-install — skipped install step 1 in .: mkdir node_modules" && ok || fail "--no-install: the step is printed (got: $out)"
 [ -L "$W/node_modules" ] && ok || fail "--no-install: node_modules is linked as before"
 
-# A workspace config with install unset: the dependency tree is not linked, with advice.
+# A workspace config alone blocks no link (PR #242 review): a pnpm
+# workspace's Composer vendor holds no workspace links, so it is linked like
+# any other tree, as on main.
 for marker in 'pnpm-workspace.yaml:packages: []' 'package.json:{"workspaces":["packages/*"]}' 'go.work:go 1.22'; do
   file="${marker%%:*}"
   M=$(new_main "ws-${file%%.*}" '{"isolation":{"provision":{"symlink":["node_modules","vendor"]}}}')
-  mkdir -p "$M/node_modules/pkg" "$M/vendor/pkg"; printf '%s\n' "${marker#*:}" > "$M/$file"
+  mkdir -p "$M/node_modules/pkg" "$M/vendor/acme/lib"; printf '%s\n' "${marker#*:}" > "$M/$file"
+  printf '<?php\n' > "$M/vendor/acme/lib/a.php"
   commit_all "$M" init
   W=$(wt_for "$M" "ws-${file%%.*}-wt")
   out=$(bash "$SCRIPT" "$W" --base main 2>&1)
-  [ ! -e "$W/node_modules" ] && [ ! -e "$W/vendor" ] && ok || fail "workspace $file: dependency trees are not linked"
-  printf '%s' "$out" | grep -qF "$file declares a workspace — not linking node_modules; set isolation.provision.install or run a real install" && ok \
-    || fail "workspace $file: the advice is printed (got: $out)"
+  [ -L "$W/vendor" ] && ok || fail "workspace $file: a vendor without workspace links is linked (got: $out)"
+  [ -L "$W/node_modules" ] && ok || fail "workspace $file: a node_modules without workspace links is linked (got: $out)"
 done
-# A package.json without workspaces is no workspace.
-M=$(new_main ws-none '{"isolation":{"provision":{"symlink":["node_modules"]}}}')
-mkdir -p "$M/node_modules/pkg"; printf '{"name":"app"}\n' > "$M/package.json"; commit_all "$M" init
-W=$(wt_for "$M" ws-none-wt)
-bash "$SCRIPT" "$W" --base main >/dev/null 2>&1
-[ -L "$W/node_modules" ] && ok || fail "workspace: a plain package.json still links node_modules"
+# A tree that does hold workspace links is still skipped, with the install advice.
+M=$(new_main ws-links '{"isolation":{"provision":{"symlink":["node_modules","vendor"]}}}')
+mkdir -p "$M/packages/ui" "$M/node_modules/@acme" "$M/vendor/acme/lib"
+printf 'packages: [packages/*]\n' > "$M/pnpm-workspace.yaml"
+ln -s ../../packages/ui "$M/node_modules/@acme/ui"
+printf '<?php\n' > "$M/vendor/acme/lib/a.php"
+commit_all "$M" init
+W=$(wt_for "$M" ws-links-wt)
+out=$(bash "$SCRIPT" "$W" --base main 2>&1)
+[ ! -e "$W/node_modules" ] && ok || fail "workspace: a node_modules with a workspace link into main is not linked"
+printf '%s' "$out" | grep -qF "node_modules loads the main checkout's own source — not linking node_modules; set isolation.provision.install or run a real install" && ok \
+  || fail "workspace: the skipped tree gets the install advice (got: $out)"
+[ -L "$W/vendor" ] && ok || fail "workspace: the vendor beside it is still linked"
 
 # The worktree's own .myspec.json wins over the main checkout's uncommitted one.
 M=$(new_main ownsettings '{"isolation":{"provision":{"symlink":[]}}}')

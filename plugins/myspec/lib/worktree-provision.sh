@@ -19,17 +19,16 @@
 #        (which lockfiles pin which entry is the dependency-lockfile map);
 #      - when the tree loads the project's own source from the main checkout
 #        (a Composer vendor, a .venv with an editable install, workspace
-#        links): through a link, the worktree's checks would run the main
-#        checkout's code;
+#        links, #229): through a link, the worktree's checks would run the
+#        main checkout's code. Only a tree that holds such links is skipped,
+#        whatever workspace config the repo has: a pnpm workspace's Composer
+#        vendor is still linked;
 #      - under --no-symlink: a step that writes into a linked directory
 #        (code generation into node_modules, vendor, .venv, ...) would write
 #        through the link into the source checkout (issue #93);
 #      - when it is a dependency tree (DEP_DIRS) and `install` is set: the
 #        install builds that tree in the worktree, and through a link it
-#        would write into the main checkout;
-#      - when it is a dependency tree, the repo declares a workspace
-#        (WORKSPACE_MARKERS) and `install` is unset: the linked tree's
-#        workspace links resolve into the main checkout (#229).
+#        would write into the main checkout.
 #   2. copy: copies each entry (default: .eslintcache), a file or a
 #      directory (#222), for anything a build writes to. {"path": "vendor",
 #      "mode": "clone"} makes a copy-on-write clone where the filesystem
@@ -42,9 +41,11 @@
 #   4. install: runs a command, or each {run, cwd, when} step, in the
 #      worktree (#230). cwd is repo-relative (default the root); a step runs
 #      only when every repo-relative path in `when` exists. Each step sees
-#      MYSPEC_WORKTREE and MYSPEC_MAIN_CHECKOUT exported. A failing step
-#      stops provisioning with exit 1 and is never retried. --no-install
-#      skips every step, prints each one, and links as if install were unset.
+#      MYSPEC_WORKTREE and MYSPEC_MAIN_CHECKOUT exported, and stdin from
+#      /dev/null, so a step that reads stdin cannot eat the steps after it.
+#      A failing step stops provisioning with exit 1 and is never retried.
+#      --no-install skips every step, prints each one, and links as if
+#      install were unset.
 #
 # Never symlink a build output directory (.nuxt, dist, .next): a later build in
 # the worktree would write through into the main checkout. Copy the single
@@ -246,30 +247,6 @@ tree_loads_checkout() {
 }
 # END dependency-lockfile map
 
-# A repo-root file that declares a workspace: its dependency trees hold
-# workspace links that resolve into the checkout holding them, so a link from
-# the main checkout loads the main checkout's packages (#229). An entry is a
-# file, or file:text when the file must also contain that fixed text. Data, so
-# another ecosystem is one more entry.
-WORKSPACE_MARKERS='pnpm-workspace.yaml lerna.json package.json:"workspaces" go.work Cargo.toml:[workspace] pyproject.toml:[tool.uv.workspace]'
-
-# workspace_marker <checkout> -> the first marker file found, or nothing.
-workspace_marker() {
-  local m f text
-  local -a markers
-  read -ra markers <<< "$WORKSPACE_MARKERS"
-  for m in "${markers[@]}"; do
-    f="${m%%:*}"
-    if [ "$f" = "$m" ]; then
-      [ -f "$1/$f" ] && { printf '%s\n' "$f"; return 0; }
-    else
-      text="${m#*:}"
-      grep -qsF -- "$text" "$1/$f" && { printf '%s\n' "$f"; return 0; }
-    fi
-  done
-  return 0
-}
-
 # is_dep_dir <entry> -> 0 when the entry is a DEP_DIRS tree, at the root or
 # nested (apps/web/node_modules).
 is_dep_dir() {
@@ -356,7 +333,6 @@ fi
 
 INSTALL_ACTIVE=0
 [ -n "$INSTALL_STEPS" ] && [ "$NO_INSTALL" -eq 0 ] && INSTALL_ACTIVE=1
-WORKSPACE=$(workspace_marker "$WORKTREE")
 
 EXCLUDE_FILE=$(git -C "$WORKTREE" rev-parse --git-path info/exclude)
 mkdir -p "$(dirname "$EXCLUDE_FILE")"
@@ -397,7 +373,7 @@ while IFS= read -r line; do
     continue
   fi
   if tree_loads_checkout "$MAIN/$entry" "$MAIN_REAL"; then
-    echo "worktree-provision: $entry loads the main checkout's own source — not linking $entry; run a real install in the worktree"
+    echo "worktree-provision: $entry loads the main checkout's own source — not linking $entry; set isolation.provision.install or run a real install in the worktree"
     continue
   fi
   if [ "$NO_SYMLINK" -eq 1 ]; then
@@ -407,10 +383,6 @@ while IFS= read -r line; do
   if [ -e "$MAIN/$entry" ] && [ ! -e "$WORKTREE/$entry" ]; then
     if is_dep_dir "$entry" && [ "$INSTALL_ACTIVE" -eq 1 ]; then
       echo "worktree-provision: install is set — not linking $entry; the install steps build it in the worktree"
-      continue
-    fi
-    if is_dep_dir "$entry" && [ -n "$WORKSPACE" ]; then
-      echo "worktree-provision: $WORKSPACE declares a workspace — not linking $entry; set isolation.provision.install or run a real install in the worktree"
       continue
     fi
     mkdir -p "$(dirname "$WORKTREE/$entry")"
@@ -514,7 +486,8 @@ while IFS= read -r step; do
   (
     cd "$WORKTREE/$cwd"
     export MYSPEC_WORKTREE="$WORKTREE" MYSPEC_MAIN_CHECKOUT="$MAIN"
-    bash -c "$run"
+    # The loop reads the step list on stdin; a step must not inherit it.
+    bash -c "$run" </dev/null
   ) || status=$?
   if [ "$status" -ne 0 ]; then
     echo "worktree-provision: install step $N failed (exit $status) in $cwd: $run — provisioning stopped; fix the step and rerun, or rerun with --no-install and install by hand" >&2
