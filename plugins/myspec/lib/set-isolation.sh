@@ -144,6 +144,28 @@ fi
 mkdir -p "$STATE_DIR"
 prune_expired
 
+# A live marker for this id is a decision already made — usually by another
+# session whose id was guessed from .claude/state/sessions/ (issue #146). The
+# model never sees its own session id; the only reliable source is the block
+# message of require-isolation-decision.sh. So a re-run may add a worktree path
+# to the same answer, but never flip the mode or repoint the path: that takes
+# an explicit --reset first.
+EXISTING="$STATE_DIR/${SESSION_ID}.json"
+if [ -f "$EXISTING" ]; then
+  OLD_MODE=$(jq -r '.mode // empty' "$EXISTING" 2>/dev/null || printf '')
+  OLD_PATH=$(jq -r '.worktree_path // empty' "$EXISTING" 2>/dev/null || printf '')
+  if [ "$OLD_MODE" != "$MODE" ] \
+      || { [ -n "$OLD_PATH" ] && [ -n "$WORKTREE_PATH" ] && [ "$OLD_PATH" != "$WORKTREE_PATH" ]; }; then
+    {
+      echo "set-isolation: a decision is already recorded for ${SESSION_ID:0:8} (mode=${OLD_MODE:-?}${OLD_PATH:+, worktree $OLD_PATH}); refusing to overwrite it."
+      echo "  Use the session id from the isolation hook's block message, never one read from .claude/state/sessions/."
+      echo "  If this really is your own session and the user changed the answer, run --reset $SESSION_ID first."
+    } >&2
+    exit 1
+  fi
+  [ -n "$WORKTREE_PATH" ] || WORKTREE_PATH="$OLD_PATH"
+fi
+
 jq -n \
   --arg mode "$MODE" \
   --arg note "$NOTE" \
