@@ -430,6 +430,25 @@ expect_line 'WARN +manifest-unknown-key: ai/features/index.yaml:5: Note:' "a cap
 expect_line 'WARN +note-over-cap: ai/features/index.yaml:7' "a real note: beside them is still capped"
 expect_no_line 'manifest-unknown-key: ai/features/index.yaml:7' "note: itself is not an unknown key"
 
+# Prose inside a block scalar or a nested mapping is value text, not an entry
+# key: reporting it would have the fix rename part of the description.
+{
+  echo 'features:'
+  echo '  - name: a'
+  echo '    description: >'
+  echo '      Exports the ledger.'
+  echo ''
+  echo '      Note: legacy path kept for exports'
+  echo '    meta:'
+  echo '      Notes: nested, not an entry key'
+  echo '    notes: entry key after the block'
+} > "$REPO/ai/features/index.yaml"
+
+run_doctor features
+expect_no_line 'manifest-unknown-key: ai/features/index.yaml:6' "a Note: line inside a block scalar is not a key"
+expect_no_line 'manifest-unknown-key: ai/features/index.yaml:8' "a Notes: key in a nested mapping is not an entry key"
+expect_line 'WARN +manifest-unknown-key: ai/features/index.yaml:9: notes:' "an entry key after the block scalar is still reported"
+
 # --- pass 3: severity depends on whether an update is pending ----------------
 
 build_fixture
@@ -699,6 +718,20 @@ for cmd in 'bash scripts/lint-changed.sh' './scripts/lint-changed.sh --fix' 'sh 
   run_doctor schema
   expect_no_line 'verification-diff-unscoped' "a diffCommand whose script reads the base ref is not flagged: $cmd"
 done
+
+# $CLAUDE_PROJECT_DIR is the repo root, the portable form for a hook script,
+# so the script behind it is read like a relative one, in every spelling.
+# shellcheck disable=SC2016 # literal text, not an expansion
+for cmd in '"$CLAUDE_PROJECT_DIR"/scripts/lint-changed.sh' '${CLAUDE_PROJECT_DIR}/scripts/lint-changed.sh' '"${CLAUDE_PROJECT_DIR}/scripts/lint-changed.sh"' 'bash $CLAUDE_PROJECT_DIR/scripts/lint-changed.sh'; do
+  CMD="$cmd" set_json .claude/verification.json "d.checks[0].diffCommand = process.env.CMD"
+  run_doctor schema
+  expect_no_line 'verification-diff-unscoped' "a project-dir diffCommand whose script reads the base ref is not flagged: $cmd"
+done
+
+# shellcheck disable=SC2016 # literal text, not an expansion
+set_json .claude/verification.json 'd.checks[0].diffCommand = "\"$CLAUDE_PROJECT_DIR\"/scripts/lint-all.sh"'
+run_doctor schema
+expect_line 'WARN +verification-diff-unscoped' "a project-dir diffCommand whose script ignores the base ref is still flagged"
 
 set_json .claude/verification.json 'd.checks[0].diffCommand = "bash scripts/lint-all.sh"'
 run_doctor schema
