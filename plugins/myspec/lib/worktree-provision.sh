@@ -93,8 +93,11 @@ fi
 # root (a nested apps/web/node_modules is pinned by either). Anything else (an
 # .env file, a cache) is unguarded: it pins no dependency set, and guarding it
 # would block every stop that links one.
+# DEP_DIRS entries are repo-relative; a * stays within one directory and is
+# expanded against the checkout root (vendor-bin/*/vendor: the per-tool vendor
+# trees the Composer bin plugin installs).
 # shellcheck disable=SC2034 # only verify-before-stop.sh reads it; the block is byte-identical in both files
-DEP_DIRS="node_modules vendor vendor/bundle .venv venv"
+DEP_DIRS="node_modules vendor vendor/bundle vendor-bin/*/vendor .venv venv"
 
 # dep_lockfiles <path> -> the lockfile names that pin that directory.
 # vendor is shared by Composer, Bundler and Go modules, so it lists all three;
@@ -171,8 +174,15 @@ symlink_entries() {
 # identical the lockfiles are. Composer writes the root package's autoload
 # rules against $baseDir, which PHP resolves through the link; an editable
 # Python install (poetry, uv, pip -e) records its source in direct_url.json.
+# A workspace link is a symlink in the tree's top two levels (<name>,
+# @scope/<name>, vendor/<name>) whose target leaves the tree: an npm, Yarn,
+# pnpm or Bun workspace package, a Composer path repository. A relative one
+# resolves from the physical tree, so through a link it lands in the other
+# checkout's packages. Only targets that can leave the tree (absolute, or
+# climbing above the link's own level) are resolved, which keeps the scan to
+# a handful of links in a tree of thousands.
 tree_loads_checkout() {
-  local tree="$1" checkout="$2" f url dir
+  local tree="$1" checkout="$2" f url dir real
   # shellcheck disable=SC2016 # the literal $baseDir text Composer writes, not a variable
   grep -qsF '$baseDir . ' "$tree"/composer/autoload_*.php && return 0
   for f in "$tree"/lib/python*/site-packages/*.dist-info/direct_url.json; do
@@ -182,6 +192,15 @@ tree_loads_checkout() {
     dir=$(cd "${url#file://}" 2>/dev/null && pwd -P) || continue
     case "$dir/" in "$checkout"/*) return 0 ;; esac
   done
+  real=$(cd "$tree" 2>/dev/null && pwd -P) || return 1
+  while IFS= read -r f; do
+    dir=$(cd "$f" 2>/dev/null && pwd -P) || continue
+    case "$dir/" in
+      "$real"/*) ;;
+      "$checkout"/*) return 0 ;;
+    esac
+  done < <(find -H "$tree" -mindepth 1 -maxdepth 1 -type l \( -lname '/*' -o -lname '../*' \) 2>/dev/null
+           find -H "$tree" -mindepth 2 -maxdepth 2 -type l \( -lname '/*' -o -lname '../../*' \) 2>/dev/null)
   return 1
 }
 # END dependency-lockfile map

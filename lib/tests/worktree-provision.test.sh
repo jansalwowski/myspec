@@ -141,5 +141,32 @@ out=$(bash "$SCRIPT" "$ROOT/selfsrc-wt" --base main)
 [ ! -e "$ROOT/selfsrc-wt/.venv" ] && ok || fail "selfsrc: a .venv with an editable install of main is not linked"
 printf '%s' "$out" | grep -qF "own source — not linking vendor" && ok || fail "selfsrc: output says why vendor was skipped"
 
+# --- a tree whose workspace links leave it is never linked (#229) -------------
+# A workspace package manager links each workspace package relatively
+# (apps/web/node_modules/@acme/ui -> ../../../../packages/ui), so through a
+# link the worktree would load the main checkout's packages. Links that stay
+# inside the tree (a content store, a bin dir) are not workspace links.
+M=$(new_main workspace '{"isolation":{"provision":{"symlink":["apps/web/node_modules","node_modules"]}}}')
+mkdir -p "$M/packages/ui" "$M/apps/web/node_modules/@acme" "$M/node_modules/.store/dep/bin" "$M/node_modules/.bin"
+ln -s ../../../../packages/ui "$M/apps/web/node_modules/@acme/ui"
+ln -s .store/dep "$M/node_modules/dep"
+ln -s ../.store/dep/bin "$M/node_modules/.bin/dep"
+printf 'apps/web/node_modules\n' >> "$M/.gitignore"
+printf 'v1\n' > "$M/lock.yaml"; commit_all "$M" init
+git -C "$M" worktree add -q -b same "$ROOT/workspace-wt" main
+out=$(bash "$SCRIPT" "$ROOT/workspace-wt" --base main)
+[ ! -e "$ROOT/workspace-wt/apps/web/node_modules" ] && ok || fail "workspace: a tree with a workspace link into main is not linked"
+printf '%s' "$out" | grep -qF "own source — not linking apps/web/node_modules" && ok || fail "workspace: output says why apps/web/node_modules was skipped"
+[ -L "$ROOT/workspace-wt/node_modules" ] && ok || fail "workspace: a tree whose links stay inside it is still linked"
+
+# The same for a Composer path repository (vendor/<vendor>/<name>).
+M=$(new_main pathrepo '{"isolation":{"provision":{"symlink":["vendor"]}}}')
+mkdir -p "$M/packages/lib" "$M/vendor/acme"
+ln -s ../../packages/lib "$M/vendor/acme/lib"
+printf 'v1\n' > "$M/composer.lock"; commit_all "$M" init
+git -C "$M" worktree add -q -b same "$ROOT/pathrepo-wt" main
+bash "$SCRIPT" "$ROOT/pathrepo-wt" --base main >/dev/null
+[ ! -e "$ROOT/pathrepo-wt/vendor" ] && ok || fail "pathrepo: a vendor with a path-repository link into main is not linked"
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

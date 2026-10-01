@@ -14,7 +14,8 @@ The stop gate is two hooks. `mark-code-changed.sh` (PostToolUse) records what a 
 | R5 | A check that is red on the default branch can be scoped to what the branch changed (`diffCommand`, `$MYSPEC_BASE_REF`). | #12 |
 | R6 | While `/myspec:feature-implement` orchestrates (marker under 8 h old), check failures warn and don't block. Its final verification still gates. | #95 |
 | R7 | A check that hits the 120 s cap is reported as timed out, not failed. The cap bounds the hook's wait and kills the check's process group. Remote work gets the check's `cleanup`. The cap is never raised. | #115, #147 |
-| R8 | A dependency directory symlinked into a checkout with different lockfiles, or one that loads that checkout's source, blocks before any check runs. | #94 |
+| R8 | A dependency directory symlinked into a checkout with different lockfiles, or one that loads that checkout's source, blocks before any check runs. Loading that checkout's source includes a workspace link (a package symlink in the tree's top two levels whose target leaves the tree). The built-in directories include the Composer bin plugin's `vendor-bin/*/vendor`. | #94, #229, #222 |
+| R8a | In a linked worktree, a check whose command runs `docker compose exec` or `docker-compose exec` without `-w`/`--workdir` is refused as unverifiable instead of run: it runs in the container's mount of the checkout the compose project was started from, so its result describes another tree. The refusal blocks, never warns through attribution, and does not apply in the main checkout. | #220 |
 | R9 | Memory and setup conformance errors block only when they are errors. Warnings, such as a duplicate ID on stale branches only, don't block. | #124 |
 | R10 | One block per stop: the continuation after a block (`stop_hook_active`) is approved. | 4eb8ccb |
 
@@ -46,3 +47,4 @@ It applies per verified checkout, when its checks fail, its feature-implement ma
 - `hooks/tests/mark-code-changed.test.sh`: write targets, `/dev/null` and descriptor redirects, `cd` and subshell scope, foreign roots, non-code writes as `file`.
 - `hooks/tests/verify-before-stop-attribution.test.sh`: arming per root, a worktree edited from the main checkout, the ledger outliving a run, the legacy marker, and each attribution rule, including #198's repro.
 - `hooks/tests/verify-before-stop-regression.test.sh`: which checkouts the ledger verifies (#201).
+- `hooks/tests/verify-before-stop.test.sh`: linked dependency directories (R8), including workspace links and `vendor-bin/*/vendor`, and `docker compose exec` in a linked worktree (R8a).

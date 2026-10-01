@@ -12,8 +12,11 @@
 # During feature-implement (.claude/state/implement-in-progress.json, at most
 # 8h old) check failures become a non-blocking systemMessage warning instead.
 # Before any check runs, blocks when a dependency directory (each guarded
-# isolation.provision.symlink entry, plus node_modules, vendor, .venv, venv)
-# is a symlink into a checkout whose lockfiles for it differ from this tree.
+# isolation.provision.symlink entry, plus node_modules, vendor,
+# vendor-bin/*/vendor, .venv, venv) is a symlink into a checkout whose
+# lockfiles for it differ from this tree, or whose tree loads that checkout's
+# own source. In a linked worktree, a check that runs `docker compose exec`
+# without -w/--workdir is refused as unverifiable, not run.
 
 set -euo pipefail
 
@@ -270,8 +273,11 @@ fi
 # root (a nested apps/web/node_modules is pinned by either). Anything else (an
 # .env file, a cache) is unguarded: it pins no dependency set, and guarding it
 # would block every stop that links one.
+# DEP_DIRS entries are repo-relative; a * stays within one directory and is
+# expanded against the checkout root (vendor-bin/*/vendor: the per-tool vendor
+# trees the Composer bin plugin installs).
 # shellcheck disable=SC2034 # only verify-before-stop.sh reads it; the block is byte-identical in both files
-DEP_DIRS="node_modules vendor vendor/bundle .venv venv"
+DEP_DIRS="node_modules vendor vendor/bundle vendor-bin/*/vendor .venv venv"
 
 # dep_lockfiles <path> -> the lockfile names that pin that directory.
 # vendor is shared by Composer, Bundler and Go modules, so it lists all three;
@@ -348,8 +354,15 @@ symlink_entries() {
 # identical the lockfiles are. Composer writes the root package's autoload
 # rules against $baseDir, which PHP resolves through the link; an editable
 # Python install (poetry, uv, pip -e) records its source in direct_url.json.
+# A workspace link is a symlink in the tree's top two levels (<name>,
+# @scope/<name>, vendor/<name>) whose target leaves the tree: an npm, Yarn,
+# pnpm or Bun workspace package, a Composer path repository. A relative one
+# resolves from the physical tree, so through a link it lands in the other
+# checkout's packages. Only targets that can leave the tree (absolute, or
+# climbing above the link's own level) are resolved, which keeps the scan to
+# a handful of links in a tree of thousands.
 tree_loads_checkout() {
-  local tree="$1" checkout="$2" f url dir
+  local tree="$1" checkout="$2" f url dir real
   # shellcheck disable=SC2016 # the literal $baseDir text Composer writes, not a variable
   grep -qsF '$baseDir . ' "$tree"/composer/autoload_*.php && return 0
   for f in "$tree"/lib/python*/site-packages/*.dist-info/direct_url.json; do
@@ -359,6 +372,15 @@ tree_loads_checkout() {
     dir=$(cd "${url#file://}" 2>/dev/null && pwd -P) || continue
     case "$dir/" in "$checkout"/*) return 0 ;; esac
   done
+  real=$(cd "$tree" 2>/dev/null && pwd -P) || return 1
+  while IFS= read -r f; do
+    dir=$(cd "$f" 2>/dev/null && pwd -P) || continue
+    case "$dir/" in
+      "$real"/*) ;;
+      "$checkout"/*) return 0 ;;
+    esac
+  done < <(find -H "$tree" -mindepth 1 -maxdepth 1 -type l \( -lname '/*' -o -lname '../*' \) 2>/dev/null
+           find -H "$tree" -mindepth 2 -maxdepth 2 -type l \( -lname '/*' -o -lname '../../*' \) 2>/dev/null)
   return 1
 }
 # END dependency-lockfile map
@@ -406,13 +428,27 @@ lockfiles_match() {
 # guarded_entries -> "configured|inferred<TAB>path<TAB>lockfile..." for the
 # configured entries, then the built-in directories the config does not name.
 guarded_entries() {
-  local configured paths dir l
+  local configured paths dir l pat
+  local -a pats dirs=()
   configured=$(symlink_entries "$REPO_ROOT/.myspec.json")
   paths=$'\n'$(printf '%s\n' "$configured" | cut -f1)$'\n'
   while IFS= read -r l; do
     [ -n "$l" ] && printf 'configured\t%s\n' "$l"
   done <<< "$configured"
-  for dir in $DEP_DIRS; do
+  # read -a splits without globbing; a * entry expands against this checkout,
+  # not the hook's cwd.
+  read -ra pats <<< "$DEP_DIRS"
+  for pat in "${pats[@]}"; do
+    case "$pat" in
+      *'*'*)
+        for dir in "$REPO_ROOT"/$pat; do
+          [ -e "$dir" ] || [ -L "$dir" ] || continue
+          dirs+=("${dir#"$REPO_ROOT"/}")
+        done ;;
+      *) dirs+=("$pat") ;;
+    esac
+  done
+  for dir in "${dirs[@]}"; do
     case "$paths" in
       *$'\n'"$dir"$'\n'*) ;;
       *) printf 'inferred\t%s\n' "$(infer_entry "$dir")" ;;
@@ -710,7 +746,8 @@ attribute_failures() {
       lines="$lines"$'\n'"- ${FAILED_CHECKS[$i]} names none of the changed files"
     fi
   done
-  if [ "$owned" -eq 0 ] && [ "$unknown" -eq 0 ] && [ ${#TIMED_OUT_CHECKS[@]} -eq "$ROOT_TIMED_START" ]; then
+  if [ "$owned" -eq 0 ] && [ "$unknown" -eq 0 ] && [ ${#TIMED_OUT_CHECKS[@]} -eq "$ROOT_TIMED_START" ] \
+      && [ ${#UNVERIFIABLE_CHECKS[@]} -eq "$ROOT_UNVERIFIABLE_START" ]; then
     ATTRIBUTION_WARN=1
   fi
   where="This checkout"
@@ -719,12 +756,86 @@ attribute_failures() {
   rm -f "$tfile" "$ffile"
 }
 
+# Container checks in a linked worktree (#220). `docker compose exec` runs in
+# the container's working directory, which mounts the checkout the compose
+# project was started from (as a rule the main checkout), and compose names
+# the project after the directory it runs in. From a linked worktree the check
+# either finds no running service (a false failure) or, once pointed at the
+# right project, lints and tests the main checkout's tree (a false pass).
+# Such a check is refused as unverifiable instead of run, unless it passes
+# -w/--workdir, which says where in the container this tree is.
+
+# is_linked_worktree <dir> -> 0 when <dir> is a linked worktree, not a main
+# checkout (or a submodule, whose git dir is its common dir).
+is_linked_worktree() {
+  local gd cd_
+  gd=$(git -C "$1" rev-parse --git-dir 2>/dev/null) || return 1
+  [ -n "$gd" ] || return 1
+  gd=$(cd "$1" && cd "$gd" && pwd -P) || return 1
+  cd_=$(physical_common_dir "$1" 2>/dev/null) || return 1
+  [ -n "$cd_" ] && [ "$gd" != "$cd_" ]
+}
+
+# compose_exec_unpinned <command> -> 0 when one of the command's simple
+# commands is `docker compose exec` or `docker-compose exec` whose options
+# (those before the service name) carry no -w/--workdir. A -w after the
+# service name belongs to the command run in the container, so it does not
+# count. Quotes are dropped, so a `bash -c "docker compose exec ..."` is read
+# too.
+compose_exec_unpinned() {
+  local cmd="$1" seg i n docker
+  local -a t
+  cmd=${cmd//&&/$'\n'}
+  cmd=${cmd//||/$'\n'}
+  cmd=${cmd//[;|&()]/$'\n'}
+  cmd=${cmd//[\"\']/}
+  while IFS= read -r seg; do
+    read -ra t <<< "$seg"
+    n=${#t[@]}
+    i=0 docker=0
+    # Find compose: a docker-compose token, or compose after a docker token.
+    while [ "$i" -lt "$n" ]; do
+      case "${t[$i]}" in
+        docker-compose|*/docker-compose) break ;;
+        docker|*/docker) docker=1 ;;
+        compose) [ "$docker" -eq 1 ] && break ;;
+      esac
+      i=$((i + 1))
+    done
+    [ "$i" -lt "$n" ] || continue
+    # Compose's own options, then the subcommand.
+    i=$((i + 1))
+    while [ "$i" -lt "$n" ]; do
+      case "${t[$i]}" in
+        -f|--file|-p|--project-name|--project-directory|--env-file|--profile|--ansi|--progress|--parallel) i=$((i + 2)) ;;
+        -*) i=$((i + 1)) ;;
+        *) break ;;
+      esac
+    done
+    if [ "$i" -ge "$n" ] || [ "${t[$i]}" != exec ]; then continue; fi
+    # exec's options, up to the service name.
+    i=$((i + 1))
+    while [ "$i" -lt "$n" ]; do
+      case "${t[$i]}" in
+        -w|-w?*|--workdir|--workdir=*) continue 2 ;;
+        -e|--env|-u|--user|--index) i=$((i + 2)) ;;
+        -*) i=$((i + 1)) ;;
+        *) break ;;
+      esac
+    done
+    return 0
+  done <<< "$cmd"
+  return 1
+}
+
 # Run each required check, once per checkout to verify.
 FAILED_CHECKS=()
 # The output file of each failed check, parallel to FAILED_CHECKS, for
 # attribution to read; removed on exit.
 FAILED_LOGS=()
 TIMED_OUT_CHECKS=()
+# Checks refused without running: their result would describe another tree.
+UNVERIFIABLE_CHECKS=()
 FAILED_OUTPUT=()
 # A failure blocks unless its checkout carries a live feature-implement marker
 # or attribution clears it (above). Notes say which, for the report.
@@ -741,7 +852,10 @@ ROOT_LABEL=""
 ROOT_FAILURES=${#FAILED_OUTPUT[@]}
 ROOT_FAILED_START=${#FAILED_CHECKS[@]}
 ROOT_TIMED_START=${#TIMED_OUT_CHECKS[@]}
+ROOT_UNVERIFIABLE_START=${#UNVERIFIABLE_CHECKS[@]}
 ROOT_KEY="$REPO_ROOT"
+ROOT_IS_LINKED=0
+is_linked_worktree "$REPO_ROOT" && ROOT_IS_LINKED=1
 # The files this session wrote in this checkout, one repo-relative path per
 # line, for a check that scopes itself to them (a per-file linter). Empty
 # when a legacy marker armed the gate.
@@ -825,6 +939,12 @@ for i in $(seq 0 $((CHECKS_COUNT - 1))); do
     COMMAND="$DIFF_COMMAND"
   fi
 
+  if [ "$ROOT_IS_LINKED" -eq 1 ] && compose_exec_unpinned "$COMMAND"; then
+    UNVERIFIABLE_CHECKS+=("$NAME")
+    FAILED_OUTPUT+=("[$NAME not run: unverifiable in a linked worktree] $COMMAND runs docker compose exec without -w/--workdir, so it runs in the container's working directory. That directory mounts the checkout the compose project was started from (as a rule the main checkout), not $REPO_ROOT, so a result would describe another tree; and compose names the project after the directory it runs in, so from here it may find no running service at all. This is not a test failure. Make the check verify this worktree (mount it in the container and pass -w/--workdir with its path there, or run the tool on the host), then report its real result.")
+    continue
+  fi
+
   # Exported to the check and to its cleanup, so a wrapper that starts work
   # the group kill cannot reach can tag it and the cleanup can find it.
   RUN_ID="myspec-$(date +%s)-$$-$i"
@@ -892,7 +1012,7 @@ fi
 done
 rm -f "$CAP_SENTINEL"
 
-if [ ${#FAILED_CHECKS[@]} -gt 0 ] || [ ${#TIMED_OUT_CHECKS[@]} -gt 0 ]; then
+if [ ${#FAILED_CHECKS[@]} -gt 0 ] || [ ${#TIMED_OUT_CHECKS[@]} -gt 0 ] || [ ${#UNVERIFIABLE_CHECKS[@]} -gt 0 ]; then
   # The headline separates the two outcomes: "failed" is a result, "timed
   # out" is the absence of one.
   NAMES=""
@@ -906,6 +1026,10 @@ if [ ${#FAILED_CHECKS[@]} -gt 0 ] || [ ${#TIMED_OUT_CHECKS[@]} -gt 0 ]; then
     else
       NAMES="$TIMED"
     fi
+  fi
+  if [ ${#UNVERIFIABLE_CHECKS[@]} -gt 0 ]; then
+    UNVER=$(printf '%s, ' "${UNVERIFIABLE_CHECKS[@]}"); UNVER="not run, unverifiable in a linked worktree: ${UNVER%, }"
+    NAMES="${NAMES:+$NAMES; }$UNVER"
   fi
   # Join with real newline-delimited separators (multi-char IFS joins only
   # use the first character, so the old IFS="\n---\n" emitted literal '\')

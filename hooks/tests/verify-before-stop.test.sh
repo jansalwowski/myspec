@@ -221,6 +221,66 @@ expect approve "$(stop 86 "$WT_R")" "vendor/bundle with identical Gemfile.lock i
 printf 'v2\n' > "$WT_R/Gemfile.lock"
 expect block "$(stop 87 "$WT_R")" "vendor/bundle with a changed Gemfile.lock blocks"
 
+# --- a workspace link out of a linked tree blocks despite equal lockfiles (#229)
+# The triage repro: apps/web/node_modules linked into main, its workspace link
+# ../../../../packages/ui then resolves to main's packages/ui.
+MAIN_W=$(new_dep_repo workspace apps/web/node_modules lock.yaml '{"isolation":{"provision":{"symlink":[{"path":"apps/web/node_modules","lockfiles":["lock.yaml"]}]}}}')
+mkdir -p "$MAIN_W/packages/ui" "$MAIN_W/apps/web/node_modules/@acme"
+ln -s ../../../../packages/ui "$MAIN_W/apps/web/node_modules/@acme/ui"
+WT_W="$ROOT/workspace-wt"
+git -C "$MAIN_W" worktree add -q -b feat "$WT_W" main
+mkdir -p "$WT_W/apps/web"
+ln -s "$MAIN_W/apps/web/node_modules" "$WT_W/apps/web/node_modules"
+expect block "$(stop 100 "$WT_W")" "a linked tree whose workspace link resolves into main blocks"
+rm "$MAIN_W/apps/web/node_modules/@acme/ui"
+ln -s ../.store/ui "$MAIN_W/apps/web/node_modules/@acme/ui"
+expect approve "$(stop 101 "$WT_W")" "a linked tree whose links stay inside it is accepted"
+
+# --- vendor-bin/*/vendor is guarded with no config (#222) --------------------
+MAIN_B2=$(new_dep_repo binplugin vendor-bin/tool/vendor vendor-bin/tool/composer.lock '')
+WT_B2="$ROOT/binplugin-wt"
+git -C "$MAIN_B2" worktree add -q -b feat "$WT_B2" main
+ln -s "$MAIN_B2/vendor-bin/tool/vendor" "$WT_B2/vendor-bin/tool/vendor"
+expect approve "$(stop 102 "$WT_B2")" "vendor-bin/tool/vendor link with identical composer.lock is accepted"
+printf 'v2\n' > "$WT_B2/vendor-bin/tool/composer.lock"
+expect block "$(stop 103 "$WT_B2")" "vendor-bin/tool/vendor link with a changed composer.lock blocks"
+
+# --- docker compose exec without -w is unverifiable in a linked worktree (#220)
+# A fake docker on PATH: a check that runs reports what it ran and passes.
+BIN="$ROOT/bin"
+mkdir -p "$BIN"
+printf '#!/bin/sh\nexit 0\n' > "$BIN/docker"
+cp "$BIN/docker" "$BIN/docker-compose"
+chmod +x "$BIN/docker" "$BIN/docker-compose"
+MAIN_X=$(new_dep_repo compose src/app app.lock '')
+WT_X="$ROOT/compose-wt"
+git -C "$MAIN_X" worktree add -q -b feat "$WT_X" main
+# compose_stop <sid> <cwd> <command> -> "decision<TAB>reason"
+compose_stop() {
+  local cfg
+  cfg=$(jq -n --arg c "$3" '{checks:[{name:"Lint",command:$c,required:true}]}')
+  printf '%s\n' "$cfg" > "$2/.claude/verification.json"
+  touch "/tmp/.myspec-code-changed-$SID-$1"
+  printf '{"session_id":"%s-%s","cwd":%s}' "$SID" "$1" "$(printf '%s' "$2" | jq -Rs .)" \
+    | PATH="$BIN:$PATH" bash "$HOOK" 2>/dev/null | jq -r '[.decision, (.reason // "")] | @tsv'
+}
+r=$(compose_stop 110 "$WT_X" "docker compose exec svc make lint")
+expect block "${r%%$'\t'*}" "worktree: docker compose exec without -w blocks"
+case "$r" in *unverifiable*) ok ;; *) fail "worktree: the reason says the check is unverifiable" ;; esac
+r=$(compose_stop 111 "$WT_X" "docker-compose -f compose.yaml exec -e APP_ENV=test svc make test")
+expect block "${r%%$'\t'*}" "worktree: docker-compose exec with options but no -w blocks"
+r=$(compose_stop 112 "$WT_X" "true && docker compose exec -T svc make -w lint")
+expect block "${r%%$'\t'*}" "worktree: a -w after the service name does not count"
+case "$r" in *unverifiable*) ok ;; *) fail "worktree: a later simple command is refused as unverifiable" ;; esac
+r=$(compose_stop 113 "$WT_X" "docker compose exec -w /srv/wt svc make lint")
+expect approve "${r%%$'\t'*}" "worktree: docker compose exec -w runs and passes"
+r=$(compose_stop 114 "$WT_X" "docker compose exec --workdir=/srv/wt svc make lint")
+expect approve "${r%%$'\t'*}" "worktree: docker compose exec --workdir= runs and passes"
+r=$(compose_stop 115 "$WT_X" "docker compose run --rm svc make lint")
+expect approve "${r%%$'\t'*}" "worktree: docker compose run is not refused"
+r=$(compose_stop 116 "$MAIN_X" "docker compose exec svc make lint")
+expect approve "${r%%$'\t'*}" "main checkout: docker compose exec without -w runs as before"
+
 # --- memory gate: stale-ref ID collisions warn, they do not block (#124) -----
 # S001 is added on feat/a, merged, reverted on main and reused there; feat/c
 # and feat/d both take P001 and never merge. Touching the memory tree must not
