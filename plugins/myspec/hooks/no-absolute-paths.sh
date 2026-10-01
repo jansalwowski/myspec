@@ -83,6 +83,10 @@ if [ -f "$REPO_ROOT/.myspec.json" ]; then
   AI_DIR=$(jq -r '.aiDir // empty' "$REPO_ROOT/.myspec.json" 2>/dev/null || true)
   AI_DIR="${AI_DIR#./}"
   AI_DIR="${AI_DIR%/}"
+  # No configured value: the documented default, as validate-frontmatter.sh
+  # and verify-before-stop.sh resolve it. A repo without .myspec.json has no
+  # aiDir at all, so only its doc kinds, .claude/ and docs/ are checked.
+  [ -n "$AI_DIR" ] || AI_DIR=".ai"
 fi
 
 IN_SCOPE=0

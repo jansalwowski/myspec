@@ -147,6 +147,24 @@ expect_quiet "placeholder forms in a doc"
 write_call "$REPO/docs/rel.md" "See apps/web/src/components/home/HomeFoo.vue"
 expect_quiet "relative home/ segment"
 
+# --- aiDir default: .myspec.json without aiDir means .ai ------------------
+
+new_repo() {  # new_repo <dir> [myspec.json content]: an initialised repo
+  mkdir -p "$1"
+  git init -q -b main "$1"
+  [ "$#" -lt 2 ] || printf '%s\n' "$2" > "$1/.myspec.json"
+}
+
+NOAIDIR="$ROOT/noaidir"
+new_repo "$NOAIDIR" '{}'
+write_call "$NOAIDIR/.ai/index.yaml" "a: /Users/alice/x"
+expect_flag "non-doc file under the default .ai when .myspec.json has no aiDir"
+
+NOCONFIG="$ROOT/noconfig"
+new_repo "$NOCONFIG"
+write_call "$NOCONFIG/.ai/index.yaml" "a: /Users/alice/x"
+expect_quiet "repo without .myspec.json has no aiDir tree in scope"
+
 TOTAL=$((PASS + FAIL))
 printf 'no-absolute-paths: %d/%d passed\n' "$PASS" "$TOTAL"
 [ "$FAIL" -eq 0 ]
