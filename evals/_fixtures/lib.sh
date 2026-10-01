@@ -98,6 +98,7 @@ MD
     "$ai/conventions/.gitkeep" "$ai/decisions/.gitkeep" "$ai/plans/.gitkeep"
   _copy_doc "$PLUGIN_ROOT/framework-files/anti-patterns.md" "$ai/anti-patterns.md"
   _copy_doc "$PLUGIN_ROOT/framework-files/pre-flight.md" "$ai/pre-flight.md"
+  _copy_doc "$PLUGIN_ROOT/framework-files/work-isolation.md" "$ai/work-isolation.md"
 
   local rule
   for rule in "$PLUGIN_ROOT"/framework-files/rules/*.md; do

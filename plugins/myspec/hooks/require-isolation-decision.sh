@@ -2,7 +2,8 @@
 # require-isolation-decision.sh
 # PreToolUse hook (Write|Edit matcher) — gates the first SOURCE edit in the main
 # checkout until an isolation decision (develop vs worktree) is recorded for the
-# session. Rules live in .claude/rules/work-isolation.md.
+# session. Contract: .claude/rules/work-isolation.md; the procedure the block
+# messages cite: <aiDir>/work-isolation.md.
 #
 # Worktree detection: worktrees have .git as a FILE (gitdir: pointer); the main
 # checkout has .git as a DIRECTORY. Inside a worktree the decision is already
@@ -126,6 +127,8 @@ AI_DIR="${AI_DIR%/}"
 AI_DIR="${AI_DIR:-.ai}"
 WORKTREE_ROOT=$(jq -r '.isolation.worktreeRoot // ".claude/worktrees"' "$REPO_ROOT/.myspec.json" 2>/dev/null)
 WORKTREE_ROOT="${WORKTREE_ROOT%/}"
+# Installed by init/update from the manifest `files` entry work-isolation.md.
+PROCEDURE="$AI_DIR/work-isolation.md"
 
 # Paths that never need an isolation decision: agent infrastructure and docs.
 # Everything else (source, config, tests, package.json, …) is gated.
@@ -234,7 +237,7 @@ Create the worktree if you have not already, then make every edit inside it:
   git worktree add -b <type>/<slug> \"\$(git rev-parse --show-toplevel)/$WORKTREE_ROOT/<slug>\" origin/$DEFAULT_BRANCH
   .claude/lib/worktree-provision.sh \"\$(git rev-parse --show-toplevel)/$WORKTREE_ROOT/<slug>\" --base origin/$DEFAULT_BRANCH
 
-Use absolute paths and \`git -C <worktree>\` for all git operations. See .claude/rules/work-isolation.md.
+Use absolute paths and \`git -C <worktree>\` for all git operations. Full procedure: $PROCEDURE
 
 Blocked edit: $REL_PATH"
 
@@ -285,7 +288,7 @@ Before editing source files in the main checkout, ask where the work should happ
     - \"develop\"  — \"Edits land in your checkout; test immediately. No branch yet.\"
     - \"Worktree\" — \"Isolated branch in $WORKTREE_ROOT/; PR opened when done.\"
 
-Mark ONE option \"(Recommended)\" using the task-shape heuristic in .claude/rules/work-isolation.md — do not present them as equals.
+Mark ONE option \"(Recommended)\" using the task-shape heuristic in $PROCEDURE, which holds the full procedure — do not present them as equals.
 
 Then record the answer (session id is already filled in):
   .claude/lib/set-isolation.sh $SESSION_ID develop

@@ -180,7 +180,7 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
    git branch -D <feature-branch>
    ```
 
-   **Option 5 — Promote develop-mode work:** the session answered `develop` (see `.claude/rules/work-isolation.md`), so the work is an uncommitted diff in the main checkout and no feature branch exists yet. Scope it to the files this feature touched and let the script do the rest — it never changes the main checkout's branch:
+   **Option 5 — Promote develop-mode work:** the session answered `develop` (procedure: `${aiDir}/work-isolation.md`), so the work is an uncommitted diff in the main checkout and no feature branch exists yet. Scope it to the files this feature touched and let the script do the rest — it never changes the main checkout's branch:
    ```bash
    .claude/lib/promote-to-worktree.sh --branch feat/<name> --title "<conventional commit subject>" \
      --only <path> [--only <path>]... --body-file <pr-body> --session-url <url>

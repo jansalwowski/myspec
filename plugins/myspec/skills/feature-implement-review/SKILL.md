@@ -109,7 +109,7 @@ Overwrite the previous report (the frontmatter records which commit was reviewed
 6. Otherwise keep the previous report's `verdict_history` value.
 7. Merge conflict in the section (both branches appended rows): keep every row from both sides in one table, ordered by the Reviewed date, and remove the conflict markers.
 
-Commit the report on its own, as `feature-implement` does with `holistic-review.md`: `git add <report path> && git commit -m "docs({feature}): conformance report ({verdict})" -- <report path>`. An uncommitted report can miss the branch entirely, because `feature-complete` pushes and merges only commits. The exception is HEAD on the default branch (develop mode). There, leave the report uncommitted, because commits are the user's call (`.claude/rules/work-isolation.md`), and say so in Step 7.
+Commit the report on its own, as `feature-implement` does with `holistic-review.md`: `git add <report path> && git commit -m "docs({feature}): conformance report ({verdict})" -- <report path>`. An uncommitted report can miss the branch entirely, because `feature-complete` pushes and merges only commits. The exception is HEAD on the default branch (develop mode). There, leave the report uncommitted, because commits are the user's call (`${aiDir}/work-isolation.md`, develop mode), and say so in Step 7.
 
 ### Step 6: Present Findings and Route
 

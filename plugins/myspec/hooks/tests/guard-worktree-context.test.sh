@@ -325,6 +325,23 @@ else
   echo "FAIL  block reason did not name the recorded worktree path" >&2
 fi
 
+# --- every isolation block cites the installed procedure file (#226) ---------
+cites() {  # cites <needle> <desc> <session-id> <command>
+  if run_hook "$REPO" "$3" "$4" | grep -qF -- "$1"; then
+    PASS=$((PASS + 1))
+  else
+    FAIL=$((FAIL + 1))
+    echo "FAIL  $2 does not cite $1" >&2
+  fi
+}
+cites '.ai/work-isolation.md' "gate A block" none-sess 'git checkout develop'
+cites '.ai/work-isolation.md' "branch -f block" none-sess 'git branch -f feat/x HEAD~1'
+cites 'Full procedure: .ai/work-isolation.md' "gate B block" path-sess 'yarn build'
+cp "$REPO/.myspec.json" "$REPO/.myspec.json.bak"
+printf '{"aiDir":"docs/ai/","frameworkVersion":"2.0.0"}\n' > "$REPO/.myspec.json"
+cites 'docs/ai/work-isolation.md' "gate A block under a custom aiDir" none-sess 'git checkout develop'
+mv "$REPO/.myspec.json.bak" "$REPO/.myspec.json"
+
 # --- the branch-guard reason never advertises its bypass ----------------------
 if run_hook "$REPO" none-sess 'git checkout develop' | grep -q "MYSPEC_ALLOW_BRANCH_OPS"; then
   FAIL=$((FAIL + 1))
