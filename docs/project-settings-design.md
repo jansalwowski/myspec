@@ -69,7 +69,7 @@ Polyglot example:
 ]
 ```
 
-Interaction with the guards: a tree that `install` built in the worktree is a real directory, not a link, so the linked-dependency guard (#229 / PR #236) passes it. That is why #236 should merge together with #230: #236 refuses the false pass, and `install` is the supported way to a true one. When a workspace config exists and the root `node_modules` (or another `DEP_DIRS` entry) would be linked while `install` is unset, provisioning skips the link and prints "set `isolation.provision.install` or run a real install", as it does today for a lockfile change.
+Interaction with the guards: a tree that `install` built in the worktree is a real directory, not a link, so the linked-dependency guard (#229 / PR #236) passes it. That is why #236 should merge together with #230: #236 refuses the false pass, and `install` is the supported way to a true one. When a dependency tree holds workspace links that resolve into the main checkout and `install` is unset, provisioning skips that link and prints "set `isolation.provision.install` or run a real install", as it does today for a lockfile change. A workspace config alone skips nothing, so a tree with no such links (a pnpm workspace's Composer `vendor`) is still linked.
 
 `--no-install` on `worktree-provision.sh` skips the install steps, for restricted environments, and prints each step it skipped.
 

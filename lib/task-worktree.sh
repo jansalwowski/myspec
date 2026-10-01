@@ -16,6 +16,8 @@
 #          worktree-provision.sh with the controller's checkout as the link
 #          source — its linked dependency directories already match the feature's
 #          lockfiles.
+#          Task worktrees run `isolation.provision.install` too, one after
+#          another; a failing install step fails the create.
 #          --no-symlink is passed through: use it when the task writes into
 #          a linked directory (code generation into node_modules, vendor,
 #          .venv, ...), then install for real.
