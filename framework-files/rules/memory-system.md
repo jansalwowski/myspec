@@ -1,7 +1,7 @@
 ---
 title: "Agent Memory System"
 purpose: "Prevent debugging loops and preserve knowledge across sessions"
-updated: 2026-09-29
+updated: 2026-10-01
 ---
 
 # Agent Memory System
@@ -42,7 +42,7 @@ Episodic memories older than 30 days consolidate into semantic facts; `/myspec:m
 | Aspect | Convention |
 |--------|-----------|
 | Live file | `.claude/state/sessions/{session_id}.md` in the **main checkout** of the repo the edited file belongs to — gitignored, never inside a linked worktree (where `git worktree remove` destroys it) |
-| Own session | The live file whose `## Files touched` lists a path you edited; several or none → newest mtime, and confirm. The harness never exposes the session id to the model |
+| Own session | The live file whose `## Files touched` lists a path you edited; several or none → newest mtime, and confirm. The model never sees its session id, so never pass this one to `set-isolation.sh` |
 | Archive file | `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md`; sessions swept without a real topic use `orphaned-{first 8 of session_id}` |
 | Terminal statuses | `completed` (via `/myspec:session-complete`) or `abandoned` (swept). Archive is a location, not a status |
 | Age policy | mtime < 1h: live, never touch. 1–6h: ambiguous — report and route to `/myspec:session-clean`. > 6h: sweep as `abandoned` |
