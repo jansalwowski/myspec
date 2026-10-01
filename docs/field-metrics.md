@@ -70,7 +70,7 @@ Recording is on by default. Any one of these turns it off:
 |---|---|
 | Per project, in `.myspec.json` | `"feedback": { "metrics": false }` |
 | Per shell | `MYSPEC_DISABLE_METRICS=1` |
-| Per shell, cross-tool | `DO_NOT_TRACK=1` (any value but empty or `0`) |
+| Per shell, cross-tool | `DO_NOT_TRACK=1` (any value but empty, `0`, `false` or `FALSE`) |
 
 A `.myspec.json` that does not parse also counts as opted out, so a hand-edited `"metrics": false` with a syntax error still holds. `"frictionReport": false` is a separate switch. It turns off the friction report, not recording. To remove what has been recorded, delete `.claude/state/metrics/`.
 

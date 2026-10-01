@@ -25,6 +25,9 @@ MJS="$PLUGIN/lib/myspec-config.mjs"
 SCHEMA="$PLUGIN/lib/myspec-config.schema.json"
 DOC="$PLUGIN/docs/project-settings-design.md"
 
+# Hooks and docs run the shell reader directly, so it must be executable.
+[ -x "$SH" ] || { echo "FATAL: script not executable: $SH" >&2; exit 1; }
+
 ROOT=$(cd "$(mktemp -d)" && pwd -P)
 trap 'rm -rf "$ROOT"' EXIT
 
@@ -124,6 +127,18 @@ read_both "$D" verification.checks; expect "array verification.json" 'null'
 printf '%s' "$ERR" | grep -qF ".claude/verification.json is not a JSON object" && ok || fail "array verification.json is named"
 read_both "$D" aiDir; expect "aiDir read beside a bad verification.json" '"docs"'
 
+# A file that exists but cannot be read falls back like a bad one, in both
+# readers, instead of aborting the shell reader (skipped as root, who reads it).
+D=$(fixture unreadable '{"aiDir":"docs"}')
+chmod 000 "$D/.myspec.json"
+if [ ! -r "$D/.myspec.json" ]; then
+  read_both "$D" aiDir; expect "unreadable .myspec.json" '".ai"'
+  printf '%s' "$ERR" | grep -qF ".myspec.json is not a JSON object; aiDir falls back to the default" && ok \
+    || fail "unreadable .myspec.json is named (got: $ERR)"
+  bash "$SH" get aiDir --root "$D" >/dev/null 2>&1; [ $? -eq 0 ] && ok || fail "sh: an unreadable file exits 0"
+fi
+chmod 644 "$D/.myspec.json"
+
 # The session layer wins over the project layer, and only on its exact value.
 D=$(fixture session '{"isolation":{"allowLinkedModules":false},"feedback":{"metrics":true}}')
 read_both "$D" isolation.allowLinkedModules MYSPEC_ALLOW_LINKED_MODULES=1; expect "session override" 'true'
@@ -131,6 +146,18 @@ read_both "$D" isolation.allowLinkedModules MYSPEC_ALLOW_LINKED_MODULES=yes; exp
 read_both "$D" feedback.metrics MYSPEC_DISABLE_METRICS=1; expect "MYSPEC_DISABLE_METRICS" 'false'
 read_both "$D" feedback.metrics DO_NOT_TRACK=0; expect "DO_NOT_TRACK=0 keeps metrics" 'true'
 read_both "$D" feedback.metrics DO_NOT_TRACK=true; expect "DO_NOT_TRACK=true stops metrics" 'false'
+read_both "$D" feedback.metrics DO_NOT_TRACK=false; expect "DO_NOT_TRACK=false keeps metrics" 'true'
+read_both "$D" feedback.metrics DO_NOT_TRACK=FALSE; expect "DO_NOT_TRACK=FALSE keeps metrics" 'true'
+# The schema's DO_NOT_TRACK rule is the metrics hook's rule: run the hook's own
+# case line on each value and compare with the reader.
+# shellcheck disable=SC2016 # a literal ${DO_NOT_TRACK in the pattern
+HOOK_CASE=$(grep -m1 '^case "${DO_NOT_TRACK' "$PLUGIN/hooks/record-session-metrics.sh")
+[ -n "$HOOK_CASE" ] && ok || fail "the metrics hook has a DO_NOT_TRACK case line"
+D=$(fixture dnt)
+for v in '' 0 false FALSE 1 true yes False off; do
+  hook=$(DO_NOT_TRACK="$v" bash -c "$HOOK_CASE; echo true" 2>/dev/null)
+  read_both "$D" feedback.metrics DO_NOT_TRACK="$v"; expect "DO_NOT_TRACK='$v' as the hook decides" "${hook:-false}"
+done
 read_both "$D" feedback MYSPEC_DISABLE_FRICTION_REPORT=1; expect "session merges into an object" '{"metrics":true,"frictionReport":false}'
 
 # --root defaults to the top of the current checkout.
@@ -140,6 +167,13 @@ OUT=$(cd "$D/src/deep" && bash "$SH" get aiDir 2>/dev/null)
 expect "sh: --root defaults to the checkout top" '"docs/ai"'
 OUT=$(cd "$D/src/deep" && node "$MJS" get aiDir 2>/dev/null)
 expect "node: --root defaults to the checkout top" '"docs/ai"'
+
+# The Node CLI runs when its path goes through a symlink (a symlinked plugin
+# or .claude dir, or a temp dir such as macOS /tmp -> /private/tmp).
+D=$(fixture symlinked '{"aiDir":"docs/ai"}')
+ln -s "$(dirname "$MJS")" "$ROOT/linked-lib"
+OUT=$(node "$ROOT/linked-lib/myspec-config.mjs" get aiDir --root "$D" 2>/dev/null)
+expect "node: runs through a symlinked path" '"docs/ai"'
 
 # Usage errors exit 2.
 for args in "" "get" "set aiDir" "get .aiDir" "get a..b" "get aiDir --root"; do
