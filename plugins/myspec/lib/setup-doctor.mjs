@@ -87,14 +87,14 @@ const RULE_BUDGET = 1000;
 
 const GROUPS = {
   install: ['framework-missing', 'framework-renamed', 'framework-removed', 'framework-drift', 'marker-missing', 'doctor-rule-unrenamed', 'sessions-unmigrated', 'shipped-missing', 'shipped-drift'],
-  wiring: ['settings-unparseable', 'hook-missing', 'hook-not-executable', 'hook-unregistered', 'hook-syntax', 'wiring-incomplete', 'tooling-absent'],
-  schema: ['myspec-unparseable', 'myspec-missing-key', 'myspec-schema-stale', 'aidir-trailing-slash', 'aidir-missing', 'verification-unparseable', 'verification-empty'],
+  wiring: ['settings-unparseable', 'hook-missing', 'hook-not-executable', 'hook-unregistered', 'hook-syntax', 'wiring-incomplete', 'hook-command-relative', 'tooling-absent'],
+  schema: ['myspec-unparseable', 'myspec-missing-key', 'myspec-schema-stale', 'aidir-trailing-slash', 'aidir-missing', 'verification-unparseable', 'verification-empty', 'verification-diff-unscoped'],
   // Separate from `schema` on purpose: the stop hook blocks on `wiring` and
   // `schema`, and it triggers on uncommitted changes under `.claude/` and
   // `.myspec.json`. The features manifest lives under ${aiDir}, so leaving it
   // in `schema` would block a stop over a settings.json edit because of a
   // months-old indent in an unrelated file.
-  features: ['features-index-unreadable', 'note-over-cap', 'note-volatile'],
+  features: ['features-index-unreadable', 'note-over-cap', 'note-volatile', 'manifest-unknown-key'],
   budget: ['over-budget', 'over-budget-pinned'],
   refs: ['dead-path-ref', 'dead-skill-ref', 'topology-missing'],
 };
@@ -441,9 +441,27 @@ if (verification.present && verification.error) {
   // A diffCommand that never reads $MYSPEC_BASE_REF is not diff-scoped: it
   // replaces the whole-repo command with something narrower for reasons the
   // gate cannot see, and the check silently stops covering the branch.
+  // The gate exports the variable, so a diffCommand that hands off to a
+  // script in the repo is scoped when that script reads it (issue #180).
+  // $CLAUDE_PROJECT_DIR names the repo root, so a script behind it is
+  // resolved and read like a relative one; any other variable stays unknown.
+  const readsBaseRef = (diffCommand) => diffCommand.includes('MYSPEC_BASE_REF')
+    || diffCommand.split(/[\s;&|()]+/)
+      .filter((token) => token && !token.startsWith('-')
+        && !token.replace(/\$\{CLAUDE_PROJECT_DIR\}|\$CLAUDE_PROJECT_DIR/g, '').includes('$'))
+      .map((token) => normalizeHookScript(token))
+      .some((token) => {
+        const path = isAbsolute(token) ? token : join(root, token);
+
+        try {
+          return statSync(path).isFile() && (read(path) || '').includes('MYSPEC_BASE_REF');
+        } catch {
+          return false;
+        }
+      });
   const unscoped = verification.value.checks
     .filter((check) => check && String(check.diffCommand || '').trim()
-      && !String(check.diffCommand).includes('MYSPEC_BASE_REF'))
+      && !readsBaseRef(String(check.diffCommand)))
     .map((check) => String(check.name || '?'));
 
   if (unscoped.length > 0) {
@@ -552,6 +570,40 @@ if (wants('features')) {
   }
 
   manifests.forEach((path) => {
+    // A near-miss spelling of `note:` is invisible to the cap and volatility
+    // checks below, and to every skill that reads the field, so a manifest
+    // using `notes:` passed clean however long it grew (issue #180).
+    // Only an entry's own keys count: a `Note:` line inside a block scalar
+    // (`description: >`) or a nested mapping is value text, and renaming it
+    // would corrupt that value.
+    let entryColumn = null;
+    let blockColumn = null;
+
+    (read(path) || '').split(/\r?\n/).forEach((line, index) => {
+      if (blockColumn !== null) {
+        if (line.trim() === '' || line.match(/^\s*/)[0].length > blockColumn) return;
+        blockColumn = null;
+      }
+
+      const item = line.match(/^(\s*-\s+)([A-Za-z_-]+):(?:\s+(.*))?$/);
+      const key = item || line.match(/^(\s*)([A-Za-z_-]+):(?:\s+(.*))?$/);
+
+      if (!key) return;
+
+      const column = key[1].length;
+
+      if (item) entryColumn = column;
+      if (/^[|>][+-]?\d*\s*(#.*)?$/.test(key[3] || '')) blockColumn = column;
+
+      if (column === entryColumn && /^notes?$/i.test(key[2]) && key[2] !== 'note') {
+        const where = `${rel(path)}:${index + 1}`;
+
+        warn('manifest-unknown-key', 'features', where, `${where}: ${key[2]}: is not a manifest key — the field is note:, so this one escapes the note cap and volatility checks and no skill reads it`, {
+          text: `rename ${key[2]}: to note: and keep it to one line of current state`,
+        });
+      }
+    });
+
     manifestNotes(read(path) || '').forEach(({ line, text, multiline }) => {
       const where = `${rel(path)}:${line}`;
 
@@ -1080,6 +1132,40 @@ registered.forEach((command) => {
   }
 });
 
+// A relative script path resolves against the session's cwd, not the project:
+// once a session cd's into a subdirectory the shell reports `No such file or
+// directory`, and on Stop that is a non-blocking error, so the verification
+// gate is skipped with no warning (issue #217). The bare form still counts as
+// wired everywhere above — update must not wire the hook a second time — but it
+// is reported here so update can rewrite it in place. A warning, not an error:
+// the hook does run from the repo root, so blocking a stop over it would be
+// louder than the damage.
+[[projectSettings, '.claude/settings.json'], [localSettings, '.claude/settings.local.json']]
+  .filter(([file]) => file.value)
+  .forEach(([file, path]) => {
+    hookCommands(file.value).forEach((command) => {
+      const script = hookScript(command);
+
+      if (!script || script.unresolved) {
+        return;
+      }
+
+      const tokens = command.trim().split(/\s+/);
+      const raw = (script.execd ? tokens[0] : tokens[1]).replace(/["']/g, '');
+
+      if (isAbsolute(raw) || raw.startsWith('$')) {
+        return;
+      }
+
+      const label = rel(script.path);
+      const framework = label.startsWith('.claude/hooks/');
+
+      warn('hook-command-relative', 'wiring', path, `${path}: hook command "${command}" runs ${label} by a relative path — it resolves against the session's cwd, so the hook fails (and a Stop gate is skipped) once the session leaves the repo root`, framework && path === '.claude/settings.json'
+        ? { commands: ['/myspec:update'] }
+        : { text: `prefix the script with "$CLAUDE_PROJECT_DIR"/, e.g. "$CLAUDE_PROJECT_DIR"/${label}` });
+    });
+  });
+
 if (existsSync(hooksDir)) {
   const registeredScripts = new Set(
     registered
@@ -1263,6 +1349,51 @@ if (managedOverBudget.length > 0 && wants('budget')) {
 const CODE_SPAN = /`([^`\n]+)`/g;
 const PATH_SHAPE = /^[\w.@/-]+$/;
 
+// The main checkout when root is a linked worktree, else null.
+let mainCheckoutCache;
+
+function mainCheckout() {
+  if (mainCheckoutCache !== undefined) {
+    return mainCheckoutCache;
+  }
+
+  mainCheckoutCache = null;
+
+  try {
+    const [gitDir, commonDir] = execFileSync('git', ['rev-parse', '--git-dir', '--git-common-dir'], { cwd: root, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] })
+      .trim().split('\n').map((dir) => resolve(root, dir));
+
+    if (gitDir !== commonDir && basename(commonDir) === '.git') {
+      mainCheckoutCache = dirname(commonDir);
+    }
+  } catch {
+    // not a git checkout: nothing to fall back to
+  }
+
+  return mainCheckoutCache;
+}
+
+// Run from a linked worktree, a reference to per-checkout state the main
+// checkout holds (`.claude/worktrees`, where the worktrees themselves live)
+// does not resolve, because that state never travels with a branch (issue
+// #228). Such a path exists in the main checkout and git does not track it
+// there. A tracked path missing here is still dead: this branch removed it.
+function perCheckoutInMain(raw) {
+  const main = mainCheckout();
+
+  if (!main || !existsSync(join(main, raw))) {
+    return false;
+  }
+
+  try {
+    execFileSync('git', ['ls-files', '--error-unmatch', '--', raw], { cwd: main, stdio: 'pipe' });
+
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 // Only a token that (a) looks like a path, (b) does not resolve, and (c) whose
 // parent directory does exist. That last condition is what keeps the false
 // positive rate down: a reference into a tree that is absent entirely is
@@ -1291,7 +1422,7 @@ function deadPathRefs(source) {
     if (looksLikePath) {
       const target = join(root, raw);
 
-      if (!existsSync(target) && existsSync(dirname(target))) {
+      if (!existsSync(target) && existsSync(dirname(target)) && !perCheckoutInMain(raw)) {
         dead.push(raw);
       }
     }

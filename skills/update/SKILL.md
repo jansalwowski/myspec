@@ -116,11 +116,11 @@ If a destination file doesn't exist for `marker-merge`, create it from the sourc
 node .claude/lib/setup-doctor.mjs --plugin-root "${CLAUDE_PLUGIN_ROOT}" wiring
 ```
 
-For each `wiring-incomplete` finding, add the entry from `templates/settings-hooks.json` under the same event (deep-merge: append to the existing array for that event and matcher, create the event when absent, match existing entries by the hook script the `command` runs, not the raw string — `"$CLAUDE_PROJECT_DIR"/.claude/hooks/x.sh` and a pre-2.2 install's bare `.claude/hooks/x.sh` are the same hook, and a literal comparison would wire it a second time). For each hook deleted by a `removed` entry, delete its `command` entries. If the file has no `hooks` key, add the template's whole block. Never add, remove, or reorder anything outside `hooks`, and never touch `settings.local.json`. Re-run the same command afterwards: `wiring-incomplete` must be gone; report what remains (`hook-not-executable`, `hook-syntax`) with the `run:` line it carries.
+For each `wiring-incomplete` finding, add the entry from `templates/settings-hooks.json` under the same event (deep-merge: append to the existing array for that event and matcher, create the event when absent, match existing entries by the hook script the `command` runs, not the raw string — `"$CLAUDE_PROJECT_DIR"/.claude/hooks/x.sh` and a pre-2.2 install's bare `.claude/hooks/x.sh` are the same hook, and a literal comparison would wire it a second time). For each hook deleted by a `removed` entry, delete its `command` entries. If the file has no `hooks` key, add the template's whole block. For each `hook-command-relative` finding on `.claude/settings.json` whose script is under `.claude/hooks/`, rewrite that `command` in place: put `"$CLAUDE_PROJECT_DIR"/` before the script path (drop a leading `./`), keep any interpreter and arguments, and leave the entry where it is. A bare relative command resolves against the session's cwd, so once a session leaves the repo root the hook fails, and a failing Stop hook is non-blocking: the verification gate is skipped silently. Rewrite, never add: if the same event and matcher already run that script in the `"$CLAUDE_PROJECT_DIR"` form, delete the bare entry instead of keeping both, or the hook runs twice. Never add, remove, or reorder anything else outside `hooks`, and never touch `settings.local.json` (report its relative commands with their `fix:` line). Re-run the same command afterwards: `wiring-incomplete` and the `settings.json` `hook-command-relative` findings must be gone; report what remains (`hook-not-executable`, `hook-syntax`) with the `run:` line it carries.
 
 **State gitignore (only if hooks were processed).** Ensure `.gitignore` contains a `.claude/state/` line; append it if missing (create `.gitignore` if absent). The hooks write per-checkout state there (session logs, isolation decisions, field metrics in `.claude/state/metrics/`), and the metrics recorder refuses to write while the line is missing.
 
-If the doctor is not on disk yet (this run is what installs it), do the comparison by hand this once: for each `command` in the template, take the `.claude/hooks/*.sh` path it runs and check whether any command under the project's `settings.json` `hooks` key runs that same script — ignoring quotes and a leading `"$CLAUDE_PROJECT_DIR"/` — and add only the ones absent by that test. Comparing the raw strings duplicates every hook on an install that predates the template switch.
+If the doctor is not on disk yet (this run is what installs it), do the comparison by hand this once: for each `command` in the template, take the `.claude/hooks/*.sh` path it runs and check whether any command under the project's `settings.json` `hooks` key runs that same script — ignoring quotes and a leading `"$CLAUDE_PROJECT_DIR"/` — and add only the ones absent by that test. Comparing the raw strings duplicates every hook on an install that predates the template switch. Then rewrite each bare `.claude/hooks/*.sh` command to the `"$CLAUDE_PROJECT_DIR"/` form by the rule above.
 
 ### Step 3.6: Check memory health
 
@@ -156,7 +156,7 @@ Read the result as a checklist of this run:
 - `marker-missing` → a `marker-merge` file has no `<!-- myspec:framework-start -->` / `<!-- myspec:framework-end -->` markers and the replace / prepend / pin choice in Step 3 was not applied. Either the question was skipped (ask it now) or the user gave no answer (report it; the file stays untouched and does not block the stamp).
 - `framework-renamed` → an old filename is still on disk. Either the Step 2 move did not happen (do it now) or both names exist and the user declined the merge (report it).
 - `shipped-drift` / `shipped-missing` on `.claude/hooks/*` or `.claude/lib/*` → a hook or helper is stale or absent; these are `overwrite` entries, so re-copy.
-- Anything in the `schema` or `features` group → fix before finishing; an unparseable `.myspec.json` or `verification.json` silently disables the surfaces that read it, and an entry the features parser cannot read is invisible to every status audit. Exception: `note-over-cap` / `note-volatile` are project content, not install state — report them and leave the notes alone.
+- Anything in the `schema` or `features` group → fix before finishing; an unparseable `.myspec.json` or `verification.json` silently disables the surfaces that read it, and an entry the features parser cannot read is invisible to every status audit. Exception: `note-over-cap` / `note-volatile` / `manifest-unknown-key` are project content, not install state — report them and leave the notes alone.
 
 Report the summary line in Step 6. `myspec-schema-stale` cannot appear here: Step 1.5 ran the schema migration first. If it does, that migration did not complete — re-run it before stamping.
 
@@ -209,7 +209,7 @@ Pinned (skipped — locally customized):
 
 Hooks: {updated N scripts / skipped — hooks directory not found}
 Lib:   {updated N helpers / skipped — hooks directory not found}
-Hook wiring: {all N hooks already wired / added M entries, removed K / N finding(s) remain — see above}
+Hook wiring: {all N hooks already wired / added M entries, rewrote R to "$CLAUDE_PROJECT_DIR", removed K / N finding(s) remain — see above}
 Memory: {indexes up to date / regenerated N, backfilled M hook: lines (K from heading — review) / skipped — no memory tree}
         doctor: {clean / N error(s), M warning(s) — see above}
 Setup:  {clean / N error(s), M warning(s) — see above / skipped — node not found}
@@ -274,7 +274,7 @@ After running the skill:
 - [ ] Memory health checked when a memory tree exists: `--check` clean (after regeneration or backfill where needed), doctor summary reported, `.claude/state/` gitignored
 - [ ] `${aiDir}` binding refreshed between `myspec:paths` markers; content outside markers unchanged
 - [ ] `.myspec.json` `frameworkVersion` bumped; project fields (`name`, `description`, `techStack`) untouched; `frameworkFiles` holds pins only
-- [ ] Hook wiring run via `setup-doctor.mjs wiring` (or by hand when the doctor was not yet installed): missing template entries added and removed hooks unwired under `settings.json` `hooks`, nothing else in that file touched, `wiring-incomplete` gone on re-run; `.gitignore` has a `.claude/state/` line
+- [ ] Hook wiring run via `setup-doctor.mjs wiring` (or by hand when the doctor was not yet installed): missing template entries added, bare `.claude/hooks/` commands rewritten to `"$CLAUDE_PROJECT_DIR"/` without duplicating an entry, removed hooks unwired under `settings.json` `hooks`, nothing else in that file touched, `wiring-incomplete` and `hook-command-relative` gone on re-run; `.gitignore` has a `.claude/state/` line
 - [ ] Full `setup-doctor.mjs` run in Step 3.7, before the Step 5 version stamp; every `install`-, `schema`- and `features`-group error resolved or reported
 - [ ] No file outside `manifest.json` was modified, except `settings.json` `hooks` and the doctor-rule rename
 - [ ] Summary printed with `Updated files`, `Migrations`, `Removed`, `Preserved`, `Hooks`, `Lib`, and `Hook wiring` lines

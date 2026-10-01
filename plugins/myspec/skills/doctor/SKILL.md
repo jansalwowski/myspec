@@ -106,7 +106,7 @@ is left is judgment:
 
 **F. Features tree + ideas** — `${aiDir}/features/`, `${aiDir}/ideas/` (structural pass, don't deep-read specs):
 - Run the feature-status-audit engine first: `node "${CLAUDE_PLUGIN_ROOT}/lib/feature-status-audit/audit.mjs"` — it owns manifest ↔ disk drift, orphans, status vocabulary, missing docs
-- Tier 0 `note-over-cap` / `note-volatile` own manifest `note:` length and PR/SHA state; the fix replaces the note with one line of current state and moves history to the feature `CHANGELOG.md`
+- Tier 0 `note-over-cap` / `note-volatile` own manifest `note:` length and PR/SHA state, and `manifest-unknown-key` a near-miss spelling (`notes:`) those checks would skip; the fix replaces the note with one line of current state and moves history to the feature `CHANGELOG.md`
 - Add only what the scripts don't cover: notes under the cap that still narrate history; largest-file outliers; index freshness (spot-check 3 mapped paths); ideas queue vs shipped reality
 
 ### Phase 2 — Verify and rank
