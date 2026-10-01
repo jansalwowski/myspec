@@ -236,6 +236,30 @@ check_in "$REPO" block "worktree prune"       wt-sess 'git worktree prune'
 check_in "$REPO" block "after && (cd inside main)" wt-sess 'cd .claude && yarn build'
 check_in "$REPO" block "project blockInMain"  wt-sess 'make deploy'
 
+# Issue #164: build targets and container execs run against the main tree too.
+check_in "$REPO" block "yarn build:<target>"          wt-sess 'yarn build:web'
+check_in "$REPO" block "npm run build:<target>"       wt-sess 'npm run build:prod'
+check_in "$REPO" block "npm run-script build"         wt-sess 'npm run-script build'
+check_in "$REPO" block "composer build script"        wt-sess 'composer build'
+check_in "$REPO" block "composer run-script build:x"  wt-sess 'composer run-script build:prod'
+check_in "$REPO" block "docker compose exec"          wt-sess 'docker compose exec app php artisan migrate'
+check_in "$REPO" block "docker-compose exec"          wt-sess 'docker-compose exec app ls'
+check_in "$REPO" block "docker compose -f f exec"     wt-sess 'docker compose -f compose.dev.yml exec app ls'
+check_in "$REPO" block "docker compose --ansi never exec" wt-sess 'docker compose --ansi never exec -T app ls'
+check_in "$REPO" allow "docker compose ps"            wt-sess 'docker compose ps'
+check_in "$REPO" allow "docker compose logs"          wt-sess 'docker compose logs app'
+check_in "$REPO" allow "exec named as an argument"    wt-sess 'docker compose logs exec'
+check_in "$REPO" allow "a script merely named build-ish" wt-sess 'yarn builder'
+
+# Issue #223: a dry-run prune only reports.
+check_in "$REPO" allow "worktree prune --dry-run"     wt-sess 'git worktree prune --dry-run'
+check_in "$REPO" allow "worktree prune -n"            wt-sess 'git worktree prune -n'
+check_in "$REPO" allow "worktree prune -nv"           wt-sess 'git worktree prune -nv'
+check_in "$REPO" allow "worktree prune -v --dry-run"  wt-sess 'git worktree prune -v --dry-run'
+check_in "$REPO" block "worktree prune -v"            wt-sess 'git worktree prune -v'
+check_in "$REPO" block "worktree prune --expire"      wt-sess 'git worktree prune --expire now'
+check_in "$REPO" block "dry run, then a real prune"   wt-sess 'git worktree prune -n && git worktree prune'
+
 # --- gate B, worktree mode: these stay allowed on purpose --------------------
 check_in "$REPO" allow "read-only lint"       wt-sess 'yarn lint'
 check_in "$REPO" allow "dev server"           wt-sess 'yarn dev'
@@ -264,6 +288,33 @@ rm -f "$REPO/.claude/state/isolation/"*.json
 check_in "$REPO" allow "no decision recorded"  none-sess 'yarn build'
 mark old-sess worktree 30000 "/tmp/wt/old"
 check_in "$REPO" allow "expired decision"      old-sess 'yarn build'
+
+# --- issue #146: only a subagent inherits another session's answer ----------
+check_as() {  # check_as <want> <desc> <session-id> <command> <extra input fields as JSON>
+  local want="$1" desc="$2" sid="$3" cmd="$4" extra="$5" got out rc
+  out=$(jq -cn --arg c "$REPO" --arg s "$sid" --arg k "$cmd" --argjson x "$extra" \
+    '{tool_input: {command: $k}, cwd: $c, session_id: $s} + $x' | "$HOOK")
+  rc=$?
+  if printf '%s' "$out" | grep -q '"block"'; then got=block
+  elif [ "$rc" -eq 0 ] && [ -z "$out" ]; then got=allow
+  else got="noisy"; fi
+  if [ "$got" = "$want" ]; then
+    PASS=$((PASS + 1))
+  else
+    FAIL=$((FAIL + 1))
+    printf 'FAIL  want=%-5s got=%-5s  %s\n      cmd: %s\n      rc=%s stdout: %s\n' \
+      "$want" "$got" "$desc" "$cmd" "$rc" "$out" >&2
+  fi
+}
+rm -f "$REPO/.claude/state/isolation/"*.json
+mark other-sess worktree 60 "/tmp/wt/other"
+check_as allow "top-level session ignores another session's worktree marker" fresh-sess 'yarn build' '{}'
+check_as block "subagent (agent_id) inherits it"         child-sess 'yarn build' '{"agent_id":"a1","agent_type":"general-purpose"}'
+check_as block "subagent (agent_type only) inherits it"  child-sess 'yarn build' '{"agent_type":"Explore"}'
+check_as allow "empty agent fields are a top-level session" fresh-sess 'yarn build' '{"agent_id":"","agent_type":""}'
+mark old-sess worktree 20000 "/tmp/wt/old"
+check_as allow "subagent, newest marker past the inherit window" child-sess 'yarn build' '{"agent_id":"a1"}'
+rm -f "$REPO/.claude/state/isolation/"*.json
 
 # --- the block names the recorded worktree -----------------------------------
 mark path-sess worktree 60 "/tmp/wt/feature-x"

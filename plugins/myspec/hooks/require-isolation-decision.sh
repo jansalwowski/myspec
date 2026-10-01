@@ -11,11 +11,14 @@
 # Marker: .claude/state/isolation/<session_id>.json  (gitignored), written by
 # .claude/lib/set-isolation.sh.
 #
-# Subagents get their own session_id from the harness and cannot call
-# AskUserQuestion. Rather than prompting, they inherit the newest develop-mode
-# marker written within INHERIT_TTL. Consequence: a fresh top-level session
-# started within that window silently inherits the previous answer instead of
-# asking. Run `.claude/lib/set-isolation.sh --reset <session_id>` to force a re-ask.
+# Subagents cannot call AskUserQuestion. Rather than prompting, a subagent with
+# no marker of its own inherits the newest marker written within INHERIT_TTL.
+# Only a subagent does: inside one the hook input carries `agent_id` or
+# `agent_type`. A top-level session (neither field) with no marker of its own
+# is asked, never handed another session's answer (issue #146). Whether a
+# subagent shares its parent's session_id is unsettled (issue #225); either way
+# it lands on the parent's decision, through branch 1 if the id is shared and
+# branch 2 if it is not.
 #
 # Configuration (all optional, .myspec.json):
 #   aiDir                       doc tree; edits there never trigger the prompt
@@ -87,6 +90,8 @@ JSON
 
 FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
+# Non-empty only inside a subagent. Gates inheritance (branch 2).
+SUBAGENT=$(printf '%s' "$INPUT" | jq -r '[.agent_id, .agent_type] | map(strings | select(. != "")) | first // empty' 2>/dev/null || printf '')
 
 if [ -z "$FILE_PATH" ]; then
   approve
@@ -96,13 +101,24 @@ if ! REPO_ROOT="$(resolve_repo_root)"; then
   approve
 fi
 
+# The cwd is a linked worktree. That says nothing about the edited file: an
+# absolute path can still point into the main checkout, which is the edit a
+# worktree answer forbids (issue #224). Judge it against the main checkout the
+# worktree belongs to; a file inside the worktree is approved below by its own
+# root. A submodule also has a .git file, but its common dir is not a `.git`
+# directory, so it keeps the approve.
+CWD_ROOT="$REPO_ROOT"
+if [ -f "$REPO_ROOT/.git" ]; then
+  COMMON=$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || printf '')
+  if [ -n "$COMMON" ] && [ -d "$COMMON" ] && [ "$(basename "$COMMON")" = ".git" ]; then
+    REPO_ROOT=$(dirname "$COMMON")
+  else
+    approve
+  fi
+fi
+
 # Only a myspec project carries the isolation contract.
 [ -f "$REPO_ROOT/.myspec.json" ] || approve
-
-# Inside a worktree — the isolation decision is already made by construction.
-if [ -f "$REPO_ROOT/.git" ]; then
-  approve
-fi
 
 # aiDir is required since 2.0; .ai is the documented default when absent.
 AI_DIR=$(jq -r '.aiDir // empty' "$REPO_ROOT/.myspec.json" 2>/dev/null)
@@ -146,7 +162,7 @@ MAIN_CHECKOUT_ONLY_PREFIXES=(
 
 case "$FILE_PATH" in
   /*) ABS_PATH="$FILE_PATH" ;;
-  *)  ABS_PATH="$REPO_ROOT/$FILE_PATH" ;;
+  *)  ABS_PATH="$CWD_ROOT/$FILE_PATH" ;;
 esac
 
 # A linked worktree lives INSIDE the repo (<worktreeRoot>/<slug>/), so a file
@@ -236,7 +252,8 @@ if [ -n "$SESSION_ID" ] && [ -f "$STATE_DIR/${SESSION_ID}.json" ]; then
 fi
 
 # 2. Inherited decision — subagents cannot prompt, so they follow the parent.
-if [ -d "$STATE_DIR" ]; then
+#    A top-level session never inherits; it falls through to the ask.
+if [ -n "$SUBAGENT" ] && [ -d "$STATE_DIR" ]; then
   # shellcheck disable=SC2012 # ls -t is the portable mtime sort; the names are generated session ids
   NEWEST=$(ls -t "$STATE_DIR"/*.json 2>/dev/null | head -1 || printf '')
 

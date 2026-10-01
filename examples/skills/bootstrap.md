@@ -98,6 +98,7 @@ Both doctors run and both come back clean, so neither adds a line beyond its sum
 - **Topology file matters.** Knowing the protected paths *before* starting work prevents accidents like Claude editing a secrets template.
 - **Active-session detection is part of bootstrap, not a separate step.** Sessions left around from interrupted work need acknowledgment before the new task — otherwise the new work pollutes the old session log.
 - **The agent notes the session staleness check.** "Topic still says auto:" is a clue that the previous work didn't finish properly. User decides whether to close it.
+- **The listed file is not proof of identity.** `2026-04-30-1027-uierror.md` may belong to another session in the same checkout, so bootstrap never passes its id to `set-isolation.sh`. When the first source edit hits the isolation gate, the id comes from that block message.
 
 ---
 
