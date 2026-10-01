@@ -15,7 +15,8 @@
 # isolation.provision.symlink entry, plus node_modules, vendor,
 # vendor-bin/*/vendor, .venv, venv) is a symlink into a checkout whose
 # lockfiles for it differ from this tree, or whose tree loads that checkout's
-# own source. In a linked worktree, a check that runs `docker compose exec`
+# own source. In a linked worktree (or a submodule inside one), a check that
+# runs a container exec (docker exec, docker compose exec, podman exec, ...)
 # without -w/--workdir is refused as unverifiable, not run.
 
 set -euo pipefail
@@ -354,15 +355,24 @@ symlink_entries() {
 # identical the lockfiles are. Composer writes the root package's autoload
 # rules against $baseDir, which PHP resolves through the link; an editable
 # Python install (poetry, uv, pip -e) records its source in direct_url.json.
-# A workspace link is a symlink in the tree's top two levels (<name>,
-# @scope/<name>, vendor/<name>) whose target leaves the tree: an npm, Yarn,
-# pnpm or Bun workspace package, a Composer path repository. A relative one
-# resolves from the physical tree, so through a link it lands in the other
-# checkout's packages. Only targets that can leave the tree (absolute, or
-# climbing above the link's own level) are resolved, which keeps the scan to
-# a handful of links in a tree of thousands.
+# A workspace link is a directory symlink in the tree's top two levels
+# (<name>, @scope/<name>, vendor/<name>), or in a nested link directory
+# (NESTED_LINK_DIRS), that resolves out of the tree: an npm, Yarn, pnpm or
+# Bun workspace package, a Composer path repository. A relative one resolves
+# from the physical tree, so through a link it lands in the other checkout's
+# packages. Every such link is resolved physically, because its text says
+# little about where it lands (.., ./../x, a/../../x, or a hop into a deeper
+# link that leaves the tree). The cd calls run in one subshell, so a tree of
+# thousands of links costs no fork per link. A find that fails (one without
+# -mindepth, say) counts as loading: an unscanned tree is never accepted.
+# NESTED_LINK_DIRS are tree-relative directories that hold links of their
+# own one or two levels down, such as the pnpm hidden hoist
+# (.pnpm/node_modules/@scope/<name>, four levels below the tree). Data, so
+# another layout is one more entry.
+NESTED_LINK_DIRS=".pnpm/node_modules"
 tree_loads_checkout() {
-  local tree="$1" checkout="$2" f url dir real
+  local tree="$1" checkout="$2" f url dir real links nested
+  local -a nests
   # shellcheck disable=SC2016 # the literal $baseDir text Composer writes, not a variable
   grep -qsF '$baseDir . ' "$tree"/composer/autoload_*.php && return 0
   for f in "$tree"/lib/python*/site-packages/*.dist-info/direct_url.json; do
@@ -373,15 +383,23 @@ tree_loads_checkout() {
     case "$dir/" in "$checkout"/*) return 0 ;; esac
   done
   real=$(cd "$tree" 2>/dev/null && pwd -P) || return 1
-  while IFS= read -r f; do
-    dir=$(cd "$f" 2>/dev/null && pwd -P) || continue
-    case "$dir/" in
-      "$real"/*) ;;
-      "$checkout"/*) return 0 ;;
-    esac
-  done < <(find -H "$tree" -mindepth 1 -maxdepth 1 -type l \( -lname '/*' -o -lname '../*' \) 2>/dev/null
-           find -H "$tree" -mindepth 2 -maxdepth 2 -type l \( -lname '/*' -o -lname '../../*' \) 2>/dev/null)
-  return 1
+  links=$(find "$real" -mindepth 1 -maxdepth 2 -type l 2>/dev/null) || return 0
+  read -ra nests <<< "$NESTED_LINK_DIRS"
+  for nested in ${nests[@]+"${nests[@]}"}; do
+    [ -d "$real/$nested" ] || continue
+    links="$links"$'\n'$(find "$real/$nested" -mindepth 1 -maxdepth 2 -type l 2>/dev/null) || return 0
+  done
+  (
+    while IFS= read -r f; do
+      [ -n "$f" ] || continue
+      cd -P "$f" 2>/dev/null || continue
+      case "$PWD/" in
+        "$real"/*) ;;
+        "$checkout"/*) exit 0 ;;
+      esac
+    done <<< "$links"
+    exit 1
+  )
 }
 # END dependency-lockfile map
 
@@ -756,34 +774,67 @@ attribute_failures() {
   rm -f "$tfile" "$ffile"
 }
 
-# Container checks in a linked worktree (#220). `docker compose exec` runs in
-# the container's working directory, which mounts the checkout the compose
-# project was started from (as a rule the main checkout), and compose names
-# the project after the directory it runs in. From a linked worktree the check
-# either finds no running service (a false failure) or, once pointed at the
-# right project, lints and tests the main checkout's tree (a false pass).
-# Such a check is refused as unverifiable instead of run, unless it passes
-# -w/--workdir, which says where in the container this tree is.
+# Container checks in a linked worktree (#220). A container exec runs in the
+# container's working directory, which mounts the checkout the container (or
+# compose project) was started from, as a rule the main checkout. A named
+# container does not depend on the cwd at all, and compose names the project
+# after the directory it runs in. From a linked worktree the check either
+# finds no running service (a false failure) or lints and tests the main
+# checkout's tree (a false pass). Such a check is refused as unverifiable
+# instead of run, unless its exec options pass -w/--workdir. That -w is
+# trusted, not verified: nothing here knows what the container mounts there.
 
-# is_linked_worktree <dir> -> 0 when <dir> is a linked worktree, not a main
-# checkout (or a submodule, whose git dir is its common dir).
+# The exec forms, as the program and its subcommand words joined by ":"
+# (program options between them are skipped). Data, so another engine or
+# wrapper is one more entry.
+CONTAINER_EXEC_FORMS="docker:exec docker:container:exec docker:compose:exec docker-compose:exec podman:exec podman:container:exec podman:compose:exec podman-compose:exec"
+# Options that take a separate value, among the program options and the exec
+# options. Any other option is read as a flag. -w/--workdir is handled apart.
+CONTAINER_VALUE_OPTS="-f --file -p --project-name --project-directory --env-file --profile --ansi --progress --parallel -H --host -c --context --config -l --log-level --connection --url --identity --root --runroot -e --env -u --user --index --detach-keys --preserve-fds"
+# The short options among those, for a cluster such as -it or -Tw.
+CONTAINER_VALUE_SHORT="fpHcleu"
+
+# is_linked_worktree <dir> -> 0 when <dir> is a linked worktree, or a
+# submodule checked out inside one, not a main checkout. A submodule's git
+# dir is its own common dir, so its superproject decides: a submodule of a
+# linked worktree sits in that worktree's tree, and the containers its
+# checks reach were started from the main checkout's copy.
 is_linked_worktree() {
-  local gd cd_
+  local gd cd_ sp
   gd=$(git -C "$1" rev-parse --git-dir 2>/dev/null) || return 1
   [ -n "$gd" ] || return 1
   gd=$(cd "$1" && cd "$gd" && pwd -P) || return 1
   cd_=$(physical_common_dir "$1" 2>/dev/null) || return 1
-  [ -n "$cd_" ] && [ "$gd" != "$cd_" ]
+  [ -n "$cd_" ] || return 1
+  [ "$gd" != "$cd_" ] && return 0
+  sp=$(git -C "$1" rev-parse --show-superproject-working-tree 2>/dev/null) || return 1
+  [ -n "$sp" ] && is_linked_worktree "$sp"
 }
 
-# compose_exec_unpinned <command> -> 0 when one of the command's simple
-# commands is `docker compose exec` or `docker-compose exec` whose options
-# (those before the service name) carry no -w/--workdir. A -w after the
-# service name belongs to the command run in the container, so it does not
-# count. Quotes are dropped, so a `bash -c "docker compose exec ..."` is read
-# too.
-compose_exec_unpinned() {
-  local cmd="$1" seg i n docker
+# exec_short_cluster <-abc> -> 0 when the cluster sets the workdir (a w in
+# it), 1 when its last option takes the next word as its value, 2 otherwise.
+# As in the engines' flag parsers, the rest of a cluster after an option that
+# takes a value is that value (-ew is -e w, not -e -w).
+exec_short_cluster() {
+  local s="${1#-}" c
+  while [ -n "$s" ]; do
+    c=${s:0:1}
+    s=${s:1}
+    [ "$c" = w ] && return 0
+    case "$CONTAINER_VALUE_SHORT" in
+      *"$c"*) [ -n "$s" ] && return 2; return 1 ;;
+    esac
+  done
+  return 2
+}
+
+# container_exec_unpinned <command> -> 0 when one of the command's simple
+# commands is a container exec (CONTAINER_EXEC_FORMS) whose exec options,
+# those before the container or service name, carry no -w/--workdir. A -w
+# after the name belongs to the command run in the container, so it does not
+# count. Quotes are dropped, so a `bash -c "docker exec ..."` is read too.
+container_exec_unpinned() {
+  local cmd="$1" seg i n word path state rc
   local -a t
   cmd=${cmd//&&/$'\n'}
   cmd=${cmd//||/$'\n'}
@@ -791,39 +842,42 @@ compose_exec_unpinned() {
   cmd=${cmd//[\"\']/}
   while IFS= read -r seg; do
     read -ra t <<< "$seg"
-    n=${#t[@]}
-    i=0 docker=0
-    # Find compose: a docker-compose token, or compose after a docker token.
+    n=${#t[@]} i=0 path="" state=scan
     while [ "$i" -lt "$n" ]; do
-      case "${t[$i]}" in
-        docker-compose|*/docker-compose) break ;;
-        docker|*/docker) docker=1 ;;
-        compose) [ "$docker" -eq 1 ] && break ;;
-      esac
+      word=${t[$i]}
       i=$((i + 1))
-    done
-    [ "$i" -lt "$n" ] || continue
-    # Compose's own options, then the subcommand.
-    i=$((i + 1))
-    while [ "$i" -lt "$n" ]; do
-      case "${t[$i]}" in
-        -f|--file|-p|--project-name|--project-directory|--env-file|--profile|--ansi|--progress|--parallel) i=$((i + 2)) ;;
-        -*) i=$((i + 1)) ;;
-        *) break ;;
+      case "$state" in
+        scan)
+          case " $CONTAINER_EXEC_FORMS " in
+            *" ${word##*/}:"*) path=${word##*/} state=words ;;
+          esac ;;
+        words)
+          case "$word" in
+            -*) case " $CONTAINER_VALUE_OPTS " in *" $word "*) i=$((i + 1)) ;; esac ;;
+            *)
+              path="$path:$word"
+              case " $CONTAINER_EXEC_FORMS " in
+                *" $path "*) state=opts ;;
+                *" $path:"*) ;;
+                *) state=scan ;;
+              esac ;;
+          esac ;;
+        opts)
+          case "$word" in
+            --workdir|--workdir=*) continue 2 ;;
+            --*) case " $CONTAINER_VALUE_OPTS " in *" $word "*) i=$((i + 1)) ;; esac ;;
+            -?*)
+              rc=0
+              exec_short_cluster "$word" || rc=$?
+              case "$rc" in
+                0) continue 2 ;;
+                1) i=$((i + 1)) ;;
+              esac ;;
+            *) return 0 ;;
+          esac ;;
       esac
     done
-    if [ "$i" -ge "$n" ] || [ "${t[$i]}" != exec ]; then continue; fi
-    # exec's options, up to the service name.
-    i=$((i + 1))
-    while [ "$i" -lt "$n" ]; do
-      case "${t[$i]}" in
-        -w|-w?*|--workdir|--workdir=*) continue 2 ;;
-        -e|--env|-u|--user|--index) i=$((i + 2)) ;;
-        -*) i=$((i + 1)) ;;
-        *) break ;;
-      esac
-    done
-    return 0
+    [ "$state" = opts ] && return 0
   done <<< "$cmd"
   return 1
 }
@@ -939,9 +993,9 @@ for i in $(seq 0 $((CHECKS_COUNT - 1))); do
     COMMAND="$DIFF_COMMAND"
   fi
 
-  if [ "$ROOT_IS_LINKED" -eq 1 ] && compose_exec_unpinned "$COMMAND"; then
+  if [ "$ROOT_IS_LINKED" -eq 1 ] && container_exec_unpinned "$COMMAND"; then
     UNVERIFIABLE_CHECKS+=("$NAME")
-    FAILED_OUTPUT+=("[$NAME not run: unverifiable in a linked worktree] $COMMAND runs docker compose exec without -w/--workdir, so it runs in the container's working directory. That directory mounts the checkout the compose project was started from (as a rule the main checkout), not $REPO_ROOT, so a result would describe another tree; and compose names the project after the directory it runs in, so from here it may find no running service at all. This is not a test failure. Make the check verify this worktree (mount it in the container and pass -w/--workdir with its path there, or run the tool on the host), then report its real result.")
+    FAILED_OUTPUT+=("[$NAME not run: unverifiable in a linked worktree] $COMMAND runs a container exec (docker exec, docker compose exec, podman exec and the like) without -w/--workdir, so it runs in the container's working directory. That directory mounts the checkout the container or compose project was started from (as a rule the main checkout), not $REPO_ROOT, so a result would describe another tree; and compose names the project after the directory it runs in, so from here it may find no running service at all. This is not a test failure. Make the check verify this worktree (mount it in the container and pass -w/--workdir with its path there, or run the tool on the host), then report its real result. The gate trusts a -w/--workdir without verifying it: it cannot see what the container mounts at that path, so the path must be this worktree's mount.")
     continue
   fi
 

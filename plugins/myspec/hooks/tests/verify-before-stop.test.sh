@@ -281,6 +281,79 @@ expect approve "${r%%$'\t'*}" "worktree: docker compose run is not refused"
 r=$(compose_stop 116 "$MAIN_X" "docker compose exec svc make lint")
 expect approve "${r%%$'\t'*}" "main checkout: docker compose exec without -w runs as before"
 
+# Combined short flags: a w in a cluster takes the next word as the workdir;
+# after an option that takes a value, the rest of the cluster is that value.
+r=$(compose_stop 117 "$WT_X" "docker compose exec -Tw /srv/wt svc make lint")
+expect approve "${r%%$'\t'*}" "worktree: docker compose exec -Tw <dir> runs and passes"
+r=$(compose_stop 118 "$WT_X" "docker exec -itw/srv/wt app make lint")
+expect approve "${r%%$'\t'*}" "worktree: docker exec -itw<dir> runs and passes"
+r=$(compose_stop 119 "$WT_X" "docker compose exec -ew svc make lint")
+expect block "${r%%$'\t'*}" "worktree: -ew is -e w, not a workdir"
+
+# Every exec form in CONTAINER_EXEC_FORMS, not only compose (#220 review).
+printf '#!/bin/sh\nexit 0\n' > "$BIN/podman"
+cp "$BIN/podman" "$BIN/podman-compose"
+chmod +x "$BIN/podman" "$BIN/podman-compose"
+sid=120
+for c in "docker exec app make lint" \
+         "docker exec -it -e A=1 app make lint" \
+         "docker --context ci container exec app make lint" \
+         "podman exec app make lint" \
+         "podman container exec app make lint" \
+         "podman-compose exec svc make lint" \
+         "env $BIN/docker exec app make -w lint"; do
+  r=$(compose_stop "$sid" "$WT_X" "$c")
+  expect block "${r%%$'\t'*}" "worktree: '$c' without -w blocks"
+  case "$r" in *unverifiable*) ok ;; *) fail "worktree: '$c' is refused as unverifiable" ;; esac
+  sid=$((sid + 1))
+done
+for c in "docker exec -w /srv/wt app make lint" \
+         "podman exec --workdir /srv/wt app make lint" \
+         "docker run --rm -v .:/srv img make lint" \
+         "docker container ls" \
+         "docker compose ps"; do
+  r=$(compose_stop "$sid" "$WT_X" "$c")
+  expect approve "${r%%$'\t'*}" "worktree: '$c' runs"
+  sid=$((sid + 1))
+done
+r=$(compose_stop 140 "$WT_X" "docker exec app make lint")
+case "$r" in *"trusts a -w/--workdir without verifying it"*) ok ;; *) fail "worktree: the refusal says -w is trusted, not verified" ;; esac
+r=$(compose_stop 141 "$MAIN_X" "docker exec app make lint")
+expect approve "${r%%$'\t'*}" "main checkout: docker exec without -w runs as before"
+
+# A submodule inside a linked worktree is in that worktree: its git dir is
+# its own common dir, so the superproject decides (#220 review).
+SUBSRC="$ROOT/subsrc"
+mkdir -p "$SUBSRC/.claude"
+git init -q -b main "$SUBSRC"
+printf '{}\n' > "$SUBSRC/.claude/verification.json"
+git -C "$SUBSRC" add -A
+git -C "$SUBSRC" -c user.email=t@t -c user.name=t commit -q -m init
+git -C "$MAIN_X" -c protocol.file.allow=always submodule add -q "$SUBSRC" sub >/dev/null 2>&1
+git -C "$MAIN_X" commit -q -m "add sub"
+WT_XS="$ROOT/compose-sub-wt"
+git -C "$MAIN_X" worktree add -q -b feat-sub "$WT_XS" main
+git -C "$WT_XS" -c protocol.file.allow=always submodule update -q --init >/dev/null 2>&1
+[ -f "$WT_XS/sub/.claude/verification.json" ] && ok || fail "fixture: the linked worktree has its submodule checked out"
+r=$(compose_stop 142 "$WT_XS/sub" "docker compose exec svc make lint")
+expect block "${r%%$'\t'*}" "submodule of a linked worktree: docker compose exec without -w blocks"
+r=$(compose_stop 143 "$MAIN_X/sub" "docker compose exec svc make lint")
+expect approve "${r%%$'\t'*}" "submodule of the main checkout: docker compose exec without -w runs"
+
+# A find without -lname (BusyBox) still blocks the #229 repro (#229 review).
+REAL_FIND=$(command -v find)
+SHIM="$ROOT/find-shim"
+mkdir -p "$SHIM"
+# shellcheck disable=SC2016 # the shim's own "$@", expanded when it runs
+printf '#!/bin/sh\nfor a in "$@"; do [ "$a" = -lname ] && { echo "find: unrecognized: -lname" >&2; exit 1; }; done\nexec %s "$@"\n' "$REAL_FIND" > "$SHIM/find"
+chmod +x "$SHIM/find"
+rm "$MAIN_W/apps/web/node_modules/@acme/ui"
+ln -s ../../../../packages/ui "$MAIN_W/apps/web/node_modules/@acme/ui"
+touch "/tmp/.myspec-code-changed-$SID-144"
+d=$(printf '{"session_id":"%s-144","cwd":%s}' "$SID" "$(printf '%s' "$WT_W" | jq -Rs .)" \
+  | PATH="$SHIM:$PATH" bash "$HOOK" 2>/dev/null | jq -r '.decision')
+expect block "$d" "a find without -lname still blocks a workspace link into main"
+
 # --- memory gate: stale-ref ID collisions warn, they do not block (#124) -----
 # S001 is added on feat/a, merged, reverted on main and reused there; feat/c
 # and feat/d both take P001 and never merge. Touching the memory tree must not
