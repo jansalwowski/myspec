@@ -18,8 +18,9 @@
 #      Blocking those deletes unconditionally only taught agents to reach for
 #      the bypass (issue #126).
 #   B. When the session has chosen WORKTREE isolation, tree-specific commands
-#      are blocked as well: builds, installs, e2e runs, `lint:fix`, `git push`
-#      and `git worktree prune` silently target the wrong tree and are noticed
+#      are blocked as well: builds, installs, e2e runs, `lint:fix`,
+#      `docker compose exec`, `git push` and `git worktree prune` (not its
+#      `--dry-run`) silently target the wrong tree and are noticed
 #      only when the output looks wrong. `.myspec.json` `isolation.blockInMain`
 #      adds project patterns (anchored extended regexes over a command segment).
 #
@@ -92,6 +93,8 @@ fi
 INPUT=$(cat)
 COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
+# Non-empty only inside a subagent. Gates marker inheritance in gate B.
+SUBAGENT=$(printf '%s' "$INPUT" | jq -r '[.agent_id, .agent_type] | map(strings | select(. != "")) | first // empty' 2>/dev/null || printf '')
 
 [ -n "$COMMAND" ] || approve
 
@@ -162,8 +165,15 @@ BRANCH_PATTERNS=(
 BRANCH_CARVE_OUT='^git[[:space:]]+(rebase|merge)[[:space:]]+--(continue|abort|skip)[[:space:]]*$'
 
 # Commands whose result depends on which tree they run in, or which write to it.
+# `build` also covers a `build:<target>` script (`build:web`, `build:prod`):
+# projects whose builds are all targets otherwise got no gate B (issue #164).
+# `docker compose exec` runs inside the container of the compose project in
+# the current directory, which mounts that tree; global options before `exec`
+# (`-f <file>`, `--project-name <n>`) are looked through.
 HEAVY_PATTERNS=(
-  '^(yarn|npm|pnpm|bun)[[:space:]]+(run[[:space:]]+)?build([[:space:]]|$)'
+  '^(yarn|npm|pnpm|bun)[[:space:]]+((run|run-script)[[:space:]]+)?build([[:space:]]|:|$)'
+  '^composer[[:space:]]+((run|run-script)[[:space:]]+)?build([[:space:]]|:|$)'
+  '^(docker[[:space:]]+compose|docker-compose)([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+exec([[:space:]]|$)'
   '^(yarn|pnpm|bun)[[:space:]]+(install|add|upgrade|remove|dedupe|up)([[:space:]]|$)'
   '^npm[[:space:]]+(install|ci|i|uninstall|update)([[:space:]]|$)'
   '^(yarn|npm|pnpm|bun)[[:space:]]+(run[[:space:]]+)?test:e2e'
@@ -173,6 +183,11 @@ HEAVY_PATTERNS=(
   '^git[[:space:]]+push([[:space:]]|$)'
   '^git[[:space:]]+worktree[[:space:]]+prune([[:space:]]|$)'
 )
+
+# Built-in patterns above that a read-only form would otherwise trip.
+# `git worktree prune -n` / `--dry-run` only reports (issue #223). Not applied
+# to the project's own isolation.blockInMain patterns.
+HEAVY_CARVE_OUT='^git[[:space:]]+worktree[[:space:]]+prune([[:space:]]+[^[:space:]]+)*[[:space:]]+(-v*nv*|--dry-run)([[:space:]]|$)'
 
 # --- where does a segment run? -------------------------------------------------
 
@@ -328,7 +343,9 @@ session_mode() {
   fi
 
   # 2. Inherited decision — subagents cannot prompt, so they follow the newest
-  #    recent marker.
+  #    recent marker. A top-level session (no agent_id / agent_type in the
+  #    input) never inherits another session's answer (issue #146).
+  [ -n "$SUBAGENT" ] || return 0
   # shellcheck disable=SC2012 # ls -t is the portable mtime sort; the names are generated session ids
   newest=$(ls -t "$state_dir"/*.json 2>/dev/null | head -1 || printf '')
   if [ -n "$newest" ] && [ -f "$newest" ]; then
@@ -409,14 +426,19 @@ check_segment() {
   session_mode "$CLS_ROOT"
   [ "$MODE" = "worktree" ] || return 0
 
-  patterns=("${HEAVY_PATTERNS[@]}")
+  if matches_any "$segment" "${HEAVY_PATTERNS[@]}" \
+      && ! printf '%s' "$segment" | grep -qE -- "$HEAVY_CARVE_OUT"; then
+    block_heavy "$CLS_ROOT" "$segment"
+  fi
+
+  patterns=()
   if [ -f "$CLS_ROOT/.myspec.json" ]; then
     while IFS= read -r extra; do
       [ -n "$extra" ] && patterns+=("$extra")
     done < <(jq -r '.isolation.blockInMain // [] | .[] | select(type == "string")' "$CLS_ROOT/.myspec.json" 2>/dev/null)
   fi
 
-  if matches_any "$segment" "${patterns[@]}"; then
+  if [ "${#patterns[@]}" -gt 0 ] && matches_any "$segment" "${patterns[@]}"; then
     block_heavy "$CLS_ROOT" "$segment"
   fi
 }
