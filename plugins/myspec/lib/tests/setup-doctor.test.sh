@@ -117,6 +117,7 @@ expect_no_line 'framework files over their always-loaded budget' "no plugin-owne
 expect_no_line 'hook-missing' "the template's \$CLAUDE_PROJECT_DIR hook commands resolve"
 expect_no_line 'hook-unregistered' "every shipped hook is recognised as wired"
 expect_no_line 'wiring-incomplete' "settings written from the template is fully wired"
+expect_no_line 'hook-command-relative' "the template's \$CLAUDE_PROJECT_DIR commands are not reported as relative"
 expect_line 'setup doctor: 0 error\(s\)' "summary counts zero errors"
 
 # The stop hook runs exactly these two groups; they must be silent on a clean
@@ -133,6 +134,9 @@ expect_no_line '^ERROR' "the blocking groups report no errors on a clean install
 # covers that shipped form. Every install written before the switch still holds
 # the relative one, and update must not treat it as unwired: the two spellings
 # name the same file, so a literal comparison would wire each hook a second time.
+# It is still reported, as hook-command-relative, so update rewrites it: once a
+# session cd's into a subdirectory the bare command fails, and a failing Stop
+# hook is non-blocking, so the verification gate is skipped silently (#217).
 cp "$REPO/.claude/settings.json" "$ROOT/settings-projectdir.json"
 # shellcheck disable=SC2016 # literal text, not an expansion
 set_json .claude/settings.json '
@@ -151,6 +155,9 @@ expect_exit 0 "hooks registered in the legacy relative form exit 0"
 expect_no_line 'hook-missing' "a relative hook path is not reported missing"
 expect_no_line 'hook-unregistered' "a relative hook is recognised as wired"
 expect_no_line 'wiring-incomplete' "a relative command matches the template's \$CLAUDE_PROJECT_DIR one"
+expect_line 'WARN +hook-command-relative: .claude/settings.json: hook command ".claude/hooks/verify-before-stop.sh" runs .claude/hooks/verify-before-stop.sh by a relative path' "a bare relative hook command is reported"
+expect_line 'run: /myspec:update' "a relative framework hook command names update as the fix"
+expect_no_line '^ERROR' "a relative hook command is a warning, so the stop gate does not block on it"
 
 # An interpreter may lead the command; the script is then token 1. Such a
 # command does not exec the file, so a mode 644 script there is correct and
@@ -165,6 +172,11 @@ expect_no_line '^ERROR' "an interpreter-led command reports no errors"
 expect_no_line 'hook-not-executable' "a script run through bash needs no executable bit"
 expect_no_line 'hook-unregistered: .claude/hooks/verify-before-stop.sh' "an interpreter-led command still resolves its script"
 expect_no_line 'wiring-incomplete' "an interpreter-led command matches the template's bare one"
+expect_no_line 'hook-command-relative: .claude/settings.json: hook command "bash' "an interpreter-led \$CLAUDE_PROJECT_DIR command is not relative"
+
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "bash ./.claude/hooks/verify-before-stop.sh"'
+run_doctor wiring
+expect_line 'WARN +hook-command-relative: .claude/settings.json: hook command "bash ./.claude/hooks/verify-before-stop.sh"' "an interpreter-led relative command is reported"
 
 # The bit still matters when the harness execs the file itself.
 set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = ".claude/hooks/verify-before-stop.sh"'
@@ -398,6 +410,25 @@ expect_line 'WARN +note-volatile: ai/features/parent/index.yaml:3' "sub-feature 
 
 run_doctor --quiet wiring schema
 expect_no_line 'note-' "the blocking stop-hook groups exclude note checks"
+
+# A near-miss key escapes every check above: it is not note:, so neither the
+# cap nor the volatility pattern ever reads it (#180).
+{
+  echo 'features:'
+  echo '  - name: a'
+  echo "    notes: \"$LONG PR #12 abc1234def\""
+  echo '  - name: b'
+  echo "    Note: short"
+  echo '  - name: c'
+  echo "    note: $LONG"
+} > "$REPO/ai/features/index.yaml"
+
+run_doctor features
+expect_exit 0 "an unknown manifest key is a warning"
+expect_line 'WARN +manifest-unknown-key: ai/features/index.yaml:3: notes:' "a notes: key is reported, not skipped"
+expect_line 'WARN +manifest-unknown-key: ai/features/index.yaml:5: Note:' "a capitalised Note: key is reported"
+expect_line 'WARN +note-over-cap: ai/features/index.yaml:7' "a real note: beside them is still capped"
+expect_no_line 'manifest-unknown-key: ai/features/index.yaml:7' "note: itself is not an unknown key"
 
 # --- pass 3: severity depends on whether an update is pending ----------------
 
@@ -656,6 +687,51 @@ set_json .claude/verification.json 'd.checks[0].diffCommand = "npx eslint src/"'
 run_doctor schema
 expect_line 'WARN +verification-diff-unscoped: .claude/verification.json' "a diffCommand that ignores the base ref is a warning"
 expect_line 'MYSPEC_BASE_REF' "the finding names the ref the command should scope to"
+
+# The gate exports $MYSPEC_BASE_REF, so a diffCommand that calls a script which
+# reads it is scoped even though the command string never names it (#180).
+mkdir -p "$REPO/scripts"
+# shellcheck disable=SC2016 # literal text, not an expansion
+printf '#!/bin/sh\ngit diff --name-only "$MYSPEC_BASE_REF" | xargs lint\n' > "$REPO/scripts/lint-changed.sh"
+printf '#!/bin/sh\nlint .\n' > "$REPO/scripts/lint-all.sh"
+for cmd in 'bash scripts/lint-changed.sh' './scripts/lint-changed.sh --fix' 'sh "scripts/lint-changed.sh"'; do
+  CMD="$cmd" set_json .claude/verification.json "d.checks[0].diffCommand = process.env.CMD"
+  run_doctor schema
+  expect_no_line 'verification-diff-unscoped' "a diffCommand whose script reads the base ref is not flagged: $cmd"
+done
+
+set_json .claude/verification.json 'd.checks[0].diffCommand = "bash scripts/lint-all.sh"'
+run_doctor schema
+expect_line 'WARN +verification-diff-unscoped' "a diffCommand whose script ignores the base ref is still flagged"
+
+set_json .claude/verification.json 'd.checks[0].diffCommand = "bash scripts/missing.sh"'
+run_doctor verification-diff-unscoped
+expect_line 'WARN +verification-diff-unscoped' "a diffCommand naming a missing script is flagged, and the check id is selectable"
+
+# --- pass 3f: dead refs from a linked worktree (#228) -------------------------
+#
+# A linked worktree lives under the main checkout's .claude/worktrees, and that
+# directory never travels with a branch. Run from the worktree, a reference to
+# it does not resolve there, though it is no dead reference.
+
+build_fixture
+# shellcheck disable=SC2016 # literal backticks, not a command substitution
+printf '# Fixture\n\nWorktrees live in `.claude/worktrees`; rules in `.claude/rules/workflow.md`; see `docs/gone.md`.\n' > "$REPO/CLAUDE.md"
+mkdir -p "$REPO/docs" "$REPO/.claude/worktrees"
+echo gone > "$REPO/docs/gone.md"
+echo keep > "$REPO/docs/keep.md"
+git -C "$REPO" add -A
+git -C "$REPO" -c user.name=t -c user.email=t@t commit -qm fixture
+git -C "$REPO" worktree add -q -b wt1 "$REPO/.claude/worktrees/wt1"
+WT="$REPO/.claude/worktrees/wt1"
+git -C "$WT" rm -q docs/gone.md
+
+run_doctor refs
+expect_no_line 'dead-path-ref' "the main checkout has no dead refs"
+
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" refs 2>&1); STATUS=$?
+expect_no_line 'dead-path-ref: CLAUDE.md: references .claude/worktrees' "a linked worktree does not report the main checkout's .claude/worktrees as dead"
+expect_line 'WARN +dead-path-ref: CLAUDE.md: references docs/gone.md' "a tracked file this branch removed is still a dead ref from the worktree"
 
 # --- pass 4: argument handling ------------------------------------------------
 
