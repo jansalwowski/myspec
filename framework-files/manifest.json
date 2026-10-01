@@ -157,6 +157,18 @@
       "type": "overwrite",
       "dest": ".claude/lib/task-worktree.sh"
     },
+    "myspec-config.sh": {
+      "type": "overwrite",
+      "dest": ".claude/lib/myspec-config.sh"
+    },
+    "myspec-config.mjs": {
+      "type": "overwrite",
+      "dest": ".claude/lib/myspec-config.mjs"
+    },
+    "myspec-config.schema.json": {
+      "type": "overwrite",
+      "dest": ".claude/lib/myspec-config.schema.json"
+    },
     "plan-checkbox.sh": {
       "type": "overwrite",
       "dest": ".claude/lib/plan-checkbox.sh"

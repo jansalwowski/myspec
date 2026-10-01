@@ -1,0 +1,336 @@
+{
+  "$comment": "Every myspec setting: its file, type, default and the issue that introduced it (docs/project-settings-design.md, principle 7). lib/myspec-config.sh and lib/myspec-config.mjs read it to build the framework-default layer and to type-check the project layer; doctor validates against it. Keys under 'verification.' live in .claude/verification.json, every other key in .myspec.json. 'type' lists the JSON types a value may have. 'merge' says how a list combines across layers: 'extend' appends a later layer's entries (principle 3), 'replace' lets the later layer win, which existing lists keep so that no project's behaviour changes (principle 2). A key with no 'default' is absent unless a layer sets it. 'loosens' marks a setting that weakens a gate, which doctor lists. 'catalogue': false marks a key the design's catalogue tables do not list; lib/tests/myspec-config.test.sh checks every other key against those tables. 'env' is the session layer: an 'override' sets 'key' to 'value' when the variable matches 'match'; the other kinds are read or exported by one script and set no key.",
+  "version": 1,
+  "files": {
+    "project": ".myspec.json",
+    "verification": ".claude/verification.json"
+  },
+  "keys": {
+    "aiDir": {
+      "file": "project",
+      "type": ["string"],
+      "default": ".ai",
+      "issue": ["exists"],
+      "catalogue": false,
+      "description": "Directory holding the framework-managed docs, repo-relative, no trailing slash."
+    },
+    "frameworkVersion": {
+      "file": "project",
+      "type": ["string"],
+      "issue": ["exists"],
+      "catalogue": false,
+      "description": "Bookkeeping: the framework version init or update last installed."
+    },
+    "project": {
+      "file": "project",
+      "type": ["object"],
+      "issue": ["exists"],
+      "catalogue": false,
+      "description": "Bookkeeping: name, description and techStack recorded by init."
+    },
+    "migrations": {
+      "file": "project",
+      "type": ["array"],
+      "merge": "replace",
+      "issue": ["exists"],
+      "catalogue": false,
+      "description": "Bookkeeping: the one-shot migrations update has already run."
+    },
+    "frameworkFiles": {
+      "file": "project",
+      "type": ["object"],
+      "issue": ["exists"],
+      "catalogue": false,
+      "description": "Pins: framework files update must not overwrite."
+    },
+    "topologyFile": {
+      "file": "project",
+      "type": ["string"],
+      "issue": ["exists"],
+      "catalogue": false,
+      "description": "Repo-relative path of the project topology file (setup backbone)."
+    },
+    "reuseAudit.enabled": {
+      "file": "project",
+      "type": ["boolean"],
+      "default": true,
+      "issue": ["exists"],
+      "loosens": true,
+      "catalogue": false,
+      "description": "false turns off the reuse-audit gate on tech specs."
+    },
+    "feedback.metrics": {
+      "file": "project",
+      "type": ["boolean"],
+      "default": true,
+      "issue": ["exists"],
+      "catalogue": false,
+      "description": "false stops record-session-metrics.sh writing field metrics."
+    },
+    "feedback.frictionReport": {
+      "file": "project",
+      "type": ["boolean"],
+      "default": true,
+      "issue": ["exists"],
+      "catalogue": false,
+      "description": "false stops session-complete offering the friction report."
+    },
+    "isolation.blockInMain": {
+      "file": "project",
+      "type": ["array"],
+      "default": [],
+      "merge": "extend",
+      "issue": ["exists"],
+      "description": "Anchored EREs: extra commands blocked in the main checkout while a session is in worktree mode."
+    },
+    "isolation.allowLinkedModules": {
+      "file": "project",
+      "type": ["boolean"],
+      "default": false,
+      "issue": ["exists"],
+      "loosens": true,
+      "description": "Accept a linked dependency tree at the Stop gate."
+    },
+    "isolation.worktreeRoot": {
+      "file": "project",
+      "type": ["string"],
+      "default": ".claude/worktrees",
+      "issue": ["exists"],
+      "description": "Repo-relative directory worktrees are created under."
+    },
+    "isolation.provision.symlink": {
+      "file": "project",
+      "type": ["array"],
+      "default": ["node_modules"],
+      "merge": "replace",
+      "issue": ["exists"],
+      "description": "Paths or {path, lockfiles} objects linked from the main checkout into a new worktree."
+    },
+    "isolation.provision.copy": {
+      "file": "project",
+      "type": ["array"],
+      "default": [".eslintcache"],
+      "merge": "replace",
+      "issue": ["exists", "#222"],
+      "description": "Paths or {path, mode} objects copied into a new worktree; a directory and mode \"clone\" are #222."
+    },
+    "isolation.provision.clean": {
+      "file": "project",
+      "type": ["array"],
+      "default": [],
+      "merge": "extend",
+      "issue": ["#193"],
+      "description": "Repo-relative globs deleted in a new worktree before any check runs."
+    },
+    "isolation.provision.install": {
+      "file": "project",
+      "type": ["string", "array"],
+      "merge": "replace",
+      "issue": ["#230"],
+      "description": "A command, or a list of {run, cwd, when} steps, run in a new worktree after links, copies and cleans."
+    },
+    "hooks.markCodeChanged.extraCodeExtensions": {
+      "file": "project",
+      "type": ["array"],
+      "default": [],
+      "merge": "extend",
+      "issue": ["#231"],
+      "description": "Extensions treated as code in addition to the framework's CODE_EXT."
+    },
+    "hooks.markCodeChanged.ignorePaths": {
+      "file": "project",
+      "type": ["array"],
+      "default": [],
+      "merge": "extend",
+      "issue": ["#231"],
+      "loosens": true,
+      "description": "Repo-relative globs whose writes never arm the stop gate by themselves."
+    },
+    "verification.notes": {
+      "file": "verification",
+      "type": ["string"],
+      "issue": ["exists"],
+      "catalogue": false,
+      "description": "Free text for the humans editing the file; never read by the gate."
+    },
+    "verification.checks": {
+      "file": "verification",
+      "type": ["array"],
+      "merge": "replace",
+      "issue": ["exists"],
+      "catalogue": false,
+      "description": "The checks the Stop gate runs."
+    },
+    "verification.checks[].name": {
+      "file": "verification",
+      "type": ["string"],
+      "issue": ["exists"],
+      "catalogue": false,
+      "description": "Label the gate reports."
+    },
+    "verification.checks[].command": {
+      "file": "verification",
+      "type": ["string"],
+      "issue": ["exists"],
+      "catalogue": false,
+      "description": "Command run from the repo root."
+    },
+    "verification.checks[].diffCommand": {
+      "file": "verification",
+      "type": ["string"],
+      "issue": ["exists"],
+      "catalogue": false,
+      "description": "Command run instead of command when a merge base exists, with MYSPEC_BASE_REF exported."
+    },
+    "verification.checks[].cleanup": {
+      "file": "verification",
+      "type": ["string"],
+      "issue": ["exists"],
+      "catalogue": false,
+      "description": "Command the gate runs after it kills a check at the cap."
+    },
+    "verification.checks[].description": {
+      "file": "verification",
+      "type": ["string"],
+      "issue": ["exists"],
+      "catalogue": false,
+      "description": "Free text."
+    },
+    "verification.checks[].required": {
+      "file": "verification",
+      "type": ["boolean"],
+      "default": false,
+      "issue": ["exists"],
+      "catalogue": false,
+      "description": "Only a check with required: true runs at the gate."
+    },
+    "verification.checks[].paths": {
+      "file": "verification",
+      "type": ["array"],
+      "merge": "replace",
+      "issue": ["#232"],
+      "loosens": true,
+      "description": "Run the check only when a file this session wrote in this checkout matches one of these globs."
+    },
+    "verification.containers": {
+      "file": "verification",
+      "type": ["object"],
+      "issue": ["#221"],
+      "description": "Map of container name to {mountSource, mountTarget}."
+    },
+    "verification.checks[].runIn": {
+      "file": "verification",
+      "type": ["string"],
+      "issue": ["#221"],
+      "description": "Name of the container (in containers) the check's command runs in."
+    }
+  },
+  "env": {
+    "MYSPEC_ALLOW_LINKED_MODULES": {
+      "kind": "override",
+      "key": "isolation.allowLinkedModules",
+      "match": "^1$",
+      "value": true,
+      "issue": ["exists"],
+      "description": "Session override of isolation.allowLinkedModules."
+    },
+    "MYSPEC_DISABLE_METRICS": {
+      "kind": "override",
+      "key": "feedback.metrics",
+      "match": "^1$",
+      "value": false,
+      "issue": ["exists"],
+      "description": "Session opt-out of field metrics."
+    },
+    "DO_NOT_TRACK": {
+      "kind": "override",
+      "key": "feedback.metrics",
+      "match": "^(?:[^0].*|0.+)$",
+      "value": false,
+      "issue": ["exists"],
+      "description": "The cross-tool opt-out: any value but empty or 0 turns field metrics off."
+    },
+    "MYSPEC_DISABLE_FRICTION_REPORT": {
+      "kind": "override",
+      "key": "feedback.frictionReport",
+      "match": "^1$",
+      "value": false,
+      "issue": ["exists"],
+      "description": "Session opt-out of the friction report."
+    },
+    "MYSPEC_CHECK_CAP_SECONDS": {
+      "kind": "standalone",
+      "type": "integer",
+      "issue": ["exists"],
+      "description": "Lowers the Stop gate's per-check time cap; it cannot raise it."
+    },
+    "MYSPEC_METRICS_CAP_SECONDS": {
+      "kind": "standalone",
+      "type": "integer",
+      "issue": ["exists"],
+      "description": "Lowers the metrics hook's time cap; it cannot raise it."
+    },
+    "MYSPEC_SKIP_MEMORY_DOCTOR": {
+      "kind": "standalone",
+      "type": "flag",
+      "issue": ["exists"],
+      "description": "1 skips memory-claim-id.sh's doctor step (its test fixture)."
+    },
+    "MYSPEC_ALLOW_BRANCH_OPS": {
+      "kind": "command-prefix",
+      "type": "flag",
+      "issue": ["exists"],
+      "loosens": true,
+      "description": "A command prefixed with MYSPEC_ALLOW_BRANCH_OPS=1 passes guard-worktree-context.sh gate A."
+    },
+    "MYSPEC_ALLOW_MAIN_CHECKOUT": {
+      "kind": "command-prefix",
+      "type": "flag",
+      "issue": ["exists"],
+      "loosens": true,
+      "description": "A command prefixed with MYSPEC_ALLOW_MAIN_CHECKOUT=1 passes guard-worktree-context.sh gate B."
+    },
+    "MYSPEC_BASE_REF": {
+      "kind": "exported",
+      "type": "string",
+      "issue": ["exists"],
+      "description": "Exported by the Stop gate to checks: the merge base with the default branch."
+    },
+    "MYSPEC_SESSION_FILES": {
+      "kind": "exported",
+      "type": "string",
+      "issue": ["exists"],
+      "description": "Exported by the Stop gate to checks: the files this session wrote in this checkout."
+    },
+    "MYSPEC_CHECK_RUN_ID": {
+      "kind": "exported",
+      "type": "string",
+      "issue": ["exists"],
+      "description": "Exported by the Stop gate to a check and its cleanup: one id per run."
+    },
+    "MYSPEC_STOP_HOOK_ACTIVE": {
+      "kind": "exported",
+      "type": "flag",
+      "issue": ["exists"],
+      "description": "Exported by the Stop gate to checks so a check that ends a nested session does not re-enter the gate."
+    },
+    "MYSPEC_WORKTREE": {
+      "kind": "exported",
+      "type": "string",
+      "issue": ["#230"],
+      "description": "Exported by worktree-provision.sh to each install step: the worktree being provisioned."
+    },
+    "MYSPEC_MAIN_CHECKOUT": {
+      "kind": "exported",
+      "type": "string",
+      "issue": ["#230"],
+      "description": "Exported by worktree-provision.sh to each install step: the checkout links point into."
+    },
+    "MYSPEC_CHECK_WORKDIR": {
+      "kind": "exported",
+      "type": "string",
+      "issue": ["#221"],
+      "description": "Exported by the Stop gate to a check with runIn: this checkout's path inside the container."
+    }
+  }
+}
