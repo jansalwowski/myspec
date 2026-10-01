@@ -61,6 +61,7 @@ Each check sits in the cheapest layer that can catch its failure. The reasoning 
 |-------|------|---------------|
 | Static lint | `node scripts/lint-skills.mjs`: frontmatter, "Use when" + "Do NOT" description rules, dead links and anchors, step pointers, size budget | pre-commit (staged content), CI |
 | JS lint | `scripts/lint-js.sh`: pinned `eslint:recommended` on `lib/` and its mirror, because `update` copies `lib/` into projects whose own lint then runs on it | pre-commit (staged lib JS, skipped when eslint can't run), CI |
+| Shell lint | `scripts/lint-sh.sh`: ShellCheck at default severity on `hooks/` and `lib/` (tests included) and their mirrors. Suppress with an inline `# shellcheck disable=SCxxxx # reason`; the `tests/.shellcheckrc` files cover only the assertion idioms | pre-commit (staged scripts, skipped when shellcheck is absent), CI (pinned version) |
 | Deterministic tests | `lib/tests`, `hooks/tests`, `scripts/tests` | CI; run locally with `TZ=UTC` |
 | Behavioural evals | `evals/` via `scripts/evals/run.sh` (`claude plugin eval`) | pre-push (changed skills only, 1 run, Sonnet, report-only), `/release` (full suite) |
 | Release comparison | `scripts/evals/release-check.sh`: paired delta, bootstrap CI and pass^k against the previous release's baseline in `quality/baselines/` | `/release`, report-only until `quality/release-check.json` sets `"gate": true` |

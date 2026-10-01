@@ -64,13 +64,13 @@ grep -qxF "last_updated: $TODAY" "$PLAN"; ok "last_updated is bumped to today" $
 [ "$(sed -n "${T2A}p" "$PLAN")" = '- [~] **Step 1: Write the failing test**' ]; ok "Task 2 step 1 reads [~]" $?
 [ "$("$SCRIPT" "$PLAN" T2)" = "doing" ]; ok "query T2 reports doing" $?
 
-"$SCRIPT" "$PLAN" "Task 2" done >/dev/null; ok "set 'Task 2' done exits 0" $?
+"$SCRIPT" "$PLAN" "Task 2" "done" >/dev/null; ok "set 'Task 2' done exits 0" $?
 [ "$("$SCRIPT" "$PLAN" 2)" = "done" ]; ok "query reports done after [~] -> [x]" $?
 [ "$(changed_lines)" = "$FM $T2A $T2B" ]; ok "Task 2 done still touches nothing else" $?
 
 # --- Task 3: the last task before `## Barrier:` — barrier steps stay [ ] ------
 fresh
-"$SCRIPT" "$PLAN" 3 done >/dev/null
+"$SCRIPT" "$PLAN" 3 "done" >/dev/null
 BAR=$(line_of '- [ ] Merge Task 3 worktree')
 [ "$(sed -n "${BAR}p" "$PLAN")" = '- [ ] Merge Task 3 worktree' ]; ok "barrier sub-step is not flipped by Task 3" $?
 [ "$(changed_lines | wc -w | tr -d ' ')" = "3" ]; ok "Task 3 changes exactly two steps plus last_updated" $?
@@ -86,30 +86,30 @@ T10=$(line_of '- [ ] **Step 1: Implement**')
 
 # --- Task 10: the section after `### Milestone 2:` --------------------------
 fresh
-"$SCRIPT" "$PLAN" 10 done >/dev/null
+"$SCRIPT" "$PLAN" 10 "done" >/dev/null
 MS=$(line_of '- [ ] Milestone 2 checkpoint')
 [ "$(sed -n "${MS}p" "$PLAN")" = '- [ ] Milestone 2 checkpoint (not a task step)' ]; ok "milestone section checkbox is untouched" $?
 [ "$(changed_lines)" = "$FM $T10" ]; ok "Task 10 changes only its own step" $?
 
 # --- failures leave the file byte-identical ------------------------------------
 fresh
-"$SCRIPT" "$PLAN" 4 done >/dev/null 2>&1
+"$SCRIPT" "$PLAN" 4 "done" >/dev/null 2>&1
 [ $? -ne 0 ]; ok "missing task exits non-zero" $?
 cmp -s "$FIXTURE" "$PLAN"; ok "missing task leaves the plan unchanged" $?
 
-"$SCRIPT" "$PLAN" 11 done >/dev/null 2>&1
+"$SCRIPT" "$PLAN" 11 "done" >/dev/null 2>&1
 [ $? -ne 0 ]; ok "task without checkbox steps exits non-zero" $?
 cmp -s "$FIXTURE" "$PLAN"; ok "task without steps leaves the plan unchanged" $?
 
 "$SCRIPT" "$PLAN" 2 finished >/dev/null 2>&1
 [ $? -ne 0 ]; ok "unknown state is refused" $?
-"$SCRIPT" "$PLAN" "Milestone 2" done >/dev/null 2>&1
+"$SCRIPT" "$PLAN" "Milestone 2" "done" >/dev/null 2>&1
 [ $? -ne 0 ]; ok "a milestone is not an addressable task" $?
 cmp -s "$FIXTURE" "$PLAN"; ok "refusals leave the plan unchanged" $?
 
 printf '### Task 2: Duplicate\n\n- [ ] step\n' >> "$PLAN"
 cp "$PLAN" "$ROOT/dup.md"
-"$SCRIPT" "$PLAN" 2 done >/dev/null 2>&1
+"$SCRIPT" "$PLAN" 2 "done" >/dev/null 2>&1
 [ $? -ne 0 ]; ok "duplicated task heading is refused" $?
 cmp -s "$ROOT/dup.md" "$PLAN"; ok "duplicate refusal leaves the plan unchanged" $?
 

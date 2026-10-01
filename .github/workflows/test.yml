@@ -51,6 +51,30 @@ jobs:
       - name: eslint:recommended on lib/ and its mirror
         run: scripts/lint-js.sh
 
+  shellcheck:
+    name: shellcheck on shipped shell
+    runs-on: ubuntu-latest
+    env:
+      SHELLCHECK_VERSION: v0.10.0
+      SHELLCHECK_SHA256: 6c881ab0698e4e6ea235245f22832860544f17ba386442fe7e9d629f8cbedf87
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned and checksummed rather than the runner's apt shellcheck, whose
+      # version moves with the image and would change findings under us.
+      - name: Install pinned ShellCheck
+        run: |
+          tarball="shellcheck-$SHELLCHECK_VERSION.linux.x86_64.tar.xz"
+          curl -fsSL -o "$RUNNER_TEMP/$tarball" \
+            "https://github.com/koalaman/shellcheck/releases/download/$SHELLCHECK_VERSION/$tarball"
+          echo "$SHELLCHECK_SHA256  $RUNNER_TEMP/$tarball" | sha256sum -c -
+          tar -xJf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP"
+          echo "SHELLCHECK=$RUNNER_TEMP/shellcheck-$SHELLCHECK_VERSION/shellcheck" >> "$GITHUB_ENV"
+
+      # Covers hooks/ and lib/ (tests included) and their plugins/myspec/ mirrors.
+      - name: ShellCheck hooks/ and lib/
+        run: scripts/lint-sh.sh
+
   stack-agnostic:
     name: no localhost ports in skills or examples
     runs-on: ubuntu-latest

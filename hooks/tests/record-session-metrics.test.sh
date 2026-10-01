@@ -59,8 +59,7 @@ run_hook() {
 }
 
 wait_for() {  # wait_for <file> <seconds>
-  local i
-  for i in $(seq 1 $(($2 * 10))); do
+  for _ in $(seq 1 $(($2 * 10))); do
     [ -s "$1" ] && return 0
     sleep 0.1
   done
@@ -138,6 +137,7 @@ else
 fi
 
 # The variable can lower the cap, never raise it.
+# shellcheck disable=SC2016 # literal text, not an expansion
 grep -q '"$MYSPEC_METRICS_CAP_SECONDS" -lt "$CAP_SECONDS"' "$HOOK" && ok || fail "the cap variable only lowers the cap"
 bash -n "$HOOK" && ok || fail "bash -n"
 

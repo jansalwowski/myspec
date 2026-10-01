@@ -22,7 +22,6 @@ fi
 INPUT=$(cat)
 
 FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
-TOOL_NAME=$(printf '%s' "$INPUT" | jq -r '.tool_name // empty' 2>/dev/null)
 
 [ -n "$FILE_PATH" ] || exit 0
 

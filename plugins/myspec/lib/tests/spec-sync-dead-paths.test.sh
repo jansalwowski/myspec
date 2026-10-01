@@ -119,8 +119,11 @@ title: s
 Given the file `app/scenario-dead.ts`
 MD
 
+  # shellcheck disable=SC2016 # literal text, not an expansion
   echo '`app/plan-dead.ts`' > .ai/features/invites/plans/2026-01-01-plan.md
+  # shellcheck disable=SC2016 # literal text, not an expansion
   echo '`app/plan-dead.ts`' > .ai/features/invites/implementation-plan.md
+  # shellcheck disable=SC2016 # literal text, not an expansion
   printf -- '---\ntitle: c\n---\nSee `app/services/invite.ts`.\n' > .ai/features/clean/spec.md
 
   mkdir -p app/old lib/handlers other/old

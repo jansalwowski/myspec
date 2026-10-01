@@ -82,6 +82,7 @@ expect_line 'look framework-side' "repeated isolation block: framework-side foot
 S=s3-attachments
 {
   prompt 'wrap up'
+  # shellcheck disable=SC2016 # literal text, not an expansion
   for i in 1 2; do hook_block Stop '"${CLAUDE_PLUGIN_ROOT}/hooks/verify-before-stop.sh"' 'Memory conformance check failed for changes under .ai/memory. Fix these'; done
   hook_block_str Stop '.claude/hooks/verify-before-stop.sh' 'Memory conformance check failed for changes under .ai/memory. Fix these'
   for i in 1 2 3; do hook_block PostToolUse:Write '.claude/hooks/verify-before-stop.sh' 'Verification did not pass (test). Fix failures'; done
@@ -112,6 +113,7 @@ S=s5-hook-errors
 {
   prompt 'go'
   hook_err PreToolUse:Bash '.claude/hooks/guard-git-branch.sh' 127 'Failed with non-blocking status code: /bin/sh: .claude/hooks/guard-git-branch.sh: No such file or directory'
+  # shellcheck disable=SC2016 # literal text, not an expansion
   hook_err Stop '"${CLAUDE_PLUGIN_ROOT}/hooks/verify-before-stop.sh"' 1 'jq: error'
   hook_err PreToolUse:Bash '.claude/hooks/guard-bulk-read.sh' 127 'Failed with non-blocking status code: /bin/sh: .claude/hooks/guard-bulk-read.sh: No such file or directory'
   hook_err PostToolUse:Write '.claude/hooks/no-absolute-paths.sh' 127 '.claude/hooks/no-absolute-paths.sh: line 12: jq: command not found'

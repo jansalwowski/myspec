@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# pre-commit: static skill lint on staged SKILL.md files, `bash -n` on staged
-# hook scripts, eslint (scripts/lint-js.sh) on staged lib/ JS. Nothing runs
-# when none of those is staged. eslint comes through npx, so when it cannot
-# run (offline, no node) the JS lint is skipped with a notice, not blocked.
+# pre-commit: static skill lint on staged SKILL.md files, `bash -n` and
+# ShellCheck on staged hooks/ and lib/ shell scripts, eslint
+# (scripts/lint-js.sh) on staged lib/ JS. Nothing runs when none of those is
+# staged. When shellcheck is not installed, or eslint cannot run through npx
+# (offline, no node), that check is skipped with a notice, not blocked.
 #
 # What is checked is what gets committed: the index is materialised into a
 # temp dir and linted there, so an unstaged edit can neither hide a staged
@@ -25,7 +26,7 @@ jsfiles=()
 while IFS= read -r -d '' f; do
   if [[ "$f" =~ ^(plugins/[^/]+/|\.claude/)?skills/[^/]+/SKILL\.md$ ]]; then
     skills+=("$f")
-  elif [[ "$f" =~ ^(plugins/[^/]+/)?hooks/.*\.sh$ ]]; then
+  elif [[ "$f" =~ ^(plugins/[^/]+/)?(hooks|lib)/.*\.sh$ ]]; then
     shells+=("$f")
   elif [[ "$f" =~ ^(plugins/[^/]+/)?lib/.*\.(mjs|cjs|js)$ ]]; then
     jsfiles+=("$f")
@@ -51,6 +52,33 @@ for f in ${shells[@]+"${shells[@]}"}; do
     status=1
   fi
 done
+
+# The plugins/ mirrors are byte-identical to hooks/ and lib/ (sync-check.yml),
+# so ShellCheck sees each script once; bash -n above still parses both.
+sclist=()
+for f in ${shells[@]+"${shells[@]}"}; do
+  [[ "$f" == plugins/* ]] || sclist+=("$f")
+done
+
+if [ ${#sclist[@]} -gt 0 ]; then
+  # Same entry point as CI (test.yml), which pins the version; here the
+  # shellcheck on PATH, or $SHELLCHECK, will do. Run from the export so the
+  # staged tests/.shellcheckrc files apply and findings print as repo paths.
+  # No working-tree fallback: lint-sh.sh lints relative to its own checkout.
+  shlint="$tmp/scripts/lint-sh.sh"
+  if ! command -v "${SHELLCHECK:-shellcheck}" >/dev/null 2>&1; then
+    echo "pre-commit: shellcheck not found; shell lint skipped" >&2
+  elif [ ! -f "$shlint" ]; then
+    echo "pre-commit: scripts/lint-sh.sh not found; shell lint skipped" >&2
+  else
+    # Any non-zero exit blocks: ShellCheck exits 2 when one file cannot be
+    # read but still reports findings in the rest.
+    if ! (cd "$tmp" && bash "$shlint" "${sclist[@]}") >&2; then
+      echo "pre-commit: shellcheck failed on staged shell scripts" >&2
+      status=1
+    fi
+  fi
+fi
 
 if [ ${#skills[@]} -gt 0 ]; then
   # Prefer the staged linter; fall back to the working tree's when it is not tracked.

@@ -36,6 +36,7 @@
 # into the same segments and the same words, so word N of a segment in one
 # stream is word N in the other; decode_word turns an encoded word back into
 # its text.
+# shellcheck disable=SC2120 # the keep argument is optional; the hooks that source this pass it
 sanitize_command() {
   awk -v keep="${1:-}" '
     function enc(ch) {
@@ -194,6 +195,7 @@ find_matching_segment() {
 
   # `tr` maps each separator character to a newline, so `&&` and `||` split the
   # same way single separators do.
+  # shellcheck disable=SC2119,SC2020 # blanking mode takes no argument; tr maps each separator character to a newline, as intended
   sanitized=$(printf '%s' "$command" | sanitize_command | tr '|&;(){}`' '\n\n\n\n\n\n\n\n')
 
   while IFS= read -r segment; do

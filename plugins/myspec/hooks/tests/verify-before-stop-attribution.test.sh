@@ -134,6 +134,7 @@ OUT=$(stop 10)
 ran && fail "a warned run counts as verified: no re-run without a new write" || ok
 
 # Absolute paths in the output are the same file.
+# shellcheck disable=SC2016 # literal text, not an expansion
 set_checks 'grep -q BROKEN other.ts && echo "$PWD/other.ts:2:1 error" && exit 1 || true'
 mark_write 11 "$REPO/app.ts"
 OUT=$(stop 11)
@@ -233,7 +234,7 @@ printf 'export const a = 6;\n' > "$REPO/app.ts"
 mark_write 37 "$REPO/app.ts"
 mark_write 37 "$REPO/tsconfig.json"
 OUT=$(stop 37)
-[ "$(cat "$ROOT/session-files")" = "$(printf 'app.ts\ntsconfig.json')" ] && ok || fail "MYSPEC_SESSION_FILES lists the files this session wrote (got: $(cat "$ROOT/session-files" | tr '\n' ' '))"
+[ "$(cat "$ROOT/session-files")" = "$(printf 'app.ts\ntsconfig.json')" ] && ok || fail "MYSPEC_SESSION_FILES lists the files this session wrote (got: $(tr '\n' ' ' < "$ROOT/session-files"))"
 reset_tree
 
 # --- PR #203 review: an edit inside a submodule verifies the superproject ----------

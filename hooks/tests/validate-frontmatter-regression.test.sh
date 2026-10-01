@@ -64,9 +64,9 @@ expect_quiet() {  # expect_quiet <desc>: exit 0 and no output
 
 # big_body <file>: appends ~256 KiB of prose, well past any pipe buffer
 big_body() {
-  local line i
+  local line
   line=$(printf 'lorem ipsum dolor sit amet %.0s' 1 2 3 4 5 6 7 8)
-  for i in $(seq 1 1200); do printf '%s\n' "$line"; done >> "$1"
+  for _ in $(seq 1 1200); do printf '%s\n' "$line"; done >> "$1"
 }
 
 mkdir -p "$REPO/.ai/features/x"
@@ -103,6 +103,7 @@ printf 'no frontmatter\n' > "$REPO2/docs/ai/features/y/spec.md"
 run "$REPO2" "$REPO2/docs/ai/features/y/spec.md"
 expect_block "a doc under a custom aiDir is validated"
 reason | grep -qF 'docs/ai/.templates/' && ok || fail "the block names the resolved aiDir (got: $(reason | tail -1))"
+# shellcheck disable=SC2016 # literal text, not an expansion
 reason | grep -qF '${aiDir}' && fail "the block does not print a literal \${aiDir}" || ok
 
 # --- 64b7f2c: a doc written in a linked worktree, cwd on the main checkout ------

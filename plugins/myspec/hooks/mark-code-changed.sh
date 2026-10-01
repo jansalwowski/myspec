@@ -142,9 +142,10 @@ emit_target() {
     ''|Q|-|*'$'*|*'`'*|*:*|/dev/*) return 0 ;;
   esac
   if [ -z "${3:-}" ] && [[ "$w" == *[\*\?\[]* ]]; then
+    # A failed cd or an empty glob both mean no targets.
     while IFS= read -r p; do
       emit_target "$p" "${2:-}" no-glob
-    done < <(cd "$BASE_DIR" 2>/dev/null && compgen -G "$w" || true)
+    done < <(cd "$BASE_DIR" 2>/dev/null && { compgen -G "$w" || true; })
     return 0
   fi
   p=$(physical_path "$w") || return 0
@@ -392,6 +393,7 @@ SESSION
       *) rel="$p" ;;
     esac
     if ! grep -qF -- "- \`$rel\`" "$active_file"; then
+      # shellcheck disable=SC2016 # literal backticks: a markdown code span
       printf -- '- `%s`\n' "$rel" >> "$active_file"
     fi
   done
@@ -477,7 +479,7 @@ for p in "${TARGETS[@]}"; do
     "$root"/*) rel="${p#"$root"/}" ;;
     *) continue ;;
   esac
-  kind=file
+  kind='file'
   if [[ "$p" =~ \.${CODE_EXT}$ ]]; then
     kind=code
     CODE_ROOTS+=("$root")

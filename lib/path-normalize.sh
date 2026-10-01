@@ -22,6 +22,7 @@ normalize_path() {
   [ -n "$abs" ] || return 1
 
   if [ -z "$repo_root" ]; then
+    # shellcheck disable=SC2119 # no argument means $PWD, not this function's $1
     repo_root="$(resolve_repo_root || true)"
   fi
 
@@ -49,6 +50,7 @@ normalize_path() {
         if [ "$first" != "$rest" ]; then
           tail="/${rest#"$first"/}"
         fi
+        # shellcheck disable=SC2088 # prints a literal ~ on purpose: the portable form of the path
         printf '~/.claude-personal/projects/<encoded_cwd>%s\n' "$tail"
         return 0
         ;;
@@ -60,6 +62,7 @@ normalize_path() {
 
 # resolve_repo_root [path]
 # Print the git toplevel for the given path (or $PWD). Exit 1 if not in a repo.
+# shellcheck disable=SC2120 # the path argument is optional; sourcing scripts may pass it
 resolve_repo_root() {
   local path="${1:-$PWD}"
   git -C "$path" rev-parse --show-toplevel 2>/dev/null

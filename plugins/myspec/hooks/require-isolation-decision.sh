@@ -237,6 +237,7 @@ fi
 
 # 2. Inherited decision — subagents cannot prompt, so they follow the parent.
 if [ -d "$STATE_DIR" ]; then
+  # shellcheck disable=SC2012 # ls -t is the portable mtime sort; the names are generated session ids
   NEWEST=$(ls -t "$STATE_DIR"/*.json 2>/dev/null | head -1 || printf '')
 
   if [ -n "$NEWEST" ] && [ -f "$NEWEST" ]; then
