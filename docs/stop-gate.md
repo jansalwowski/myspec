@@ -15,9 +15,11 @@ The stop gate is two hooks. `mark-code-changed.sh` (PostToolUse) records what a 
 | R6 | While `/myspec:feature-implement` orchestrates (marker under 8 h old), check failures warn and don't block. Its final verification still gates. | #95 |
 | R7 | A check that hits the 120 s cap is reported as timed out, not failed. The cap bounds the hook's wait and kills the check's process group. Remote work gets the check's `cleanup`. The cap is never raised. | #115, #147 |
 | R8 | A dependency directory symlinked into a checkout with different lockfiles, or one that loads that checkout's source, blocks before any check runs. Loading that checkout's source includes a workspace link: a directory symlink in the tree's top two levels, or two levels into a nested link directory such as pnpm's hidden hoist (`.pnpm/node_modules`), that resolves out of the tree. Every such link is resolved physically, whatever its text, and a tree the scan cannot list (a `find` that fails) counts as loading. The built-in directories include the Composer bin plugin's `vendor-bin/*/vendor`. | #94, #229, #222 |
-| R8a | In a linked worktree, or a submodule checked out inside one, a check whose command runs a container exec without `-w`/`--workdir` in its exec options is refused as unverifiable instead of run. The exec forms are data in the hook (`CONTAINER_EXEC_FORMS`): `docker exec`, `docker container exec`, `docker compose exec`, `docker-compose exec`, `podman exec`, `podman container exec`, `podman compose exec`, `podman-compose exec`. Such a check runs in the container's mount of the checkout the container or compose project was started from, so its result describes another tree. A `-w` is trusted, not verified: the gate cannot see what the container mounts at that path, so a `-w` naming the main checkout's mount still passes on the main tree. Validating it waits for a mount mapping in config (#221). Short-flag clusters are parsed (`-Tw <dir>` sets the workdir; `-ew` is `-e w`). The refusal blocks, never warns through attribution, and does not apply in the main checkout or its own submodules. | #220 |
+| R8a | In a linked worktree, or a submodule checked out inside one, a check whose command runs a container exec without `-w`/`--workdir` in its exec options is refused as unverifiable instead of run. The exec forms are data in the hook (`CONTAINER_EXEC_FORMS`): `docker exec`, `docker container exec`, `docker compose exec`, `docker-compose exec`, `podman exec`, `podman container exec`, `podman compose exec`, `podman-compose exec`. Such a check runs in the container's mount of the checkout the container or compose project was started from, so its result describes another tree. A `-w` is trusted, not verified: the gate cannot see what the container mounts at that path, so a `-w` naming the main checkout's mount still passes on the main tree. A check with `runIn` (R12) is exempt: the gate computes its workdir from the mount mapping instead. Short-flag clusters are parsed (`-Tw <dir>` sets the workdir; `-ew` is `-e w`). The refusal blocks, never warns through attribution, and does not apply in the main checkout or its own submodules. | #220 |
 | R9 | Memory and setup conformance errors block only when they are errors. Warnings, such as a duplicate ID on stale branches only, don't block. | #124 |
 | R10 | One block per stop: the continuation after a block (`stop_hook_active`) is approved. | 4eb8ccb |
+| R11 | A check with `paths` runs only when a file this session wrote in that checkout (`$MYSPEC_SESSION_FILES`, code or not) matches one of its globs; without `paths` it always runs. A required check skipped this way is named in the stop message, an approve included (a `systemMessage`), so the loosening is never silent. A `paths` that is not a non-empty list of usable globs is ignored, the check runs, and the message names it. When a legacy marker armed the gate the session's writes are unknown, so every check runs. Glob semantics: see Per-check settings. | #232 |
+| R12 | A check with `runIn` names a container in the top-level `containers` map (`{mountSource, mountTarget}`). The gate exports `MYSPEC_CHECK_WORKDIR`, where this checkout's `mountSource` sits inside the container, and does not apply R8a's refusal to it. When the checkout's `mountSource` is not under the main checkout's (a worktree outside the mounted directory), the check is refused with "this worktree is not visible inside the container" and never run. A `runIn` naming an undefined container, or a container without a repo-relative `mountSource` and an absolute `mountTarget`, refuses the check with its reason. Refusals block like R8a's. | #221 |
 
 ## Session writes (R1–R4)
 
@@ -42,9 +44,39 @@ It applies per verified checkout, when its checks fail, its feature-implement ma
 
 **Not covered.** The memory and setup conformance gates are still armed by uncommitted changes under the memory tree or `.claude/`, not by this session's writes. Many of those writes come from lib scripts through Bash, which the ledger can't see.
 
+## Per-check settings (R11, R12)
+
+The gate reads `checks` and `containers` through `lib/myspec-config.sh`, the one settings reader (`docs/project-settings-design.md`), from the checkout whose `.claude/verification.json` is in use. A hook installed without the reader reads `checks` from the file as before and refuses every `runIn` check, because it cannot read `containers`. Order per required check: `paths` first (a skipped check is never refused), then `runIn` or the R8a refusal, then the run.
+
+**Globs (`paths`).** Each glob is matched against each session file as a repo-relative path. These are the semantics doctor validates (#233):
+
+- A glob matches the whole path from the repository root. `*.php` matches only a file at the root; `**/*.php` matches one at any depth.
+- `*` matches any run of characters within one path segment, and `?` matches one character other than `/`.
+- `**` as a whole segment matches zero or more segments: `api/**` is everything under `api/`, and `a/**/b.ts` matches `a/b.ts` and `a/x/y/b.ts`. `**` inside a segment (`a**b`) is a plain `*`.
+- A trailing `/` means everything under it (`api/` is `api/**`), and a leading `./` is dropped.
+- Every other character is literal, including `[`, `{` and `\`. There are no classes and no braces: list two globs instead of `{api,worker}/**`.
+- An empty glob, an absolute one, or one with a `..` segment is unusable.
+
+The set matched is every file the session wrote in the checkout, not only those since the last run. A check that failed before still runs after the session moves on to other directories.
+
+**Workdir (`runIn`).** Let M be the main checkout (for a submodule, its superproject's main checkout plus the submodule's path) and C this checkout. `MYSPEC_CHECK_WORKDIR` is `mountTarget` plus the path of `C/mountSource` under `M/mountSource`. With `mountSource` `.` that is `mountTarget` in the main checkout and `mountTarget/.claude/worktrees/<name>` in a worktree under the default `isolation.worktreeRoot`. With `mountSource` `api`, a worktree's `api/` is not under the main checkout's `api/`, so only the main checkout is visible. A polyglot pair:
+
+```json
+{
+  "containers": { "api": { "mountSource": ".", "mountTarget": "/srv/app" } },
+  "checks": [
+    { "name": "API tests", "command": "docker compose exec -w \"$MYSPEC_CHECK_WORKDIR/api\" api composer test", "runIn": "api", "paths": ["api/**"], "required": true },
+    { "name": "Web typecheck", "command": "npx tsc --noEmit -p web", "paths": ["web/**"], "required": true }
+  ]
+}
+```
+
+The PHP suite runs in the container and the TypeScript check on the host, each only when the session wrote under its directory. The command is the project's, so `podman exec`, `nerdctl exec` or `kubectl exec` work the same way.
+
 ## Verification
 
 - `hooks/tests/mark-code-changed.test.sh`: write targets, `/dev/null` and descriptor redirects, `cd` and subshell scope, foreign roots, non-code writes as `file`.
 - `hooks/tests/verify-before-stop-attribution.test.sh`: arming per root, a worktree edited from the main checkout, the ledger outliving a run, the legacy marker, and each attribution rule, including #198's repro.
 - `hooks/tests/verify-before-stop-regression.test.sh`: which checkouts the ledger verifies (#201).
 - `hooks/tests/verify-before-stop.test.sh`: linked dependency directories (R8), including workspace links, `vendor-bin/*/vendor` and a `find` without `-lname`, and container execs in a linked worktree and its submodules (R8a), including each exec form and short-flag clusters.
+- `hooks/tests/verify-before-stop-check-scope.test.sh`: `paths` (R11) matching, skipping and the message, each glob rule, unusable settings and the legacy marker; `runIn` (R12) in the main checkout, a nested worktree and one outside `mountSource`, a subdirectory mount, undefined and malformed containers, and the interaction with R8a.
