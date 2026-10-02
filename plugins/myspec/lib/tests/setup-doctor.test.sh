@@ -853,6 +853,33 @@ run_doctor_env -- setting-unknown-ref
 expect_line 'setting-unknown-ref' "settings: a single settings check id is selectable"
 expect_no_line 'setting-wrong-type|setting-unknown-key' "settings: selecting one check id hides the others"
 
+# PR #246 review: an emptied list is listed whole; a top-level typo gets its
+# near miss; a non-object settings file is one finding; a list setting of the
+# wrong type is not also read as a glob.
+build_fixture
+set_json .myspec.json 'd.isolation={provision:{symlink:[], copy:[]}}; d.isolaton={}; d.reuseAudt={}; d.hooks={markCodeChanged:{ignorePaths:7}};'
+set_json .claude/verification.json 'd.checks=[];'
+run_doctor_env -- settings
+expect_line '^SET +isolation\.provision\.symlink = \[\] \(\.myspec\.json\)$' "settings: an emptied symlink list is listed"
+expect_line '^SET +isolation\.provision\.copy = \[\] \(\.myspec\.json\)$' "settings: an emptied copy list is listed"
+expect_line '^SET +checks = \[\] \(\.claude/verification\.json\)$' "settings: an emptied checks list is listed"
+
+run_doctor_env -- schema
+expect_line '^WARN +setting-unknown-key: \.myspec\.json: isolaton is not a myspec setting \(did you mean isolation\?\)' "settings: a top-level typo gets its near miss"
+expect_line '^WARN +setting-unknown-key: \.myspec\.json: reuseAudt is not a myspec setting \(did you mean reuseAudit\?\)' "settings: a second top-level typo gets its near miss"
+GLOB_LINES=$(printf '%s\n' "$OUTPUT" | grep -c 'ignorePaths')
+if [ "$GLOB_LINES" -eq 1 ]; then ok; else fail "settings: a non-array ignorePaths is one finding, got $GLOB_LINES"; fi
+expect_line '^ERROR setting-wrong-type: \.myspec\.json: hooks\.markCodeChanged\.ignorePaths is ignored — expected array, got number' "settings: a non-array ignorePaths is a wrong type"
+expect_no_line 'setting-glob-unusable' "settings: a non-array ignorePaths is not also an unusable glob"
+
+printf '[]\n' > "$REPO/.myspec.json"
+printf '[]\n' > "$REPO/.claude/verification.json"
+run_doctor_env -- schema
+for f in '\.myspec\.json' '\.claude/verification\.json'; do
+  N=$(printf '%s\n' "$OUTPUT" | grep -cE "^ERROR setting-wrong-type: $f: $f is not a JSON object")
+  if [ "$N" -eq 1 ]; then ok; else fail "settings: a non-object $f is one finding, got $N"; fi
+done
+
 # --- pass 4: argument handling ------------------------------------------------
 
 OUTPUT=$(node "$SCRIPT" --list-checks 2>&1); STATUS=$?

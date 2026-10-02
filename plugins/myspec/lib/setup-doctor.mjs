@@ -662,9 +662,12 @@ function validateSettings(schema) {
     key.split('.').forEach((_, i, segments) => known.add(segments.slice(0, i + 1).join('.')));
   });
 
-  const childrenOf = (prefix) => [...known]
-    .filter((key) => key.startsWith(`${prefix}.`) && !key.slice(prefix.length + 1).includes('.'))
-    .map((key) => key.slice(prefix.length + 1));
+  // The root's children are the keys with no dot at all.
+  const childrenOf = (prefix) => (prefix === ''
+    ? [...known].filter((key) => !key.includes('.'))
+    : [...known]
+      .filter((key) => key.startsWith(`${prefix}.`) && !key.slice(prefix.length + 1).includes('.'))
+      .map((key) => key.slice(prefix.length + 1)));
 
   // Unknown keys. Keys starting with `$` ($schema, $comment) are JSON
   // conventions, not settings.
@@ -695,7 +698,8 @@ function validateSettings(schema) {
         return;
       }
 
-      const siblings = childrenOf(schemaPath).filter((sibling) => !sibling.endsWith('[]'));
+      const siblings = childrenOf(schemaPath).filter((sibling) => !sibling.endsWith('[]')
+        && !(schemaPath === '' && sibling !== 'project' && Object.hasOwn(schema.files, sibling)));
       const sibling = nearMiss(name, siblings);
       // No close sibling: the same name somewhere else in this file, which
       // is a key written at the wrong level.
@@ -740,16 +744,26 @@ function validateSettings(schema) {
     configLib.getSetting(key, { root, env: {}, schema }).warnings.forEach((text) => readerWarnings.add(text));
   });
 
+  // A file that is not an object warns once per key read from it; it is
+  // one problem, so it is one finding per file.
+  const notObjectFiles = new Set();
+
   readerWarnings.forEach((text) => {
     const ignored = text.match(/^ignoring (\S+) in (.+?): (.*)$/);
     const notObject = text.match(/^(.+?) is not a JSON object/);
     const path = ignored ? ignored[2] : notObject ? notObject[1] : '.myspec.json';
 
-    if (notObject && unparseable.has(path)) {
+    if (notObject && (unparseable.has(path) || notObjectFiles.has(path))) {
       return;
     }
 
-    const detail = ignored ? `${path}: ${ignored[1]} is ignored — ${ignored[3]}` : `${path}: ${text}`;
+    if (notObject) {
+      notObjectFiles.add(path);
+    }
+
+    const detail = ignored
+      ? `${path}: ${ignored[1]} is ignored — ${ignored[3]}`
+      : notObject ? `${path}: ${path} is not a JSON object; every setting in it falls back to its default` : `${path}: ${text}`;
 
     error('setting-wrong-type', 'schema', path, detail, {
       text: 'give the setting a value of the type the schema allows (lib/myspec-config.schema.json)',
@@ -774,11 +788,17 @@ function validateSettings(schema) {
     }
 
     occurrences(data, key).forEach(({ label, value }) => {
+      // A list setting of the wrong type is already a setting-wrong-type
+      // error; reading it as one glob too would report it twice.
+      if (entry.type.includes('array') && !Array.isArray(value)) {
+        return;
+      }
+
       const where = fileLabel(entry.file, label);
       const values = Array.isArray(value) ? value.map((v, i) => [`${where}[${i}]`, v]) : [[where, value]];
 
       values.forEach(([at, v]) => {
-        if (entry.format === 'glob') {
+        if (entry.format === 'glob' && typeof v === 'string') {
           const problem = globProblem(v);
 
           if (problem) {
@@ -1899,7 +1919,8 @@ function listSettings(schema) {
       const label = fileLabel(entry.file, key);
       const fields = Object.entries(keys).filter(([other]) => other.startsWith(`${key}[].`));
 
-      if (!Array.isArray(value) || !Object.hasOwn(keys, `${key}[]`)) {
+      // An emptied list has no items to list, so it is listed whole.
+      if (!Array.isArray(value) || value.length === 0 || !Object.hasOwn(keys, `${key}[]`)) {
         settingsInForce.push({ key: label, value, source, loosens: entry.loosens === true });
 
         return;
