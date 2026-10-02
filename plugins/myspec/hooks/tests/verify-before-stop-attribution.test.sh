@@ -237,6 +237,42 @@ OUT=$(stop 37)
 [ "$(cat "$ROOT/session-files")" = "$(printf 'app.ts\ntsconfig.json')" ] && ok || fail "MYSPEC_SESSION_FILES lists the files this session wrote (got: $(tr '\n' ' ' < "$ROOT/session-files"))"
 reset_tree
 
+# --- #225: a subagent's write arms the parent's gate -------------------------------
+# Subagents share the parent's session_id; their events add agent_id, which the
+# ledger records as a fourth field. The Stop hook (main session, no agent_id)
+# must still verify the checkout and count the file as the session's.
+mark_agent() {  # mark_agent <sid> <file> <agent_id>
+  jq -n --arg s "$SID-$1" --arg d "$REPO" --arg f "$2" --arg a "$3" \
+    '{session_id: $s, tool_name: "Write", cwd: $d, tool_input: {file_path: $f}, agent_id: $a, agent_type: "general-purpose"}' \
+    | bash "$MARK" >/dev/null 2>&1
+}
+set_checks "printf '%s\n' \"\$MYSPEC_SESSION_FILES\" > $ROOT/session-files; $LINT"
+printf 'BROKEN\n' >> "$REPO/app.ts"
+mark_agent 50 "$REPO/app.ts" a6baef07
+OUT=$(stop 50)
+ran && ok || fail "#225: a subagent's code write arms the parent's Stop gate"
+expect_decision block "$OUT" "#225: a failure naming the subagent's file blocks the parent"
+expect_no_text "$OUT" 'did not write' "#225: the subagent's file counts as this session's"
+[ "$(cat "$ROOT/session-files")" = "app.ts" ] && ok || fail "#225: MYSPEC_SESSION_FILES lists the subagent's file by path alone (got: $(tr '\n' ' ' < "$ROOT/session-files"))"
+OUT=$(stop 50)
+ran && fail "#225: the subagent's write counts as verified after the run" || ok
+reset_tree
+
+# --- #231: an ignorePaths write never arms the gate --------------------------------
+set_checks "$LINT"
+printf '{"aiDir":".ai","hooks":{"markCodeChanged":{"ignorePaths":["gen/**"]}}}\n' > "$REPO/.myspec.json"
+git -C "$REPO" commit -q -am ignore-gen
+mkdir -p "$REPO/gen"
+printf 'BROKEN\n' > "$REPO/gen/out.ts"
+printf 'BROKEN\n' >> "$REPO/app.ts"
+mark_write 51 "$REPO/gen/out.ts"
+OUT=$(stop 51)
+expect_decision approve "$OUT" "#231: a code write under ignorePaths alone does not arm the gate"
+ran && fail "#231: an ignored write runs no check" || ok
+printf '{"aiDir":".ai"}\n' > "$REPO/.myspec.json"
+git -C "$REPO" commit -q -am unignore
+reset_tree
+
 # --- PR #203 review: an edit inside a submodule verifies the superproject ----------
 MOD="$ROOT/modsrc"
 git init -q -b main "$MOD"

@@ -17,7 +17,9 @@ List `.claude/state/sessions/*.md`.
 
 - **Zero files**: Abort. Tell user: "No active sessions found. Either no code was edited this session (the hook only auto-creates on code edits) or all sessions were already archived. Use `/myspec:session-start` to create one manually."
 - **Exactly one file**: Use it.
-- **Multiple files**: Yours is the one whose `## Files touched` lists a path you edited this session — the harness never exposes the session id, but the paths are known to you. If none or several match, fall back to the latest mtime, show the user every active file (`session_id` prefix + topic + started + age) and confirm before proceeding. Multiple-active is normal in multi-agent workflows where subagents created their own sessions.
+- **Multiple files**: Yours is the one whose `## Files touched` lists a path you edited this session — the harness never exposes the session id, but the paths are known to you. If none or several match, fall back to the latest mtime, show the user every active file (`session_id` prefix + topic + started + age) and confirm before proceeding. Multiple-active is normal when several top-level sessions share a checkout.
+
+Subagents share their parent's session id, so their edits land in the parent's file, tagged `(subagent <agent_id>[, <agent_type>])`. An untagged line is the main session's own edit. A tagged line is delegated work: it makes the file yours only if that agent id is one your Agent tool reported, and in the Outcome it is credited to that subagent, not to you. A subagent never completes the session it ran in; it reports back to its controller.
 
 Set `TARGET_FILE` to the chosen file path. Do NOT touch sibling active files.
 

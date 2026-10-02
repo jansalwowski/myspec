@@ -27,7 +27,7 @@ List `.claude/state/sessions/*.md`.
 
 Your own session is the file whose `## Files touched` lists a path you edited this session; with `auto_created: true` and a recent mtime it is the hook's log for the current agent. Refine its frontmatter (topic, feature, mode) instead of creating a new one.
 
-If several exist and none lists your edits — check `started` and the `Context` line to identify the relevant one, and confirm. Multiple-active is normal in multi-agent workflows where subagents created their own sessions.
+If several exist and none lists your edits — check `started` and the `Context` line to identify the relevant one, and confirm. Multiple-active is normal when several top-level sessions share a checkout. Subagents share their parent's file, and their paths carry a `(subagent <agent_id>)` tag.
 
 ### 2. Determine Mode
 

@@ -283,7 +283,9 @@ glob_regex() {
     case "$c" in
       "*") re="${re}[^/]*" ;;
       "?") re="${re}[^/]" ;;
-      [][.+^\$\(\)\{\}\|\\]) re="$re\\$c" ;;
+      # The ERE metacharacters, one quoted literal each: a bracket
+      # expression here matched none of them on bash 3.2 or 5.
+      "."|"["|"\\"|"("|")"|"+"|"{"|"|"|"^"|'$') re="$re\\$c" ;;
       *) re="$re$c" ;;
     esac
     i=$((i + 1))

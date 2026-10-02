@@ -42,6 +42,21 @@
 # harness never exposes the session id to the model, but the paths it edited
 # are known to it. Tests live in the plugin repository (hooks/tests/), which
 # projects do not receive.
+#
+# Subagents (#225): a subagent's tool events carry the parent's session_id
+# plus an agent_id (and agent_type); the main session's carry neither. The
+# ledger stays keyed by session_id, so a subagent's write arms the parent's
+# Stop gate. Its lines gain a fourth field, the agent_id, which the Stop
+# hook's three-field parser ignores; a main-session line is unchanged. In the
+# log, a subagent's path is tagged `(subagent <agent_id>[, <agent_type>])`, so
+# session-complete can tell the controller's own edits from delegated ones.
+#
+# Settings (#231, docs/project-settings-design.md), read through
+# lib/myspec-config.sh from the checkout that holds the written file:
+# hooks.markCodeChanged.extraCodeExtensions adds to CODE_EXT, and a write to a
+# path matching a hooks.markCodeChanged.ignorePaths glob is recorded as
+# `file`, never `code`, so it does not arm the gate by itself. A default
+# extension cannot be removed; ignoring the paths that hold it is the lever.
 
 set -euo pipefail
 
@@ -52,6 +67,132 @@ fi
 INPUT=$(cat)
 
 CODE_EXT='(ts|tsx|vue|js|jsx|mjs|cjs|mts|cts|py|rb|go|java|php|rs|cs|swift|kt|sh|bash|graphql|gql)'
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+# glob_regex <glob> -> an anchored ERE: ** crosses directories, * and ? stay
+# within one, everything else is literal. The same semantics as
+# lib/worktree-provision.sh's clean globs, so one glob means one thing.
+glob_regex() {
+  local g="$1" re="" c i=0
+  while [ "$i" -lt "${#g}" ]; do
+    c="${g:$i:1}"
+    if [ "$c" = "*" ] && [ "${g:$i:3}" = "**/" ]; then re="$re(.*/)?"; i=$((i + 3)); continue; fi
+    if [ "$c" = "*" ] && [ "${g:$i:2}" = "**" ]; then re="$re.*"; i=$((i + 2)); continue; fi
+    case "$c" in
+      "*") re="${re}[^/]*" ;;
+      "?") re="${re}[^/]" ;;
+      # The ERE metacharacters, one quoted literal each: a bracket
+      # expression here matched none of them on bash 3.2 or 5.
+      "."|"["|"\\"|"("|")"|"+"|"{"|"|"|"^"|'$') re="$re\\$c" ;;
+      *) re="$re$c" ;;
+    esac
+    i=$((i + 1))
+  done
+  printf '^%s$\n' "$re"
+}
+
+# ere_literal <text> -> the text as an ERE matching only itself, so an
+# extension such as c++ is the literal suffix.
+ere_literal() {
+  local s="$1" out="" c i=0
+  while [ "$i" -lt "${#s}" ]; do
+    c="${s:$i:1}"
+    case "$c" in
+      "."|"["|"\\"|"("|")"|"*"|"+"|"?"|"{"|"|"|"^"|'$') out="$out\\$c" ;;
+      *) out="$out$c" ;;
+    esac
+    i=$((i + 1))
+  done
+  printf '%s' "$out"
+}
+
+# code_re_or_default <ERE> -> the ERE when it compiles, else the default
+# code pattern with a warning: an uncompilable pattern makes every [[ =~ ]]
+# return 2, which would record every write as file and never arm the gate.
+code_re_or_default() {
+  local rc=0
+  # shellcheck disable=SC2319 # the [[ ]] status is the point: 2 = no compile
+  [[ "x" =~ $1 ]] || rc=$?
+  if [ "$rc" -eq 2 ]; then
+    echo "mark-code-changed: hooks.markCodeChanged.extraCodeExtensions gave a pattern that does not compile; using the default extensions" >&2
+    printf '%s' "\\.${CODE_EXT}\$"
+  else
+    printf '%s' "$1"
+  fi
+}
+
+# Per-checkout settings, cached for this run: SET_ROOTS[i] has the code
+# pattern SET_CODE_RE[i] and the ignore patterns SET_IGNORE[i] (one ERE per
+# line).
+SET_ROOTS=()
+SET_CODE_RE=()
+SET_IGNORE=()
+
+# load_settings <checkout root> -> sets CODE_RE and IGNORE_RES for it. Read
+# from the checkout itself, else its primary checkout when it has no
+# .myspec.json (as worktree-provision.sh does). No .myspec.json, no reader or
+# an unreadable value: the defaults, and the reader names what it ignored.
+load_settings() {
+  local root="$1" src cfg json ext exts="" g i
+  for ((i = 0; i < ${#SET_ROOTS[@]}; i++)); do
+    if [ "${SET_ROOTS[$i]}" = "$root" ]; then
+      CODE_RE="${SET_CODE_RE[$i]}"
+      IGNORE_RES="${SET_IGNORE[$i]}"
+      return 0
+    fi
+  done
+  CODE_RE="\\.${CODE_EXT}\$"
+  IGNORE_RES=""
+  src="$root"
+  if [ ! -f "$src/.myspec.json" ]; then
+    src=$(main_worktree_root "$root" 2>/dev/null) || src=""
+  fi
+  if [ -n "$src" ] && [ -f "$src/.myspec.json" ]; then
+    cfg=""
+    for cand in "$SCRIPT_DIR/../lib/myspec-config.sh" "$src/.claude/lib/myspec-config.sh"; do
+      if [ -f "$cand" ]; then
+        cfg="$cand"
+        break
+      fi
+    done
+    if [ -n "$cfg" ] && json=$(bash "$cfg" get hooks.markCodeChanged --root "$src"); then
+      while IFS= read -r ext; do
+        ext="${ext#.}"
+        if [[ "$ext" =~ ^[A-Za-z0-9_+-]+(\.[A-Za-z0-9_+-]+)*$ ]]; then
+          exts="$exts|$(ere_literal "$ext")"
+        elif [ -n "$ext" ]; then
+          echo "mark-code-changed: ignoring hooks.markCodeChanged.extraCodeExtensions entry '$ext': not an extension" >&2
+        fi
+      done < <(printf '%s' "$json" | jq -r '(.extraCodeExtensions // [])[] | strings' 2>/dev/null)
+      if [ -n "$exts" ]; then
+        CODE_RE=$(code_re_or_default "\\.(${CODE_EXT:1:${#CODE_EXT}-2}${exts})\$")
+      fi
+      while IFS= read -r g; do
+        [ -n "$g" ] || continue
+        case "/$g/" in
+          //*|*/../*)
+            echo "mark-code-changed: ignoring hooks.markCodeChanged.ignorePaths glob '$g': it leaves the checkout" >&2
+            continue
+            ;;
+        esac
+        IGNORE_RES="$IGNORE_RES$(glob_regex "${g#./}")"$'\n'
+      done < <(printf '%s' "$json" | jq -r '(.ignorePaths // [])[] | strings' 2>/dev/null)
+    fi
+  fi
+  SET_ROOTS+=("$root")
+  SET_CODE_RE+=("$CODE_RE")
+  SET_IGNORE+=("$IGNORE_RES")
+}
+
+# ignored <rel> -> 0 when the repo-relative path matches an IGNORE_RES glob.
+ignored() {
+  local re
+  while IFS= read -r re; do
+    [ -n "$re" ] || continue
+    [[ "$1" =~ $re ]] && return 0
+  done <<< "$IGNORE_RES"
+  return 1
+}
 
 # Nearest existing directory at or above the edited file. PostToolUse runs after
 # the write, so the parent normally exists; walking up keeps resolution working
@@ -290,10 +431,14 @@ bash_write_targets() {
 }
 
 # ledger_add <kind> <root> <rel>: appends the line unless it is already there
-# since the root's last `verified` line.
+# since the root's last `verified` line. A subagent's line ends in a fourth
+# field, its agent_id; the Stop hook reads only the first three.
 ledger_add() {
   local line
   line=$(printf '%s\t%s\t%s' "$1" "$2" "$3")
+  if [ -n "$AGENT_ID" ]; then
+    line="$line"$'\t'"$AGENT_ID"
+  fi
   if [ -f "$LEDGER" ] && L="$line" R="$2" awk -F'\t' '
       $1 == "verified" && $2 == ENVIRON["R"] { seen = 0; next }
       $0 == ENVIRON["L"] { seen = 1 }
@@ -306,7 +451,7 @@ ledger_add() {
 # write_session_log <checkout root> <path>...: creates or extends the live log
 # in the primary checkout of <checkout root>, a myspec project only.
 write_session_log() {
-  local raw_root="$1" repo_root state_dir active_file worktree topic_seed started short_id p rel
+  local raw_root="$1" repo_root state_dir active_file worktree topic_seed started short_id p rel entry
   shift
 
   # raw_root is the repository root as seen from the edit (a linked worktree
@@ -392,9 +537,12 @@ SESSION
       "$repo_root"/*) rel="${p#"$repo_root"/}" ;;
       *) rel="$p" ;;
     esac
-    if ! grep -qF -- "- \`$rel\`" "$active_file"; then
-      # shellcheck disable=SC2016 # literal backticks: a markdown code span
-      printf -- '- `%s`\n' "$rel" >> "$active_file"
+    # shellcheck disable=SC2016 # literal backticks: a markdown code span
+    entry=$(printf -- '- `%s`%s' "$rel" "$AGENT_TAG")
+    # A whole-line match: the controller's own line and a subagent's tagged
+    # line for the same path are both kept.
+    if ! grep -qxF -- "$entry" "$active_file"; then
+      printf '%s\n' "$entry" >> "$active_file"
     fi
   done
 }
@@ -404,6 +552,16 @@ COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/nul
 SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
 
 [ -n "$SESSION_ID" ] || exit 0
+
+# A subagent's events carry agent_id (and agent_type); the main session's do
+# not. Only id-safe characters are kept, so a value can't break a ledger line
+# or the log's markdown.
+AGENT_ID=$(printf '%s' "$INPUT" | jq -r '.agent_id // empty | strings' 2>/dev/null | tr -cd 'A-Za-z0-9._:-')
+AGENT_TYPE=$(printf '%s' "$INPUT" | jq -r '.agent_type // empty | strings' 2>/dev/null | tr -cd 'A-Za-z0-9._:-')
+AGENT_TAG=""
+if [ -n "$AGENT_ID" ]; then
+  AGENT_TAG=" (subagent $AGENT_ID${AGENT_TYPE:+, $AGENT_TYPE})"
+fi
 
 # The directory relative paths are taken from: the first cwd the payload
 # carries that exists, else the hook's own.
@@ -435,7 +593,6 @@ if [ -n "$FILE_PATH" ]; then
   TARGETS=("$(physical_path "$FILE_PATH")")
   CONTEXT="Auto-created on first code edit at \`$FILE_PATH\`."
 elif [ -n "$COMMAND" ]; then
-  SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
   CWD_ROOT=$(git -C "$PAYLOAD_CWD" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$PAYLOAD_CWD")
   LIB=""
   for cand in "$SCRIPT_DIR/../lib/command-scan.sh" "$CWD_ROOT/.claude/lib/command-scan.sh" "$CWD_ROOT/lib/command-scan.sh"; do
@@ -479,8 +636,9 @@ for p in "${TARGETS[@]}"; do
     "$root"/*) rel="${p#"$root"/}" ;;
     *) continue ;;
   esac
+  load_settings "$root"
   kind='file'
-  if [[ "$p" =~ \.${CODE_EXT}$ ]]; then
+  if [[ "$p" =~ $CODE_RE ]] && ! ignored "$rel"; then
     kind=code
     CODE_ROOTS+=("$root")
     CODE_PATHS+=("$p")

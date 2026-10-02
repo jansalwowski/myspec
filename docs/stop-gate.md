@@ -29,6 +29,10 @@ For a Write or Edit, the written file is the tool's `file_path`. For Bash, only 
 
 Every written file is recorded, code or not, because the ledger is also the attribution list: a `tsconfig.json` or `package.json` this session edited must count as its own.
 
+What counts as code is `CODE_EXT` plus `hooks.markCodeChanged.extraCodeExtensions`, and a path matching a `hooks.markCodeChanged.ignorePaths` glob is recorded as `file` even when its extension is code, so generated output never arms the gate by itself (#231, `docs/project-settings-design.md`). Both are read through `lib/myspec-config.sh` from the checkout holding the written file, not the cwd's, falling back to its primary checkout when it has no `.myspec.json`. The globs are repo-relative, with `**` crossing directories, the same as `isolation.provision.clean`. A default extension can't be removed; ignoring the paths that hold it does that. A malformed value falls back to the default and is named on stderr.
+
+Subagents share their parent's `session_id`; their tool events add `agent_id` and `agent_type`, and the main session's carry neither (#225). The ledger stays keyed by `session_id`, so a subagent's write arms the parent's gate and counts as the session's file. A subagent's line gains a fourth field, its `agent_id`: `<kind>\t<root>\t<path>\t<agent_id>`. The Stop hook reads only the first three fields, and a main-session line is unchanged. In the session log a subagent's path is tagged `` - `path` (subagent <agent_id>, <agent_type>) ``, which is how session-complete keeps the controller's own edits apart from delegated ones.
+
 The ledger outlives each run. The empty `/tmp/.myspec-code-changed-<session_id>` marker it replaces was deleted after every run, which erased the list of files the session had written. That marker is still honoured: it arms the cwd's checkout with attribution off, and is removed after the run.
 
 ## Attribution (R4)
