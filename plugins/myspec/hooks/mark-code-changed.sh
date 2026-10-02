@@ -81,12 +81,44 @@ glob_regex() {
     case "$c" in
       "*") re="${re}[^/]*" ;;
       "?") re="${re}[^/]" ;;
-      [][.+^\$\(\)\{\}\|\\]) re="$re\\$c" ;;
+      # The ERE metacharacters, one quoted literal each: a bracket
+      # expression here matched none of them on bash 3.2 or 5.
+      "."|"["|"\\"|"("|")"|"+"|"{"|"|"|"^"|'$') re="$re\\$c" ;;
       *) re="$re$c" ;;
     esac
     i=$((i + 1))
   done
   printf '^%s$\n' "$re"
+}
+
+# ere_literal <text> -> the text as an ERE matching only itself, so an
+# extension such as c++ is the literal suffix.
+ere_literal() {
+  local s="$1" out="" c i=0
+  while [ "$i" -lt "${#s}" ]; do
+    c="${s:$i:1}"
+    case "$c" in
+      "."|"["|"\\"|"("|")"|"*"|"+"|"?"|"{"|"|"|"^"|'$') out="$out\\$c" ;;
+      *) out="$out$c" ;;
+    esac
+    i=$((i + 1))
+  done
+  printf '%s' "$out"
+}
+
+# code_re_or_default <ERE> -> the ERE when it compiles, else the default
+# code pattern with a warning: an uncompilable pattern makes every [[ =~ ]]
+# return 2, which would record every write as file and never arm the gate.
+code_re_or_default() {
+  local rc=0
+  # shellcheck disable=SC2319 # the [[ ]] status is the point: 2 = no compile
+  [[ "x" =~ $1 ]] || rc=$?
+  if [ "$rc" -eq 2 ]; then
+    echo "mark-code-changed: hooks.markCodeChanged.extraCodeExtensions gave a pattern that does not compile; using the default extensions" >&2
+    printf '%s' "\\.${CODE_EXT}\$"
+  else
+    printf '%s' "$1"
+  fi
 }
 
 # Per-checkout settings, cached for this run: SET_ROOTS[i] has the code
@@ -127,13 +159,13 @@ load_settings() {
       while IFS= read -r ext; do
         ext="${ext#.}"
         if [[ "$ext" =~ ^[A-Za-z0-9_+-]+(\.[A-Za-z0-9_+-]+)*$ ]]; then
-          exts="$exts|${ext//./\\.}"
+          exts="$exts|$(ere_literal "$ext")"
         elif [ -n "$ext" ]; then
           echo "mark-code-changed: ignoring hooks.markCodeChanged.extraCodeExtensions entry '$ext': not an extension" >&2
         fi
       done < <(printf '%s' "$json" | jq -r '(.extraCodeExtensions // [])[] | strings' 2>/dev/null)
       if [ -n "$exts" ]; then
-        CODE_RE="\\.(${CODE_EXT:1:${#CODE_EXT}-2}${exts})\$"
+        CODE_RE=$(code_re_or_default "\\.(${CODE_EXT:1:${#CODE_EXT}-2}${exts})\$")
       fi
       while IFS= read -r g; do
         [ -n "$g" ] || continue

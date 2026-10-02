@@ -384,5 +384,36 @@ out=$(bash "$SCRIPT" "$W" --base main 2>&1)
 [ -L "$W/node_modules" ] && [ -e "$M/node_modules/pkg/linked.tsbuildinfo" ] && ok || fail "clean: never deletes through a link"
 [ -z "$(git -C "$W" status --porcelain)" ] && ok || fail "clean: the worktree stays clean"
 
+# glob_regex escapes every ERE metacharacter but its own * ** ? (PR #243
+# review): the bracket expression that tried to matched none of them. The
+# hook keeps a copy for ignorePaths, so the two must not drift.
+fn_block() { sed -n '/^glob_regex()/,/^}/p' "$1"; }
+G1=$(fn_block "$SCRIPT")
+G2=$(fn_block "$HERE/../../hooks/mark-code-changed.sh")
+[ -n "$G1" ] && [ "$G1" = "$G2" ] && ok || fail "glob_regex is identical in worktree-provision.sh and mark-code-changed.sh"
+glob_case() {  # glob_case <glob> <path> <yes|no>
+  local got
+  got=$(bash -c "$G1"'
+    re=$(glob_regex "$1"); [[ "$2" =~ $re ]] && echo yes || echo no' _ "$1" "$2")
+  [ "$got" = "$3" ] && ok || fail "glob_regex: '$1' vs '$2' should be $3 (got: $got)"
+}
+glob_case '*.gen.ts' x.gen.ts yes
+glob_case '*.gen.ts' codegen.ts no
+glob_case 'src/(old)/**' 'src/(old)/a.ts' yes
+glob_case 'src/(old)/**' src/old/a.ts no
+# shellcheck disable=SC2016 # literal text, not an expansion
+glob_case 'lib/a$b.ts' 'lib/a$b.ts' yes
+glob_case 'a+b.txt' a+b.txt yes
+glob_case 'a+b.txt' aab.txt no
+glob_case 'x[1].log' 'x[1].log' yes
+glob_case 'x[1].log' x1.log no
+glob_case 'v?.ts' v1.ts yes
+glob_case 'v?.ts' v12.ts no
+glob_case 'v?.ts' v/.ts no
+glob_case '**/*.tsbuildinfo' a/b/c/d.tsbuildinfo yes
+glob_case '**/*.tsbuildinfo' d.tsbuildinfo yes
+glob_case 'a/**/z.ts' a/b/c/z.ts yes
+glob_case '*.ts' a/b.ts no
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

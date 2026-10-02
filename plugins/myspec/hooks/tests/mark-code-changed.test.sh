@@ -284,8 +284,9 @@ git -C "$CFG" config user.email t@t
 git -C "$CFG" config user.name t
 cat > "$CFG/.myspec.json" <<'JSON'
 {"aiDir":".ai","hooks":{"markCodeChanged":{
-  "extraCodeExtensions":["twig",".proto","not an ext"],
-  "ignorePaths":["generated/**","**/*.gen.ts","../outside/**"]}}}
+  "extraCodeExtensions":["twig",".proto","not an ext","c++"],
+  "ignorePaths":["generated/**","**/*.gen.ts","../outside/**",
+    "src/(old)/**","lib/a$b.ts","src/v?.ts","*.gen.ts"]}}}
 JSON
 git -C "$CFG" add .myspec.json
 git -C "$CFG" commit -q -m init
@@ -310,6 +311,45 @@ write "$SID-75" "$CFG" "$CFG/src/schema.gen.ts"
 ledger_has "$SID-75" file "$CFG" src/schema.gen.ts && ok || fail "a **/ glob matches below the root"
 bashcmd "$SID-76" "$CFG" 'echo x > generated/out.twig'
 ledger_has "$SID-76" file "$CFG" generated/out.twig && ok || fail "ignorePaths applies to a Bash write and wins over an extra extension"
+
+# Glob metacharacters are literal (PR #243 review): an unescaped . made
+# *.gen.ts match codegen.ts, and ( ) $ made a glob never match.
+write "$SID-84" "$CFG" "$CFG/codegen.ts"
+ledger_has "$SID-84" code "$CFG" codegen.ts && ok || fail "*.gen.ts does not match the near-miss codegen.ts"
+write "$SID-84" "$CFG" "$CFG/x.gen.ts"
+ledger_has "$SID-84" file "$CFG" x.gen.ts && ok || fail "*.gen.ts matches x.gen.ts"
+write "$SID-84" "$CFG" "$CFG/src/(old)/legacy.ts"
+ledger_has "$SID-84" file "$CFG" "src/(old)/legacy.ts" && ok || fail "src/(old)/** matches a path under src/(old)/"
+write "$SID-84" "$CFG" "$CFG/src/old/legacy.ts"
+ledger_has "$SID-84" code "$CFG" src/old/legacy.ts && ok || fail "src/(old)/** does not match src/old/"
+write "$SID-84" "$CFG" "$CFG/lib/a\$b.ts"
+# shellcheck disable=SC2016 # literal text, not an expansion
+ledger_has "$SID-84" file "$CFG" 'lib/a$b.ts' && ok || fail "a glob with \$ matches its literal path"
+write "$SID-84" "$CFG" "$CFG/src/v1.ts"
+ledger_has "$SID-84" file "$CFG" src/v1.ts && ok || fail "? matches one character"
+write "$SID-84" "$CFG" "$CFG/src/v12.ts"
+ledger_has "$SID-84" code "$CFG" src/v12.ts && ok || fail "? does not match two characters"
+write "$SID-84" "$CFG" "$CFG/src/a/b/c/deep.gen.ts"
+ledger_has "$SID-84" file "$CFG" src/a/b/c/deep.gen.ts && ok || fail "**/ crosses several levels"
+
+# An extension with an ERE metacharacter is literal (PR #243 review): c++
+# made CODE_RE uncompilable on macOS, so every write was recorded as file.
+write "$SID-85" "$CFG" "$CFG/src/b.c++"
+ledger_has "$SID-85" code "$CFG" src/b.c++ && ok || fail "an extra extension c++ arms the gate"
+write "$SID-85" "$CFG" "$CFG/src/a.ts"
+ledger_has "$SID-85" code "$CFG" src/a.ts && ok || fail "with c++ configured, a.ts still arms the gate"
+write "$SID-85" "$CFG" "$CFG/src/b.cc"
+ledger_has "$SID-85" file "$CFG" src/b.cc && ok || fail "c++ is not read as one-or-more c"
+
+# Fail closed: a code pattern that does not compile falls back to the
+# defaults with a warning instead of recording every write as file.
+FALLBACK=$(CODE_EXT='(ts|py)' bash -c "$(sed -n '/^code_re_or_default()/,/^}/p' "$HOOK")"'
+  code_re_or_default "\\.(ts|(x)\$"' 2>"$ROOT/fallback.err")
+[ "$FALLBACK" = '\.(ts|py)$' ] && ok || fail "an uncompilable CODE_RE falls back to the default (got: $FALLBACK)"
+grep -qF 'does not compile' "$ROOT/fallback.err" && ok || fail "an uncompilable CODE_RE is warned about on stderr"
+KEPT=$(CODE_EXT='(ts|py)' bash -c "$(sed -n '/^code_re_or_default()/,/^}/p' "$HOOK")"'
+  code_re_or_default "\\.(ts|c\\+\\+)\$"' 2>/dev/null)
+[ "$KEPT" = '\.(ts|c\+\+)$' ] && ok || fail "a compilable CODE_RE is kept (got: $KEPT)"
 
 # Settings come from the checkout holding the file, not the cwd.
 write "$SID-77" "$REPO" "$CFG/templates/x.twig"
