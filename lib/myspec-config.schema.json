@@ -210,19 +210,19 @@
       "merge": "replace",
       "issue": ["#232"],
       "loosens": true,
-      "description": "Run the check only when a file this session wrote in this checkout matches one of these globs."
+      "description": "Run the check only when a file this session wrote in this checkout matches one of these globs: repo-relative, anchored at the root, * and ? within one segment, ** as a whole segment for any depth (docs/stop-gate.md, Per-check settings). An unusable value is ignored and the check runs."
     },
     "verification.containers": {
       "file": "verification",
       "type": ["object"],
       "issue": ["#221"],
-      "description": "Map of container name to {mountSource, mountTarget}."
+      "description": "Map of container name to {mountSource, mountTarget}: mountSource the repo-relative directory the container mounts (usually \".\"), mountTarget the absolute path it is mounted at inside the container."
     },
     "verification.checks[].runIn": {
       "file": "verification",
       "type": ["string"],
       "issue": ["#221"],
-      "description": "Name of the container (in containers) the check's command runs in."
+      "description": "Name of the container (in containers) the check's command runs in. The check gets MYSPEC_CHECK_WORKDIR and is exempt from the linked-worktree container-exec refusal; it is refused when the container is undefined or cannot see this checkout."
     }
   },
   "env": {

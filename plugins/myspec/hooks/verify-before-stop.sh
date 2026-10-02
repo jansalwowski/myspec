@@ -18,6 +18,11 @@
 # own source. In a linked worktree (or a submodule inside one), a check that
 # runs a container exec (docker exec, docker compose exec, podman exec, ...)
 # without -w/--workdir is refused as unverifiable, not run.
+# A check with `paths` runs only when a file the session wrote in that
+# checkout matches one of its globs (#232); a skipped one is named in the
+# stop message. A check with `runIn` gets MYSPEC_CHECK_WORKDIR, this
+# checkout's path inside that container (`containers`), and is refused when
+# the container cannot see this checkout (#221).
 
 set -euo pipefail
 
@@ -538,7 +543,7 @@ CAP_SENTINEL=$(mktemp "${TMPDIR:-/tmp}/.myspec-cap.XXXXXX")
 rm -f "$CAP_SENTINEL"
 CHECK_LOG=""
 CHECK_RUN_LOG=""
-trap 'finish_run; rm -f "$CAP_SENTINEL" ${CHECK_LOG:+"$CHECK_LOG"} ${CHECK_RUN_LOG:+"$CHECK_RUN_LOG"} ${FAILED_LOGS[@]+"${FAILED_LOGS[@]}"}' EXIT
+trap 'finish_run; rm -f "$CAP_SENTINEL" ${SETTING_ERR:+"$SETTING_ERR"} ${CHECK_LOG:+"$CHECK_LOG"} ${CHECK_RUN_LOG:+"$CHECK_RUN_LOG"} ${FAILED_LOGS[@]+"${FAILED_LOGS[@]}"}' EXIT
 
 # run_with_cap <seconds> <command>: runs it under the cap and kills the whole
 # process group at the deadline. Killing only the direct child is not enough:
@@ -882,6 +887,224 @@ container_exec_unpinned() {
   return 1
 }
 
+# Settings, through the one reader (lib/myspec-config.sh): next to this hook's
+# directory in the plugin and in a project (.claude/hooks, .claude/lib), or
+# in the plugin root. Without it, the checks are read from the file as before
+# and a check with runIn is refused: its container cannot be read.
+CONFIG_READER=""
+for CANDIDATE in "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/myspec-config.sh" \
+    "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/myspec-config.sh"; do
+  if [ -f "$CANDIDATE" ]; then
+    CONFIG_READER="$CANDIDATE"
+    break
+  fi
+done
+
+# read_setting <key> <root> -> sets SETTING to the value as JSON and
+# SETTING_NOTES to the reader's notes on an ignored key. Fails without the
+# reader, or when it fails.
+SETTING_ERR=$(mktemp "${TMPDIR:-/tmp}/.myspec-cfg.XXXXXX")
+read_setting() {
+  SETTING=""
+  SETTING_NOTES=""
+  [ -n "$CONFIG_READER" ] || return 1
+  SETTING=$(bash "$CONFIG_READER" get "$1" --root "$2" 2>"$SETTING_ERR") || return 1
+  SETTING_NOTES=$(sed 's/^myspec-config: //' "$SETTING_ERR")
+}
+
+# Path scope (#232). A check's `paths` is a list of globs matched against
+# each file this session wrote in the checkout, as a repo-relative path:
+#   - a glob matches the whole path, from the repo root (`*.php` is a file at
+#     the root only; `**/*.php` is one at any depth);
+#   - `*` matches any run of characters within one path segment, `?` one
+#     character other than `/`;
+#   - `**` as a whole segment matches zero or more segments (`api/**` is
+#     everything under api/, `a/**/b` matches a/b and a/x/y/b); `**` inside
+#     a segment is a plain `*`;
+#   - a trailing `/` means everything under it (`api/` is `api/**`), and a
+#     leading `./` is dropped;
+#   - every other character is literal, `[`, `{` and `\` included.
+# A glob that is empty, absolute or has a `..` segment is unusable, and so
+# is a `paths` that is not a non-empty list of strings: the check then runs,
+# and the stop message names the ignored setting (fail closed).
+
+# glob_ere <glob> -> the anchored ERE for it; fails when it is unusable.
+glob_ere() {
+  local g="$1" re="" c seg=1
+  while [ "${g#./}" != "$g" ]; do g="${g#./}"; done
+  case "$g" in ''|/*) return 1 ;; esac
+  case "/$g/" in */../*) return 1 ;; esac
+  case "$g" in */) g="$g**" ;; esac
+  while [ -n "$g" ]; do
+    if [ "$seg" -eq 1 ] && [ "$g" = '**' ]; then
+      re="$re.*"
+      break
+    fi
+    if [ "$seg" -eq 1 ] && [ "${g#'**/'}" != "$g" ]; then
+      re="$re(.*/)?"
+      g="${g#'**/'}"
+      continue
+    fi
+    c="${g:0:1}"
+    g="${g:1}"
+    seg=0
+    case "$c" in
+      '*') while [ "${g:0:1}" = '*' ]; do g="${g:1}"; done; re="${re}[^/]*" ;;
+      '?') re="${re}[^/]" ;;
+      /) re="$re/"; seg=1 ;;
+      .|+|\(|\)|\||\$|\{|\}) re="${re}[$c]" ;;
+      ^|\[|\\) re="$re\\$c" ;;
+      *) re="$re$c" ;;
+    esac
+  done
+  printf '^%s$\n' "$re"
+}
+
+# paths_verdict <check json> -> sets PATHS_VERDICT to run (no paths, or a
+# file matches), skip (no file matches) or ignored (unusable; the check
+# runs), and PATHS_GLOBS to the globs joined with ", ".
+paths_verdict() {
+  local state glob re alt="" f
+  PATHS_VERDICT=run
+  PATHS_GLOBS=""
+  state=$(printf '%s' "$1" | jq -r '.paths
+    | if . == null then "absent"
+      elif type == "array" and length > 0 and all(.[]; type == "string") then "list"
+      else "bad" end')
+  [ "$state" != absent ] || return 0
+  if [ "$state" = bad ]; then
+    PATHS_VERDICT=ignored
+    return 0
+  fi
+  while IFS= read -r glob; do
+    PATHS_GLOBS="${PATHS_GLOBS:+$PATHS_GLOBS, }$glob"
+    if ! re=$(glob_ere "$glob"); then
+      PATHS_VERDICT=ignored
+      return 0
+    fi
+    alt="${alt:+$alt|}$re"
+  done < <(printf '%s' "$1" | jq -r '.paths[]')
+  # The legacy marker carries no list of what the session wrote, so nothing
+  # can be ruled out: the check runs.
+  [ "$ATTRIBUTE" -eq 1 ] || return 0
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    [[ "$f" =~ $alt ]] && return 0
+  done <<< "$MYSPEC_SESSION_FILES"
+  # The ledger misses writes it cannot see: git revert or checkout, rm, a
+  # code generator, a variable path. A path under the globs that git reports
+  # changed, uncommitted or against the base, runs the check (fail closed).
+  unseen_files
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    [[ "$f" =~ $alt ]] && return 0
+  done <<< "$UNSEEN_FILES"
+  PATHS_VERDICT=skip
+}
+
+# unseen_files -> sets UNSEEN_FILES, once per checkout: the paths git reports
+# changed there, uncommitted or untracked (changed_files) and, when a base
+# ref resolved, against MYSPEC_BASE_REF, both sides of a rename included.
+UNSEEN_READY=0
+UNSEEN_FILES=""
+unseen_files() {
+  [ "$UNSEEN_READY" -eq 0 ] || return 0
+  UNSEEN_READY=1
+  UNSEEN_FILES=$({
+    changed_files
+    if [ -n "$MYSPEC_BASE_REF" ]; then
+      git -C "$REPO_ROOT" diff --name-only --no-renames "$MYSPEC_BASE_REF" -- 2>/dev/null || true
+    fi
+  } | grep -v '^\.claude/state/' | sort -u || true)
+}
+
+# Containers (#221). A container that bind-mounts part of the repository
+# mounts the MAIN checkout's copy, so a check run in it sees the worktree only
+# when the worktree lies under that mount. `containers` maps a name to
+# {mountSource, mountTarget}: mountSource repo-relative (usually "."),
+# mountTarget absolute inside the container. For a check with runIn, the
+# check gets MYSPEC_CHECK_WORKDIR: where this checkout's mountSource sits in
+# the container, mountTarget plus the path of <checkout>/<mountSource> under
+# <main checkout>/<mountSource>. In the main checkout that is mountTarget.
+
+# main_checkout <root> -> the physical path of the repository's main
+# checkout. A submodule's is its superproject's main checkout plus the
+# submodule's path, so a submodule of a linked worktree is not its own main.
+main_checkout() {
+  local sp main first
+  if ! git -C "$1" rev-parse --git-dir >/dev/null 2>&1; then
+    printf '%s\n' "$1"
+    return 0
+  fi
+  sp=$(git -C "$1" rev-parse --show-superproject-working-tree 2>/dev/null || printf '')
+  if [ -n "$sp" ]; then
+    sp=$(cd "$sp" && pwd -P) || return 1
+    case "$1/" in "$sp"/*) ;; *) return 1 ;; esac
+    main=$(main_checkout "$sp") || return 1
+    printf '%s/%s\n' "$main" "${1#"$sp"/}"
+    return 0
+  fi
+  # The first entry of the worktree list is the main working tree; a bare
+  # repository has none.
+  first=$(git -C "$1" worktree list --porcelain 2>/dev/null \
+    | awk 'NR == 1 && /^worktree / { p = substr($0, 10); next } /^bare$/ { p = "" } /^$/ { exit } END { print p }')
+  [ -n "$first" ] || return 1
+  (cd "$first" 2>/dev/null && pwd -P)
+}
+
+# check_workdir <root> <container name> -> sets CHECK_WORKDIR, or
+# REFUSE_REASON when the check cannot run there.
+check_workdir() {
+  local spec src tgt main base self rel
+  CHECK_WORKDIR=""
+  REFUSE_REASON=""
+  if [ -z "$CONTAINERS_JSON" ]; then
+    REFUSE_REASON="runIn names container \"$2\", but the containers setting could not be read (lib/myspec-config.sh was not found next to this hook)."
+    return 1
+  fi
+  spec=$(printf '%s' "$CONTAINERS_JSON" | jq -c --arg n "$2" 'if type == "object" and has($n) then .[$n] else empty end')
+  if [ -z "$spec" ]; then
+    REFUSE_REASON="runIn names container \"$2\", which \`containers\` in .claude/verification.json does not define.${CONTAINERS_NOTES:+ $CONTAINERS_NOTES}"
+    return 1
+  fi
+  # An empty value means missing or not a non-empty string.
+  src=$(printf '%s' "$spec" | jq -r 'if type == "object" and (.mountSource | type) == "string" then .mountSource else "" end')
+  tgt=$(printf '%s' "$spec" | jq -r 'if type == "object" and (.mountTarget | type) == "string" then .mountTarget else "" end')
+  case "$src" in
+    ''|/*|..|../*|*/..|*/../*)
+      REFUSE_REASON="container \"$2\" needs mountSource, the repo-relative directory it mounts (usually \".\"), without .. segments."
+      return 1 ;;
+  esac
+  while [ "${src#./}" != "$src" ]; do src="${src#./}"; done
+  while [ "${src%/}" != "$src" ]; do src="${src%/}"; done
+  [ "$src" != "." ] || src=""
+  case "$tgt" in
+    /*) ;;
+    *)
+      REFUSE_REASON="container \"$2\" needs mountTarget, the absolute path its mountSource is mounted at inside the container."
+      return 1 ;;
+  esac
+  while [ "${tgt%/}" != "$tgt" ]; do tgt="${tgt%/}"; done
+  if ! main=$(main_checkout "$1"); then
+    REFUSE_REASON="the main checkout of $1 could not be found, so where container \"$2\" sees this checkout is unknown."
+    return 1
+  fi
+  base="$main${src:+/$src}"
+  self="$1${src:+/$src}"
+  if [ "$self" = "$base" ]; then
+    rel=""
+  else
+    case "$self/" in
+      "$base"/*) rel="/${self#"$base"/}" ;;
+      *)
+        REFUSE_REASON="this worktree is not visible inside the container: container \"$2\" mounts $base at ${tgt:-/}, and $self is not under it, so a check run there would see another tree. Create the worktree under $base (for example in the isolation.worktreeRoot of the main checkout), or run the check on the host."
+        return 1 ;;
+    esac
+  fi
+  CHECK_WORKDIR="$tgt$rel"
+  [ -n "$CHECK_WORKDIR" ] || CHECK_WORKDIR=/
+}
+
 # Run each required check, once per checkout to verify.
 FAILED_CHECKS=()
 # The output file of each failed check, parallel to FAILED_CHECKS, for
@@ -896,6 +1119,10 @@ FAILED_OUTPUT=()
 BLOCKING_FAILURE=0
 WARN_NOTES=()
 BLOCK_NOTES=()
+# Checks skipped by their paths, and settings the reader or the gate ignored:
+# reported on every outcome, an approve included (a loosened gate is named).
+SCOPE_NOTES=()
+CHECKS_RAN=0
 
 for REPO_ROOT in "${VERIFY_ROOTS[@]}"; do
 ROOT_CONFIG="$REPO_ROOT/.claude/verification.json"
@@ -918,6 +1145,7 @@ if [ "$ATTRIBUTE" -eq 1 ] && [ -f "$LEDGER" ]; then
   MYSPEC_SESSION_FILES=$(session_files)
 fi
 export MYSPEC_SESSION_FILES
+UNSEEN_READY=0
 
 # Base ref for diff-scoped checks. A repo whose lint or type-check is already
 # red on the default branch cannot use a whole-repo command as a gate — it
@@ -976,31 +1204,81 @@ if [ -f "$IMPLEMENT_MARKER" ]; then
   fi
 fi
 
-CHECKS_COUNT=$(jq '.checks | length' "$ROOT_CONFIG")
+# The checks and containers, through the reader, from the checkout whose
+# verification.json is in use. Without the reader, the checks are read from
+# the file as before; CONTAINERS_JSON stays empty and a runIn check is refused.
+CONFIG_ROOT=$(dirname "$(dirname "$ROOT_CONFIG")")
+CONTAINERS_JSON=""
+CONTAINERS_NOTES=""
+if read_setting verification.checks "$CONFIG_ROOT"; then
+  CHECKS_JSON=$SETTING
+  [ -z "$SETTING_NOTES" ] || SCOPE_NOTES+=("$SETTING_NOTES")
+  if read_setting verification.containers "$CONFIG_ROOT"; then
+    CONTAINERS_JSON=$SETTING
+    CONTAINERS_NOTES=$SETTING_NOTES
+  fi
+else
+  CHECKS_JSON=$(jq -c '.checks' "$ROOT_CONFIG")
+fi
+CHECKS_COUNT=$(printf '%s' "$CHECKS_JSON" | jq 'if type == "array" then length else 0 end')
 
 for i in $(seq 0 $((CHECKS_COUNT - 1))); do
-  REQUIRED=$(jq -r ".checks[$i].required" "$ROOT_CONFIG")
+  CHECK=$(printf '%s' "$CHECKS_JSON" | jq -c ".[$i]")
+  REQUIRED=$(printf '%s' "$CHECK" | jq -r '.required')
   if [ "$REQUIRED" != "true" ]; then
     continue
   fi
 
-  NAME=$(jq -r ".checks[$i].name" "$ROOT_CONFIG")$ROOT_LABEL
-  COMMAND=$(jq -r ".checks[$i].command" "$ROOT_CONFIG")
-  DIFF_COMMAND=$(jq -r ".checks[$i].diffCommand // \"\"" "$ROOT_CONFIG")
-  CLEANUP=$(jq -r ".checks[$i].cleanup // \"\"" "$ROOT_CONFIG")
+  NAME=$(printf '%s' "$CHECK" | jq -r '.name')$ROOT_LABEL
+  COMMAND=$(printf '%s' "$CHECK" | jq -r '.command')
+  DIFF_COMMAND=$(printf '%s' "$CHECK" | jq -r '.diffCommand // ""')
+  CLEANUP=$(printf '%s' "$CHECK" | jq -r '.cleanup // ""')
+  RUN_IN=$(printf '%s' "$CHECK" | jq -r '.runIn // empty | if type == "string" then . else "\(.)" end')
+  unset MYSPEC_CHECK_WORKDIR
+
+  # Path scope (#232): a required check skipped here is named in the stop
+  # message, so the loosening never goes unseen.
+  paths_verdict "$CHECK"
+  case "$PATHS_VERDICT" in
+    skip)
+      SCOPE_NOTES+=("$NAME: skipped, no file this session wrote matches its paths ($PATHS_GLOBS).")
+      continue ;;
+    ignored)
+      SCOPE_NOTES+=("$NAME: its paths setting was ignored, so the check ran. paths must be a non-empty list of repo-relative globs, none absolute or with a .. segment${PATHS_GLOBS:+ (got $PATHS_GLOBS)}.") ;;
+  esac
 
   if [ -n "${DIFF_COMMAND// /}" ] && [ -n "$MYSPEC_BASE_REF" ]; then
     COMMAND="$DIFF_COMMAND"
   fi
 
-  if [ "$ROOT_IS_LINKED" -eq 1 ] && container_exec_unpinned "$COMMAND"; then
+  # A check with runIn names where its work runs, so the gate can say where
+  # this checkout is inside the container (or refuse when it is not there).
+  # That satisfies the #220 refusal below: the command gets the workdir.
+  if [ -n "$RUN_IN" ]; then
+    if ! check_workdir "$REPO_ROOT" "$RUN_IN"; then
+      UNVERIFIABLE_CHECKS+=("$NAME")
+      FAILED_OUTPUT+=("[$NAME not run: runIn $RUN_IN] $REFUSE_REASON This is not a test failure.")
+      continue
+    fi
+    export MYSPEC_CHECK_WORKDIR="$CHECK_WORKDIR"
+    # runIn exempts a command from the #220 refusal only when it uses the
+    # workdir: an exec with neither -w/--workdir nor MYSPEC_CHECK_WORKDIR
+    # still runs in the container's default directory.
+    if [ "$ROOT_IS_LINKED" -eq 1 ] && container_exec_unpinned "$COMMAND" \
+        && [ "${COMMAND#*MYSPEC_CHECK_WORKDIR}" = "$COMMAND" ]; then
+      UNVERIFIABLE_CHECKS+=("$NAME")
+      FAILED_OUTPUT+=("[$NAME not run: runIn $RUN_IN without its workdir] $COMMAND runs a container exec without -w/--workdir and does not use MYSPEC_CHECK_WORKDIR, so it runs in the container's default working directory, which mounts the main checkout's tree, not $REPO_ROOT. A result would describe another tree. This is not a test failure. Pass -w \"\$MYSPEC_CHECK_WORKDIR\" in the exec options, before the container or service name, then report the check's real result.")
+      continue
+    fi
+  elif [ "$ROOT_IS_LINKED" -eq 1 ] && container_exec_unpinned "$COMMAND"; then
     UNVERIFIABLE_CHECKS+=("$NAME")
-    FAILED_OUTPUT+=("[$NAME not run: unverifiable in a linked worktree] $COMMAND runs a container exec (docker exec, docker compose exec, podman exec and the like) without -w/--workdir, so it runs in the container's working directory. That directory mounts the checkout the container or compose project was started from (as a rule the main checkout), not $REPO_ROOT, so a result would describe another tree; and compose names the project after the directory it runs in, so from here it may find no running service at all. This is not a test failure. Make the check verify this worktree (mount it in the container and pass -w/--workdir with its path there, or run the tool on the host), then report its real result. The gate trusts a -w/--workdir without verifying it: it cannot see what the container mounts at that path, so the path must be this worktree's mount.")
+    FAILED_OUTPUT+=("[$NAME not run: unverifiable in a linked worktree] $COMMAND runs a container exec (docker exec, docker compose exec, podman exec and the like) without -w/--workdir, so it runs in the container's working directory. That directory mounts the checkout the container or compose project was started from (as a rule the main checkout), not $REPO_ROOT, so a result would describe another tree; and compose names the project after the directory it runs in, so from here it may find no running service at all. This is not a test failure. Make the check verify this worktree: give it runIn with the container's mount in containers (.claude/verification.json) and pass -w \"\$MYSPEC_CHECK_WORKDIR\", or mount it in the container and pass -w/--workdir with its path there, or run the tool on the host. The gate trusts a -w/--workdir without verifying it: it cannot see what the container mounts at that path, so the path must be this worktree's mount.")
     continue
   fi
 
   # Exported to the check and to its cleanup, so a wrapper that starts work
   # the group kill cannot reach can tag it and the cleanup can find it.
+  CHECKS_RAN=$((CHECKS_RAN + 1))
   RUN_ID="myspec-$(date +%s)-$$-$i"
   run_capped "$CHECK_CAP_SECONDS" "$COMMAND" "$RUN_ID" keep
   CHECK_RUN_LOG=$RUN_LOG
@@ -1066,6 +1344,12 @@ fi
 done
 rm -f "$CAP_SENTINEL"
 
+# One line per note, deduplicated (a note from the reader repeats per root).
+SCOPE=""
+if [ "${#SCOPE_NOTES[@]}" -gt 0 ]; then
+  SCOPE="Scope: $(printf '%s\n' "${SCOPE_NOTES[@]}" | awk '!seen[$0]++ { printf "%s%s", (n++ ? " " : ""), $0 }')"
+fi
+
 if [ ${#FAILED_CHECKS[@]} -gt 0 ] || [ ${#TIMED_OUT_CHECKS[@]} -gt 0 ] || [ ${#UNVERIFIABLE_CHECKS[@]} -gt 0 ]; then
   # The headline separates the two outcomes: "failed" is a result, "timed
   # out" is the absence of one.
@@ -1082,7 +1366,7 @@ if [ ${#FAILED_CHECKS[@]} -gt 0 ] || [ ${#TIMED_OUT_CHECKS[@]} -gt 0 ] || [ ${#U
     fi
   fi
   if [ ${#UNVERIFIABLE_CHECKS[@]} -gt 0 ]; then
-    UNVER=$(printf '%s, ' "${UNVERIFIABLE_CHECKS[@]}"); UNVER="not run, unverifiable in a linked worktree: ${UNVER%, }"
+    UNVER=$(printf '%s, ' "${UNVERIFIABLE_CHECKS[@]}"); UNVER="not run, unverifiable here: ${UNVER%, }"
     NAMES="${NAMES:+$NAMES; }$UNVER"
   fi
   # Join with real newline-delimited separators (multi-char IFS joins only
@@ -1092,7 +1376,7 @@ if [ ${#FAILED_CHECKS[@]} -gt 0 ] || [ ${#TIMED_OUT_CHECKS[@]} -gt 0 ] || [ ${#U
     DETAILS+="${ENTRY}"$'\n---\n'
   done
   DETAILS=${DETAILS%$'\n---\n'}
-  NOTES=""
+  NOTES="${SCOPE:+$SCOPE$'\n\n'}"
   for ENTRY in ${WARN_NOTES[@]+"${WARN_NOTES[@]}"}; do
     NOTES+="${ENTRY}"$'\n\n'
   done
@@ -1115,4 +1399,11 @@ if [ ${#FAILED_CHECKS[@]} -gt 0 ] || [ ${#TIMED_OUT_CHECKS[@]} -gt 0 ] || [ ${#U
   exit 0
 fi
 
+if [ -n "$SCOPE" ]; then
+  HEADLINE="Verification passed."
+  [ "$CHECKS_RAN" -gt 0 ] || HEADLINE="Verification ran no check."
+  MESSAGE=$(printf '%s %s' "$HEADLINE" "$SCOPE" | jq -Rs .)
+  echo "{\"decision\": \"approve\", \"systemMessage\": $MESSAGE}"
+  exit 0
+fi
 echo '{"decision": "approve"}'
