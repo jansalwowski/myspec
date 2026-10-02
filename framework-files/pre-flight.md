@@ -19,7 +19,7 @@ Run these checks before starting work on any feature or task.
   → **Verify**: Can name 1 anti-pattern relevant to current task
 - [ ] Check `.claude/state/sessions/*.md` for existing sessions (yours lists a path you edited under `## Files touched`):
   - If one is related to this work → Ask user: resume it or complete it first?
-  - If unrelated sessions are dangling (> 6h stale) → run `/myspec:session-clean`; 1–6h is ambiguous, report only
+  - If unrelated sessions are dangling: 1–6h stale → report them and route to `/myspec:session-clean`; > 6h → bootstrap sweeps them as abandoned (age policy: Session Lifecycle table in `.claude/rules/memory-system.md`)
   - Never touch another agent's fresh session (multi-agent workflows keep several active files)
   → **Verify**: No conflicting active session
 - [ ] Read feature-specific `${aiDir}/features/{feature}/pre-flight.md` (if exists)
