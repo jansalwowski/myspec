@@ -177,17 +177,23 @@ Moves the session to the archive without writing any memories. Index entry:
 
 ## Multiple active sessions — confirm target first
 
-Multi-agent workflows (e.g., parallel `feature-implement` subagents) can leave several active sessions. The skill picks the most likely target but asks the user to confirm.
+Two top-level sessions in one checkout leave two active logs. Subagents do not add a third: they share their parent's session id, so their edits land in the parent's log, tagged. The skill picks its own file by the paths it edited and asks before touching the other.
 
 ### Setup
 
-The user ran a parallel-group phase of `feature-implement` earlier. Each parallel subagent (3 agents in worktrees) created its own session log via the hook. The user is wrapping up.
+The user ran a parallel-group phase of `feature-implement` (two implementer subagents in worktrees) and, in a second terminal, a separate session fixing a flaky test. Both are still open.
 
 `.claude/state/sessions/` contains:
 
-- `2026-04-30-0900-orchestrator.md` (started 1h ago, mtime 5 min ago — main agent, just finished phase review)
-- `2026-04-30-0905-T2.md` (started 55 min ago, mtime 30 min ago — completed parallel task)
-- `2026-04-30-0905-T3.md` (started 55 min ago, mtime 32 min ago — completed parallel task)
+- `5f2c9a1e….md` (started 1h ago, mtime 5 min ago). Its `## Files touched`:
+
+  ```
+  - `src/reports/index.ts`
+  - `.claude/worktrees/t2/src/reports/schedule-repository.ts` (subagent a6baef07, general-purpose)
+  - `.claude/worktrees/t3/src/reports/export-run-repository.ts` (subagent c91d0e44, general-purpose)
+  ```
+
+- `b7e3d210….md` (started 40 min ago, mtime 20 min ago). Its `## Files touched` lists `tests/reports/retry.test.ts`.
 
 ### Invocation
 
@@ -199,47 +205,33 @@ The user ran a parallel-group phase of `feature-implement` earlier. Each paralle
 
 #### 1. Identify target — multiple active
 
-The skill detects 3 active sessions. Picks the latest mtime (orchestrator) as most likely, but presents the list:
+The controller wired `src/reports/index.ts` itself, and that path is untagged in `5f2c9a1e….md`. The two tagged lines carry the agent ids its Agent tool reported for T2 and T3, which confirms the match. `b7e3d210….md` lists nothing it edited.
 
 ```
 Multiple active sessions detected:
 
-  1. 2026-04-30-0900-orchestrator.md (last activity: 5 min ago) [most recent]
+  1. 5f2c9a1e… (last activity: 5 min ago) [yours: lists your edits]
      topic: scheduled-reports phase 4 dispatch
-  2. 2026-04-30-0905-T2.md (last activity: 30 min ago)
-     topic: ScheduleRepository
-  3. 2026-04-30-0905-T3.md (last activity: 32 min ago)
-     topic: ExportRunRepository
+  2. b7e3d210… (last activity: 20 min ago)
+     topic: auto:reports
 
-I'll target #1 (orchestrator) by default. The other two are completed
-parallel-task sessions from worktree subagents — they should also be
-closed eventually, but I'll only touch what you confirm.
-
-Reply with numbers (e.g. "1 and 2 and 3" or "all") to specify which
-sessions to complete in this run, or "1" to target only the orchestrator.
+I'll complete #1 only. #2 belongs to another session; /myspec:session-clean
+handles it once it goes stale.
 ```
 
-User: `all`.
+#### 2–6
 
-#### 2–6 (per session)
+The Outcome credits the two repository files to T2 and T3 as delegated work, and the `index.ts` wiring to the controller. T2's report mentioned a `pg-driver` parameter-binding gotcha, which becomes one memory candidate.
 
-The skill processes each session independently, in order: T2, T3, then orchestrator. For each: updates frontmatter, fills outcome, analyzes for extractions, proposes per session.
+#### 7. Archive
 
-- T2's session log has one `S 💡` row (a discovery about `pg-driver` parameter binding) → one memory candidate.
-- T3's session log has nothing memory-worthy.
-- Orchestrator's log has a `P ✅` row about phase-review checklist refinement → one memory candidate.
-
-User accepts both candidates.
-
-#### 7. Archive all three
-
-Each session moves to `ai/memory/sessions/archive/2026-04/`. Index gets three rows. Two memories written.
+Only `5f2c9a1e….md` moves to the archive. `b7e3d210….md` is left as it was.
 
 ### Why this example matters
 
-- **Multi-active is normal in modern workflows.** Subagents in worktrees create sibling sessions; the orchestrator has its own. The skill doesn't panic — it confirms scope.
-- **Per-session extraction.** Each session's log is reviewed independently. The orchestrator's "phase review went well" insight is different from T2's "parameter binding gotcha" — they're genuinely separate memories.
-- **Defensive default — pick the most recent, ask before touching siblings.** If the user types `1`, the skill closes only the orchestrator. The subagent sessions stay active until explicitly closed. This prevents accidental archive of sessions other agents may still be writing to.
+- **One log per top-level session.** Before #225 the docs said each subagent created its own log; a capture showed subagents share the parent's `session_id`, so their paths always landed in the parent's file, indistinguishable from the controller's.
+- **Tags keep ownership exact.** An untagged line is the main session's edit; a tagged line is a subagent's, attributed to it. A subagent never completes the session it ran in.
+- **Defensive default.** The other top-level session is never touched; that is `/myspec:session-clean`'s job.
 
 ---
 

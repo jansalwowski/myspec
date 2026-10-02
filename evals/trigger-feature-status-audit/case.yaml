@@ -62,14 +62,14 @@ execution:
     | Session start | `/myspec:bootstrap` — Layer 1, memory health, session sweep; Layer 2 only when given a task |
     | Before significant work (new feature, multi-file change, debugging) | `/myspec:memory-preflight`, unless bootstrap already scanned Layer 2 for this task |
     | Before trivial work (single-file fix, typo, config) | Read `.ai/memory/index.md` only |
-    | First code edit | Automatic — `mark-code-changed.sh` creates `.claude/state/sessions/{session_id}.md`, one per agent, and appends every code path to its `## Files touched` — Bash writes included |
+    | First code edit | Automatic — `mark-code-changed.sh` creates `.claude/state/sessions/{session_id}.md`, shared with subagents, and appends every code path to its `## Files touched` — Bash writes included |
     | Non-code session (debugging without edits, discovery, doc-only) | `/myspec:session-start` |
     | Repeated failure — same file edited 3+ times, same error after 2 different fixes, about to retry a failed approach | `/myspec:memory-lookup`, then pause and ask the user. Protocol and message template: `.ai/pre-flight.md` |
     | Debugging an unfamiliar error | `/myspec:memory-lookup` |
     | Work complete | `/myspec:session-complete` — extraction plus archive of your own session file only |
     | User says "remember / note / keep in mind …" | Project fact (environment, gotcha, decision, convention) → `/myspec:memorize`, not auto-memory. Personal preference (style, role) → auto-memory. `/memorize` always wins |
     | User approves a memory | `/myspec:memory-create` |
-    | Allocating a memory ID | `.claude/lib/memory-claim-id.sh <procedural\|semantic\|episodic>` — never read the index and pick a number; parallel sessions pick the same one and the tables auto-merge silently. Exit 3 → fix the conformance errors it printed |
+    | Allocating a memory ID | `.claude/lib/memory-claim-id.sh <procedural\|semantic\|episodic>` — never read the index and pick a number; parallel sessions pick the same one. Exit 3 → fix the conformance errors it printed |
     | After adding, removing, or superseding a memory | `node .claude/lib/memory-index.mjs` — the tables are generated from the files. On an `index.md` merge conflict keep either side and re-run |
     | Memory drift suspected | `node .claude/lib/memory-doctor.mjs` — reports each disagreement and its fix |
     | Before reporting anything as done | Run the check and read the output first; "should work" is not a result |
@@ -89,7 +89,7 @@ execution:
     | Aspect | Convention |
     |--------|-----------|
     | Live file | `.claude/state/sessions/{session_id}.md` in the **main checkout** of the repo the edited file belongs to — gitignored, never inside a linked worktree (where `git worktree remove` destroys it) |
-    | Own session | The live file whose `## Files touched` lists a path you edited; several or none → newest mtime, and confirm. The model never sees its session id, so never pass this one to `set-isolation.sh` |
+    | Own session | The live file whose `## Files touched` lists a path you edited untagged, or tags your subagent; several or none → newest mtime, and confirm. The model never sees its session id, so never pass this one to `set-isolation.sh` |
     | Archive file | `.ai/memory/sessions/archive/YYYY-MM-DD-{slug}.md`; sessions swept without a real topic use `orphaned-{first 8 of session_id}` |
     | Terminal statuses | `completed` (via `/myspec:session-complete`) or `abandoned` (swept). Archive is a location, not a status |
     | Age policy | mtime < 1h: live, never touch. 1–6h: ambiguous — report and route to `/myspec:session-clean`. > 6h: sweep as `abandoned` |

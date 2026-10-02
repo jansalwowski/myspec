@@ -276,6 +276,96 @@ expect_in "$SID-10" '## Files touched' "an older log gains the section"
 # shellcheck disable=SC2016 # literal text, not an expansion
 expect_in "$SID-10" '- `src/f.ts`' "and the path"
 
+# --- settings: extraCodeExtensions and ignorePaths (#231) ----------------------
+CFG="$ROOT/cfg"
+mkdir -p "$CFG/src" "$CFG/templates" "$CFG/generated/api"
+git init -q -b main "$CFG"
+git -C "$CFG" config user.email t@t
+git -C "$CFG" config user.name t
+cat > "$CFG/.myspec.json" <<'JSON'
+{"aiDir":".ai","hooks":{"markCodeChanged":{
+  "extraCodeExtensions":["twig",".proto","not an ext"],
+  "ignorePaths":["generated/**","**/*.gen.ts","../outside/**"]}}}
+JSON
+git -C "$CFG" add .myspec.json
+git -C "$CFG" commit -q -m init
+
+write "$SID-70" "$CFG" "$CFG/templates/page.twig"
+ledger_has "$SID-70" code "$CFG" templates/page.twig && ok || fail "an extra code extension arms the gate"
+# shellcheck disable=SC2016 # literal text, not an expansion
+grep -qxF -- '- `templates/page.twig`' "$CFG/.claude/state/sessions/$SID-70.md" 2>/dev/null \
+  && ok || fail "an extra code extension is logged as a code path"
+write "$SID-71" "$CFG" "$CFG/src/api.proto"
+ledger_has "$SID-71" code "$CFG" src/api.proto && ok || fail "an extra extension given with its dot is code too"
+write "$SID-72" "$CFG" "$CFG/src/a.ts"
+ledger_has "$SID-72" code "$CFG" src/a.ts && ok || fail "the default extensions still count"
+write "$SID-73" "$CFG" "$CFG/src/notes.md"
+ledger_has "$SID-73" file "$CFG" src/notes.md && ok || fail "an extension in neither list stays file"
+
+write "$SID-74" "$CFG" "$CFG/generated/api/client.ts"
+ledger_has "$SID-74" file "$CFG" generated/api/client.ts && ok || fail "an ignorePaths match records a code write as file"
+no_code_for "$SID-74" "$CFG" && ok || fail "an ignorePaths match does not arm the gate"
+[ ! -f "$CFG/.claude/state/sessions/$SID-74.md" ] && ok || fail "an ignored write creates no log"
+write "$SID-75" "$CFG" "$CFG/src/schema.gen.ts"
+ledger_has "$SID-75" file "$CFG" src/schema.gen.ts && ok || fail "a **/ glob matches below the root"
+bashcmd "$SID-76" "$CFG" 'echo x > generated/out.twig'
+ledger_has "$SID-76" file "$CFG" generated/out.twig && ok || fail "ignorePaths applies to a Bash write and wins over an extra extension"
+
+# Settings come from the checkout holding the file, not the cwd.
+write "$SID-77" "$REPO" "$CFG/templates/x.twig"
+ledger_has "$SID-77" code "$CFG" templates/x.twig && ok || fail "a write into a configured checkout uses its settings from another cwd"
+write "$SID-78" "$CFG" "$REPO/src/y.twig"
+ledger_has "$SID-78" file "$REPO" src/y.twig && ok || fail "a write into an unconfigured checkout ignores the cwd's settings"
+write "$SID-79" "$CFG" "$REPO/generated/z.ts"
+ledger_has "$SID-79" code "$REPO" generated/z.ts && ok || fail "the cwd's ignorePaths does not reach another checkout"
+
+# A linked worktree reads its own committed settings.
+git -C "$CFG" worktree add -q "$CFG/.claude/worktrees/wt-c" -b wt-c
+CWT="$CFG/.claude/worktrees/wt-c"
+mkdir -p "$CWT/generated"
+write "$SID-80" "$CWT" "$CWT/generated/w.ts"
+ledger_has "$SID-80" file "$CWT" generated/w.ts && ok || fail "a worktree applies ignorePaths repo-relative to itself"
+write "$SID-81" "$CWT" "$CWT/w.twig"
+ledger_has "$SID-81" code "$CWT" w.twig && ok || fail "a worktree applies extraCodeExtensions"
+
+# Fail closed: a wrong type falls back to the defaults and is named.
+BAD="$ROOT/bad"
+mkdir -p "$BAD/generated"
+git init -q -b main "$BAD"
+printf '{"hooks":{"markCodeChanged":{"ignorePaths":"generated/**","extraCodeExtensions":"twig"}}}\n' > "$BAD/.myspec.json"
+ERR=$(printf '{"session_id":"%s-82","tool_name":"Write","cwd":"%s","tool_input":{"file_path":"%s/generated/a.ts"}}' "$SID" "$BAD" "$BAD" | bash "$HOOK" 2>&1 >/dev/null)
+ledger_has "$SID-82" code "$BAD" generated/a.ts && ok || fail "a malformed ignorePaths does not loosen the gate"
+case "$ERR" in *hooks.markCodeChanged.ignorePaths*) ok ;; *) fail "a malformed setting is named (stderr: $ERR)" ;; esac
+ERR=$(printf '{"session_id":"%s-83","tool_name":"Write","cwd":"%s","tool_input":{"file_path":"%s/src/b.twig"}}' "$SID" "$CFG" "$CFG" | bash "$HOOK" 2>&1 >/dev/null)
+case "$ERR" in *"not an ext"*"not an extension"*) ok ;; *) fail "an invalid extension entry is named (stderr: $ERR)" ;; esac
+case "$ERR" in *"../outside/**"*"leaves the checkout"*) ok ;; *) fail "a glob leaving the checkout is named (stderr: $ERR)" ;; esac
+
+# --- subagents: agent_id is recorded, session_id stays the key (#225) ----------
+write_agent() {  # write_agent <sid> <cwd> <file-path> <agent_id> [agent_type]
+  jq -n --arg s "$1" --arg d "$2" --arg f "$3" --arg a "$4" --arg t "${5:-}" \
+    '{session_id: $s, tool_name: "Write", cwd: $d, tool_input: {file_path: $f}, agent_id: $a}
+     + (if $t == "" then {} else {agent_type: $t} end)' | bash "$HOOK" >/dev/null 2>&1
+}
+write_agent "$SID-90" "$REPO" "$REPO/src/sub.ts" a6baef07 general-purpose
+grep -qxF -- "$(printf 'code\t%s\tsrc/sub.ts\ta6baef07' "$REPO")" "/tmp/.myspec-session-writes-$SID-90" \
+  && ok || fail "a subagent write is recorded with its agent_id under the parent's session_id"
+expect_log "$SID-90" "a subagent's first code edit creates the parent's log"
+# shellcheck disable=SC2016 # literal text, not an expansion
+expect_in "$SID-90" '- `src/sub.ts` (subagent a6baef07, general-purpose)' "the log tags a subagent's path"
+write "$SID-90" "$REPO" "$REPO/src/sub.ts"
+grep -qxF -- "$(printf 'code\t%s\tsrc/sub.ts' "$REPO")" "/tmp/.myspec-session-writes-$SID-90" \
+  && ok || fail "the main session's write of the same path gets its own three-field line"
+# shellcheck disable=SC2016 # literal text, not an expansion
+grep -qxF -- '- `src/sub.ts`' "$STATE/$SID-90.md" && ok || fail "the main session's own edit is logged untagged beside the subagent's"
+write_agent "$SID-90" "$REPO" "$REPO/src/sub.ts" a6baef07 general-purpose
+# shellcheck disable=SC2016 # literal text, not an expansion
+[ "$(grep -cF -- '- `src/sub.ts`' "$STATE/$SID-90.md")" -eq 2 ] && ok || fail "each line is logged once"
+write_agent "$SID-91" "$REPO" "$REPO/src/odd.ts" $'b1\tx`y'
+grep -qxF -- "$(printf 'code\t%s\tsrc/odd.ts\tb1xy' "$REPO")" "/tmp/.myspec-session-writes-$SID-91" \
+  && ok || fail "an agent_id is reduced to id-safe characters"
+# shellcheck disable=SC2016 # literal text, not an expansion
+expect_in "$SID-91" '- `src/odd.ts` (subagent b1xy)' "a tag without agent_type names the id only"
+
 # --- not a myspec project: marker, but no log -----------------------------------
 OTHER="$ROOT/other"
 mkdir -p "$OTHER/src"
