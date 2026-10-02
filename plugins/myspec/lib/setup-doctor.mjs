@@ -44,11 +44,13 @@
 //                  an installed project, where this file lives in
 //                  .claude/lib/) skips the checks that need the plugin as the
 //                  reference copy, and says so.
-//   --quiet        errors and the summary only
+//   --quiet        errors and the summary only (no warnings, notes or settings)
 //   --json         { errors: [...], warnings: [...], notes: [...] } of
-//                  { id, group, path, detail, remediation: { commands, text } }
+//                  { id, group, path, detail, remediation: { commands, text } },
+//                  plus settings: [...] of { key, value, source, loosens }
 //   positional     limit the run to one or more groups (install, wiring,
-//                  schema, features, budget, refs) or to a single check id
+//                  schema, features, budget, refs, settings) or to a single
+//                  check id
 //
 // Exit 1 when any error was found, 2 on a usage error, else 0.
 
@@ -88,7 +90,7 @@ const RULE_BUDGET = 1000;
 const GROUPS = {
   install: ['framework-missing', 'framework-renamed', 'framework-removed', 'framework-drift', 'marker-missing', 'doctor-rule-unrenamed', 'sessions-unmigrated', 'shipped-missing', 'shipped-drift'],
   wiring: ['settings-unparseable', 'hook-missing', 'hook-not-executable', 'hook-unregistered', 'hook-syntax', 'wiring-incomplete', 'hook-command-relative', 'tooling-absent'],
-  schema: ['myspec-unparseable', 'myspec-missing-key', 'myspec-schema-stale', 'aidir-trailing-slash', 'aidir-missing', 'verification-unparseable', 'verification-empty', 'verification-diff-unscoped'],
+  schema: ['myspec-unparseable', 'myspec-missing-key', 'myspec-schema-stale', 'aidir-trailing-slash', 'aidir-missing', 'verification-unparseable', 'verification-empty', 'verification-diff-unscoped', 'setting-unknown-key', 'setting-wrong-type', 'setting-unknown-ref', 'setting-glob-unusable', 'setting-dir-missing'],
   // Separate from `schema` on purpose: the stop hook blocks on `wiring` and
   // `schema`, and it triggers on uncommitted changes under `.claude/` and
   // `.myspec.json`. The features manifest lives under ${aiDir}, so leaving it
@@ -97,6 +99,9 @@ const GROUPS = {
   features: ['features-index-unreadable', 'note-over-cap', 'note-volatile', 'manifest-unknown-key'],
   budget: ['over-budget', 'over-budget-pinned'],
   refs: ['dead-path-ref', 'dead-skill-ref', 'topology-missing'],
+  // Not findings: the settings that differ from their defaults, as SET lines
+  // (`settings` in --json). Never in the stop hook's groups.
+  settings: ['setting-in-force'],
 };
 
 // --- arguments ---------------------------------------------------------------
@@ -469,6 +474,377 @@ if (verification.present && verification.error) {
       text: 'scope the command to the base ref, e.g. git diff --name-only --diff-filter=ACMR "$MYSPEC_BASE_REF"',
     });
   }
+}
+
+// --- settings schema (#233) ----------------------------------------------------
+//
+// Every key, type, format and cross-reference comes from
+// lib/myspec-config.schema.json; this code names none of them. A setting the
+// readers cannot use keeps its default, so a typo or a wrong type would
+// otherwise change nothing and say nothing (docs/project-settings-design.md,
+// principle 5).
+//
+// Severity: a wrong type and a reference to an undefined entry are errors.
+// Both are deterministic, the readers drop the value (or the stop gate
+// refuses the check), and the stop hook only sees them when this session
+// edited the file. An unknown key, an unusable glob and a missing directory
+// are warnings: a project or another tool may keep its own keys in the file,
+// the readers skip a bad glob and keep the rest, and a directory can exist on
+// the branch a worktree is created from without existing here.
+
+let configLib = null;
+
+try {
+  configLib = await import('./myspec-config.mjs');
+} catch {
+  configLib = null;
+}
+
+let configSchema = null;
+
+if (configLib) {
+  try {
+    configSchema = configLib.loadSchema();
+  } catch {
+    configSchema = null;
+  }
+}
+
+if (!configSchema && (wants('schema') || wants('settings'))) {
+  note('settings schema unavailable (myspec-config.mjs or myspec-config.schema.json missing next to setup-doctor.mjs) — project settings were not validated or listed; run /myspec:update');
+}
+
+function jsonType(value) {
+  if (value === null) {
+    return 'null';
+  }
+
+  return Array.isArray(value) ? 'array' : typeof value;
+}
+
+const isPlainObject = (value) => jsonType(value) === 'object';
+const stableJson = (value) => JSON.stringify(value, (key, v) => (isPlainObject(v)
+  ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, v[k]]))
+  : v));
+
+function editDistance(a, b) {
+  const row = Array.from({ length: b.length + 1 }, (_, j) => j);
+
+  for (let i = 1; i <= a.length; i += 1) {
+    let diagonal = row[0];
+
+    row[0] = i;
+
+    for (let j = 1; j <= b.length; j += 1) {
+      const above = row[j];
+
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, diagonal + (a[i - 1] === b[j - 1] ? 0 : 1));
+      diagonal = above;
+    }
+  }
+
+  return row[b.length];
+}
+
+// The closest candidate within a third of the name's length (at least 2
+// edits), compared case-insensitively; null when none is that close.
+function nearMiss(name, candidates) {
+  let best = null;
+  let bestDistance = Infinity;
+
+  candidates.forEach((candidate) => {
+    const distance = editDistance(name.toLowerCase(), candidate.toLowerCase());
+
+    if (distance < bestDistance) {
+      best = candidate;
+      bestDistance = distance;
+    }
+  });
+
+  return bestDistance <= Math.max(2, Math.floor(name.length / 3)) ? best : null;
+}
+
+// Keys under a non-project file are written with the file's name as their
+// first segment (schema $comment); in the file itself that segment is absent.
+function fileLabel(entryFile, key) {
+  return entryFile === 'project' ? key : key.slice(entryFile.length + 1);
+}
+
+// name -> the parsed object of each schema file, or null when it is absent,
+// unparseable or not an object.
+function projectFiles(schema) {
+  return Object.fromEntries(Object.keys(schema.files).map((name) => {
+    const parsed = name === 'project' ? config : readJson(join(root, schema.files[name]));
+
+    return [name, isPlainObject(parsed.value) ? parsed.value : null];
+  }));
+}
+
+// The readers' shape: .myspec.json at the top, each other file under its name.
+function projectData(files) {
+  const data = { ...(files.project || {}) };
+
+  Object.keys(files).filter((name) => name !== 'project').forEach((name) => {
+    if (files[name]) {
+      data[name] = files[name];
+    } else {
+      delete data[name];
+    }
+  });
+
+  return data;
+}
+
+// occurrences(data, key) -> [{ label, value }] for every place data sets the
+// schema key; a `name[]` segment visits each item of that list.
+function occurrences(data, key) {
+  const segments = key.split('.');
+  const found = [];
+
+  function visit(node, index, label) {
+    if (index === segments.length) {
+      found.push({ label, value: node });
+
+      return;
+    }
+
+    const segment = segments[index];
+    const list = segment.endsWith('[]');
+    const name = list ? segment.slice(0, -2) : segment;
+
+    if (!isPlainObject(node) || !Object.hasOwn(node, name)) {
+      return;
+    }
+
+    const at = label ? `${label}.${name}` : name;
+
+    if (!list) {
+      visit(node[name], index + 1, at);
+    } else if (Array.isArray(node[name])) {
+      node[name].forEach((item, i) => visit(item, index + 1, `${at}[${i}]`));
+    }
+  }
+
+  visit(data, 0, '');
+
+  return found;
+}
+
+// A glob the readers accept: non-empty, not absolute, no `..` segment
+// (hooks/verify-before-stop.sh glob_ere, hooks/mark-code-changed.sh, the clean
+// step of lib/worktree-provision.sh).
+function globProblem(glob) {
+  if (typeof glob !== 'string' || glob.replace(/^(\.\/)+/, '') === '') {
+    return 'it is empty';
+  }
+
+  if (glob.startsWith('/')) {
+    return 'it is absolute';
+  }
+
+  if (`/${glob}/`.includes('/../')) {
+    return 'it has a .. segment';
+  }
+
+  return null;
+}
+
+function validateSettings(schema) {
+  const keys = schema.keys;
+  const files = projectFiles(schema);
+  const data = projectData(files);
+  const pathOf = (entry) => schema.files[entry.file];
+  // Every schema key and each of its ancestors; a key whose children are
+  // listed is walked, any other key is opaque.
+  const known = new Set();
+
+  Object.keys(keys).forEach((key) => {
+    key.split('.').forEach((_, i, segments) => known.add(segments.slice(0, i + 1).join('.')));
+  });
+
+  // The root's children are the keys with no dot at all.
+  const childrenOf = (prefix) => (prefix === ''
+    ? [...known].filter((key) => !key.includes('.'))
+    : [...known]
+      .filter((key) => key.startsWith(`${prefix}.`) && !key.slice(prefix.length + 1).includes('.'))
+      .map((key) => key.slice(prefix.length + 1)));
+
+  // Unknown keys. Keys starting with `$` ($schema, $comment) are JSON
+  // conventions, not settings.
+  function walk(node, schemaPath, label, file) {
+    Object.keys(node).forEach((name) => {
+      if (name.startsWith('$')) {
+        return;
+      }
+
+      const key = schemaPath ? `${schemaPath}.${name}` : name;
+      const at = label ? `${label}.${name}` : name;
+      const value = node[name];
+      // Another file's keys sit under its name only in the readers' merged
+      // view; written into .myspec.json, that name is not a setting.
+      const otherFile = schemaPath === '' && name !== 'project' && Object.hasOwn(schema.files, name);
+
+      if (known.has(key) && !otherFile) {
+        if (Array.isArray(value) && childrenOf(`${key}[]`).length > 0) {
+          value.forEach((item, i) => {
+            if (isPlainObject(item)) {
+              walk(item, `${key}[]`, `${at}[${i}]`, file);
+            }
+          });
+        } else if (isPlainObject(value) && childrenOf(key).length > 0) {
+          walk(value, key, at, file);
+        }
+
+        return;
+      }
+
+      const siblings = childrenOf(schemaPath).filter((sibling) => !sibling.endsWith('[]')
+        && !(schemaPath === '' && sibling !== 'project' && Object.hasOwn(schema.files, sibling)));
+      const sibling = nearMiss(name, siblings);
+      // No close sibling: the same name somewhere else in this file, which
+      // is a key written at the wrong level.
+      const elsewhere = sibling ? null : Object.keys(keys)
+        .filter((other) => keys[other].file === file && other.split('.').pop() === name)
+        .map((other) => fileLabel(file, other))[0];
+      const hint = sibling
+        ? ` (did you mean ${label ? `${label}.` : ''}${sibling}?)`
+        : elsewhere ? ` (did you mean ${elsewhere}?)` : '';
+
+      warn('setting-unknown-key', 'schema', schema.files[file], `${schema.files[file]}: ${at} is not a myspec setting${hint}; nothing reads it, so whatever it was meant to change keeps its default`, {
+        text: sibling || elsewhere ? 'rename the key' : 'remove the key, or correct it against lib/myspec-config.schema.json',
+      });
+    });
+  }
+
+  Object.keys(schema.files).forEach((file) => {
+    if (files[file]) {
+      walk(files[file], file === 'project' ? '' : file, '', file);
+    }
+  });
+
+  // Wrong types, as the reader sees them: the same check that makes it drop
+  // the value, so doctor and the hooks cannot disagree on what was ignored.
+  const unparseable = new Set();
+
+  if (config.error) {
+    unparseable.add(schema.files.project);
+  }
+
+  Object.keys(schema.files).filter((name) => name !== 'project').forEach((name) => {
+    const parsed = readJson(join(root, schema.files[name]));
+
+    if (parsed.present && parsed.error) {
+      unparseable.add(schema.files[name]);
+    }
+  });
+
+  const readerWarnings = new Set();
+
+  Object.keys(keys).filter((key) => !key.includes('[]')).forEach((key) => {
+    configLib.getSetting(key, { root, env: {}, schema }).warnings.forEach((text) => readerWarnings.add(text));
+  });
+
+  // A file that is not an object warns once per key read from it; it is
+  // one problem, so it is one finding per file.
+  const notObjectFiles = new Set();
+
+  readerWarnings.forEach((text) => {
+    const ignored = text.match(/^ignoring (\S+) in (.+?): (.*)$/);
+    const notObject = text.match(/^(.+?) is not a JSON object/);
+    const path = ignored ? ignored[2] : notObject ? notObject[1] : '.myspec.json';
+
+    if (notObject && (unparseable.has(path) || notObjectFiles.has(path))) {
+      return;
+    }
+
+    if (notObject) {
+      notObjectFiles.add(path);
+    }
+
+    const detail = ignored
+      ? `${path}: ${ignored[1]} is ignored — ${ignored[3]}`
+      : notObject ? `${path}: ${path} is not a JSON object; every setting in it falls back to its default` : `${path}: ${text}`;
+
+    error('setting-wrong-type', 'schema', path, detail, {
+      text: 'give the setting a value of the type the schema allows (lib/myspec-config.schema.json)',
+    });
+  });
+
+  // The readers never look inside a list's items, so `name[]` and
+  // `name[].field` entries are checked here.
+  Object.entries(keys).filter(([key]) => key.includes('[]')).forEach(([key, entry]) => {
+    occurrences(data, key).forEach(({ label, value }) => {
+      if (!entry.type.includes(jsonType(value))) {
+        error('setting-wrong-type', 'schema', pathOf(entry), `${pathOf(entry)}: ${fileLabel(entry.file, label)} is ${jsonType(value)}, expected ${entry.type.join(' or ')} — the hook that reads it ignores or misreads it`, {
+          text: `make it ${entry.type.join(' or ')}`,
+        });
+      }
+    });
+  });
+
+  Object.entries(keys).forEach(([key, entry]) => {
+    if (!entry.format && !entry.refersTo) {
+      return;
+    }
+
+    occurrences(data, key).forEach(({ label, value }) => {
+      // A list setting of the wrong type is already a setting-wrong-type
+      // error; reading it as one glob too would report it twice.
+      if (entry.type.includes('array') && !Array.isArray(value)) {
+        return;
+      }
+
+      const where = fileLabel(entry.file, label);
+      const values = Array.isArray(value) ? value.map((v, i) => [`${where}[${i}]`, v]) : [[where, value]];
+
+      values.forEach(([at, v]) => {
+        if (entry.format === 'glob' && typeof v === 'string') {
+          const problem = globProblem(v);
+
+          if (problem) {
+            warn('setting-glob-unusable', 'schema', pathOf(entry), `${pathOf(entry)}: ${at} is ${JSON.stringify(v)}, which is not a usable glob: ${problem} — the hook that reads it skips it, so the setting does less than it says`, {
+              text: 'write a repo-relative glob from the repository root, e.g. "api/**" or "**/*.generated.*"',
+            });
+          }
+        }
+
+        if (entry.format === 'dir' && typeof v === 'string') {
+          const dir = v === '' ? '.' : v;
+          const inside = !isAbsolute(dir) && !`/${dir}/`.includes('/../');
+          let isDir;
+
+          try {
+            isDir = inside && statSync(join(root, dir)).isDirectory();
+          } catch {
+            isDir = false;
+          }
+
+          if (!isDir) {
+            warn('setting-dir-missing', 'schema', pathOf(entry), `${pathOf(entry)}: ${at} is ${JSON.stringify(v)}, which is not a repo-relative directory in this checkout — a run that reaches it stops there`, {
+              text: 'correct the directory, or create it on the branch worktrees are made from',
+            });
+          }
+        }
+
+        if (entry.refersTo && typeof v === 'string') {
+          const target = configLib.getSetting(entry.refersTo, { root, env: {}, schema }).value;
+
+          if (!isPlainObject(target) || !Object.hasOwn(target, v)) {
+            const targetFile = schema.files[keys[entry.refersTo]?.file] || pathOf(entry);
+            const targetKey = fileLabel(keys[entry.refersTo]?.file || 'project', entry.refersTo);
+
+            error('setting-unknown-ref', 'schema', pathOf(entry), `${pathOf(entry)}: ${at} names ${JSON.stringify(v)}, which ${targetKey} in ${targetFile} does not define — the hook that reads it refuses to act on it`, {
+              text: `define ${JSON.stringify(v)} under ${targetKey}, or correct the name`,
+            });
+          }
+        }
+      });
+    });
+  });
+}
+
+if (configSchema && wants('schema')) {
+  validateSettings(configSchema);
 }
 
 // The features audit engine parses this file with a purpose-built reader that
@@ -1472,6 +1848,116 @@ if (typeof settings.topologyFile === 'string' && settings.topologyFile !== '') {
   }
 }
 
+// --- settings (#233) -----------------------------------------------------------
+//
+// The effective policy: every setting whose value, after the reader merges its
+// layers, differs from the schema default, with the layer that set it. A
+// setting the schema marks `loosens` weakens a gate, and is marked here so it
+// cannot become invisible policy (docs/project-settings-design.md, principle
+// 5). Values come from lib/myspec-config.mjs, the reader the lib scripts use
+// and lib/myspec-config.sh mirrors, so this listing and the hooks agree.
+// Bookkeeping keys are left out. A list whose items the schema describes
+// (`name[]`) is listed item by item.
+
+const settingsInForce = [];
+let settingsListed = false;
+
+function listSettings(schema) {
+  const keys = schema.keys;
+  const layers = configLib.LAYERS;
+  const sessionEnv = process.env;
+  const effective = (key, n) => configLib.getSetting(key, { root, schema, env: sessionEnv, layers: layers.slice(0, n) }).value;
+  const defaultOf = (entry) => (entry && Object.hasOwn(entry, 'default') ? entry.default : null);
+  // An empty string where the schema has no default is the template's blank,
+  // which every reader treats as unset.
+  const differs = (value, entry) => value !== null
+    && !(value === '' && defaultOf(entry) === null)
+    && stableJson(value) !== stableJson(defaultOf(entry));
+
+  // The layer that last changed the value, named for the reader of the
+  // report: the project file, or the session variables that set it.
+  function sourceOf(key, entry) {
+    let previous = stableJson(effective(key, 1));
+    let name = 'default';
+
+    for (let n = 2; n <= layers.length; n += 1) {
+      const now = stableJson(effective(key, n));
+
+      if (now !== previous) {
+        name = layers[n - 1]({ schema, root, env: sessionEnv, req: key }).name;
+      }
+
+      previous = now;
+    }
+
+    if (name === 'project') {
+      return schema.files[entry.file];
+    }
+
+    if (name === 'session') {
+      const vars = Object.entries(schema.env)
+        .filter(([variable, env]) => env.kind === 'override' && env.key === key
+          && new RegExp(env.match).test(sessionEnv[variable] ?? ''))
+        .map(([variable]) => `${variable}=${sessionEnv[variable]}`);
+
+      return vars.length > 0 ? `session: ${vars.join(', ')}` : 'session';
+    }
+
+    return name;
+  }
+
+  Object.entries(keys)
+    .filter(([key, entry]) => !key.includes('[]') && !entry.bookkeeping)
+    .forEach(([key, entry]) => {
+      const value = effective(key, layers.length);
+
+      if (!differs(value, entry)) {
+        return;
+      }
+
+      const source = sourceOf(key, entry);
+      const label = fileLabel(entry.file, key);
+      const fields = Object.entries(keys).filter(([other]) => other.startsWith(`${key}[].`));
+
+      // An emptied list has no items to list, so it is listed whole.
+      if (!Array.isArray(value) || value.length === 0 || !Object.hasOwn(keys, `${key}[]`)) {
+        settingsInForce.push({ key: label, value, source, loosens: entry.loosens === true });
+
+        return;
+      }
+
+      value.forEach((item, i) => {
+        if (!isPlainObject(item)) {
+          settingsInForce.push({ key: `${label}[${i}]`, value: item, source, loosens: entry.loosens === true });
+
+          return;
+        }
+
+        fields
+          .filter(([, field]) => !field.bookkeeping)
+          .forEach(([other, field]) => {
+            const name = other.slice(key.length + 3);
+
+            if (Object.hasOwn(item, name) && differs(item[name], field)) {
+              settingsInForce.push({ key: `${label}[${i}].${name}`, value: item[name], source, loosens: entry.loosens === true || field.loosens === true });
+            }
+          });
+      });
+    });
+
+  // Session variables that set no key but change a hook's behaviour.
+  Object.entries(schema.env)
+    .filter(([variable, env]) => env.kind === 'standalone' && (sessionEnv[variable] ?? '') !== '')
+    .forEach(([variable, env]) => {
+      settingsInForce.push({ key: variable, value: sessionEnv[variable], source: 'session', loosens: env.loosens === true });
+    });
+}
+
+if (configSchema && wants('settings') && (selectedIds.size === 0 || selectedIds.has('setting-in-force'))) {
+  listSettings(configSchema);
+  settingsListed = true;
+}
+
 // --- report -------------------------------------------------------------------
 
 const fixable = [...errors, ...warnings].filter((finding) => finding.remediation.commands.length > 0).length;
@@ -1480,7 +1966,7 @@ const summary = errors.length === 0 && warnings.length === 0
   : `setup doctor: ${errors.length} error(s), ${warnings.length} warning(s)${fixable > 0 ? `, ${fixable} with a fix command` : ''}`;
 
 if (json) {
-  process.stdout.write(`${JSON.stringify({ errors, warnings, notes }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ errors, warnings, notes, settings: settingsInForce }, null, 2)}\n`);
 } else {
   const lines = [];
 
@@ -1499,6 +1985,16 @@ if (json) {
   if (!quiet) {
     warnings.forEach((finding) => render('WARN ', finding));
     notes.forEach((text) => lines.push(`NOTE  ${text}`));
+
+    if (settingsListed && settingsInForce.length === 0) {
+      lines.push('SET   every setting is at its default');
+    }
+
+    settingsInForce.forEach(({ key, value, source, loosens }) => {
+      const shown = JSON.stringify(value);
+
+      lines.push(`SET   ${key} = ${shown.length > 160 ? `${shown.slice(0, 157)}...` : shown} (${source})${loosens ? ' — loosens a gate' : ''}`);
+    });
   }
 
   lines.push(summary);

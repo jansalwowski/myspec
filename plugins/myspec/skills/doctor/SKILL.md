@@ -48,7 +48,9 @@ due for a pass; reach for tier 1 when the user named a surface or tier 0 pointed
 
    Each record is `{ id, group, path, detail, remediation: { commands, text } }`. Group them by
    `group` and carry them forward: `install` and `wiring` records go into surface E's brief,
-   `schema` into E, `features` into F, `budget` and `refs` into A. The brief says *these are established
+   `schema` into E, `features` into F, `budget` and `refs` into A. The `settings` array is the
+   effective project policy, `{ key, value, source, loosens }` for every setting that differs
+   from its default; it goes into E's brief and, as given, into the Phase 3 report. The brief says *these are established
    facts, verified by command — do not re-check them, and do not report a finding that
    contradicts one*. A `NOTE` about an unresolved plugin root means the `install` group did not
    run; say so in Phase 3 rather than filling the gap by hand.
@@ -117,7 +119,7 @@ is left is judgment:
 
 ### Phase 3 — Report and get approval
 
-Present: per-surface findings with evidence, token table (now → target), the fix grouping below, the field-metrics lines that led anywhere (when Phase 0 step 5 ran), and a needs-user-decision list. Wait for the user before editing anything. Always needs a user decision: feature status transitions (`/myspec:feature-complete`'s job), orphan-feature promotion, anything in `settings.local.json` or `## Read-only` files.
+Present: per-surface findings with evidence, token table (now → target), the Phase 0 `settings` listing with each `loosens` entry called out, the fix grouping below, the field-metrics lines that led anywhere (when Phase 0 step 5 ran), and a needs-user-decision list. Wait for the user before editing anything. Always needs a user decision: feature status transitions (`/myspec:feature-complete`'s job), orphan-feature promotion, anything in `settings.local.json` or `## Read-only` files.
 
 ### Phase 4 — Apply as grouped PRs
 

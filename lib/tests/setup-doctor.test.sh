@@ -766,6 +766,120 @@ OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" refs 2>&1); STATUS=
 expect_no_line 'dead-path-ref: CLAUDE.md: references .claude/worktrees' "a linked worktree does not report the main checkout's .claude/worktrees as dead"
 expect_line 'WARN +dead-path-ref: CLAUDE.md: references docs/gone.md' "a tracked file this branch removed is still a dead ref from the worktree"
 
+# --- pass 5: project settings against the schema (#233) ------------------------
+# The doctor names no setting itself: every key, type, format and reference
+# comes from lib/myspec-config.schema.json, so these fixtures exercise the
+# schema's own entries.
+
+# run_doctor_env <env assignments...> -- <args...>: run with only these
+# variables, so a MYSPEC_* in the caller's environment cannot leak in.
+run_doctor_env() {
+  local vars=()
+  while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do vars+=("$1"); shift; done
+  shift
+  OUTPUT=$(env -i PATH="$PATH" HOME="$HOME" ${vars[@]+"${vars[@]}"} node "$SCRIPT" --root "$REPO" --plugin-root "$PLUGIN" "$@" 2>&1)
+  STATUS=$?
+}
+
+build_fixture
+run_doctor_env -- schema
+expect_exit 0 "settings: a fresh install passes the schema surface"
+expect_no_line 'setting-' "settings: a fresh install has no unknown key, wrong type, bad glob or dangling ref"
+
+run_doctor_env -- settings
+expect_line '^SET +aiDir = "ai" \(\.myspec\.json\)$' "settings: a non-default aiDir is listed with its file"
+expect_line '^SET +checks\[0\]\.required = true \(\.claude/verification\.json\)$' "settings: a check's fields are listed item by item"
+expect_no_line 'frameworkVersion|migrations|checks\[0\]\.name|checks\[0\]\.description|^SET +notes' "settings: bookkeeping and free-text keys are not listed"
+expect_no_line 'loosens a gate' "settings: a fresh install loosens nothing"
+
+# Defaults only: nothing to list, and the listing says so.
+DEFAULTS="$ROOT/defaults"
+mkdir -p "$DEFAULTS/.ai"
+printf '{"aiDir": ".ai", "frameworkVersion": "0.0.0"}\n' > "$DEFAULTS/.myspec.json"
+OUTPUT=$(env -i PATH="$PATH" HOME="$HOME" node "$SCRIPT" --root "$DEFAULTS" --plugin-root "$PLUGIN" settings 2>&1); STATUS=$?
+expect_line '^SET +every setting is at its default$' "settings: defaults only says every setting is at its default"
+expect_no_line '^SET +[a-zA-Z]+.* = ' "settings: defaults only lists no key"
+
+# A project file plus a session override.
+set_json .myspec.json 'd.isolation={worktreeRoot:"wt", allowLinkedModules:false}; d.hooks={markCodeChanged:{ignorePaths:["gen/**"]}}; d.reuseAudit={enabled:false};'
+set_json .claude/verification.json 'd.containers={api:{mountSource:".", mountTarget:"/srv/app"}}; d.checks[0].paths=["api/**"]; d.checks[0].runIn="api";'
+run_doctor_env MYSPEC_ALLOW_LINKED_MODULES=1 MYSPEC_CHECK_CAP_SECONDS=30 -- settings
+expect_line '^SET +isolation\.worktreeRoot = "wt" \(\.myspec\.json\)$' "settings: a project value is listed with its file and is not marked"
+expect_line '^SET +isolation\.allowLinkedModules = true \(session: MYSPEC_ALLOW_LINKED_MODULES=1\) — loosens a gate$' "settings: a session override wins over the project file, names its variable, and is marked"
+expect_line '^SET +hooks\.markCodeChanged\.ignorePaths = \["gen/\*\*"\] \(\.myspec\.json\) — loosens a gate$' "settings: ignorePaths is marked as loosening"
+expect_line '^SET +reuseAudit\.enabled = false \(\.myspec\.json\) — loosens a gate$' "settings: a gate turned off is marked as loosening"
+expect_line '^SET +checks\[0\]\.paths = \["api/\*\*"\] \(\.claude/verification\.json\) — loosens a gate$' "settings: a check's paths is marked as loosening"
+expect_line '^SET +checks\[0\]\.runIn = "api" \(\.claude/verification\.json\)$' "settings: runIn is listed, unmarked"
+expect_line '^SET +MYSPEC_CHECK_CAP_SECONDS = "30" \(session\)$' "settings: a standalone session variable is listed"
+expect_no_line '^SET +every setting' "settings: a project with settings does not claim defaults"
+
+run_doctor_env MYSPEC_ALLOW_LINKED_MODULES=1 -- --json settings
+if printf '%s' "$OUTPUT" | node -e 'const r=JSON.parse(require("fs").readFileSync(0,"utf8")); const s=r.settings.find((x)=>x.key==="hooks.markCodeChanged.ignorePaths"); process.exit(s && s.loosens===true && s.source===".myspec.json" ? 0 : 1)'; then ok; else fail "settings: --json carries key, source and loosens"; fi
+
+run_doctor_env MYSPEC_ALLOW_LINKED_MODULES=1 -- --quiet
+expect_no_line '^SET ' "settings: --quiet leaves the listing out (bootstrap's summary stays one line)"
+
+run_doctor_env -- schema
+expect_exit 0 "settings: valid settings pass the schema surface"
+expect_no_line 'setting-' "settings: a defined container, usable globs and known keys raise nothing"
+
+# One break per finding type.
+build_fixture
+# shellcheck disable=SC2016 # literal text, not an expansion
+set_json .myspec.json 'd["$schema"]="x"; d.isolation={worktreeRot:"wt", allowLinkedModules:"yes", provision:{install:[{run:"true", cwd:"nope"}, {run:"true", cwd:"."}, "make deps"]}}; d.ignorePaths=["gen/**"]; d.zzzUnrelated=1; d.hooks={markCodeChanged:{ignorePaths:["../out/**", "/abs/**", "ok/**"]}};'
+set_json .claude/verification.json 'd.checks[0].pahts=["api/**"]; d.checks[0].required="true"; d.checks[1].runIn="api"; d.checks[2].paths=[""];'
+run_doctor_env -- schema
+expect_exit 1 "settings: a wrong type or a dangling reference is an error"
+expect_line '^WARN +setting-unknown-key: \.myspec\.json: isolation\.worktreeRot is not a myspec setting \(did you mean isolation\.worktreeRoot\?\)' "settings: a misspelled key gets its near-miss sibling"
+expect_line '^WARN +setting-unknown-key: \.myspec\.json: ignorePaths is not a myspec setting \(did you mean hooks\.markCodeChanged\.ignorePaths\?\)' "settings: a key at the wrong level points at where it belongs"
+expect_line '^WARN +setting-unknown-key: \.claude/verification\.json: checks\[0\]\.pahts is not a myspec setting \(did you mean checks\[0\]\.paths\?\)' "settings: an unknown field on a check gets its near miss"
+expect_line '^WARN +setting-unknown-key: \.myspec\.json: zzzUnrelated is not a myspec setting; nothing reads it' "settings: an unknown key with no near miss is still reported"
+# shellcheck disable=SC2016 # literal text, not an expansion
+expect_no_line 'setting-unknown-key: .*\$schema' "settings: a \$-prefixed JSON convention key is not reported"
+expect_line '^ERROR setting-wrong-type: \.myspec\.json: isolation\.allowLinkedModules is ignored — expected boolean, got string; it uses the default' "settings: a wrong type is an error that says the default applies"
+expect_line '^ERROR setting-wrong-type: \.claude/verification\.json: checks\[0\]\.required is string, expected boolean' "settings: a wrong type inside a check is an error"
+expect_line '^ERROR setting-unknown-ref: \.claude/verification\.json: checks\[1\]\.runIn names "api", which containers in \.claude/verification\.json does not define' "settings: runIn naming an undefined container is an error"
+expect_line '^WARN +setting-glob-unusable: \.myspec\.json: hooks\.markCodeChanged\.ignorePaths\[0\] is "\.\./out/\*\*".*\.\. segment' "settings: a glob that leaves the checkout is unusable"
+expect_line '^WARN +setting-glob-unusable: \.myspec\.json: hooks\.markCodeChanged\.ignorePaths\[1\] is "/abs/\*\*".*absolute' "settings: an absolute glob is unusable"
+expect_no_line 'ignorePaths\[2\]' "settings: a usable glob beside bad ones is not reported"
+expect_line '^WARN +setting-glob-unusable: \.claude/verification\.json: checks\[2\]\.paths\[0\] is "".*empty' "settings: an empty check path glob is unusable"
+expect_line '^WARN +setting-dir-missing: \.myspec\.json: isolation\.provision\.install\[0\]\.cwd is "nope"' "settings: an install step whose cwd does not exist is reported"
+expect_no_line 'install\[1\]\.cwd|install\[2\]' "settings: an install step in an existing cwd, or a bare command, is not reported"
+
+run_doctor_env -- --quiet wiring schema
+expect_exit 1 "settings: the stop hook's groups see a wrong-type setting"
+
+run_doctor_env -- setting-unknown-ref
+expect_line 'setting-unknown-ref' "settings: a single settings check id is selectable"
+expect_no_line 'setting-wrong-type|setting-unknown-key' "settings: selecting one check id hides the others"
+
+# PR #246 review: an emptied list is listed whole; a top-level typo gets its
+# near miss; a non-object settings file is one finding; a list setting of the
+# wrong type is not also read as a glob.
+build_fixture
+set_json .myspec.json 'd.isolation={provision:{symlink:[], copy:[]}}; d.isolaton={}; d.reuseAudt={}; d.hooks={markCodeChanged:{ignorePaths:7}};'
+set_json .claude/verification.json 'd.checks=[];'
+run_doctor_env -- settings
+expect_line '^SET +isolation\.provision\.symlink = \[\] \(\.myspec\.json\)$' "settings: an emptied symlink list is listed"
+expect_line '^SET +isolation\.provision\.copy = \[\] \(\.myspec\.json\)$' "settings: an emptied copy list is listed"
+expect_line '^SET +checks = \[\] \(\.claude/verification\.json\)$' "settings: an emptied checks list is listed"
+
+run_doctor_env -- schema
+expect_line '^WARN +setting-unknown-key: \.myspec\.json: isolaton is not a myspec setting \(did you mean isolation\?\)' "settings: a top-level typo gets its near miss"
+expect_line '^WARN +setting-unknown-key: \.myspec\.json: reuseAudt is not a myspec setting \(did you mean reuseAudit\?\)' "settings: a second top-level typo gets its near miss"
+GLOB_LINES=$(printf '%s\n' "$OUTPUT" | grep -c 'ignorePaths')
+if [ "$GLOB_LINES" -eq 1 ]; then ok; else fail "settings: a non-array ignorePaths is one finding, got $GLOB_LINES"; fi
+expect_line '^ERROR setting-wrong-type: \.myspec\.json: hooks\.markCodeChanged\.ignorePaths is ignored — expected array, got number' "settings: a non-array ignorePaths is a wrong type"
+expect_no_line 'setting-glob-unusable' "settings: a non-array ignorePaths is not also an unusable glob"
+
+printf '[]\n' > "$REPO/.myspec.json"
+printf '[]\n' > "$REPO/.claude/verification.json"
+run_doctor_env -- schema
+for f in '\.myspec\.json' '\.claude/verification\.json'; do
+  N=$(printf '%s\n' "$OUTPUT" | grep -cE "^ERROR setting-wrong-type: $f: $f is not a JSON object")
+  if [ "$N" -eq 1 ]; then ok; else fail "settings: a non-object $f is one finding, got $N"; fi
+done
+
 # --- pass 4: argument handling ------------------------------------------------
 
 OUTPUT=$(node "$SCRIPT" --list-checks 2>&1); STATUS=$?
