@@ -98,7 +98,11 @@ MD
     "$ai/conventions/.gitkeep" "$ai/decisions/.gitkeep" "$ai/plans/.gitkeep"
   _copy_doc "$PLUGIN_ROOT/framework-files/anti-patterns.md" "$ai/anti-patterns.md"
   _copy_doc "$PLUGIN_ROOT/framework-files/pre-flight.md" "$ai/pre-flight.md"
-  _copy_doc "$PLUGIN_ROOT/framework-files/work-isolation.md" "$ai/work-isolation.md"
+  # Added in 2.10.0 (#241). release-check re-runs an older tag with HEAD's evals/
+  # copied in, and that tree has no such file, so copy it only where it exists.
+  if [ -f "$PLUGIN_ROOT/framework-files/work-isolation.md" ]; then
+    _copy_doc "$PLUGIN_ROOT/framework-files/work-isolation.md" "$ai/work-isolation.md"
+  fi
 
   local rule
   for rule in "$PLUGIN_ROOT"/framework-files/rules/*.md; do
