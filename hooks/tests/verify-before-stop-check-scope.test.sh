@@ -189,6 +189,30 @@ out=$(stop "$WT_P" code:web/a.ts)
 expect yes "$(ran Web)" "worktree: the check matching its own write runs"
 expect no "$(ran Api)" "worktree: the other check is skipped"
 
+# Changes the ledger cannot see (git revert, rm, codegen, a variable path):
+# a path under the globs that git reports changed, uncommitted or against the
+# base, runs the check even when the ledger has no matching write.
+WT_U="$MAIN/.claude/worktrees/unseen"
+git -C "$MAIN" worktree add -q -b feat-unseen "$WT_U" main
+set_config "$WT_U" "{\"checks\":[$API,$WEB]}"
+out=$(stop "$WT_U" code:web/a.ts)
+expect no "$(ran Api)" "unseen: a clean api/ stays skipped"
+has "Api: skipped" "$(text "$out")" "unseen: the clean skip is still named"
+rm "$WT_U/api/a.php"
+out=$(stop "$WT_U" code:web/a.ts)
+expect yes "$(ran Api)" "unseen: an rm under api/ the ledger lacks runs the api check"
+expect yes "$(ran Web)" "unseen: the check matching the ledger still runs"
+lacks "Api: skipped" "$(text "$out")" "unseen: the rm-armed check is not reported skipped"
+git -C "$WT_U" checkout -q -- api/a.php
+printf '<?php // gen\n' > "$WT_U/api/gen.php"
+out=$(stop "$WT_U" code:web/a.ts)
+expect yes "$(ran Api)" "unseen: an untracked file under api/ (codegen) runs the api check"
+rm "$WT_U/api/gen.php"
+printf '<?php // v2\n' > "$WT_U/api/a.php"
+git -C "$WT_U" commit -q -am "api change" 
+out=$(stop "$WT_U" code:web/a.ts)
+expect yes "$(ran Api)" "unseen: a committed change under api/ against the base (git revert) runs the api check"
+
 # --- containers and runIn (#221) -----------------------------------------------
 # A fake docker on PATH: every exec passes.
 mkdir -p "$ROOT/bin"
@@ -291,6 +315,44 @@ container_config "$WT_N" "$(exec_check app)"
 out=$(stop "$WT_N" code:api/a.php)
 expect approve "$(decision "$out")" "nested worktree: runIn satisfies the #220 refusal"
 expect yes "$(ran X)" "nested worktree: the runIn check runs"
+
+# runIn exempts only a command that uses the workdir: an exec with neither
+# -w/--workdir nor MYSPEC_CHECK_WORKDIR still runs in the container's default
+# directory, the main checkout's tree.
+plain_exec() {  # plain_exec <runIn> <exec options>
+  jq -nc --arg c "echo ran > $RAN/P; docker compose exec $2 app make lint" --arg r "$1" \
+    '{name: "P", command: $c, required: true, runIn: $r}'
+}
+# The literal $MYSPEC_CHECK_WORKDIR below is meant: the hook expands it.
+# shellcheck disable=SC2016
+{
+container_config "$WT_N" "$(plain_exec app '')"
+out=$(stop "$WT_N" code:api/a.php)
+expect block "$(decision "$out")" "nested worktree: runIn with an exec lacking -w and the workdir is refused"
+expect no "$(ran P)" "nested worktree: runIn with an unpinned exec never runs"
+has '-w "$MYSPEC_CHECK_WORKDIR"' "$(text "$out")" "nested worktree: the refusal says to pass -w \"\$MYSPEC_CHECK_WORKDIR\""
+container_config "$WT_N" "$(plain_exec app '-w "$MYSPEC_CHECK_WORKDIR"')"
+out=$(stop "$WT_N" code:api/a.php)
+expect approve "$(decision "$out")" "nested worktree: runIn with -w \"\$MYSPEC_CHECK_WORKDIR\" runs"
+expect yes "$(ran P)" "nested worktree: runIn with -w runs the check"
+}
+container_config "$WT_N" "$(plain_exec app '-Tw /var/www/html/.claude/worktrees/nested')"
+out=$(stop "$WT_N" code:api/a.php)
+expect yes "$(ran P)" "nested worktree: runIn with a -Tw cluster runs the check"
+container_config "$MAIN" "$(plain_exec app '')"
+out=$(stop "$MAIN" code:api/a.php)
+expect yes "$(ran P)" "main checkout: runIn with a plain exec runs (R8a is for linked worktrees)"
+
+# The documented example pins the compose project, and runs in a worktree.
+# The docs live at the repository root, above both copies of this suite.
+DOCS="$(git -C "$HERE" rev-parse --show-toplevel)/docs/stop-gate.md"
+# shellcheck disable=SC2016
+DOC_CMD=$(sed -n '/^```json$/,/^```$/p' "$DOCS" | sed '1d;$d' | jq -r '.checks[0].command')
+has ' -p ' "$DOC_CMD" "docs example: the compose project is pinned with -p"
+c=$(jq -nc --arg c "echo ran > $RAN/D; $DOC_CMD" '{name: "D", command: $c, required: true, runIn: "app"}')
+container_config "$WT_N" "$c"
+out=$(stop "$WT_N" code:api/a.php)
+expect yes "$(ran D)" "docs example: runs in a nested worktree"
 
 container_config "$WT_O" "$(exec_check app)"
 out=$(stop "$WT_O" code:api/a.php)

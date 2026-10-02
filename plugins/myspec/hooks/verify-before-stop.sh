@@ -991,7 +991,31 @@ paths_verdict() {
     [ -n "$f" ] || continue
     [[ "$f" =~ $alt ]] && return 0
   done <<< "$MYSPEC_SESSION_FILES"
+  # The ledger misses writes it cannot see: git revert or checkout, rm, a
+  # code generator, a variable path. A path under the globs that git reports
+  # changed, uncommitted or against the base, runs the check (fail closed).
+  unseen_files
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    [[ "$f" =~ $alt ]] && return 0
+  done <<< "$UNSEEN_FILES"
   PATHS_VERDICT=skip
+}
+
+# unseen_files -> sets UNSEEN_FILES, once per checkout: the paths git reports
+# changed there, uncommitted or untracked (changed_files) and, when a base
+# ref resolved, against MYSPEC_BASE_REF, both sides of a rename included.
+UNSEEN_READY=0
+UNSEEN_FILES=""
+unseen_files() {
+  [ "$UNSEEN_READY" -eq 0 ] || return 0
+  UNSEEN_READY=1
+  UNSEEN_FILES=$({
+    changed_files
+    if [ -n "$MYSPEC_BASE_REF" ]; then
+      git -C "$REPO_ROOT" diff --name-only --no-renames "$MYSPEC_BASE_REF" -- 2>/dev/null || true
+    fi
+  } | grep -v '^\.claude/state/' | sort -u || true)
 }
 
 # Containers (#221). A container that bind-mounts part of the repository
@@ -1121,6 +1145,7 @@ if [ "$ATTRIBUTE" -eq 1 ] && [ -f "$LEDGER" ]; then
   MYSPEC_SESSION_FILES=$(session_files)
 fi
 export MYSPEC_SESSION_FILES
+UNSEEN_READY=0
 
 # Base ref for diff-scoped checks. A repo whose lint or type-check is already
 # red on the default branch cannot use a whole-repo command as a gate — it
@@ -1236,6 +1261,15 @@ for i in $(seq 0 $((CHECKS_COUNT - 1))); do
       continue
     fi
     export MYSPEC_CHECK_WORKDIR="$CHECK_WORKDIR"
+    # runIn exempts a command from the #220 refusal only when it uses the
+    # workdir: an exec with neither -w/--workdir nor MYSPEC_CHECK_WORKDIR
+    # still runs in the container's default directory.
+    if [ "$ROOT_IS_LINKED" -eq 1 ] && container_exec_unpinned "$COMMAND" \
+        && [ "${COMMAND#*MYSPEC_CHECK_WORKDIR}" = "$COMMAND" ]; then
+      UNVERIFIABLE_CHECKS+=("$NAME")
+      FAILED_OUTPUT+=("[$NAME not run: runIn $RUN_IN without its workdir] $COMMAND runs a container exec without -w/--workdir and does not use MYSPEC_CHECK_WORKDIR, so it runs in the container's default working directory, which mounts the main checkout's tree, not $REPO_ROOT. A result would describe another tree. This is not a test failure. Pass -w \"\$MYSPEC_CHECK_WORKDIR\" in the exec options, before the container or service name, then report the check's real result.")
+      continue
+    fi
   elif [ "$ROOT_IS_LINKED" -eq 1 ] && container_exec_unpinned "$COMMAND"; then
     UNVERIFIABLE_CHECKS+=("$NAME")
     FAILED_OUTPUT+=("[$NAME not run: unverifiable in a linked worktree] $COMMAND runs a container exec (docker exec, docker compose exec, podman exec and the like) without -w/--workdir, so it runs in the container's working directory. That directory mounts the checkout the container or compose project was started from (as a rule the main checkout), not $REPO_ROOT, so a result would describe another tree; and compose names the project after the directory it runs in, so from here it may find no running service at all. This is not a test failure. Make the check verify this worktree: give it runIn with the container's mount in containers (.claude/verification.json) and pass -w \"\$MYSPEC_CHECK_WORKDIR\", or mount it in the container and pass -w/--workdir with its path there, or run the tool on the host. The gate trusts a -w/--workdir without verifying it: it cannot see what the container mounts at that path, so the path must be this worktree's mount.")
