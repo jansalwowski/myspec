@@ -137,6 +137,7 @@ expect_no_line '^ERROR' "the blocking groups report no errors on a clean install
 # It is still reported, as hook-command-relative, so update rewrites it: once a
 # session cd's into a subdirectory the bare command fails, and a failing Stop
 # hook is non-blocking, so the verification gate is skipped silently (#217).
+# That makes it an error: nothing else would ever report the missing gate (#216).
 cp "$REPO/.claude/settings.json" "$ROOT/settings-projectdir.json"
 # shellcheck disable=SC2016 # literal text, not an expansion
 set_json .claude/settings.json '
@@ -151,13 +152,51 @@ const walk = (n) => {
 walk(d.hooks)'
 
 run_doctor wiring
-expect_exit 0 "hooks registered in the legacy relative form exit 0"
+expect_exit 1 "hooks registered in the legacy relative form fail the wiring group"
 expect_no_line 'hook-missing' "a relative hook path is not reported missing"
 expect_no_line 'hook-unregistered' "a relative hook is recognised as wired"
 expect_no_line 'wiring-incomplete' "a relative command matches the template's \$CLAUDE_PROJECT_DIR one"
-expect_line 'WARN +hook-command-relative: .claude/settings.json: hook command ".claude/hooks/verify-before-stop.sh" runs .claude/hooks/verify-before-stop.sh by a relative path' "a bare relative hook command is reported"
+expect_line 'ERROR hook-command-relative: .claude/settings.json: hook command ".claude/hooks/verify-before-stop.sh" runs .claude/hooks/verify-before-stop.sh by a relative path' "a bare relative Stop hook command is an error"
 expect_line 'run: /myspec:update' "a relative framework hook command names update as the fix"
-expect_no_line '^ERROR' "a relative hook command is a warning, so the stop gate does not block on it"
+expect_no_line 'WARN +hook-command-relative' "no relative framework hook command is downgraded to a warning"
+
+# Every template entry is reported, whatever its event and matcher: update
+# rewrites what the doctor lists, so an entry the scan skipped stays bare. The
+# expected list is read from the template, not written out here.
+TEMPLATE_COMMANDS=$(node -e '
+const walk = (n, out) => {
+  if (Array.isArray(n)) { n.forEach((x) => walk(x, out)); return out; }
+  if (!n || typeof n !== "object") { return out; }
+  if (typeof n.command === "string") { out.push(n.command.replace(/^"\$CLAUDE_PROJECT_DIR"\//, "")); }
+  Object.values(n).forEach((x) => walk(x, out));
+  return out;
+};
+console.log(walk(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).hooks, []).join("\n"));
+' "$PLUGIN/templates/settings-hooks.json")
+TEMPLATE_COUNT=$(printf '%s\n' "$TEMPLATE_COMMANDS" | grep -c .)
+REPORTED_COUNT=$(printf '%s\n' "$OUTPUT" | grep -cE '^ERROR hook-command-relative: .claude/settings.json:')
+if [ "$TEMPLATE_COUNT" -gt 0 ] && [ "$REPORTED_COUNT" -eq "$TEMPLATE_COUNT" ]; then ok; else fail "every bare template entry is reported once (template $TEMPLATE_COUNT, reported $REPORTED_COUNT)"; fi
+while IFS= read -r cmd; do
+  case "$OUTPUT" in
+    *"hook command \"$cmd\" runs"*) ok ;;
+    *) fail "the bare template command is reported: $cmd" ;;
+  esac
+done <<< "$TEMPLATE_COMMANDS"
+
+# A project's own relative hook is not the framework's gate: a warning.
+mkdir -p "$REPO/scripts"
+printf '#!/bin/sh\nexit 0\n' > "$REPO/scripts/own-hook.sh"
+chmod 755 "$REPO/scripts/own-hook.sh"
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks.push({type:"command",command:"scripts/own-hook.sh"})'
+run_doctor hook-command-relative
+expect_line 'WARN +hook-command-relative: .claude/settings.json: hook command "scripts/own-hook.sh"' "a project-owned relative hook command is a warning"
+expect_line 'fix: prefix the script with "\$CLAUDE_PROJECT_DIR"/' "a project-owned relative hook command names the prefix fix"
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks.pop()'
+rm "$REPO/scripts/own-hook.sh"
+
+# The cases below change the Stop entry alone; with every other entry bare they
+# would also carry those entries' hook-command-relative errors.
+cp "$ROOT/settings-projectdir.json" "$REPO/.claude/settings.json"
 
 # An interpreter may lead the command; the script is then token 1. Such a
 # command does not exec the file, so a mode 644 script there is correct and
@@ -176,7 +215,7 @@ expect_no_line 'hook-command-relative: .claude/settings.json: hook command "bash
 
 set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "bash ./.claude/hooks/verify-before-stop.sh"'
 run_doctor wiring
-expect_line 'WARN +hook-command-relative: .claude/settings.json: hook command "bash ./.claude/hooks/verify-before-stop.sh"' "an interpreter-led relative command is reported"
+expect_line 'ERROR hook-command-relative: .claude/settings.json: hook command "bash ./.claude/hooks/verify-before-stop.sh"' "an interpreter-led relative command is an error"
 
 # The bit still matters when the harness execs the file itself.
 set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = ".claude/hooks/verify-before-stop.sh"'
