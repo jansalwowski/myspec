@@ -132,6 +132,14 @@
       "type": "overwrite",
       "dest": ".claude/lib/session-event.sh"
     },
+    "stop-gate/arm.sh": {
+      "type": "overwrite",
+      "dest": ".claude/lib/stop-gate/arm.sh"
+    },
+    "stop-gate/provision.sh": {
+      "type": "overwrite",
+      "dest": ".claude/lib/stop-gate/provision.sh"
+    },
     "branch-cleanup.sh": {
       "type": "overwrite",
       "dest": ".claude/lib/branch-cleanup.sh"
