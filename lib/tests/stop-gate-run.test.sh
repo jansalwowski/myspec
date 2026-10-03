@@ -60,6 +60,17 @@ eq "$(caps 500)" 120/30 "the variable cannot raise the cap"
 eq "$(caps abc)" 120/30 "a non-number is ignored"
 eq "$(caps 0)" 120/30 "zero is ignored"
 
+# --- the gate budget (R13) ---------------------------------------------------------------
+budget() { (unset GATE_DEADLINE; MYSPEC_GATE_BUDGET_SECONDS="$1" gate_budget_init; printf '%s' "$GATE_BUDGET_SECONDS"); }
+eq "$(budget '')" 300 "the default budget"
+eq "$(budget 40)" 40 "a lower budget is honoured"
+eq "$(budget 301)" 300 "the variable cannot raise the budget"
+eq "$(budget 100000)" 300 "nor raise it by much"
+eq "$(budget -5)" 300 "a negative value is ignored"
+eq "$(budget 0)" 300 "zero is ignored"
+eq "$( (GATE_DEADLINE=$(( $(date +%s) - 10 )); gate_remaining) )" 0 "a spent budget has 0 s left"
+eq "$( (GATE_DEADLINE=$(( $(date +%s) + 60 )); gate_remaining) )" 60 "the seconds left"
+
 # --- container_exec_form (R8a) ----------------------------------------------------------
 for c in "docker exec app make lint" \
          "docker container exec app make lint" \
@@ -205,7 +216,8 @@ gate() {
       --argjson unver "$(jq -nc '$ARGS.positional' --args ${UNVERIFIABLE_CHECKS[@]+"${UNVERIFIABLE_CHECKS[@]}"})" \
       --argjson output "$(jq -nc '$ARGS.positional' --args ${FAILED_OUTPUT[@]+"${FAILED_OUTPUT[@]}"})" \
       --argjson scope "$(jq -nc '$ARGS.positional' --args ${SCOPE_NOTES[@]+"${SCOPE_NOTES[@]}"})" \
-      '{ran: ($ran | tonumber), failed: $failed, timed: $timed, unver: $unver, output: ($output | join("\n---\n")), scope: ($scope | join(" "))}'
+      --argjson notrun "$(jq -nc '$ARGS.positional' --args ${NOT_RUN_CHECKS[@]+"${NOT_RUN_CHECKS[@]}"})" \
+      '{ran: ($ran | tonumber), failed: $failed, timed: $timed, unver: $unver, notrun: $notrun, output: ($output | join("\n---\n")), scope: ($scope | join(" "))}'
   )
 }
 check() {  # check <name> <command> [extra json] -> a required check that records its run
@@ -260,6 +272,21 @@ eq "$(f "$out" '.unver | length')" 0 "paths before runIn: a skipped check is not
 out=$(gate "$REPO" "{\"containers\":\"app\",\"checks\":[$(check R "$WD" '{"runIn":"app"}')]}" code:api/a.php)
 has "$(f "$out" .output)" "ignoring verification.containers" "containers not an object: the reader's note is in the refusal"
 eq "$(ran R)" no "containers not an object: the check never runs"
+
+# The budget in run_checks (R13): a spent budget runs nothing; a short one
+# caps the running check at what is left and leaves the rest unrun.
+out=$(GATE_DEADLINE=$(( $(date +%s) - 1 )) gate "$REPO" "{\"checks\":[$(check one true),$(check two true)]}" code:a.ts)
+eq "$(ran one)$(ran two)" nono "budget spent: no check starts"
+eq "$(f "$out" '.notrun | join(",")')" one,two "budget spent: every check is reported not run"
+eq "$(f "$out" '.ran')|$(f "$out" '.output')" "0|" "budget spent: nothing ran, nothing failed"
+START=$(date +%s)
+out=$(MYSPEC_GATE_BUDGET_SECONDS=2 gate "$REPO" "{\"checks\":[$(check slow 'sleep 30'),$(check after true)]}" code:a.ts)
+[ $(( $(date +%s) - START )) -lt 8 ] && ok || fail "budget: the running check is capped at what is left"
+# What is left is 1 or 2 s, by where the second boundary falls.
+has "$(f "$out" '.timed | join(",")')" "slow (at the gate budget, " "budget: the capped check is a timeout at the budget"
+has "$(f "$out" .output)" "s, the rest of the gate budget] " "budget: the timeout says the budget cut it"
+eq "$(ran after)" no "budget: the next check does not start"
+eq "$(f "$out" '.notrun | join(",")')" after "budget: the next check is reported not run"
 
 # --- the capped runner (R7, docs/verify-check-escapes.md) ------------------------------------------
 export MYSPEC_CHECK_CAP_SECONDS=1

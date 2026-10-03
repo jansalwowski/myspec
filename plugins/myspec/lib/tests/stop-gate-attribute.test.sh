@@ -113,6 +113,10 @@ results lint='other.ts:2 BROKEN'
 UNVERIFIABLE_CHECKS+=(container)
 attribute_failures
 eq "$ATTRIBUTION_WARN" 0 "a refused check is never downgraded"
+results lint='other.ts:2 BROKEN'
+NOT_RUN_CHECKS+=(later)
+attribute_failures
+eq "$ATTRIBUTION_WARN" 0 "R13: a check the budget left unrun is never downgraded"
 
 mkdir -p "$REPO/.claude/state"
 printf 'x\n' > "$REPO/.claude/state/x.ts"
@@ -140,6 +144,8 @@ decide() {  # decide <implement 0|1> <check=output>... -> block|warn|none and th
 }
 out=$(decide 0)
 eq "$out" "0||" "no failure: nothing to report"
+out=$(attribute_init; IMPLEMENT_ACTIVE=0; results; NOT_RUN_CHECKS+=(later); ROOT_LABEL=""; attribute_root; printf '%s' "$BLOCKING_FAILURE")
+eq "$out" 1 "R13: a checkout whose only problem is an unrun check blocks"
 out=$(decide 1 lint='app.ts:1 BROKEN')
 eq "${out%%|*}" 0 "R6: a live feature-implement run warns"
 has "$out" "during feature-implement orchestration" "R6: the warning says why"

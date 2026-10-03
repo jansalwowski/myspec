@@ -46,6 +46,8 @@ done
 # shellcheck source=lib/stop-gate/report.sh
 . "$HOOK_LIB/stop-gate/report.sh"
 
+# The gate-wide budget (R13) starts here.
+gate_budget_init
 payload_parse "$(cat)" STOP_HOOK_ACTIVE=.stop_hook_active SESSION_ID=.session_id CWDS="$HOOK_CWDS"
 
 # Prevent infinite loop on re-entry (R10). The harness signals this via

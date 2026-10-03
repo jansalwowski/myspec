@@ -57,7 +57,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/verify-before-stop.sh"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/verify-before-stop.sh",
+            "timeout": 330
           }
         ]
       }

@@ -10,7 +10,8 @@
 #
 # Results go to the arrays run_init sets up: FAILED_CHECKS with FAILED_LOGS
 # (kept for attribution, removed on exit), FAILED_CWDS and FAILED_OUTPUT,
-# TIMED_OUT_CHECKS, UNVERIFIABLE_CHECKS, SCOPE_NOTES, and CHECKS_RAN.
+# TIMED_OUT_CHECKS, UNVERIFIABLE_CHECKS, NOT_RUN_CHECKS, RAN_CHECKS,
+# SCOPE_NOTES, and CHECKS_RAN.
 # shellcheck disable=SC2034
 
 # Per-check time cap (R7). A check that outlives it is killed and reported as
@@ -23,8 +24,42 @@
 CHECK_CAP_DEFAULT=120
 CLEANUP_CAP_DEFAULT=30
 
-# run_init -> the caps, the cap sentinel and the result arrays.
+# Gate-wide budget (R13). One budget covers the whole stop: every check in
+# every armed checkout, and their cleanup. Per-check caps alone let the worst
+# case grow as checks x checkouts x 150 s, and then the harness's own Stop
+# hook timeout (600 s by default, docs/verify-check-escapes.md) decides the
+# outcome, discarding whatever the gate had found. The budget stays below
+# it. A check that would start after the budget ran out is not run and is
+# reported as such; one running when it runs out is capped at what is left
+# and reported as timed out. MYSPEC_GATE_BUDGET_SECONDS lowers it and can
+# never raise it. A cleanup after a timeout still gets GATE_CLEANUP_FLOOR
+# seconds when the budget is spent, so remote work is not left running; the
+# 30 s between the budget and the harness timeout in hooks.json covers that
+# and the kill grace.
+GATE_BUDGET_DEFAULT=300
+GATE_CLEANUP_FLOOR=5
+
+# gate_budget_init -> GATE_BUDGET_SECONDS and GATE_DEADLINE, from now. The
+# hook calls it first thing, so the conformance gates count too.
+gate_budget_init() {
+  GATE_BUDGET_SECONDS=$GATE_BUDGET_DEFAULT
+  if [[ "${MYSPEC_GATE_BUDGET_SECONDS:-}" =~ ^[1-9][0-9]*$ ]] && [ "$MYSPEC_GATE_BUDGET_SECONDS" -lt "$GATE_BUDGET_SECONDS" ]; then
+    GATE_BUDGET_SECONDS=$MYSPEC_GATE_BUDGET_SECONDS
+  fi
+  GATE_DEADLINE=$(( $(date +%s) + GATE_BUDGET_SECONDS ))
+}
+
+# gate_remaining -> the seconds left in the budget, 0 when spent.
+gate_remaining() {
+  local r=$(( GATE_DEADLINE - $(date +%s) ))
+  [ "$r" -gt 0 ] || r=0
+  printf '%s\n' "$r"
+}
+
+# run_init -> the caps, the cap sentinel and the result arrays. Starts the
+# budget unless gate_budget_init already did.
 run_init() {
+  [ -n "${GATE_DEADLINE:-}" ] || gate_budget_init
   CHECK_CAP_SECONDS=$CHECK_CAP_DEFAULT
   if [[ "${MYSPEC_CHECK_CAP_SECONDS:-}" =~ ^[1-9][0-9]*$ ]] && [ "$MYSPEC_CHECK_CAP_SECONDS" -lt "$CHECK_CAP_SECONDS" ]; then
     CHECK_CAP_SECONDS=$MYSPEC_CHECK_CAP_SECONDS
@@ -45,6 +80,9 @@ run_init() {
   TIMED_OUT_CHECKS=()
   # Checks refused without running: their result would describe another tree.
   UNVERIFIABLE_CHECKS=()
+  # Checks the budget left no time for, and the checks that did run (R13).
+  NOT_RUN_CHECKS=()
+  RAN_CHECKS=()
   # Checks skipped by their paths, and settings the reader or the gate
   # ignored: reported on every outcome, an approve included.
   SCOPE_NOTES=()
@@ -433,6 +471,7 @@ load_checks() {
 # then cwd, then runIn or the R8a refusal, then the run.
 run_checks() {
   local count i check name command diff_command cleanup run_in run_id truncated cleanup_note
+  local remaining cap cut cleanup_cap
   load_checks "$1"
   count=$(printf '%s' "$CHECKS_JSON" | jq 'if type == "array" then length else 0 end')
   for ((i = 0; i < count; i++)); do
@@ -487,11 +526,26 @@ run_checks() {
       continue
     fi
 
+    # The budget (R13): no time left, no run; less than the cap, a shorter
+    # cap.
+    remaining=$(gate_remaining)
+    if [ "$remaining" -le 0 ]; then
+      NOT_RUN_CHECKS+=("$name")
+      continue
+    fi
+    cap=$CHECK_CAP_SECONDS
+    cut=""
+    if [ "$remaining" -lt "$cap" ]; then
+      cap=$remaining
+      cut=1
+    fi
+
     # Exported to the check and to its cleanup, so a wrapper that starts work
     # the group kill cannot reach can tag it and the cleanup can find it.
     CHECKS_RAN=$((CHECKS_RAN + 1))
+    RAN_CHECKS+=("$name")
     run_id="myspec-$(date +%s)-$$-$i"
-    run_capped "$CHECK_CAP_SECONDS" "$command" "$run_id" keep
+    run_capped "$cap" "$command" "$run_id" keep
     CHECK_RUN_LOG=$RUN_LOG
 
     if [ "$RUN_EXIT" -ne 0 ]; then
@@ -499,23 +553,26 @@ run_checks() {
       # last error). The first 2000 characters of the last 50 lines cut that
       # end off mid-line.
       truncated=$(printf '%s\n' "$RUN_OUTPUT" | tail -50 | tail -c 2000)
-      if capped "$RUN_EXIT" "$RUN_ELAPSED" "$CHECK_CAP_SECONDS"; then
+      if capped "$RUN_EXIT" "$RUN_ELAPSED" "$cap"; then
         # Cleanup runs only here: a check that exited on its own took its
         # remote work with it (the client returns when that work ends).
         if [ -n "${cleanup// /}" ]; then
-          run_capped "$CLEANUP_CAP_SECONDS" "$cleanup" "$run_id"
+          cleanup_cap=$(gate_remaining)
+          [ "$cleanup_cap" -ge "$GATE_CLEANUP_FLOOR" ] || cleanup_cap=$GATE_CLEANUP_FLOOR
+          [ "$cleanup_cap" -le "$CLEANUP_CAP_SECONDS" ] || cleanup_cap=$CLEANUP_CAP_SECONDS
+          run_capped "$cleanup_cap" "$cleanup" "$run_id"
           if [ "$RUN_EXIT" -eq 0 ]; then
             cleanup_note="Cleanup ran ($cleanup)."
-          elif capped "$RUN_EXIT" "$RUN_ELAPSED" "$CLEANUP_CAP_SECONDS"; then
-            cleanup_note="Cleanup timed out after ${CLEANUP_CAP_SECONDS}s ($cleanup): work this check started in a container, on another host or detached may still be running. Confirm it stopped before running the check again."
+          elif capped "$RUN_EXIT" "$RUN_ELAPSED" "$cleanup_cap"; then
+            cleanup_note="Cleanup timed out after ${cleanup_cap}s ($cleanup): work this check started in a container, on another host or detached may still be running. Confirm it stopped before running the check again."
           else
             cleanup_note="Cleanup failed (exit $RUN_EXIT) ($cleanup): work this check started in a container, on another host or detached may still be running. Confirm it stopped before running the check again. Cleanup output: $(printf '%s\n' "$RUN_OUTPUT" | tail -10 | tail -c 600)"
           fi
         else
           cleanup_note="No cleanup declared. The kill reaches only processes on this machine that stay in the check's process group: work it runs in a container or on another host (docker exec, kubectl exec, ssh) or detaches keeps running. Confirm that stopped before running the check again, or give the check a cleanup command in .claude/verification.json."
         fi
-        TIMED_OUT_CHECKS+=("$name")
-        FAILED_OUTPUT+=("[$name timed out after ${CHECK_CAP_SECONDS}s] $command was killed before it finished, so its result is unknown. This is not a test failure. $cleanup_note Then run the check directly and report its real exit code; if it passes but is slow, reduce its runtime (narrow what it runs). Do not raise the cap. Output so far:"$'\n'"$truncated")
+        TIMED_OUT_CHECKS+=("$name${cut:+ (at the gate budget, ${cap}s)}")
+        FAILED_OUTPUT+=("[$name timed out after ${cap}s${cut:+, the rest of the gate budget}] $command was killed before it finished, so its result is unknown. This is not a test failure. $cleanup_note Then run the check directly and report its real exit code; if it passes but is slow, reduce its runtime (narrow what it runs). Do not raise the cap. Output so far:"$'\n'"$truncated")
       else
         FAILED_CHECKS+=("$name")
         FAILED_LOGS+=("$CHECK_RUN_LOG")

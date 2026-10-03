@@ -11,7 +11,8 @@
 # cases (a fast exit 124, long output, a leftover child, a setsid grandchild,
 # cleanup failing or timing out or not running, a detached writer, the
 # no-perl fallback, and the cap that cannot be raised) are function tests in
-# lib/tests/stop-gate-run.test.sh.
+# lib/tests/stop-gate-run.test.sh. The gate-wide budget (R13) is here end to
+# end; that it cannot be raised is a function test there.
 #
 # MYSPEC_CHECK_CAP_SECONDS lowers the cap so this runs in seconds; the hook
 # ignores values above its default, so the variable can never raise it.
@@ -87,6 +88,22 @@ OUT=$(run_hook)
   && ok || fail "cleanup runs with the check's MYSPEC_CHECK_RUN_ID"
 reason "$OUT" | grep -q 'Cleanup ran' && ok || fail "the reason says cleanup ran (got: $(reason "$OUT"))"
 reason "$OUT" | grep -q 'No cleanup declared' && fail "a declared cleanup is not reported as missing" || ok
+
+# --- the gate budget runs out after check 1 of 3 (R13) ------------------------
+# A lowered budget of 4 s: the first check is cut at what is left of it, and
+# checks 2 and 3 never start. A check that did not run is not a pass, so the
+# stop blocks and names what ran and what did not.
+checks "[{\"name\":\"one\",\"command\":\"sleep 30\",\"required\":true},{\"name\":\"two\",\"command\":\"touch $ROOT/two.ran\",\"required\":true},{\"name\":\"three\",\"command\":\"touch $ROOT/three.ran\",\"required\":true}]"
+arm
+START=$(date +%s)
+OUT=$(printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$REPO" | MYSPEC_GATE_BUDGET_SECONDS=4 bash "$HOOK")
+ELAPSED=$(( $(date +%s) - START ))
+[ "$(printf '%s' "$OUT" | jq -r '.decision')" = "block" ] && ok || fail "budget: a spent budget blocks (got: $OUT)"
+reason "$OUT" | grep -q 'not run, gate budget of 4s spent: two, three' && ok || fail "budget: the headline names checks 2 and 3 as not run (got: $(reason "$OUT" | head -1))"
+reason "$OUT" | grep -q 'Checks that ran: one\.' && ok || fail "budget: the reason names the check that ran (got: $(reason "$OUT"))"
+reason "$OUT" | grep -q 'one (at the gate budget' && ok || fail "budget: check 1 is a timeout at the budget (got: $(reason "$OUT" | head -1))"
+[ ! -e "$ROOT/two.ran" ] && [ ! -e "$ROOT/three.ran" ] && ok || fail "budget: checks 2 and 3 never start"
+[ "$ELAPSED" -lt 10 ] && ok || fail "budget: a lowered budget is honoured (took ${ELAPSED}s with a 4s budget)"
 
 printf 'verify-before-stop-timeout: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
