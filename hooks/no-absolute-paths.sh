@@ -30,26 +30,32 @@
 
 set -euo pipefail
 
-if ! command -v jq >/dev/null 2>&1; then
-  exit 0
-fi
+command -v jq >/dev/null 2>&1 || exit 0
+HOOK_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+for HOOK_CORE in "$HOOK_DIR/../lib/hook-core.sh" "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"; do
+  [ -f "$HOOK_CORE" ] && break
+done
+[ -f "$HOOK_CORE" ] || exit 0
+# shellcheck source=lib/hook-core.sh
+. "$HOOK_CORE"
 
-INPUT=$(cat)
-
-FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' 2>/dev/null || true)
+# NEW_CONTENT is the content this call added; HAS_NEW says whether the call
+# carries any, HAS_CONTENT whether it is a whole-file Write.
+payload_parse "$(cat)" FILE_PATH='.tool_input.file_path // .tool_input.notebook_path' \
+  HAS_NEW='.tool_input | has("content") or has("new_string") or has("new_source") or has("edits")' \
+  HAS_CONTENT='.tool_input | has("content")' \
+  NEW_CONTENT='.tool_input | [.content, .new_string, .new_source, ((.edits // [])[] | .new_string)] | map(select(type == "string")) | join("\n")'
 
 [ -n "$FILE_PATH" ] || exit 0
 [ -f "$FILE_PATH" ] || exit 0
 
 # Resolve the file and its work tree physically, so a symlinked prefix
 # (macOS /var -> /private/var) compares equal to what git reports.
-FILE_DIR=$(cd "$(dirname "$FILE_PATH")" 2>/dev/null && pwd -P) || exit 0
-REAL_PATH="$FILE_DIR/$(basename "$FILE_PATH")"
+REAL_PATH=$(physical_path "$FILE_PATH") || exit 0
 
 # Outside any work tree (a scratchpad, $TMPDIR): nothing there is committed.
-REPO_ROOT=$(git -C "$FILE_DIR" rev-parse --show-toplevel 2>/dev/null) || exit 0
-[ -n "$REPO_ROOT" ] || exit 0
-REPO_ROOT=$(cd "$REPO_ROOT" 2>/dev/null && pwd -P) || exit 0
+checkout_facts "$REAL_PATH" || exit 0
+REPO_ROOT="$CF_ROOT"
 
 case "$REAL_PATH" in
   "$REPO_ROOT"/*) REL_PATH="${REAL_PATH#"$REPO_ROOT"/}" ;;
@@ -78,15 +84,11 @@ case "$REL_PATH" in
 esac
 
 # File kinds in scope: doc kinds anywhere, any kind under the rule's trees.
+# A repo without .myspec.json has no aiDir at all, so only its doc kinds,
+# .claude/ and docs/ are checked.
 AI_DIR=""
 if [ -f "$REPO_ROOT/.myspec.json" ]; then
-  AI_DIR=$(jq -r '.aiDir // empty' "$REPO_ROOT/.myspec.json" 2>/dev/null || true)
-  AI_DIR="${AI_DIR#./}"
-  AI_DIR="${AI_DIR%/}"
-  # No configured value: the documented default, as validate-frontmatter.sh
-  # and verify-before-stop.sh resolve it. A repo without .myspec.json has no
-  # aiDir at all, so only its doc kinds, .claude/ and docs/ are checked.
-  [ -n "$AI_DIR" ] || AI_DIR=".ai"
+  AI_DIR=$(ai_dir "$REPO_ROOT")
 fi
 
 IN_SCOPE=0
@@ -103,19 +105,7 @@ fi
 # The content this call added. Write content maps line for line onto the
 # file; for the other tools each finding is looked up in the file.
 WHOLE_FILE=0
-HAS_NEW=$(printf '%s' "$INPUT" | jq -r '
-  .tool_input
-  | if has("content") or has("new_string") or has("new_source") or has("edits") then "yes" else "no" end
-' 2>/dev/null || echo no)
-
-if [ "$HAS_NEW" = "yes" ]; then
-  NEW_CONTENT=$(printf '%s' "$INPUT" | jq -r '
-    .tool_input
-    | [ .content, .new_string, .new_source, ((.edits // [])[] | .new_string) ]
-    | map(select(type == "string"))
-    | join("\n")
-  ' 2>/dev/null || true)
-  HAS_CONTENT=$(printf '%s' "$INPUT" | jq -r '.tool_input | has("content")' 2>/dev/null || echo false)
+if [ "$HAS_NEW" = "true" ]; then
   [ "$HAS_CONTENT" = "true" ] && WHOLE_FILE=1
 else
   NEW_CONTENT=$(cat "$FILE_PATH")
