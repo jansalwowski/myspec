@@ -385,6 +385,12 @@
       "issue": ["exists"],
       "description": "Lowers the Stop gate's per-check time cap; it cannot raise it."
     },
+    "MYSPEC_GATE_BUDGET_SECONDS": {
+      "kind": "standalone",
+      "type": "integer",
+      "issue": ["#250"],
+      "description": "Lowers the Stop gate's time budget for the whole stop (300 s); it cannot raise it."
+    },
     "MYSPEC_METRICS_CAP_SECONDS": {
       "kind": "standalone",
       "type": "integer",

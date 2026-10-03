@@ -12,7 +12,7 @@
 # outside T. A failure is this session's when its output names a file in T,
 # matched by basename, which errs toward blocking. The stop warns instead of
 # blocking only when every failed check names a file in F and none names one
-# in T, and nothing timed out or was refused. F is matched by its full
+# in T, and nothing timed out, was refused or was left unrun by the budget. F is matched by its full
 # repo-relative path, which errs toward blocking too: a package-relative path
 # in a monorepo tool's output does not match.
 # shellcheck disable=SC2034
@@ -32,6 +32,7 @@ attribute_begin() {
   ROOT_FAILED_START=${#FAILED_CHECKS[@]}
   ROOT_TIMED_START=${#TIMED_OUT_CHECKS[@]}
   ROOT_UNVERIFIABLE_START=${#UNVERIFIABLE_CHECKS[@]}
+  ROOT_NOT_RUN_START=${#NOT_RUN_CHECKS[@]}
 }
 
 # names_in <base|full> <paths file> <output file> -> the listed paths the output
@@ -125,7 +126,8 @@ attribute_failures() {
     fi
   done
   if [ "$owned" -eq 0 ] && [ "$unknown" -eq 0 ] && [ ${#TIMED_OUT_CHECKS[@]} -eq "$ROOT_TIMED_START" ] \
-      && [ ${#UNVERIFIABLE_CHECKS[@]} -eq "$ROOT_UNVERIFIABLE_START" ]; then
+      && [ ${#UNVERIFIABLE_CHECKS[@]} -eq "$ROOT_UNVERIFIABLE_START" ] \
+      && [ ${#NOT_RUN_CHECKS[@]} -eq "$ROOT_NOT_RUN_START" ]; then
     ATTRIBUTION_WARN=1
   fi
   where="This checkout"
@@ -135,11 +137,11 @@ attribute_failures() {
 }
 
 # attribute_root -> after the current checkout's checks ran: nothing when
-# they all passed; a warning during a live feature-implement run (R6) or when
+# they all passed (a check the budget left unrun did not pass, R13); a warning during a live feature-implement run (R6) or when
 # attribution clears every failure (R4); otherwise BLOCKING_FAILURE=1, with
 # the attribution paragraph when there is one.
 attribute_root() {
-  [ "${#FAILED_OUTPUT[@]}" -gt "$ROOT_FAILURES" ] || return 0
+  [ "${#FAILED_OUTPUT[@]}" -gt "$ROOT_FAILURES" ] || [ "${#NOT_RUN_CHECKS[@]}" -gt "$ROOT_NOT_RUN_START" ] || return 0
   if [ "$IMPLEMENT_ACTIVE" -eq 1 ]; then
     WARN_NOTES+=("Failing${ROOT_LABEL} during feature-implement orchestration; not blocking (session-event.sh implement start). The final verification step still gates.")
     return 0

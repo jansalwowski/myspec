@@ -52,13 +52,14 @@ conformance_gates() {
 # report_decision -> prints the decision and exits 0. Reads the run.sh
 # arrays, the attribute.sh notes and SCOPE_NOTES.
 report_decision() {
-  local scope="" names="" timed unver details="" notes entry headline message
+  local scope="" names="" timed unver unrun ran details="" notes entry headline message
   # One line per note, deduplicated (a note from the reader repeats per root).
   if [ "${#SCOPE_NOTES[@]}" -gt 0 ]; then
     scope="Scope: $(printf '%s\n' "${SCOPE_NOTES[@]}" | awk '!seen[$0]++ { printf "%s%s", (n++ ? " " : ""), $0 }')"
   fi
 
-  if [ ${#FAILED_CHECKS[@]} -gt 0 ] || [ ${#TIMED_OUT_CHECKS[@]} -gt 0 ] || [ ${#UNVERIFIABLE_CHECKS[@]} -gt 0 ]; then
+  if [ ${#FAILED_CHECKS[@]} -gt 0 ] || [ ${#TIMED_OUT_CHECKS[@]} -gt 0 ] || [ ${#UNVERIFIABLE_CHECKS[@]} -gt 0 ] \
+      || [ ${#NOT_RUN_CHECKS[@]} -gt 0 ]; then
     # The headline separates the outcomes: "failed" is a result, "timed out"
     # and "not run" are the absence of one.
     if [ ${#FAILED_CHECKS[@]} -gt 0 ]; then
@@ -71,6 +72,17 @@ report_decision() {
     if [ ${#UNVERIFIABLE_CHECKS[@]} -gt 0 ]; then
       unver=$(printf '%s, ' "${UNVERIFIABLE_CHECKS[@]}"); unver="not run, unverifiable here: ${unver%, }"
       names="${names:+$names; }$unver"
+    fi
+    # A check the budget left unrun is not a pass (R13): name what ran and
+    # what did not.
+    if [ ${#NOT_RUN_CHECKS[@]} -gt 0 ]; then
+      unrun=$(printf '%s, ' "${NOT_RUN_CHECKS[@]}"); unrun=${unrun%, }
+      names="${names:+$names; }not run, gate budget of ${GATE_BUDGET_SECONDS}s spent: $unrun"
+      ran="No check ran."
+      if [ ${#RAN_CHECKS[@]} -gt 0 ]; then
+        ran=$(printf '%s, ' "${RAN_CHECKS[@]}"); ran="Checks that ran: ${ran%, }."
+      fi
+      FAILED_OUTPUT+=("[gate budget] The stop gate's time budget, ${GATE_BUDGET_SECONDS}s for every check in every checkout, ran out before these checks started: $unrun. $ran A check that did not run is not a pass, and this is not a test failure. Run the checks that did not run directly and report their results; if the checks together take this long, reduce their runtime (paths, diffCommand). Do not raise the budget.")
     fi
     # Real newline-delimited separators: a multi-char IFS join uses only its
     # first character (4eb8ccb).
@@ -95,7 +107,7 @@ report_decision() {
       done
       notes+="Fix what your changes broke. Do not edit files changed outside this session to make a check pass: another session sharing this checkout may be working on them. If a failure comes from those changes, say so and stop. A Bash side effect (an install, code generation) is not recorded as this session's write, so if you made one of those changes, it is yours."$'\n\n'
     fi
-    decision_block "Verification did not pass (%s). Fix the failures your changes caused before completing; for a timeout, get the real result first.\n\n%s%s" "$names" "$notes" "$details"
+    decision_block "Verification did not pass (%s). Fix the failures your changes caused before completing; for a timeout or a check not run, get the real result first.\n\n%s%s" "$names" "$notes" "$details"
   fi
 
   if [ -n "$scope" ]; then
