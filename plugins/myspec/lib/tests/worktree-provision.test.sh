@@ -370,7 +370,8 @@ mkdir -p "$SHIMDIR/lib"
 printf '#!/bin/sh\nfor a in "$@"; do case "$a" in -c|--reflink*) echo "cp: illegal option" >&2; exit 64 ;; esac; done\nexec /bin/cp "$@"\n' > "$SHIMDIR/cp"
 chmod +x "$SHIMDIR/cp"
 sed "s#/bin/cp #$SHIMDIR/cp #g" "$SCRIPT" > "$SHIMDIR/lib/worktree-provision.sh"
-cp "$(dirname "$SCRIPT")/myspec-config.sh" "$(dirname "$SCRIPT")/myspec-config.schema.json" "$(dirname "$SCRIPT")/glob-regex.sh" "$SHIMDIR/lib/"
+cp "$(dirname "$SCRIPT")/myspec-config.sh" "$(dirname "$SCRIPT")/myspec-config.schema.json" "$(dirname "$SCRIPT")/glob-regex.sh" \
+  "$(dirname "$SCRIPT")/hook-core.sh" "$SHIMDIR/lib/"
 W=$(wt_for "$M" copydir-fallback)
 out=$(bash "$SHIMDIR/lib/worktree-provision.sh" "$W" --base main 2>&1)
 [ -f "$W/vendor/acme/lib/a.php" ] && printf '%s' "$out" | grep -qF "no copy-on-write clone on this filesystem — copied vendor" && ok \

@@ -63,6 +63,11 @@
 set -euo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# checkout_facts, and glob_regex: the one glob compiler (lib/glob-regex.sh,
+# which hook-core sources), shared with the Stop hook's `paths` and
+# mark-code-changed's ignorePaths, so one glob means one thing.
+# shellcheck source=lib/hook-core.sh
+. "$HERE/hook-core.sh"
 WORKTREE=""
 BASE=""
 MAIN=""
@@ -85,13 +90,10 @@ if [ -z "$WORKTREE" ] || [ ! -d "$WORKTREE" ]; then
   exit 1
 fi
 
-WORKTREE=$(cd "$WORKTREE" && pwd -P)
+WORKTREE=$(physical_dir "$WORKTREE")
 
-if [ -z "$MAIN" ]; then
-  COMMON=$(git -C "$WORKTREE" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || printf '')
-  if [ -n "$COMMON" ] && [ "$(basename "$COMMON")" = ".git" ]; then
-    MAIN=$(dirname "$COMMON")
-  fi
+if [ -z "$MAIN" ] && checkout_facts "$WORKTREE"; then
+  MAIN="$CF_MAIN"
 fi
 
 if [ -z "$MAIN" ] || [ ! -d "$MAIN" ]; then
@@ -276,11 +278,6 @@ clone_tree() {
   rm -rf "$2"
   return 1
 }
-
-# glob_regex: the one glob compiler, shared with the Stop hook's `paths`
-# and mark-code-changed's ignorePaths, so one glob means one thing.
-# shellcheck source=lib/glob-regex.sh
-. "$HERE/glob-regex.sh"
 
 # repo_relative <path> -> 0 when the path stays inside the checkout.
 repo_relative() {
