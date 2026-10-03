@@ -1122,8 +1122,8 @@ expect_line '^WARN +verification-runin-no-workdir: .*check C8 ' "containers: a -
 expect_no_line 'check C9 |check C10 ' "containers: a compose run and a host command raise nothing"
 
 # Every form the hook declares is found the way the hook finds it.
-FORMS=$(sed -n 's/^CONTAINER_EXEC_FORMS=(\(.*\))$/\1/p' "$PLUGIN/hooks/verify-before-stop.sh" | grep -o '"[^"]*"' | tr -d '"')
-[ "$(printf '%s\n' "$FORMS" | grep -c .)" -ge 8 ] && ok || fail "containers: the hook's CONTAINER_EXEC_FORMS were read (got: $FORMS)"
+FORMS=$(sed -n 's/^CONTAINER_EXEC_FORMS=(\(.*\))$/\1/p' "$PLUGIN/lib/stop-gate/run.sh" | grep -o '"[^"]*"' | tr -d '"')
+[ "$(printf '%s\n' "$FORMS" | grep -c .)" -ge 8 ] && ok || fail "containers: the gate's CONTAINER_EXEC_FORMS were read (got: $FORMS)"
 build_fixture
 exec_checks "$(printf '%s\n' "$FORMS" | jq -Rnc '[inputs | [. + " app make lint", ""]]')"
 run_doctor_env -- verification-exec-no-runin
