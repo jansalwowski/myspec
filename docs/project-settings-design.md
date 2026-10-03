@@ -102,7 +102,8 @@ The framework never names a container runtime: the command is the project's, and
 
 | Key | Type | Default | Issue | Effect |
 |---|---|---|---|---|
-| `blockInMain` | list of anchored ERE | `[]` | exists | Extra commands blocked in the main checkout while a session is in worktree mode. |
+| `blockInMain` | list of anchored ERE | the built-in list (see schema) | exists; default #250 | Commands blocked in the main checkout while a session is in worktree mode. The default is the guard's former `HEAVY_PATTERNS`: builds, installs, e2e runs, `lint:fix`, `docker compose exec`, `git push`, `git worktree prune`, for the JS, PHP, Python, Ruby, Rust, Go, JVM (Maven, Gradle), .NET and Make stacks. A project's entries extend it. |
+| `ignoreBlockInMain` | list of anchored ERE | `[]` | #250 | Default `blockInMain` entries, by their exact text, that the guard drops. Loosens the gate, so doctor lists it. |
 | `allowLinkedModules` | bool | `false` | exists | Accept a linked dependency tree at the Stop gate. Loosens the gate. |
 | `worktreeRoot` | repo-relative path | `.claude/worktrees` | exists | Where worktrees are created. |
 

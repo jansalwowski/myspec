@@ -81,10 +81,35 @@
     "isolation.blockInMain": {
       "file": "project",
       "type": ["array"],
+      "default": [
+        "^(yarn|npm|pnpm|bun)[[:space:]]+((run|run-script)[[:space:]]+)?build([[:space:]]|:|$)",
+        "^composer[[:space:]]+((run|run-script)[[:space:]]+)?build([[:space:]]|:|$)",
+        "^(docker[[:space:]]+compose|docker-compose)([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+exec([[:space:]]|$)",
+        "^(yarn|pnpm|bun)[[:space:]]+(install|add|upgrade|remove|dedupe|up)([[:space:]]|$)",
+        "^npm[[:space:]]+(install|ci|i|uninstall|update)([[:space:]]|$)",
+        "^(yarn|npm|pnpm|bun)[[:space:]]+(run[[:space:]]+)?test:e2e",
+        "^(yarn|npm|pnpm|bun)[[:space:]]+(run[[:space:]]+)?lint:fix([[:space:]]|$)",
+        "^(pip|pip3|poetry|composer|bundle)[[:space:]]+install([[:space:]]|$)",
+        "^(cargo|go)[[:space:]]+build([[:space:]]|$)",
+        "^(\\./)?mvnw?([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+(clean|compile|package|install|verify|deploy)([[:space:]]|$)",
+        "^(\\./)?gradlew?([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+([^[:space:]]*:)?(build|assemble|clean)([[:space:]]|$)",
+        "^make([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*([[:space:]]+(all|build|install))?[[:space:]]*$",
+        "^dotnet[[:space:]]+(build|publish|restore|pack|clean)([[:space:]]|$)",
+        "^git[[:space:]]+push([[:space:]]|$)",
+        "^git[[:space:]]+worktree[[:space:]]+prune([[:space:]]|$)"
+      ],
+      "merge": "extend",
+      "issue": ["exists", "#250"],
+      "description": "Anchored EREs over a command segment: commands guard-worktree-context.sh blocks in the main checkout while a session is in worktree mode. The default covers builds, installs and other tree-specific commands across the common stacks; a project's entries are added to it."
+    },
+    "isolation.ignoreBlockInMain": {
+      "file": "project",
+      "type": ["array"],
       "default": [],
       "merge": "extend",
-      "issue": ["exists"],
-      "description": "Anchored EREs: extra commands blocked in the main checkout while a session is in worktree mode."
+      "issue": ["#250"],
+      "loosens": true,
+      "description": "Entries of isolation.blockInMain, by their exact text, that the guard does not apply: how a project drops a default pattern."
     },
     "isolation.allowLinkedModules": {
       "file": "project",
