@@ -70,26 +70,20 @@ resolve_repo_root() {
 
 # canonical_main_worktree [path]
 # When invoked inside an agent worktree, return the main worktree's toplevel
-# instead. Used for computing a stable encoded-cwd across worktrees so the
-# user-level auto-memory store does not splinter.
+# instead (checkout_facts in hook-core.sh, beside this file); the checkout's
+# own toplevel when git cannot name one, and the path itself outside git.
+# Used for computing a stable encoded-cwd across worktrees so the user-level
+# auto-memory store does not splinter.
 canonical_main_worktree() {
   local cur="${1:-$PWD}"
-  local toplevel common_git_dir
-
-  toplevel=$(git -C "$cur" rev-parse --show-toplevel 2>/dev/null) || {
-    printf '%s\n' "$cur"
-    return 0
-  }
-
-  common_git_dir=$(git -C "$cur" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || {
-    printf '%s\n' "$toplevel"
-    return 0
-  }
-
-  if [ "$(basename "$common_git_dir")" = ".git" ]; then
-    dirname "$common_git_dir"
+  if ! declare -F checkout_facts >/dev/null; then
+    # shellcheck source=lib/hook-core.sh
+    . "$(dirname "${BASH_SOURCE[0]}")/hook-core.sh"
+  fi
+  if checkout_facts "$cur"; then
+    printf '%s\n' "${CF_MAIN:-$CF_ROOT}"
   else
-    printf '%s\n' "$toplevel"
+    printf '%s\n' "$cur"
   fi
 }
 
