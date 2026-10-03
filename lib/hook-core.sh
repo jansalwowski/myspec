@@ -253,16 +253,16 @@ pretool_deny() {
 }
 
 # read_setting <dotted key> <root> -> sets SETTING to the value as JSON and
-# SETTING_NOTES to the reader's notes on what it ignored, through the one
-# settings reader (lib/myspec-config.sh, beside this file). Fails without the
-# reader, or when it fails.
+# SETTING_NOTES to the reader's notes (what it ignored, or why it failed),
+# through the one settings reader (lib/myspec-config.sh, beside this file).
+# Fails without the reader, or when it fails.
 read_setting() {
   local err rc=0
   SETTING="" SETTING_NOTES=""
   [ -f "$HOOK_LIB/myspec-config.sh" ] || return 1
   err=$(mktemp "${TMPDIR:-/tmp}/.myspec-cfg.XXXXXX") || return 1
   SETTING=$(bash "$HOOK_LIB/myspec-config.sh" get "$1" --root "$2" 2>"$err") || rc=$?
-  [ "$rc" -ne 0 ] || SETTING_NOTES=$(sed 's/^myspec-config: //' "$err")
+  SETTING_NOTES=$(sed 's/^myspec-config: //' "$err")
   rm -f "$err"
   return "$rc"
 }
