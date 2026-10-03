@@ -833,6 +833,51 @@ OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" refs 2>&1); STATUS=
 expect_no_line 'dead-path-ref: CLAUDE.md: references .claude/worktrees' "a linked worktree does not report the main checkout's .claude/worktrees as dead"
 expect_line 'WARN +dead-path-ref: CLAUDE.md: references docs/gone.md' "a tracked file this branch removed is still a dead ref from the worktree"
 
+# --- pass 3g: links the provision record does not list (#239) ----------------
+#
+# The Stop hook compares only what worktree-provision.sh recorded in
+# .claude/state/provision.json. A link out of the worktree it did not record,
+# and a recorded lockfile that changed, are the doctor's to report.
+
+build_fixture
+mkdir -p "$REPO/node_modules/dep" "$REPO/apps/web/node_modules/dep" "$REPO/vendor/dep" "$ROOT/outside"
+printf 'node_modules\napps/web/node_modules\nvendor\n' > "$REPO/.gitignore"
+printf 'v1\n' > "$REPO/composer.lock"
+printf '{}\n' > "$REPO/apps/web/package.json"
+ln -s "$ROOT/outside" "$REPO/shared"
+git -C "$REPO" add -A
+git -C "$REPO" -c user.name=t -c user.email=t@t commit -qm fixture
+git -C "$REPO" worktree add -q -b wt2 "$REPO/.claude/worktrees/wt2"
+WT="$REPO/.claude/worktrees/wt2"
+ln -s "$REPO/node_modules" "$WT/node_modules"
+ln -s "$REPO/apps/web/node_modules" "$WT/apps/web/node_modules"
+ln -s "$REPO/vendor" "$WT/vendor"
+mkdir -p "$WT/inner" "$WT/.claude/state"
+ln -s "$WT/inner" "$WT/inside"
+jq -n --arg s "$REPO" --arg t "$REPO/vendor" --arg h "$(shasum -a 256 < "$REPO/composer.lock" 2>/dev/null | cut -d' ' -f1 || sha256sum < "$REPO/composer.lock" | cut -d' ' -f1)" \
+  '{source: $s, links: [{path: "vendor", target: $t, lockfiles: {"composer.lock": $h}}]}' > "$WT/.claude/state/provision.json"
+
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +link-unrecorded: node_modules links out of this worktree \(to $REPO/node_modules\) and was not recorded by provision; checks here may describe the main checkout" "worktree: a hand-made top-level link out of the worktree is reported"
+expect_line "WARN +link-unrecorded: apps/web/node_modules links out of this worktree" "worktree: a hand-made link one level down (a workspace package) is reported"
+expect_no_line "link-unrecorded: vendor" "worktree: a link the record lists is not reported"
+expect_no_line "link-unrecorded: inside" "worktree: a link that stays inside the worktree is not reported"
+expect_no_line "link-unrecorded: shared" "worktree: a link git tracks is not reported"
+expect_no_line "provision-stale" "worktree: a recorded lockfile that still matches is not reported"
+expect_exit 0 "worktree: the findings are warnings"
+
+printf 'v2\n' > "$WT/composer.lock"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +provision-stale: vendor was provisioned from composer.lock, which has changed since \(in this worktree\)" "worktree: a recorded lockfile changed in the worktree is reported"
+git -C "$WT" checkout -q -- composer.lock
+printf 'v3\n' > "$REPO/composer.lock"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +provision-stale: vendor was provisioned from composer.lock, which has changed since \(in $REPO\)" "worktree: a recorded lockfile changed in the source checkout is reported"
+
+ln -s "$ROOT/outside" "$REPO/elsewhere"
+run_doctor worktree
+expect_no_line "link-unrecorded" "worktree: the main checkout is never checked"
+
 # --- pass 5: project settings against the schema (#233) ------------------------
 # The doctor names no setting itself: every key, type, format and reference
 # comes from lib/myspec-config.schema.json, so these fixtures exercise the
