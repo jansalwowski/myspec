@@ -18,9 +18,9 @@ HOOK_LIB=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # A session's own isolation decision, and the feature-implement marker, stay
 # valid this long (8h).
-MYSPEC_DECISION_TTL=28800
+HOOK_DECISION_TTL=28800
 # Window in which a subagent inherits the newest decision (4h).
-MYSPEC_INHERIT_TTL=14400
+HOOK_INHERIT_TTL=14400
 
 # jq expressions for payload_parse. HOOK_CWDS: the payload's cwd candidates,
 # one per line. `cwd` is what Claude Code and Codex send; the tool's own
@@ -201,9 +201,9 @@ ai_dir() {
 
 # isolation_decision <main root> <session id> <subagent> -> sets ISO_MODE
 # (develop, worktree, or empty) and ISO_PATH (the recorded worktree path).
-# The session's own marker decides while younger than MYSPEC_DECISION_TTL.
+# The session's own marker decides while younger than HOOK_DECISION_TTL.
 # Without one, a subagent (non-empty <subagent>) follows the newest marker
-# younger than MYSPEC_INHERIT_TTL; a top-level session never inherits another
+# younger than HOOK_INHERIT_TTL; a top-level session never inherits another
 # session's answer (issue #146). Markers: .claude/state/isolation/<id>.json,
 # written by set-isolation.sh.
 isolation_decision() {
@@ -211,7 +211,7 @@ isolation_decision() {
   ISO_MODE="" ISO_PATH=""
   [ -d "$dir" ] || return 0
   now=$(date +%s)
-  if [ -n "$2" ] && [ -f "$dir/$2.json" ] && _iso_read "$dir/$2.json" "$MYSPEC_DECISION_TTL"; then
+  if [ -n "$2" ] && [ -f "$dir/$2.json" ] && _iso_read "$dir/$2.json" "$HOOK_DECISION_TTL"; then
     return 0
   fi
   [ -n "$3" ] || return 0
@@ -219,7 +219,7 @@ isolation_decision() {
   # awk, not head: it reads all of ls, so no SIGPIPE under pipefail.
   newest=$(ls -t "$dir"/*.json 2>/dev/null | awk 'NR == 1' || printf '')
   if [ -n "$newest" ] && [ -f "$newest" ]; then
-    _iso_read "$newest" "$MYSPEC_INHERIT_TTL" || true
+    _iso_read "$newest" "$HOOK_INHERIT_TTL" || true
   fi
 }
 

@@ -845,7 +845,7 @@ check_workdir() {
 # once, there, for the whole session: the task worktrees its subagents edit
 # share the session id, so their writes arm this gate too, and they carry no
 # marker of their own. A concurrent run in another checkout has another cwd
-# and keeps its own gate. A marker older than MYSPEC_DECISION_TTL (8h, the
+# and keeps its own gate. A marker older than HOOK_DECISION_TTL (8h, the
 # isolation-decision TTL) or without a readable started_at is a crashed run:
 # it is deleted and the gate blocks.
 # Only the verification.json checks are downgraded; the conformance and
@@ -859,7 +859,7 @@ if [ -f "$IMPLEMENT_MARKER" ]; then
   esac
   if [ -n "$STARTED_AT" ]; then
     MARKER_AGE=$(( $(date +%s) - STARTED_AT ))
-    if [ "$MARKER_AGE" -ge 0 ] && [ "$MARKER_AGE" -le "$MYSPEC_DECISION_TTL" ]; then
+    if [ "$MARKER_AGE" -ge 0 ] && [ "$MARKER_AGE" -le "$HOOK_DECISION_TTL" ]; then
       IMPLEMENT_ACTIVE=1
     fi
   fi

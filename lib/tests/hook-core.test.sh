@@ -182,7 +182,7 @@ eq "$(git() { return 1; }; checkout_facts "$ROOT/plain/src" && printf '%s' "${CF
 
 # --- TTLs and isolation_decision --------------------------------------------------
 
-eq "$MYSPEC_DECISION_TTL|$MYSPEC_INHERIT_TTL" "28800|14400" "TTL constants"
+eq "$HOOK_DECISION_TTL|$HOOK_INHERIT_TTL" "28800|14400" "TTL constants"
 
 ISO="$ROOT/plain/.claude/state/isolation"
 mkdir -p "$ISO"
@@ -193,7 +193,7 @@ marker own worktree "$((NOW - 60))" /wt/path
 isolation_decision "$ROOT/plain" own ""
 eq "$ISO_MODE|$ISO_PATH" "worktree|/wt/path" "isolation: the session's own marker"
 
-marker old develop "$((NOW - MYSPEC_DECISION_TTL - 5))"
+marker old develop "$((NOW - HOOK_DECISION_TTL - 5))"
 isolation_decision "$ROOT/plain" old ""
 eq "$ISO_MODE" "" "isolation: an own marker past the TTL decides nothing for a top-level session"
 
@@ -205,7 +205,7 @@ marker parent develop "$((NOW - 100))"
 isolation_decision "$ROOT/plain" nobody agent-1
 eq "$ISO_MODE" "develop" "isolation: a subagent inherits the newest marker"
 
-marker parent develop "$((NOW - MYSPEC_INHERIT_TTL - 5))"
+marker parent develop "$((NOW - HOOK_INHERIT_TTL - 5))"
 isolation_decision "$ROOT/plain" nobody agent-1
 eq "$ISO_MODE" "" "isolation: not past the inherit TTL"
 

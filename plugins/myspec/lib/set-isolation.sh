@@ -40,7 +40,7 @@ REPO_ROOT="${CF_MAIN:-$CF_ROOT}"
 
 STATE_DIR="$REPO_ROOT/.claude/state/isolation"
 
-# Markers outlive their TTL (MYSPEC_DECISION_TTL, 8h) as dead files; without a sweep they accumulate
+# Markers outlive their TTL (HOOK_DECISION_TTL, 8h) as dead files; without a sweep they accumulate
 # indefinitely. Expired markers are also what `ls -t | head -1` inheritance
 # would otherwise walk.
 prune_expired() {
@@ -51,7 +51,7 @@ prune_expired() {
   for f in "$STATE_DIR"/*.json; do
     [ -f "$f" ] || continue
     age=$(( $(date +%s) - $(jq -r '.decided_at // 0' "$f" 2>/dev/null || printf 0) ))
-    if [ "$age" -gt "$MYSPEC_DECISION_TTL" ]; then
+    if [ "$age" -gt "$HOOK_DECISION_TTL" ]; then
       rm -f "$f"
     fi
   done

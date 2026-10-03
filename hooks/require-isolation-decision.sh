@@ -13,7 +13,7 @@
 #
 # Subagents cannot call AskUserQuestion. Rather than prompting, a subagent with
 # no marker of its own inherits the newest marker written within
-# MYSPEC_INHERIT_TTL.
+# HOOK_INHERIT_TTL.
 # Only a subagent does: inside one the hook input carries `agent_id` or
 # `agent_type`. A top-level session (neither field) with no marker of its own
 # is asked, never handed another session's answer (issue #146). Whether a
