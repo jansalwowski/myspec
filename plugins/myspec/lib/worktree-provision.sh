@@ -14,7 +14,10 @@
 #   1. symlink: links each entry (default: node_modules) that exists in the
 #      main checkout, and lists it in the worktree's info/exclude so it is
 #      never staged. A link an earlier run made is dropped and decided again,
-#      so a rerun refreshes the record below. An entry is SKIPPED, with a line
+#      so a rerun refreshes the record below. An entry with a glob
+#      (vendor-bin/*/vendor) is expanded against the main checkout, a * staying
+#      within one directory: each match is linked and recorded on its own, and
+#      a glob that matches nothing is named. An entry is SKIPPED, with a line
 #      saying why,
 #      - when the branch changes one of the lockfiles that pin it relative
 #        to --base, or a lockfile that pins it differs from the main
@@ -174,14 +177,36 @@ symlink_entries() {
     while [ "${path#./}" != "$path" ]; do path="${path#./}"; done
     path="${path%/}"
     [ -n "$path" ] || continue
-    if [ "$mode" = "-" ]; then
-      infer_entry "$path"
-    elif [ "$rest" = "=" ]; then
-      printf '%s\n' "$path"
-    else
-      printf '%s\t%s\n' "$path" "${rest#=$'\t'}"
-    fi
+    while IFS= read -r match; do
+      [ -n "$match" ] || continue
+      if [ "$mode" = "-" ]; then
+        infer_entry "$match"
+      elif [ "$rest" = "=" ]; then
+        printf '%s\n' "$match"
+      else
+        printf '%s\t%s\n' "$match" "${rest#=$'\t'}"
+      fi
+    done < <(expand_entry "$path")
   done <<< "$raw"
+}
+
+# expand_entry <path> -> the path itself, or for a glob (vendor-bin/*/vendor,
+# the Composer bin plugin's layout) each match in the main checkout, a *
+# staying within one directory. A glob with no match prints itself, so the
+# caller can say so.
+expand_entry() {
+  case "$1" in
+    *[*?[]*) ;;
+    *) printf '%s\n' "$1"; return ;;
+  esac
+  # The glob is meant to expand; IFS is empty, so nothing splits.
+  local IFS='' found=0 match
+  while IFS= read -r match; do
+    [ -n "$match" ] || continue
+    printf '%s\n' "$match"
+    found=1
+  done < <(cd "$MAIN" 2>/dev/null && shopt -s nullglob && for m in $1; do printf '%s\n' "$m"; done)
+  [ "$found" -eq 1 ] || printf '%s\n' "$1"
 }
 
 # tree_loads_checkout <tree> <checkout> -> 0 when the dependency tree at
@@ -469,6 +494,14 @@ while IFS= read -r line; do
     # :(glob) keeps a * inside one directory, as the shell glob in lock_paths does.
     for lock in "${LOCKS[@]}"; do SPECS+=(":(glob)$lock"); done
   fi
+  # A glob comes back unexpanded only when nothing in the main checkout matched.
+  case "$entry" in
+    *[*?[]*)
+      if [ ! -e "$MAIN/$entry" ]; then
+        echo "worktree-provision: no match for $entry in the main checkout — nothing linked for it"
+        continue
+      fi ;;
+  esac
   # A link an earlier run made is decided again, so a rerun after a lockfile
   # change drops a link that no longer matches and records the one that does.
   # Compared physically: an earlier run may have got --main through a symlink
