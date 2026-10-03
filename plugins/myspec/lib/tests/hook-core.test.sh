@@ -214,6 +214,15 @@ eq "$(printf '%s' "$out" | jq -r '.decision')" block "decision_block prints the 
 eq "$(printf '%s' "$out" | jq -r '.reason')" $'Fix a.ts:\n\nline "1"' "decision_block formats the reason with printf"
 eq "$(printf '%s' "$out" | jq -j '.reason' | tail -c 1 | od -An -c | tr -d ' ')" '\n' "decision_block keeps a trailing newline"
 
+# --- file_sha256 ----------------------------------------------------------------------
+
+printf 'abc' > "$ROOT/hash.txt"
+eq "$(file_sha256 "$ROOT/hash.txt")" "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" "file_sha256: the SHA-256 of the file's bytes"
+rc=0; file_sha256 "$ROOT/no-such-file" >/dev/null || rc=$?
+[ "$rc" -ne 0 ] && ok || fail "file_sha256 fails on a missing file"
+rc=0; file_sha256 "$ROOT" >/dev/null || rc=$?
+[ "$rc" -ne 0 ] && ok || fail "file_sha256 fails on a directory"
+
 # --- glob-regex comes along -------------------------------------------------------
 
 declare -F glob_regex >/dev/null && ok || fail "sourcing hook-core makes glob_regex available"

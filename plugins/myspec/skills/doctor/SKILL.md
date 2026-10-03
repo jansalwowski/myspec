@@ -48,7 +48,7 @@ due for a pass; reach for tier 1 when the user named a surface or tier 0 pointed
 
    Each record is `{ id, group, path, detail, remediation: { commands, text } }`. Group them by
    `group` and carry them forward: `install` and `wiring` records go into surface E's brief,
-   `schema` into E, `features` into F, `budget` and `refs` into A. The `settings` array is the
+   `schema` and `worktree` into E, `features` into F, `budget` and `refs` into A. The `settings` array is the
    effective project policy, `{ key, value, source, loosens }` for every setting that differs
    from its default; it goes into E's brief and, as given, into the Phase 3 report. The brief says *these are established
    facts, verified by command — do not re-check them, and do not report a finding that

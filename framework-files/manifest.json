@@ -132,10 +132,6 @@
       "type": "overwrite",
       "dest": ".claude/lib/session-event.sh"
     },
-    "dependency-map.sh": {
-      "type": "overwrite",
-      "dest": ".claude/lib/dependency-map.sh"
-    },
     "branch-cleanup.sh": {
       "type": "overwrite",
       "dest": ".claude/lib/branch-cleanup.sh"
@@ -202,6 +198,10 @@
     }
   },
   "removed": {
+    "lib/dependency-map.sh": {
+      "dest": ".claude/lib/dependency-map.sh",
+      "since": "3.0.0"
+    },
     "hooks/guard-git-branch.sh": {
       "dest": ".claude/hooks/guard-git-branch.sh",
       "since": "2.0.0"
