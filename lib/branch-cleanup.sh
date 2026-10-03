@@ -167,7 +167,7 @@ patches_upstream() {
   # No commits relative to the base proves nothing.
   [ -n "$out" ] || return 1
 
-  ! printf '%s\n' "$out" | grep -q '^+'
+  ! grep -q '^+' <<< "$out"
 }
 
 # Sets VERDICT, PROOF, DETAIL for one branch.

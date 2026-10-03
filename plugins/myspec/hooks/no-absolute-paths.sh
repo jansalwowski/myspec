@@ -135,7 +135,8 @@ fi
 #   -home-<name>-...        encoded form of /home/<name>/...   (leading - kept)
 DETECT_RE='(^|[^A-Za-z0-9._/-])(/Users/[A-Za-z][A-Za-z0-9._-]*|/home/[A-Za-z][A-Za-z0-9._-]*)|(-Users-[A-Za-z][A-Za-z0-9._-]+|-home-[A-Za-z][A-Za-z0-9._-]+)'
 
-MATCHES=$(printf '%s\n' "$NEW_CONTENT" | grep -noE "$DETECT_RE" 2>/dev/null | head -10 || true)
+# awk, not head: it reads all of grep's output, so no SIGPIPE under pipefail.
+MATCHES=$(printf '%s\n' "$NEW_CONTENT" | grep -noE "$DETECT_RE" 2>/dev/null | awk 'NR <= 10' || true)
 
 if [ -z "$MATCHES" ]; then
   exit 0
@@ -157,7 +158,7 @@ while IFS= read -r line; do
     *) MATCH="${MATCH#?}" ;;
   esac
   if [ "$WHOLE_FILE" -eq 0 ]; then
-    LINE_FOUND=$(grep -nF -- "$MATCH" "$FILE_PATH" 2>/dev/null | head -1 | cut -d: -f1 || true)
+    LINE_FOUND=$(grep -nF -- "$MATCH" "$FILE_PATH" 2>/dev/null | awk -F: 'NR == 1 { print $1 }' || true)
     [ -n "$LINE_FOUND" ] || LINE_FOUND="?"
   fi
   SUGGESTION="use <repo_root>/<relative-path> for repo-internal paths, or ~/.claude-personal/projects/<encoded_cwd>/... for the harness memory dir"

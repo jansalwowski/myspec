@@ -268,7 +268,8 @@ fi
 #    A top-level session never inherits; it falls through to the ask.
 if [ -n "$SUBAGENT" ] && [ -d "$STATE_DIR" ]; then
   # shellcheck disable=SC2012 # ls -t is the portable mtime sort; the names are generated session ids
-  NEWEST=$(ls -t "$STATE_DIR"/*.json 2>/dev/null | head -1 || printf '')
+  # awk, not head: it reads all of ls, so no SIGPIPE under pipefail.
+  NEWEST=$(ls -t "$STATE_DIR"/*.json 2>/dev/null | awk 'NR == 1' || printf '')
 
   if [ -n "$NEWEST" ] && [ -f "$NEWEST" ]; then
     read_marker "$NEWEST"

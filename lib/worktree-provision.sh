@@ -359,7 +359,7 @@ while IFS= read -r line; do
   fi
   # ${arr[@]+"${arr[@]}"}: an empty array is "unbound" under set -u in bash < 4.4
   if [ "$BASE_OK" -eq 1 ] && [ "${#SPECS[@]}" -gt 0 ] \
-      && git -C "$WORKTREE" diff --name-only "$BASE...HEAD" -- ${SPECS[@]+"${SPECS[@]}"} 2>/dev/null | grep -q .; then
+      && [ -n "$(git -C "$WORKTREE" diff --name-only "$BASE...HEAD" -- ${SPECS[@]+"${SPECS[@]}"} 2>/dev/null)" ]; then
     echo "worktree-provision: lockfile differs from $BASE — not linking $entry; run a real install in the worktree"
     continue
   fi
@@ -430,7 +430,7 @@ if [ "${#REGEXES[@]}" -gt 0 ]; then
     [ -n "$REMOVED" ] && case "$rel/" in "$REMOVED"/*) continue ;; esac
     for re in "${REGEXES[@]}"; do
       [[ "$rel" =~ $re ]] || continue
-      if [ -n "$(git -C "$WORKTREE" ls-files -- ":(literal)$rel" | head -n 1)" ]; then
+      if [ -n "$(git -C "$WORKTREE" ls-files -- ":(literal)$rel")" ]; then
         echo "worktree-provision: not cleaning $rel — it is tracked"
       else
         rm -rf "$path"
