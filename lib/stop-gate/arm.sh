@@ -85,9 +85,11 @@ armed_roots() {
 # Once the checks run (success or failure), the state file gets a `verified`
 # event for each verified checkout, so only a later code write re-arms it.
 # The writes stay: they are the list of what this session wrote, which
-# attribution needs on every later run.
+# attribution needs on every later run. A run that could not read its
+# checks (GATE_UNVERIFIED, run.sh) records nothing.
 finish_run() {
   local r
+  [ "${GATE_UNVERIFIED:-0}" -eq 0 ] || return 0
   for r in "${VERIFY_ROOTS[@]}" ${NESTED_ROOTS[@]+"${NESTED_ROOTS[@]}"}; do
     session_append "$STATE_HOME" "$SESSION_ID" "$(jq -nc --arg r "$r" '{t: "verified", root: $r}')" || true
   done

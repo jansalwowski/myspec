@@ -184,6 +184,9 @@ has "$(workdir "$REPO" nope)" 'runIn names container "nope", which `containers`'
 eq "$(workdir "$NESTED" app api)" /var/www/html/.claude/worktrees/nested/api "cwd: the workdir includes it"
 eq "$(workdir "$REPO" apionly api/sub)" /srv/api/sub "cwd: relative to a subdirectory mount"
 has "$(workdir "$REPO" apionly web)" 'cwd "web" is not under mountSource' "cwd outside mountSource is refused"
+CONTAINERS_JSON=null
+# shellcheck disable=SC2016 # backticks in the expected message
+has "$(workdir "$REPO" app)" 'which `containers` in .claude/verification.json does not define' "no containers setting: refused as undefined"
 for spec in '{"mountSource":"."}' '{"mountSource":".","mountTarget":"srv"}' '{"mountSource":"../x","mountTarget":"/srv"}' '{"mountTarget":"/srv"}' '"x"'; do
   CONTAINERS_JSON="{\"app\":$spec}"
   has "$(workdir "$REPO" app)" "refused: container \"app\" needs mount" "container $spec is refused"
@@ -250,6 +253,17 @@ mkdir -p "$NOBASE/.claude"
 git_ init -q -b trunk "$NOBASE" && git_ -C "$NOBASE" commit -q --allow-empty -m init
 GATE_HOME="$NOBASE" gate "$NOBASE" "{\"checks\":[$DIFF]}" code:a.ts >/dev/null
 eq "$(cat "$RAN/L")" "whole" "without a base ref, the whole-repo command runs"
+
+# The reader ships with the hook: when it fails, the gate blocks and records
+# no verified event, instead of reading the file its own way.
+mkdir -p "$ROOT/nolib"
+out=$( (HOOK_LIB="$ROOT/nolib"; run_init; load_checks "$REPO/.claude/verification.json"; echo "not reached") )
+has "$out" '"decision": "block"' "no reader: the gate blocks"
+has "$out" "myspec lib missing, run /myspec:update" "no reader: the block says how to repair it"
+lacks "$out" "not reached" "no reader: nothing runs after the block"
+SESSION_ID=unverified STATE_HOME="$REPO" VERIFY_ROOTS=("$REPO") NESTED_ROOTS=()
+(GATE_UNVERIFIED=1; finish_run)
+eq "$(session_events "$REPO" unverified)" "" "no reader: no verified event, so the checkout stays armed"
 
 # runIn and the R8a refusal.
 CONTAINERS='{"app":{"mountSource":".","mountTarget":"/var/www/html"}}'

@@ -18,19 +18,30 @@
 
 set -euo pipefail
 
-# Every gate below reads JSON, so without jq or the shared lib there is
-# nothing to verify with.
+# Every gate below reads JSON, so without jq there is nothing to verify with.
 approve() {
   echo '{"decision": "approve"}'
   exit 0
 }
 command -v jq >/dev/null 2>&1 || approve
+PAYLOAD=$(cat)
+
+# The libs ship with the hooks (framework-files/manifest.json). A missing one
+# is a broken install: block once and say how to repair it, rather than
+# guess at the checks. The continuation after that block approves (R10).
 HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
 [ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
 LIB_DIR=$(dirname "$HOOK_CORE")
-for f in session-event.sh stop-gate/arm.sh stop-gate/provision.sh stop-gate/run.sh stop-gate/attribute.sh stop-gate/report.sh; do
-  if [ ! -f "$HOOK_CORE" ] || [ ! -f "$LIB_DIR/$f" ]; then approve; fi
+MISSING=""
+for f in hook-core.sh session-event.sh glob-regex.sh myspec-config.sh myspec-config.schema.json \
+    stop-gate/arm.sh stop-gate/provision.sh stop-gate/run.sh stop-gate/attribute.sh stop-gate/report.sh; do
+  [ -f "$LIB_DIR/$f" ] || MISSING="${MISSING:+$MISSING, }$f"
 done
+if [ -n "$MISSING" ]; then
+  [ "$(printf '%s' "$PAYLOAD" | jq -r '.stop_hook_active // false' 2>/dev/null)" != "true" ] || approve
+  jq -nc --arg r "myspec lib missing, run /myspec:update. The stop gate needs $MISSING beside its hook (.claude/lib/), so no check ran." '{decision: "block", reason: $r}'
+  exit 0
+fi
 # shellcheck source=lib/hook-core.sh
 . "$HOOK_CORE"
 # shellcheck source=lib/session-event.sh
@@ -48,15 +59,11 @@ done
 
 # The gate-wide budget (R13) starts here.
 gate_budget_init
-payload_parse "$(cat)" STOP_HOOK_ACTIVE=.stop_hook_active SESSION_ID=.session_id CWDS="$HOOK_CWDS"
+payload_parse "$PAYLOAD" STOP_HOOK_ACTIVE=.stop_hook_active SESSION_ID=.session_id CWDS="$HOOK_CWDS"
 
-# Prevent infinite loop on re-entry (R10). The harness signals this via
-# stop_hook_active in the stdin JSON (the continuation after a prior block);
-# env vars kept as a fallback for hosts that set them instead.
-if [ "$STOP_HOOK_ACTIVE" = "true" ] || [ "${CLAUDE_STOP_HOOK_ACTIVE:-}" = "1" ] \
-    || [ "${MYSPEC_STOP_HOOK_ACTIVE:-}" = "1" ]; then
-  approve
-fi
+# Prevent infinite loop on re-entry (R10): the harness sends
+# stop_hook_active in the payload on the continuation after a prior block.
+[ "$STOP_HOOK_ACTIVE" != "true" ] || approve
 
 REPO_ROOT=$(hook_repo_root "$CWDS" myspec) || approve
 conformance_gates "$REPO_ROOT"
