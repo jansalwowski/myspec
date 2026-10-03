@@ -288,7 +288,7 @@ out=$(stop "$MAIN" code:api/a.php)
 expect approve "$(decision "$out")" "a check skipped by paths is not refused for its runIn"
 
 # --- runIn and the #220 container-exec refusal ---------------------------------
-# An exec without -w that reads the workdir some other way.
+# An exec that reads the workdir without -w.
 EXEC_NO_W="docker compose exec app sh -c 'cd \"\$MYSPEC_CHECK_WORKDIR\" && make lint'"
 exec_check() {  # exec_check <runIn or empty>
   jq -nc --arg c "echo ran > $RAN/X; $EXEC_NO_W" --arg r "$1" \
@@ -296,7 +296,7 @@ exec_check() {  # exec_check <runIn or empty>
 }
 container_config "$WT_N" "$(exec_check '')"
 out=$(stop "$WT_N" code:api/a.php)
-expect block "$(decision "$out")" "nested worktree: an exec without -w and without runIn is refused (#220)"
+expect block "$(decision "$out")" "nested worktree: an exec without runIn is refused (#220)"
 has "unverifiable in a linked worktree" "$(text "$out")" "nested worktree: the #220 reason names runIn as a way out"
 has "runIn" "$(text "$out")" "nested worktree: the #220 reason points at runIn"
 expect no "$(ran X)" "nested worktree: the #220-refused check never runs"
@@ -306,32 +306,19 @@ out=$(stop "$WT_N" code:api/a.php)
 expect approve "$(decision "$out")" "nested worktree: runIn satisfies the #220 refusal"
 expect yes "$(ran X)" "nested worktree: the runIn check runs"
 
-# runIn exempts only a command that uses the workdir: an exec with neither
-# -w/--workdir nor MYSPEC_CHECK_WORKDIR still runs in the container's default
-# directory, the main checkout's tree.
+# A runIn check is trusted: its command is not read for -w (R8a), so an exec
+# without one runs, in a worktree as in the main checkout.
 plain_exec() {  # plain_exec <runIn> <exec options>
   jq -nc --arg c "echo ran > $RAN/P; docker compose exec $2 app make lint" --arg r "$1" \
     '{name: "P", command: $c, required: true, runIn: $r}'
 }
-# The literal $MYSPEC_CHECK_WORKDIR below is meant: the hook expands it.
-# shellcheck disable=SC2016
-{
 container_config "$WT_N" "$(plain_exec app '')"
 out=$(stop "$WT_N" code:api/a.php)
-expect block "$(decision "$out")" "nested worktree: runIn with an exec lacking -w and the workdir is refused"
-expect no "$(ran P)" "nested worktree: runIn with an unpinned exec never runs"
-has '-w "$MYSPEC_CHECK_WORKDIR"' "$(text "$out")" "nested worktree: the refusal says to pass -w \"\$MYSPEC_CHECK_WORKDIR\""
-container_config "$WT_N" "$(plain_exec app '-w "$MYSPEC_CHECK_WORKDIR"')"
-out=$(stop "$WT_N" code:api/a.php)
-expect approve "$(decision "$out")" "nested worktree: runIn with -w \"\$MYSPEC_CHECK_WORKDIR\" runs"
-expect yes "$(ran P)" "nested worktree: runIn with -w runs the check"
-}
-container_config "$WT_N" "$(plain_exec app '-Tw /var/www/html/.claude/worktrees/nested')"
-out=$(stop "$WT_N" code:api/a.php)
-expect yes "$(ran P)" "nested worktree: runIn with a -Tw cluster runs the check"
+expect approve "$(decision "$out")" "nested worktree: a runIn check is trusted without -w"
+expect yes "$(ran P)" "nested worktree: a runIn check without -w runs"
 container_config "$MAIN" "$(plain_exec app '')"
 out=$(stop "$MAIN" code:api/a.php)
-expect yes "$(ran P)" "main checkout: runIn with a plain exec runs (R8a is for linked worktrees)"
+expect yes "$(ran P)" "main checkout: runIn with a plain exec runs"
 
 # The documented example pins the compose project, and runs in a worktree.
 # The docs live at the repository root, above both copies of this suite.

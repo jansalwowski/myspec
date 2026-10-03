@@ -310,7 +310,7 @@
       "file": "verification",
       "type": ["string"],
       "issue": ["#221"],
-      "description": "Name of the container (in containers) the check's command runs in. The check gets MYSPEC_CHECK_WORKDIR and is exempt from the linked-worktree container-exec refusal; it is refused when the container is undefined or cannot see this checkout.",
+      "description": "Name of the container (in containers) the check's command runs in. The check gets MYSPEC_CHECK_WORKDIR and its command is trusted to use it; without runIn, a container exec is refused in a linked worktree. It is refused when the container is undefined or cannot see this checkout.",
       "refersTo": "verification.containers"
     }
   },
