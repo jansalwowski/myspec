@@ -220,5 +220,21 @@ check_as allow "subagent inherits develop"                  "$REPO" child-sess "
 check_as allow "subagent sharing the parent id uses it"     "$REPO" other-sess "$REPO/components/Foo.vue" '{"agent_id":"a1"}'
 check_as block "empty agent_id is not a subagent"           "$REPO" fresh-sess "$REPO/components/Foo.vue" '{"agent_id":""}'
 
+# A file_path spelled through a symlink (a linked home directory, macOS /tmp)
+# is the same file. Git reports the physical toplevel, so the hook used to
+# miss the repo prefix and approve the edit as outside the repo.
+LINKED="$ROOT/linked-checkout"
+ln -s "$REPO" "$LINKED"
+rm -f "$REPO/.claude/state/isolation/"*.json
+check_as block "symlinked path, no decision, source asks"       "$LINKED" link-sess "$LINKED/components/Foo.vue"
+check_as block "symlinked path, cwd physical, no decision"      "$REPO"   link-sess "$LINKED/components/Foo.vue"
+mark link-sess worktree 60
+check_as block "symlinked path, worktree mode, main-checkout file" "$LINKED" link-sess "$LINKED/components/Foo.vue"
+check_as allow "symlinked path, worktree mode, worktree file"   "$LINKED" link-sess "$LINKED/.claude/worktrees/wt-a/components/Foo.vue"
+rm -f "$REPO/.claude/state/isolation/"*.json
+mark link-sess develop 60
+check_as allow "symlinked path, develop mode"                  "$LINKED" link-sess "$LINKED/components/Foo.vue"
+check_as allow "symlinked path outside the repo"               "$LINKED" link-sess "$ROOT/elsewhere/a.ts"
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
