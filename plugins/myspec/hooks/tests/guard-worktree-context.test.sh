@@ -6,7 +6,8 @@
 # inside a commit message blocking the commit) is invisible until something
 # exercises it. Gate B (tree-specific commands in worktree mode) reads the
 # isolation markers; its cases prove the mode lookup, the inheritance window,
-# the recorded-path naming, and the project-level blockInMain extension.
+# the recorded-path naming, the blockInMain setting (its default, a project
+# extension) and ignoreBlockInMain.
 #
 # Runs against a synthetic checkout with a real linked worktree, so the
 # worktree-targeting cases exercise the actual `git worktree list` lookup.
@@ -236,6 +237,25 @@ check_in "$REPO" block "push"                 wt-sess 'git push origin HEAD'
 check_in "$REPO" block "worktree prune"       wt-sess 'git worktree prune'
 check_in "$REPO" block "after && (cd inside main)" wt-sess 'cd .claude && yarn build'
 check_in "$REPO" block "project blockInMain"  wt-sess 'make deploy'
+
+# The list is the setting isolation.blockInMain (#250): its schema default
+# covers the JVM, .NET and Make stacks too, and a project trims it.
+check_in "$REPO" block "gradle wrapper build"  wt-sess './gradlew build'
+check_in "$REPO" block "gradle task path"      wt-sess 'gradle :app:assemble'
+check_in "$REPO" block "maven package"         wt-sess 'mvn -q -pl api package'
+check_in "$REPO" block "maven wrapper install" wt-sess './mvnw clean install'
+check_in "$REPO" block "dotnet build"          wt-sess 'dotnet build'
+check_in "$REPO" block "bare make"             wt-sess 'make'
+check_in "$REPO" block "make install"          wt-sess 'make -j 4 install'
+check_in "$REPO" allow "gradle test"           wt-sess './gradlew test'
+check_in "$REPO" allow "dotnet test"           wt-sess 'dotnet test'
+check_in "$REPO" allow "make lint"             wt-sess 'make lint'
+MYSPEC_JSON=$(cat "$REPO/.myspec.json")
+jq '.isolation.ignoreBlockInMain = ["^git[[:space:]]+push([[:space:]]|$)"]' <<< "$MYSPEC_JSON" > "$REPO/.myspec.json"
+check_in "$REPO" allow "ignoreBlockInMain drops a default entry" wt-sess 'git push origin HEAD'
+check_in "$REPO" block "ignoreBlockInMain keeps the others"      wt-sess 'yarn build'
+check_in "$REPO" block "ignoreBlockInMain keeps project entries" wt-sess 'make deploy'
+printf '%s\n' "$MYSPEC_JSON" > "$REPO/.myspec.json"
 
 # Issue #164: build targets and container execs run against the main tree too.
 check_in "$REPO" block "yarn build:<target>"          wt-sess 'yarn build:web'

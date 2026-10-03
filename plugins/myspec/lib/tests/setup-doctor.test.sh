@@ -944,6 +944,16 @@ expect_line '^WARN +setting-dir-missing: \.claude/verification\.json: checks\[2\
 run_doctor_env -- settings
 expect_line '^SET +checks\[0\]\.cwd = "api" \(\.claude/verification\.json\)$' "cwd: a check's cwd is listed"
 
+# The worktree guard's list is a setting: a project's entries and its
+# ignoreBlockInMain are listed in force, the trim marked as loosening.
+build_fixture
+set_json .myspec.json 'd.isolation={blockInMain:["^make[[:space:]]+deploy"], ignoreBlockInMain:["^git[[:space:]]+push([[:space:]]|$)"]};'
+run_doctor_env -- settings
+expect_line '^SET +isolation\.blockInMain = default \+ \["\^make\[\[:space:\]\]\+deploy"\] \(\.myspec\.json\)$' "blockInMain: the list in force, default plus the project entry, is listed"
+expect_line '^SET +isolation\.ignoreBlockInMain = \["\^git.*push.*"\] \(\.myspec\.json\) — loosens a gate$' "blockInMain: ignoreBlockInMain is listed as loosening"
+run_doctor_env -- schema
+expect_no_line 'setting-' "blockInMain: both keys are known settings of the right type"
+
 # --- pass 4: argument handling ------------------------------------------------
 
 OUTPUT=$(node "$SCRIPT" --list-checks 2>&1); STATUS=$?

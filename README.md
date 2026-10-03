@@ -176,11 +176,12 @@ An optional `isolation` block configures the work-isolation hooks; every key has
   "worktreeRoot": ".claude/worktrees",
   "allowLinkedModules": false,
   "blockInMain": [],
+  "ignoreBlockInMain": [],
   "provision": { "symlink": ["node_modules"], "copy": [".eslintcache"] }
 }
 ```
 
-`allowLinkedModules` lets the Stop hook verify a worktree whose dependency directory is a symlink even when the lockfiles that pin it differ from the linked checkout (a link with identical lockfiles is accepted without it); `blockInMain` adds command patterns the Bash guard blocks in the main checkout while a session works in a worktree; `provision` is what `worktree-provision.sh` links and copies into a new worktree.
+`allowLinkedModules` lets the Stop hook verify a worktree whose dependency directory is a symlink even when the lockfiles that pin it differ from the linked checkout (a link with identical lockfiles is accepted without it); `blockInMain` adds command patterns (anchored EREs) to the ones the Bash guard blocks in the main checkout while a session works in a worktree, whose default list in `lib/myspec-config.schema.json` covers builds and installs across the common stacks, and `ignoreBlockInMain` drops a default pattern by its exact text; `provision` is what `worktree-provision.sh` links and copies into a new worktree.
 
 A `symlink` entry is a path string or an object naming the lockfiles that pin it; `"lockfiles": []` marks an entry unguarded:
 
