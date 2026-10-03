@@ -12,6 +12,10 @@
 # satisfies the #220 container-exec refusal. cwd (#250): the check runs from
 # that repo-relative directory, and a runIn check's workdir includes it.
 #
+# This suite keeps the paths that need the whole hook; each glob rule,
+# unusable setting, unseen change, container spec and cwd value is a function
+# test in lib/tests/stop-gate-run.test.sh.
+#
 # The write events are appended here directly through lib/session-event.sh,
 # in the form mark-code-changed.sh records them.
 #
@@ -109,100 +113,12 @@ has "Web: skipped" "$(text "$out")" "paths: the approve message names the skippe
 has "web/**" "$(text "$out")" "paths: the message gives the globs that did not match"
 lacks "Api: skipped" "$(text "$out")" "paths: a check that ran is not reported as skipped"
 
-out=$(stop "$MAIN" code:worker/main.go file:docs/notes.md)
-expect no "$(ran Api)" "paths: no match, api check skipped"
-expect no "$(ran Web)" "paths: no match, web check skipped"
-expect yes "$(ran All)" "paths: no match, unscoped check still runs"
-
-# A non-code write is a session write too: it can match a check's paths.
-out=$(stop "$MAIN" code:worker/main.go file:web/tsconfig.json)
-expect yes "$(ran Web)" "paths: a non-code file the session wrote matches"
-
 # A required check skipped by paths is named in a block message as well.
 API_RED=$(check Api false '{"paths":["api/**"]}')
 set_config "$MAIN" "{\"checks\":[$API_RED,$WEB]}"
 out=$(stop "$MAIN" code:api/a.php)
 expect block "$(decision "$out")" "paths: a failing matched check blocks"
 has "Web: skipped" "$(text "$out")" "paths: the block message names the skipped required check"
-
-# Only checks that would have run are reported: a check that is not required
-# is never run, with or without paths.
-OPT=$(jq -nc '{name: "Opt", command: "true", required: false, paths: ["web/**"]}')
-set_config "$MAIN" "{\"checks\":[$API,$OPT]}"
-out=$(stop "$MAIN" code:api/a.php)
-lacks "Opt" "$(text "$out")" "paths: a check that is not required is not reported"
-
-# Glob semantics, documented in docs/stop-gate.md.
-# glob_case <glob> <written path> <yes|no> <desc>
-glob_case() {
-  local c
-  c=$(check G true "$(jq -nc --arg g "$1" '{paths: [$g]}')")
-  set_config "$MAIN" "{\"checks\":[$c]}"
-  stop "$MAIN" "code:$2" >/dev/null
-  expect "$3" "$(ran G)" "glob '$1' vs '$2': $4"
-}
-glob_case 'api/**' api/a.php yes "** under a directory"
-glob_case 'api/**' api/v1/deep/a.php yes "** spans segments"
-glob_case 'api/**' apix/a.php no "a directory prefix is a whole segment"
-glob_case 'api/' api/v1/a.php yes "a trailing / is everything under it"
-glob_case '**/*.php' a.php yes "**/ matches zero segments"
-glob_case '**/*.php' api/v1/a.php yes "**/ matches several segments"
-glob_case '*.php' api/a.php no "* stays within one segment and the glob is anchored at the root"
-glob_case '*.php' a.php yes "* at the root"
-glob_case 'api/*/a.php' api/v1/a.php yes "* is one segment"
-glob_case 'api/*/a.php' api/v1/v2/a.php no "* is not two segments"
-glob_case 'a/**/b.ts' a/b.ts yes "a/**/b matches a/b"
-glob_case 'a/**/b.ts' a/x/y/b.ts yes "a/**/b matches deeper"
-glob_case 'src/?.go' src/a.go yes "? is one character"
-glob_case 'src/?.go' src/ab.go no "? is not two characters"
-glob_case './web/**' web/a.ts yes "a leading ./ is dropped"
-glob_case 'web/a.ts' web/a.ts yes "a literal path"
-glob_case 'web/a.ts' web/axts no ". is literal"
-glob_case 'web/[ab].ts' web/a.ts no "[ is literal, not a class"
-glob_case 'web/[ab].ts' 'web/[ab].ts' yes "[ matches itself"
-glob_case 'a**b/x' azzb/x yes "** inside a segment is a plain *"
-glob_case 'a**b/x' a/b/x no "** inside a segment does not cross /"
-
-# An unusable paths setting runs the check, and the message names it.
-for bad in '"api/**"' '[]' '["/abs/**"]' '["../api/**"]' '[""]' '[1]'; do
-  c=$(check B true "{\"paths\":$bad}")
-  set_config "$MAIN" "{\"checks\":[$c]}"
-  out=$(stop "$MAIN" code:web/a.ts)
-  expect yes "$(ran B)" "paths $bad is unusable, so the check runs"
-  has "paths setting was ignored" "$(text "$out")" "paths $bad: the message names the ignored setting"
-done
-
-# A linked worktree is scoped by the files written in it, not in main.
-WT_P="$MAIN/.claude/worktrees/paths"
-git -C "$MAIN" worktree add -q -b feat-paths "$WT_P" main
-set_config "$WT_P" "{\"checks\":[$API,$WEB]}"
-out=$(stop "$WT_P" code:web/a.ts)
-expect yes "$(ran Web)" "worktree: the check matching its own write runs"
-expect no "$(ran Api)" "worktree: the other check is skipped"
-
-# Changes the ledger cannot see (git revert, rm, codegen, a variable path):
-# a path under the globs that git reports changed, uncommitted or against the
-# base, runs the check even when the ledger has no matching write.
-WT_U="$MAIN/.claude/worktrees/unseen"
-git -C "$MAIN" worktree add -q -b feat-unseen "$WT_U" main
-set_config "$WT_U" "{\"checks\":[$API,$WEB]}"
-out=$(stop "$WT_U" code:web/a.ts)
-expect no "$(ran Api)" "unseen: a clean api/ stays skipped"
-has "Api: skipped" "$(text "$out")" "unseen: the clean skip is still named"
-rm "$WT_U/api/a.php"
-out=$(stop "$WT_U" code:web/a.ts)
-expect yes "$(ran Api)" "unseen: an rm under api/ the ledger lacks runs the api check"
-expect yes "$(ran Web)" "unseen: the check matching the ledger still runs"
-lacks "Api: skipped" "$(text "$out")" "unseen: the rm-armed check is not reported skipped"
-git -C "$WT_U" checkout -q -- api/a.php
-printf '<?php // gen\n' > "$WT_U/api/gen.php"
-out=$(stop "$WT_U" code:web/a.ts)
-expect yes "$(ran Api)" "unseen: an untracked file under api/ (codegen) runs the api check"
-rm "$WT_U/api/gen.php"
-printf '<?php // v2\n' > "$WT_U/api/a.php"
-git -C "$WT_U" commit -q -am "api change" 
-out=$(stop "$WT_U" code:web/a.ts)
-expect yes "$(ran Api)" "unseen: a committed change under api/ against the base (git revert) runs the api check"
 
 # --- containers and runIn (#221) -----------------------------------------------
 # A fake docker on PATH: every exec passes.
@@ -238,13 +154,6 @@ out=$(stop "$WT_N" code:api/a.php)
 expect approve "$(decision "$out")" "nested worktree: a runIn check runs and passes"
 expect /var/www/html/.claude/worktrees/nested "$(wd Lint)" "nested worktree: MYSPEC_CHECK_WORKDIR is its path under the mount"
 
-# Nested under the checkout, but not under a mount of api/ only.
-container_config "$WT_N" "$(workdir_check Sub apionly)"
-out=$(stop "$WT_N" code:api/a.php)
-expect block "$(decision "$out")" "nested worktree outside an api/ mount: refused"
-has "this worktree is not visible inside the container" "$(text "$out")" "nested worktree outside an api/ mount: the reason says why"
-expect not-run "$(wd Sub)" "nested worktree outside an api/ mount: the check never runs"
-
 # A worktree outside the main checkout is not visible in the container.
 WT_O="$ROOT/outside-wt"
 git -C "$MAIN" worktree add -q -b feat-outside "$WT_O" main
@@ -254,39 +163,6 @@ expect block "$(decision "$out")" "worktree outside mountSource: refused, blocks
 has "this worktree is not visible inside the container" "$(text "$out")" "worktree outside mountSource: the reason says why"
 has "not run" "$(text "$out")" "worktree outside mountSource: the headline says it was not run"
 expect not-run "$(wd Lint)" "worktree outside mountSource: the check never runs"
-
-# An undefined container refuses the check with a clear reason.
-container_config "$MAIN" "$(workdir_check Lint nope)"
-out=$(stop "$MAIN" code:api/a.php)
-expect block "$(decision "$out")" "undefined container: refused, blocks"
-has 'runIn names container "nope"' "$(text "$out")" "undefined container: the reason names it"
-has "does not define" "$(text "$out")" "undefined container: the reason says it is not defined"
-expect not-run "$(wd Lint)" "undefined container: the check never runs"
-
-# containers that is not an object: the reader ignores it and says so.
-set_config "$MAIN" "{\"containers\":\"app\",\"checks\":[$(workdir_check Lint app)]}"
-out=$(stop "$MAIN" code:api/a.php)
-expect block "$(decision "$out")" "containers not an object: a runIn check is refused"
-has "ignoring verification.containers" "$(text "$out")" "containers not an object: the reader's note is in the reason"
-
-# A container without a usable mountTarget or mountSource is refused.
-for spec in '{"mountSource":"."}' '{"mountSource":".","mountTarget":"srv"}' '{"mountSource":"../x","mountTarget":"/srv"}' '{"mountSource":".//api","mountTarget":"/srv"}' '{"mountSource":"","mountTarget":"/srv"}' '{"mountTarget":"/srv"}'; do
-  set_config "$MAIN" "{\"containers\":{\"app\":$spec},\"checks\":[$(workdir_check Lint app)]}"
-  out=$(stop "$MAIN" code:api/a.php)
-  expect block "$(decision "$out")" "container $spec: refused"
-  expect not-run "$(wd Lint)" "container $spec: the check never runs"
-done
-
-# A check without runIn never sees a workdir, not even one from the caller.
-container_config "$MAIN" "$(workdir_check Plain '')"
-out=$(MYSPEC_CHECK_WORKDIR=/stale stop "$MAIN" code:api/a.php)
-expect unset "$(wd Plain)" "no runIn: MYSPEC_CHECK_WORKDIR is not exported"
-
-# paths is applied before runIn: a skipped check is not refused.
-c=$(jq -nc '{name: "Skip", command: "true", required: true, runIn: "nope", paths: ["web/**"]}')
-set_config "$MAIN" "{\"checks\":[$c]}"
-out=$(stop "$MAIN" code:api/a.php)
-expect approve "$(decision "$out")" "a check skipped by paths is not refused for its runIn"
 
 # --- runIn and the #220 container-exec refusal ---------------------------------
 # An exec that reads the workdir without -w.
@@ -307,20 +183,6 @@ out=$(stop "$WT_N" code:api/a.php)
 expect approve "$(decision "$out")" "nested worktree: runIn satisfies the #220 refusal"
 expect yes "$(ran X)" "nested worktree: the runIn check runs"
 
-# A runIn check is trusted: its command is not read for -w (R8a), so an exec
-# without one runs, in a worktree as in the main checkout.
-plain_exec() {  # plain_exec <runIn> <exec options>
-  jq -nc --arg c "echo ran > $RAN/P; docker compose exec $2 app make lint" --arg r "$1" \
-    '{name: "P", command: $c, required: true, runIn: $r}'
-}
-container_config "$WT_N" "$(plain_exec app '')"
-out=$(stop "$WT_N" code:api/a.php)
-expect approve "$(decision "$out")" "nested worktree: a runIn check is trusted without -w"
-expect yes "$(ran P)" "nested worktree: a runIn check without -w runs"
-container_config "$MAIN" "$(plain_exec app '')"
-out=$(stop "$MAIN" code:api/a.php)
-expect yes "$(ran P)" "main checkout: runIn with a plain exec runs"
-
 # --- per-check cwd (#250) -------------------------------------------------------
 # cwd_check <name> <cwd json> [runIn] -> a check that records where it ran
 # and the workdir it got.
@@ -338,82 +200,6 @@ expect "$MAIN/api" "$(where Rel)" "cwd: a relative cwd runs the check there"
 expect "$MAIN/web" "$(where Dot)" "cwd: ./ and a trailing / are dropped"
 lacks "cwd setting was ignored" "$(text "$out")" "cwd: a usable cwd is not reported"
 
-# Under the verified checkout, not the cwd's or the main one.
-container_config "$WT_N" "$(cwd_check Rel '"api"')"
-out=$(stop "$WT_N" code:api/a.php)
-expect "$WT_N/api" "$(where Rel)" "cwd: in a worktree, the cwd is under the worktree"
-
-# A cwd missing in the verified checkout (a worktree made from a base that
-# did not have it yet) is a check not run, not a failed command (#255
-# review): the stop says so and blocks, and attribution never downgrades it.
-container_config "$WT_N" "$(cwd_check Missing '"nope"')"
-printf 'export {}\n' > "$WT_N/web/foreign.ts"
-out=$(stop "$WT_N" code:api/a.php)
-rm -f "$WT_N/web/foreign.ts"
-expect block "$(decision "$out")" "cwd missing: blocks"
-expect not-run "$(where Missing)" "cwd missing: the check never runs"
-has "[Missing not run: cwd missing] nope is not a directory in $WT_N" "$(text "$out")" "cwd missing: the headline says not run, and names the directory"
-has "This is not a test failure" "$(text "$out")" "cwd missing: and says it is not a failure"
-lacks "failed:" "$(text "$out")" "cwd missing: not reported as the command failing"
-lacks "No such file or directory" "$(text "$out")" "cwd missing: the shell's cd error is not the report"
-
-# The rejection runs again after each strip (#255 review): .//api would
-# otherwise become /api, and ./.. a parent.
-for bad in '"/tmp"' '"../app"' '"api/../.."' '"api/../x"' '".//api"' '"./.."' '3'; do
-  container_config "$MAIN" "$(cwd_check Bad "$bad")"
-  out=$(stop "$MAIN" code:api/a.php)
-  expect "$MAIN" "$(where Bad)" "cwd $bad: ignored, the check runs from the root"
-  has "Bad: its cwd setting was ignored" "$(text "$out")" "cwd $bad: the stop message names it"
-done
-# "" is the root, as doctor reads it, not an ignored setting named on every stop.
-container_config "$MAIN" "$(cwd_check Empty '""')" "$(cwd_check Slashes '"./api/"')"
-out=$(stop "$MAIN" code:api/a.php)
-expect "$MAIN" "$(where Empty)" "cwd \"\": the root (#255 review)"
-expect "$MAIN/api" "$(where Slashes)" "cwd ./api/: api"
-lacks "cwd setting was ignored" "$(text "$out")" "cwd \"\": not reported as ignored"
-
-# runIn and cwd: the workdir is the cwd inside the container.
-container_config "$WT_N" "$(cwd_check Wd '"api"' app)"
-out=$(stop "$WT_N" code:api/a.php)
-expect /var/www/html/.claude/worktrees/nested/api "$(wd Wd)" "runIn + cwd: the workdir includes the cwd"
-expect "$WT_N/api" "$(where Wd)" "runIn + cwd: the command runs from the cwd on the host"
-container_config "$MAIN" "$(cwd_check Wd '"api/sub"' apionly)"
-mkdir -p "$MAIN/api/sub"
-out=$(stop "$MAIN" code:api/a.php)
-expect /srv/api/sub "$(wd Wd)" "runIn + cwd: the cwd under a subdirectory mount is relative to it"
-container_config "$MAIN" "$(cwd_check Wd '"web"' apionly)"
-out=$(stop "$MAIN" code:api/a.php)
-expect block "$(decision "$out")" "runIn + cwd outside mountSource: refused"
-has 'cwd "web" is not under mountSource' "$(text "$out")" "runIn + cwd outside mountSource: the reason says why"
-expect not-run "$(where Wd)" "runIn + cwd outside mountSource: the check never runs"
-
-# With cwd, MYSPEC_SESSION_FILES is relative to it, so a per-file linter run
-# there finds the files (#255 review): under cwd the prefix goes, outside it
-# the path gets ../.
-printf 'export {}\n' > "$MAIN/web/b.ts"
-c=$(jq -nc --arg c 'printf "%s\n" "$MYSPEC_SESSION_FILES" > '"$RAN"'/Lint.files; for f in $MYSPEC_SESSION_FILES; do test -f "$f" || { echo "missing $f"; exit 1; }; done' \
-  '{name: "Lint", command: $c, required: true, cwd: "api"}')
-container_config "$MAIN" "$c"
-out=$(stop "$MAIN" code:api/a.php file:web/b.ts)
-expect approve "$(decision "$out")" "cwd: every MYSPEC_SESSION_FILES path resolves from the check's cwd"
-expect "$(printf 'a.php\n../web/b.ts')" "$(cat "$RAN/Lint.files" 2>/dev/null)" "cwd: MYSPEC_SESSION_FILES is relative to the cwd"
-rm -f "$MAIN/web/b.ts"
-# One ../ per segment of the cwd the path does not share, and a name that
-# only starts like the cwd is outside it.
-files_check() {  # files_check <cwd> -> a check that records its MYSPEC_SESSION_FILES
-  jq -nc --arg d "$1" --arg c 'printf "%s\n" "$MYSPEC_SESSION_FILES" > '"$RAN"'/Files.files' \
-    '{name: "Files", command: $c, required: true, cwd: $d}'
-}
-container_config "$MAIN" "$(files_check api/sub)"
-out=$(stop "$MAIN" code:api/a.php file:web/a.ts file:api/sub/s.php)
-expect "$(printf '../a.php\ns.php\n../../web/a.ts')" "$(cat "$RAN/Files.files" 2>/dev/null)" "cwd api/sub: a shared parent costs no ../, an unshared one costs one each"
-container_config "$MAIN" "$(files_check api)"
-out=$(stop "$MAIN" code:api/a.php file:apiary/x.ts)
-expect "$(printf 'a.php\n../apiary/x.ts')" "$(cat "$RAN/Files.files" 2>/dev/null)" "cwd api: apiary/ only starts like the cwd, so it is outside it"
-container_config "$MAIN" "$(check Root 'printf "%s\n" "$MYSPEC_SESSION_FILES" > '"$RAN"'/Root.files')"
-out=$(stop "$MAIN" code:api/a.php file:web/a.ts)
-expect "$(printf 'api/a.php\nweb/a.ts')" "$(cat "$RAN/Root.files" 2>/dev/null)" "no cwd: MYSPEC_SESSION_FILES stays repo-relative"
-
 # The documented example pins the compose project, and runs in a worktree.
 # The docs live at the repository root, above both copies of this suite.
 DOCS="$(git -C "$HERE" rev-parse --show-toplevel)/docs/stop-gate.md"
@@ -424,12 +210,6 @@ c=$(jq -nc --arg c "echo ran > $RAN/D; $DOC_CMD" '{name: "D", command: $c, requi
 container_config "$WT_N" "$c"
 out=$(stop "$WT_N" code:api/a.php)
 expect yes "$(ran D)" "docs example: runs in a nested worktree"
-
-container_config "$WT_O" "$(exec_check app)"
-out=$(stop "$WT_O" code:api/a.php)
-expect block "$(decision "$out")" "outside worktree: runIn does not bypass visibility"
-expect no "$(ran X)" "outside worktree: the check never runs"
-lacks "unverifiable in a linked worktree" "$(text "$out")" "outside worktree: the reason is visibility, not #220"
 
 printf '\nverify-before-stop-check-scope: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

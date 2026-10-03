@@ -7,7 +7,9 @@
 # run only after this session wrote code in this checkout (#145), and it must
 # not block a session on failures that name only files another session left
 # uncommitted in a shared checkout (#198). When it can't tell, it still blocks,
-# and says which changes are not the session's.
+# and says which changes are not the session's. How a path in the output is
+# matched, and that a timeout is never downgraded, are function tests in
+# lib/tests/stop-gate-attribute.test.sh.
 #
 # Usage: verify-before-stop-attribution.test.sh [path-to-hook]
 
@@ -134,19 +136,6 @@ expect_text "$OUT" 'worktree per session' "#198: the warning points at isolation
 OUT=$(stop 10)
 ran && fail "a warned run counts as verified: no re-run without a new write" || ok
 
-# Absolute paths in the output are the same file.
-# shellcheck disable=SC2016 # literal text, not an expansion
-set_checks 'grep -q BROKEN other.ts && echo "$PWD/other.ts:2:1 error" && exit 1 || true'
-mark_write 11 "$REPO/app.ts"
-OUT=$(stop 11)
-expect_decision approve "$OUT" "an absolute path to the foreign file counts as naming it"
-
-# A clean file that shares the foreign file's name is not that file.
-set_checks 'grep -q BROKEN other.ts && echo "pkg/other.ts:2:1 error" && exit 1 || true'
-mark_write 12 "$REPO/app.ts"
-OUT=$(stop 12)
-expect_decision block "$OUT" "a clean file with the foreign file's basename does not count as foreign"
-
 # A silent failure can't be attributed: block, but say whose changes are whose.
 set_checks '! grep -q BROKEN other.ts'
 mark_write 13 "$REPO/app.ts"
@@ -164,13 +153,6 @@ mark_write 14 "$REPO/app.ts"
 OUT=$(stop 14)
 expect_decision block "$OUT" "a failure naming the session's file blocks"
 expect_text "$OUT" 'names files this session wrote: app.ts' "the block says which failure is the session's"
-
-# A timeout is never downgraded.
-set_checks "$LINT" 'sleep 5'
-mark_write 15 "$REPO/app.ts"
-git -C "$REPO" checkout -q -- app.ts
-OUT=$(export MYSPEC_CHECK_CAP_SECONDS=1; stop 15)
-expect_decision block "$OUT" "a timeout blocks even when every failure is foreign"
 reset_tree
 
 # A check run from a cwd prints its paths relative to it (src/Foo.php for
