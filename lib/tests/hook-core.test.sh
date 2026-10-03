@@ -264,6 +264,15 @@ eq "$(bash -e -c '. "$1"; canonical_main_worktree "$2"; echo AFTER' _ "$ROOT/pn-
 eq "$(bash -e -c '. "$1"; canonical_main_worktree "$2"' _ "$PN" "$ROOT/plain/.claude/worktrees/wt" 2>&1)" \
   "$ROOT/plain" "path-normalize with hook-core: a linked worktree maps to its main checkout"
 
+# --- file_sha256 ----------------------------------------------------------------------
+
+printf 'abc' > "$ROOT/hash.txt"
+eq "$(file_sha256 "$ROOT/hash.txt")" "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" "file_sha256: the SHA-256 of the file's bytes"
+rc=0; file_sha256 "$ROOT/no-such-file" >/dev/null || rc=$?
+[ "$rc" -ne 0 ] && ok || fail "file_sha256 fails on a missing file"
+rc=0; file_sha256 "$ROOT" >/dev/null || rc=$?
+[ "$rc" -ne 0 ] && ok || fail "file_sha256 fails on a directory"
+
 # --- glob-regex comes along -------------------------------------------------------
 
 declare -F glob_regex >/dev/null && ok || fail "sourcing hook-core makes glob_regex available"
