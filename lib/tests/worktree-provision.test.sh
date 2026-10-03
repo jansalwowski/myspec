@@ -221,6 +221,17 @@ mkdir -p "$FAILSHIM"
 printf '#!/bin/sh\necho "find: bad option" >&2\nexit 1\n' > "$FAILSHIM/find"
 chmod +x "$FAILSHIM/find"
 tlc "$ROOT/lc-inside/node_modules" "$ROOT/lc-inside" "$FAILSHIM" && ok || fail "links: a failing find makes the tree count as loading the checkout"
+# An unreadable directory makes find exit non-zero after it listed every link
+# it could read: the tree is judged on that list, not counted as loading.
+if [ "$(id -u)" -ne 0 ]; then
+  C="$ROOT/lc-unreadable"
+  mkdir -p "$C/packages/ui" "$C/node_modules/pkg" "$C/node_modules/.cache/locked"
+  chmod 000 "$C/node_modules/.cache"
+  tlc "$C/node_modules" "$C" && fail "links: an unreadable directory alone does not count as loading" || ok
+  ln -s ../packages/ui "$C/node_modules/ui"
+  tlc "$C/node_modules" "$C" && ok || fail "links: a workspace link beside an unreadable directory is still caught"
+  chmod 755 "$C/node_modules/.cache"
+fi
 
 # --- install, copy, clean (#230, #222, #193) ---------------------------------
 # Install steps are fake commands that leave marker files, so no network is

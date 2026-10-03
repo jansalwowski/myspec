@@ -207,8 +207,11 @@ symlink_entries() {
 # packages. Every such link is resolved physically, because its text says
 # little about where it lands (.., ./../x, a/../../x, or a hop into a deeper
 # link that leaves the tree). The cd calls run in one subshell, so a tree of
-# thousands of links costs no fork per link. A find that fails (one without
-# -mindepth, say) counts as loading: an unscanned tree is never accepted.
+# thousands of links costs no fork per link. A find that cannot run the
+# scan (one without -mindepth, say) counts as loading: an unscanned tree is
+# never accepted. The scan's own exit status is ignored: find also fails on
+# an unreadable directory inside the tree, after listing every link it
+# could read, and that failure says nothing about those links.
 # NESTED_LINK_DIRS are tree-relative directories that hold links of their
 # own one or two levels down, such as the pnpm hidden hoist
 # (.pnpm/node_modules/@scope/<name>, four levels below the tree). Data, so
@@ -227,11 +230,12 @@ tree_loads_checkout() {
     case "$dir/" in "$checkout"/*) return 0 ;; esac
   done
   real=$(cd "$tree" 2>/dev/null && pwd -P) || return 1
-  links=$(find "$real" -mindepth 1 -maxdepth 2 -type l 2>/dev/null) || return 0
+  find "$real" -mindepth 1 -maxdepth 0 -type l >/dev/null 2>&1 || return 0
+  links=$(find "$real" -mindepth 1 -maxdepth 2 -type l 2>/dev/null || true)
   read -ra nests <<< "$NESTED_LINK_DIRS"
   for nested in ${nests[@]+"${nests[@]}"}; do
     [ -d "$real/$nested" ] || continue
-    links="$links"$'\n'$(find "$real/$nested" -mindepth 1 -maxdepth 2 -type l 2>/dev/null) || return 0
+    links="$links"$'\n'$(find "$real/$nested" -mindepth 1 -maxdepth 2 -type l 2>/dev/null || true)
   done
   (
     while IFS= read -r f; do
