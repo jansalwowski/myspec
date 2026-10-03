@@ -933,6 +933,17 @@ run_doctor_env -- schema
 expect_exit 1 "containers: runIn naming an undefined container is an error"
 expect_line '^ERROR setting-unknown-ref: .*checks\[0\]\.runIn names "nope"' "containers: the error names the container"
 
+# A check's cwd is a repo-relative directory that must exist.
+build_fixture
+mkdir -p "$REPO/api"
+set_json .claude/verification.json 'd.checks[0].cwd="api"; d.checks[1].cwd="nope"; d.checks[2].cwd="/abs";'
+run_doctor_env -- schema
+expect_no_line 'checks\[0\]\.cwd' "cwd: an existing directory raises nothing"
+expect_line '^WARN +setting-dir-missing: \.claude/verification\.json: checks\[1\]\.cwd is "nope"' "cwd: a missing directory is reported"
+expect_line '^WARN +setting-dir-missing: \.claude/verification\.json: checks\[2\]\.cwd is "/abs"' "cwd: an absolute cwd is reported"
+run_doctor_env -- settings
+expect_line '^SET +checks\[0\]\.cwd = "api" \(\.claude/verification\.json\)$' "cwd: a check's cwd is listed"
+
 # --- pass 4: argument handling ------------------------------------------------
 
 OUTPUT=$(node "$SCRIPT" --list-checks 2>&1); STATUS=$?

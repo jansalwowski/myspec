@@ -9,7 +9,8 @@
 # MYSPEC_CHECK_WORKDIR, this checkout's path inside the container, in the main
 # checkout and in a worktree nested under the mount; a worktree outside the
 # mount, or an undefined container, is refused without running. A runIn check
-# satisfies the #220 container-exec refusal.
+# satisfies the #220 container-exec refusal. cwd (#250): the check runs from
+# that repo-relative directory, and a runIn check's workdir includes it.
 #
 # The write events are appended here directly through lib/session-event.sh,
 # in the form mark-code-changed.sh records them.
@@ -319,6 +320,50 @@ expect yes "$(ran P)" "nested worktree: a runIn check without -w runs"
 container_config "$MAIN" "$(plain_exec app '')"
 out=$(stop "$MAIN" code:api/a.php)
 expect yes "$(ran P)" "main checkout: runIn with a plain exec runs"
+
+# --- per-check cwd (#250) -------------------------------------------------------
+# cwd_check <name> <cwd json> [runIn] -> a check that records where it ran
+# and the workdir it got.
+cwd_check() {
+  jq -nc --arg n "$1" --argjson d "$2" --arg r "${3:-}" \
+    --arg c "pwd -P > $RAN/$1.pwd; printf '%s' \"\${MYSPEC_CHECK_WORKDIR-unset}\" > $RAN/$1.wd" \
+    '{name: $n, command: $c, required: true, cwd: $d} + (if $r == "" then {} else {runIn: $r} end)'
+}
+where() { cat "$RAN/$1.pwd" 2>/dev/null || printf 'not-run'; }
+
+container_config "$MAIN" "$(cwd_check Rel '"api"')" "$(cwd_check Dot '"./web/"')"
+out=$(stop "$MAIN" code:api/a.php)
+expect approve "$(decision "$out")" "cwd: relative cwds run and pass"
+expect "$MAIN/api" "$(where Rel)" "cwd: a relative cwd runs the check there"
+expect "$MAIN/web" "$(where Dot)" "cwd: ./ and a trailing / are dropped"
+lacks "cwd setting was ignored" "$(text "$out")" "cwd: a usable cwd is not reported"
+
+# Under the verified checkout, not the cwd's or the main one.
+container_config "$WT_N" "$(cwd_check Rel '"api"')"
+out=$(stop "$WT_N" code:api/a.php)
+expect "$WT_N/api" "$(where Rel)" "cwd: in a worktree, the cwd is under the worktree"
+
+for bad in '"/tmp"' '"../app"' '"api/../.."' '""' '3'; do
+  container_config "$MAIN" "$(cwd_check Bad "$bad")"
+  out=$(stop "$MAIN" code:api/a.php)
+  expect "$MAIN" "$(where Bad)" "cwd $bad: ignored, the check runs from the root"
+  has "Bad: its cwd setting was ignored" "$(text "$out")" "cwd $bad: the stop message names it"
+done
+
+# runIn and cwd: the workdir is the cwd inside the container.
+container_config "$WT_N" "$(cwd_check Wd '"api"' app)"
+out=$(stop "$WT_N" code:api/a.php)
+expect /var/www/html/.claude/worktrees/nested/api "$(wd Wd)" "runIn + cwd: the workdir includes the cwd"
+expect "$WT_N/api" "$(where Wd)" "runIn + cwd: the command runs from the cwd on the host"
+container_config "$MAIN" "$(cwd_check Wd '"api/sub"' apionly)"
+mkdir -p "$MAIN/api/sub"
+out=$(stop "$MAIN" code:api/a.php)
+expect /srv/api/sub "$(wd Wd)" "runIn + cwd: the cwd under a subdirectory mount is relative to it"
+container_config "$MAIN" "$(cwd_check Wd '"web"' apionly)"
+out=$(stop "$MAIN" code:api/a.php)
+expect block "$(decision "$out")" "runIn + cwd outside mountSource: refused"
+has 'cwd "web" is not under mountSource' "$(text "$out")" "runIn + cwd outside mountSource: the reason says why"
+expect not-run "$(where Wd)" "runIn + cwd outside mountSource: the check never runs"
 
 # The documented example pins the compose project, and runs in a worktree.
 # The docs live at the repository root, above both copies of this suite.
