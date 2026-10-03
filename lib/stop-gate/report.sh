@@ -69,7 +69,16 @@ report_decision() {
       names=$(printf '%s, ' "${FAILED_CHECKS[@]}"); names="failed: ${names%, }"
     fi
     if [ ${#TIMED_OUT_CHECKS[@]} -gt 0 ]; then
-      timed=$(printf '%s, ' "${TIMED_OUT_CHECKS[@]}"); timed="timed out after ${CHECK_CAP_SECONDS}s, result unknown: ${timed%, }"
+      # Each entry carries its own cap: a check the budget cut short already
+      # names the seconds it got, the rest ran to the per-check cap.
+      timed=""
+      for entry in "${TIMED_OUT_CHECKS[@]}"; do
+        case "$entry" in
+          *"(at the gate budget, "*) timed+="$entry, " ;;
+          *) timed+="$entry (after ${CHECK_CAP_SECONDS}s), " ;;
+        esac
+      done
+      timed="timed out, result unknown: ${timed%, }"
       names="${names:+$names; }$timed"
     fi
     if [ ${#UNVERIFIABLE_CHECKS[@]} -gt 0 ]; then

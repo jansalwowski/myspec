@@ -105,5 +105,15 @@ reason "$OUT" | grep -q 'one (at the gate budget' && ok || fail "budget: check 1
 [ ! -e "$ROOT/two.ran" ] && [ ! -e "$ROOT/three.ran" ] && ok || fail "budget: checks 2 and 3 never start"
 [ "$ELAPSED" -lt 10 ] && ok || fail "budget: a lowered budget is honoured (took ${ELAPSED}s with a 4s budget)"
 
+# --- the headline names the cap the budget applied, not the default (R13) ------
+# Budget 4 s, default cap 120 s, a 10 s check: the check is cut at what is
+# left of the budget, and the summary line must say so, not "after 120s".
+checks "[{\"name\":\"ten\",\"command\":\"sleep 10\",\"required\":true}]"
+arm
+OUT=$(printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$REPO" | MYSPEC_GATE_BUDGET_SECONDS=4 bash "$HOOK")
+HEAD=$(reason "$OUT" | head -1)
+printf '%s' "$HEAD" | grep -q 'after 120s' && fail "budget cap: the headline names the default cap (got: $HEAD)" || ok
+printf '%s' "$HEAD" | grep -qE 'ten \(at the gate budget, [1-4]s\)' && ok || fail "budget cap: the headline names a cap of at most 4s and the budget (got: $HEAD)"
+
 printf 'verify-before-stop-timeout: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
