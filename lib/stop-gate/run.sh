@@ -297,9 +297,7 @@ check_cwd() {
 # docs/stop-gate.md "Globs"), which hook-core sources. A glob that is empty,
 # absolute or has a `..` segment is unusable, and so is a `paths` that is not
 # a non-empty list of strings: the check then runs, and the stop message
-# names the ignored setting (fail closed). Without the compiler every
-# `paths` is ignored the same way.
-declare -F glob_regex >/dev/null || glob_regex() { return 1; }
+# names the ignored setting (fail closed).
 
 # paths_verdict <check json> -> sets PATHS_VERDICT to run (no paths, or a
 # file matches), skip (no file matches) or ignored (unusable; the check
@@ -386,16 +384,12 @@ main_checkout() {
 }
 
 # check_workdir <root> <container name> <cwd> -> sets CHECK_WORKDIR, or
-# REFUSE_REASON when the check cannot run there. Reads CONTAINERS_JSON and
-# CONTAINERS_NOTES (load_checks).
+# REFUSE_REASON when the check cannot run there. Reads CONTAINERS_JSON (null
+# when unset) and CONTAINERS_NOTES (load_checks).
 check_workdir() {
   local spec src tgt main base self rel sub=""
   CHECK_WORKDIR=""
   REFUSE_REASON=""
-  if [ -z "$CONTAINERS_JSON" ]; then
-    REFUSE_REASON="runIn names container \"$2\", but the containers setting could not be read (lib/myspec-config.sh was not found next to this hook)."
-    return 1
-  fi
   spec=$(printf '%s' "$CONTAINERS_JSON" | jq -c --arg n "$2" 'if type == "object" and has($n) then .[$n] else empty end')
   if [ -z "$spec" ]; then
     REFUSE_REASON="runIn names container \"$2\", which \`containers\` in .claude/verification.json does not define.${CONTAINERS_NOTES:+ $CONTAINERS_NOTES}"
@@ -447,23 +441,23 @@ check_workdir() {
 # load_checks <config file> -> sets CHECKS_JSON and CONTAINERS_JSON (with
 # CONTAINERS_NOTES) through the settings reader (read_setting in
 # lib/hook-core.sh), from the checkout whose verification.json is in use.
-# Without the reader, the checks are read from the file as before;
-# CONTAINERS_JSON stays empty and a runIn check is refused.
+# The reader ships with the hook; when it fails, the gate blocks with its
+# reason instead of guessing at the checks, and records no verified event
+# (GATE_UNVERIFIED), so the checkout stays armed until the install is fixed.
 load_checks() {
   local config_root
   config_root=$(dirname "$(dirname "$1")")
-  CONTAINERS_JSON=""
-  CONTAINERS_NOTES=""
-  if read_setting verification.checks "$config_root"; then
-    CHECKS_JSON=$SETTING
-    [ -z "$SETTING_NOTES" ] || SCOPE_NOTES+=("$SETTING_NOTES")
-    if read_setting verification.containers "$config_root"; then
-      CONTAINERS_JSON=$SETTING
-      CONTAINERS_NOTES=$SETTING_NOTES
-    fi
-  else
-    CHECKS_JSON=$(jq -c '.checks' "$1")
-  fi
+  read_setting verification.checks "$config_root" || load_checks_failed
+  CHECKS_JSON=$SETTING
+  [ -z "$SETTING_NOTES" ] || SCOPE_NOTES+=("$SETTING_NOTES")
+  read_setting verification.containers "$config_root" || load_checks_failed
+  CONTAINERS_JSON=$SETTING
+  CONTAINERS_NOTES=$SETTING_NOTES
+}
+
+load_checks_failed() {
+  GATE_UNVERIFIED=1
+  decision_block 'myspec lib missing, run /myspec:update. The settings reader (lib/myspec-config.sh) could not read the checks: %s' "${SETTING_NOTES:-no reason given}"
 }
 
 # run_checks <config file> -> runs each required check of the checkout

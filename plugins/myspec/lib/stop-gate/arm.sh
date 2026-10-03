@@ -86,12 +86,13 @@ armed_roots() {
 # event for each verified checkout, so only a later code write re-arms it.
 # The writes stay: they are the list of what this session wrote, which
 # attribution needs on every later run. Only a run that printed its decision
-# (GATE_DECIDED, report_decision) records anything: one that died before
-# deciding (an abort under set -e) leaves the checkouts armed, so the next
-# stop runs them again.
+# (GATE_DECIDED, report.sh) records anything: one that died before deciding
+# (an abort under set -e) or could not read its checks (GATE_UNVERIFIED,
+# run.sh) leaves the checkouts armed, so the next stop runs them again.
 finish_run() {
   local r
   [ "${GATE_DECIDED:-0}" -eq 1 ] || return 0
+  [ "${GATE_UNVERIFIED:-0}" -eq 0 ] || return 0
   for r in "${VERIFY_ROOTS[@]}" ${NESTED_ROOTS[@]+"${NESTED_ROOTS[@]}"}; do
     session_append "$STATE_HOME" "$SESSION_ID" "$(jq -nc --arg r "$r" '{t: "verified", root: $r}')" || true
   done

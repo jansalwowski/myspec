@@ -53,7 +53,7 @@ It applies per verified checkout, when its checks fail and the session is not in
 
 ## Per-check settings (R11, R12)
 
-The gate reads `checks` and `containers` through `lib/myspec-config.sh`, the one settings reader (`docs/project-settings-design.md`), from the checkout whose `.claude/verification.json` is in use. A hook installed without the reader reads `checks` from the file as before and refuses every `runIn` check, because it cannot read `containers`. Order per required check: `paths` first (a skipped check is never refused), then `cwd`, then `runIn` or the R8a refusal, then the run.
+The gate reads `checks` and `containers` through `lib/myspec-config.sh`, the one settings reader (`docs/project-settings-design.md`), from the checkout whose `.claude/verification.json` is in use. The reader ships with the hook; when it or another lib the gate sources is missing, the gate blocks once with "myspec lib missing, run /myspec:update" and runs no check, rather than guess at the settings. Order per required check: `paths` first (a skipped check is never refused), then `cwd`, then `runIn` or the R8a refusal, then the run.
 
 **Globs (`paths`).** Each glob is matched against each session file as a repo-relative path. These are the semantics doctor validates (#233):
 
