@@ -18,7 +18,8 @@
 # lockfiles for it differ from this tree, or whose tree loads that checkout's
 # own source. In a linked worktree (or a submodule inside one), a check
 # without runIn whose command contains a container exec (CONTAINER_EXEC_FORMS)
-# is refused as unverifiable, not run.
+# is refused as unverifiable, not run. A check with `cwd` runs from that
+# repo-relative directory of the checkout.
 # A check with `paths` runs only when a file the session wrote in that
 # checkout matches one of its globs (#232); a skipped one is named in the
 # stop message. A check with `runIn` gets MYSPEC_CHECK_WORKDIR, this
@@ -405,9 +406,10 @@ capped() {
 }
 
 # run_capped <seconds> <command> <run id> [keep]: runs <command> from the repo
-# root under run_with_cap. Sets RUN_EXIT, RUN_ELAPSED and RUN_OUTPUT. With
-# keep, the output file stays and RUN_LOG names it: the caller removes it, or
-# keeps a failed check's log for attribution to read.
+# root, or the check's cwd under it (CHECK_CWD), under run_with_cap. Sets
+# RUN_EXIT, RUN_ELAPSED and RUN_OUTPUT. With keep, the output file stays and
+# RUN_LOG names it: the caller removes it, or keeps a failed check's log for
+# attribution to read.
 # Output goes to a file, not a $(...) capture: a process that escapes the
 # group kill (it called setsid, or it is a detaching daemon) would otherwise
 # hold the pipe open and keep the hook waiting until it exits on its own,
@@ -419,7 +421,7 @@ run_capped() {
   rm -f "$CAP_SENTINEL"
   CHECK_LOG=$(mktemp "${TMPDIR:-/tmp}/.myspec-check.XXXXXX")
   start=$(date +%s)
-  (cd "$REPO_ROOT" && MYSPEC_STOP_HOOK_ACTIVE=1 MYSPEC_CHECK_RUN_ID="$3" run_with_cap "$1" "$2") \
+  (cd "$REPO_ROOT${CHECK_CWD:+/$CHECK_CWD}" && MYSPEC_STOP_HOOK_ACTIVE=1 MYSPEC_CHECK_RUN_ID="$3" run_with_cap "$1" "$2") \
     >"$CHECK_LOG" 2>&1 </dev/null && RUN_EXIT=0 || RUN_EXIT=$?
   RUN_ELAPSED=$(( $(date +%s) - start ))
   RUN_OUTPUT=$(cat "$CHECK_LOG")
@@ -608,6 +610,29 @@ is_linked_worktree() {
   [ "$CF_SUBMODULE" = 1 ] && is_linked_worktree "$CF_SUPER"
 }
 
+# check_cwd <check json> -> sets CHECK_CWD to the check's repo-relative cwd
+# ("" for the checkout root), and CWD_IGNORED to the raw value when it is
+# unusable (not a string, empty, absolute, or with a .. segment): the check
+# then runs from the root and the stop message names it, as for paths.
+CHECK_CWD=""
+check_cwd() {
+  local raw
+  CHECK_CWD="" CWD_IGNORED=""
+  raw=$(printf '%s' "$1" | jq -r 'if has("cwd") then (.cwd | if type == "string" then "s" + . else "x" + tojson end) else "" end')
+  [ -n "$raw" ] || return 0
+  case "$raw" in
+    x*) CWD_IGNORED=${raw#x}; return 0 ;;
+  esac
+  raw=${raw#s}
+  case "$raw" in
+    ''|/*|..|../*|*/..|*/../*) CWD_IGNORED="\"$raw\""; return 0 ;;
+  esac
+  while [ "${raw#./}" != "$raw" ]; do raw="${raw#./}"; done
+  while [ "${raw%/}" != "$raw" ]; do raw="${raw%/}"; done
+  [ "$raw" != "." ] || raw=""
+  CHECK_CWD=$raw
+}
+
 # Settings, through the one reader (read_setting in lib/hook-core.sh, which
 # runs lib/myspec-config.sh beside it). Without it, the checks are read from
 # the file as before and a check with runIn is refused: its container cannot
@@ -686,6 +711,7 @@ unseen_files() {
 # check gets MYSPEC_CHECK_WORKDIR: where this checkout's mountSource sits in
 # the container, mountTarget plus the path of <checkout>/<mountSource> under
 # <main checkout>/<mountSource>. In the main checkout that is mountTarget.
+# A check's cwd under mountSource is appended (#250).
 
 # main_checkout <root> -> the physical path of the repository's main
 # checkout. A submodule's is its superproject's main checkout plus the
@@ -705,10 +731,10 @@ main_checkout() {
   printf '%s\n' "$CF_MAIN"
 }
 
-# check_workdir <root> <container name> -> sets CHECK_WORKDIR, or
+# check_workdir <root> <container name> <cwd> -> sets CHECK_WORKDIR, or
 # REFUSE_REASON when the check cannot run there.
 check_workdir() {
-  local spec src tgt main base self rel
+  local spec src tgt main base self rel sub=""
   CHECK_WORKDIR=""
   REFUSE_REASON=""
   if [ -z "$CONTAINERS_JSON" ]; then
@@ -754,7 +780,15 @@ check_workdir() {
         return 1 ;;
     esac
   fi
-  CHECK_WORKDIR="$tgt$rel"
+  if [ -n "$3" ] && [ "$3" != "$src" ]; then
+    case "$3/" in
+      "${src:+$src/}"*) sub="/${3#"${src:+$src/}"}" ;;
+      *)
+        REFUSE_REASON="its cwd \"$3\" is not under mountSource \"$src\" of container \"$2\", so it is not visible inside the container."
+        return 1 ;;
+    esac
+  fi
+  CHECK_WORKDIR="$tgt$rel$sub"
   [ -n "$CHECK_WORKDIR" ] || CHECK_WORKDIR=/
 }
 
@@ -872,6 +906,7 @@ for i in $(seq 0 $((CHECKS_COUNT - 1))); do
   CLEANUP=$(printf '%s' "$CHECK" | jq -r '.cleanup // ""')
   RUN_IN=$(printf '%s' "$CHECK" | jq -r '.runIn // empty | if type == "string" then . else "\(.)" end')
   unset MYSPEC_CHECK_WORKDIR
+  check_cwd "$CHECK"
 
   # Path scope (#232): a required check skipped here is named in the stop
   # message, so the loosening never goes unseen.
@@ -883,6 +918,7 @@ for i in $(seq 0 $((CHECKS_COUNT - 1))); do
     ignored)
       SCOPE_NOTES+=("$NAME: its paths setting was ignored, so the check ran. paths must be a non-empty list of repo-relative globs, none absolute or with a .. segment${PATHS_GLOBS:+ (got $PATHS_GLOBS)}.") ;;
   esac
+  [ -z "$CWD_IGNORED" ] || SCOPE_NOTES+=("$NAME: its cwd setting was ignored, so the check ran from the checkout root. cwd must be a repo-relative directory, not absolute and without a .. segment (got $CWD_IGNORED).")
 
   if [ -n "${DIFF_COMMAND// /}" ] && [ -n "$MYSPEC_BASE_REF" ]; then
     COMMAND="$DIFF_COMMAND"
@@ -893,7 +929,7 @@ for i in $(seq 0 $((CHECKS_COUNT - 1))); do
   # and its command is trusted to use that workdir. In a linked worktree, a
   # container exec without runIn would verify another tree (R8a).
   if [ -n "$RUN_IN" ]; then
-    if ! check_workdir "$REPO_ROOT" "$RUN_IN"; then
+    if ! check_workdir "$REPO_ROOT" "$RUN_IN" "$CHECK_CWD"; then
       UNVERIFIABLE_CHECKS+=("$NAME")
       FAILED_OUTPUT+=("[$NAME not run: runIn $RUN_IN] $REFUSE_REASON This is not a test failure.")
       continue
