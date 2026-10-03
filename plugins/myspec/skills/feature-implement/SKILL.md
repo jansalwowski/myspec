@@ -174,14 +174,13 @@ It warns rather than blocks: implementers already work from the current code and
 2. Record `BASE_SHA`: `git rev-parse HEAD`
 3. Set the feature's `status: in-progress` in `${aiDir}/features/index.yaml` (owner of the `draft → in-progress` transition; `feature-complete` later flips it to `complete`).
 4. Create task tracking with all tasks.
-5. Write the orchestration marker. Mid-run the tree is red by design (an accepted barrier failure, a fix round in flight, a test the next phase owns), and the Stop hook would otherwise block every controller turn end on it. With the marker present it reports failing checks as a warning instead; it ignores and deletes a marker older than 8h, so a crashed run cannot disable the gate for good.
+5. Set the orchestration marker. Mid-run the tree is red by design (an accepted barrier failure, a fix round in flight, a test the next phase owns), and the Stop hook would otherwise block every controller turn end on it. While the marker is set it reports failing checks as a warning instead; it ignores a marker older than 8h, so a crashed run cannot disable the gate for good.
 
    ```bash
-   STATE="$(git rev-parse --show-toplevel)/.claude/state"; mkdir -p "$STATE"
-   printf '{"started_at":%s,"feature":"%s"}\n' "$(date +%s)" "<feature>" > "$STATE/implement-in-progress.json"
+   .claude/lib/session-event.sh implement start
    ```
 
-   Rewrite it the same way before each phase's first dispatch so a long run stays inside the 8h window. Remove it (`rm -f "$(git rev-parse --show-toplevel)/.claude/state/implement-in-progress.json"`) on **stop** or **fresh** at a milestone checkpoint and at the start of Step 5.
+   The PostToolUse hook records it for this session from the command itself (you never see the session id), so run it as written, as a Bash command. Re-run it before each phase's first dispatch so a long run stays inside the 8h window. Remove it (`.claude/lib/session-event.sh implement stop`) on **stop** or **fresh** at a milestone checkpoint and at the start of Step 5.
 
 ### Step 3: Execute Milestones
 
@@ -393,7 +392,7 @@ After all phases complete:
 - [ ] Execution Log deferred minors triaged by the holistic review (fixed or explicitly accepted)
 - [ ] Every `Ruling:` line from the Execution Log surfaced under "Rulings I made" in the completion report
 - [ ] No uncommitted changes from implementation
-- [ ] Orchestration marker `.claude/state/implement-in-progress.json` removed before Final Verification
+- [ ] Orchestration marker removed (`session-event.sh implement stop`) before Final Verification
 - [ ] Read `.claude/verification.json` and run each required check — all pass
 
 ## Integration

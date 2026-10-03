@@ -29,25 +29,31 @@ git -C "$REPO" config user.email t@t
 git -C "$REPO" config user.name t
 git -C "$REPO" commit -q --allow-empty -m init
 SID="vbs-timeout-$$"
-CHANGED="/tmp/.myspec-code-changed-$SID"
 GRANDCHILD_PID="$ROOT/grandchild.pid"
 LEFTOVER_PID="$ROOT/leftover.pid"
 DETACHED_PID="$ROOT/detached.pid"
 WRITER_PID="$ROOT/writer.pid"
 # shellcheck disable=SC2154 # p is the trap body's own loop variable
-trap 'for p in "$GRANDCHILD_PID" "$LEFTOVER_PID" "$DETACHED_PID" "$WRITER_PID"; do [ -f "$p" ] && kill "$(cat "$p")" 2>/dev/null; done; rm -rf "$ROOT"; rm -f "$CHANGED"' EXIT
+trap 'for p in "$GRANDCHILD_PID" "$LEFTOVER_PID" "$DETACHED_PID" "$WRITER_PID"; do [ -f "$p" ] && kill "$(cat "$p")" 2>/dev/null; done; rm -rf "$ROOT"' EXIT
 
 PASS=0
 FAIL=0
 ok()   { PASS=$((PASS + 1)); }
 fail() { FAIL=$((FAIL + 1)); printf 'FAIL  %s\n' "$1" >&2; }
 
+# arm: a code write in the checkout, recorded the way mark-code-changed.sh
+# records it (lib/session-event.sh), so each run has something to verify.
+SESSION_EVENT="$(cd "$(dirname "$HOOK")" && pwd)/../lib/session-event.sh"
+arm() {
+  bash "$SESSION_EVENT" --root "$REPO" append "$SID" "$(jq -nc --arg r "$REPO" '{t: "write", root: $r, rel: "src/edited.ts", kind: "code"}')"
+}
+
 checks() {  # checks <verification.json checks array>
   printf '{"checks":%s}\n' "$1" > "$REPO/.claude/verification.json"
 }
 
 run_hook() {  # run_hook -> hook stdout; cap lowered to 2 s
-  touch "$CHANGED"
+  arm
   printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$REPO" \
     | MYSPEC_CHECK_CAP_SECONDS=2 bash "$HOOK"
 }
@@ -158,7 +164,7 @@ if [ -n "$TIMEOUT_BIN" ] && "$TIMEOUT_BIN" --version 2>/dev/null | grep -q 'GNU 
   done
   checks "[{\"name\":\"leaky\",\"command\":\"sh -c 'echo \$\$ > $LEFTOVER_PID; exec sleep 30' & echo done\",\"required\":true}]"
   rm -f "$LEFTOVER_PID"
-  touch "$CHANGED"
+  arm
   START=$(date +%s)
   OUT=$(printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$REPO" | PATH="$NOPERL" MYSPEC_CHECK_CAP_SECONDS=2 "$NOPERL/bash" "$HOOK")
   ELAPSED=$(( $(date +%s) - START ))

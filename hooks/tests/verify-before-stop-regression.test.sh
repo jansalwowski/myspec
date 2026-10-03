@@ -36,10 +36,9 @@ git -C "$REPO" config user.email t@t
 git -C "$REPO" config user.name t
 git -C "$REPO" commit -q --allow-empty -m init
 SID="vbs-regression-$$"
-CHANGED="/tmp/.myspec-code-changed-$SID"
 RAN="$ROOT/ran"
-LEDGER="/tmp/.myspec-session-writes-$SID"
-trap 'rm -rf "$ROOT"; rm -f "$CHANGED" "$LEDGER"' EXIT
+trap 'rm -rf "$ROOT"' EXIT
+SESSION_EVENT="$(cd "$(dirname "$HOOK")" && pwd)/../lib/session-event.sh"
 
 PASS=0
 FAIL=0
@@ -50,8 +49,14 @@ fail() { FAIL=$((FAIL + 1)); printf 'FAIL  %s\n' "$1" >&2; }
 printf '{"checks":[{"name":"alpha","command":"touch %s; echo ALPHA-OUT; exit 1","required":true},{"name":"beta","command":"echo BETA-OUT; exit 1","required":true}]}\n' \
   "$RAN" > "$REPO/.claude/verification.json"
 
+# also_wrote <root> <rel>: a code write, recorded the way mark-code-changed.sh
+# records it (lib/session-event.sh), in the state file of <root>'s repository.
+also_wrote() {
+  bash "$SESSION_EVENT" --root "$1" append "$SID" "$(jq -nc --arg r "$1" --arg p "$2" '{t: "write", root: $r, rel: $p, kind: "code"}')"
+}
+
 run_hook() {  # run_hook <extra stdin json fields> -> hook stdout
-  touch "$CHANGED"
+  also_wrote "$REPO" src/edited.ts
   rm -f "$RAN"
   printf '{"session_id":"%s","cwd":"%s"%s}' "$SID" "$REPO" "$1" | bash "$HOOK" 2>/dev/null
 }
@@ -87,21 +92,15 @@ WT="$ROOT/wt"
 git -C "$REPO" worktree add -q -b wt "$WT"
 mkdir -p "$WT/src" "$REPO/.claude/state/sessions"
 touch "$WT/BROKEN" "$WT/src/a.ts"
-wrote() {  # wrote <root> <rel>...: a fresh ledger of code writes
+wrote() {  # wrote <root> <rel>...: a fresh session-state file of code writes
   local root="$1" p
   shift
-  : > "$LEDGER"
-  for p in "$@"; do printf 'code\t%s\t%s\n' "$root" "$p" >> "$LEDGER"; done
+  rm -f "$REPO/.claude/state/sessions/$SID.jsonl"
+  for p in "$@"; do also_wrote "$root" "$p"; done
 }
-also_wrote() { printf 'code\t%s\t%s\n' "$1" "$2" >> "$LEDGER"; }
-run_ledger() {  # run_ledger -> hook stdout, armed by the ledger alone
-  rm -f "$CHANGED"
+run_ledger() {  # run_ledger -> hook stdout
   printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$REPO" | bash "$HOOK" 2>/dev/null
 }
-
-rm -f "$LEDGER"
-OUT=$(run_hook '')
-[ "$(decision "$OUT")" = approve ] && ok || fail "legacy marker, no ledger: the cwd checkout is verified, as before (got: ${OUT:0:200})"
 
 wrote "$WT" src/a.ts
 OUT=$(run_ledger)
@@ -140,7 +139,8 @@ if command -v node >/dev/null 2>&1; then
   : > "$CONF/src/a.ts"
   git -C "$CONF" add -A && git -C "$CONF" commit -q -m init
   conf_run() {
-    printf 'code\t%s\tsrc/a.ts\n' "$CONF" > "$LEDGER"
+    rm -f "$CONF/.claude/state/sessions/$SID.jsonl"
+    also_wrote "$CONF" src/a.ts
     printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$CONF" | bash "$HOOK" 2>/dev/null
   }
   pad=untracked-file-with-a-long-enough-name-to-fill-the-pipe-buffer

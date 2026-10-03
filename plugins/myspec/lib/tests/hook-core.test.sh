@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Fixture for lib/hook-core.sh, the primitives the hooks and the worktree
-# libs share: payload parsing, physical paths, checkout facts, the marker
-# TTLs, the isolation-decision lookup and the settings reader.
+# libs share: payload parsing, physical paths, checkout facts, the state TTL
+# and the settings reader. The session-state file has its own fixture,
+# session-event.test.sh.
 #
 # Until hook-core existed, six scripts resolved "the main checkout" on their
 # own and disagreed on two layouts. Each case below that settles one names the
@@ -46,10 +47,12 @@ new_repo() { git_ init -q "$1" && git_ -C "$1" commit -q --allow-empty -m init; 
 
 # --- payload_parse -------------------------------------------------------------
 
+SUBAGENT_EXPR='[.agent_id, .agent_type] | map(strings | select(. != "")) | first'
+
 # shellcheck disable=SC2016 # a literal $HOME: the payload must not expand it
 P='{"cwd":"/c","session_id":"s1","agent_id":"","agent_type":"Explore","stop_hook_active":true,
     "tool_name":"Bash","tool_input":{"command":"echo '"'"'a b'"'"'\nls $HOME","file_path":"x.ts","edits":[1]}}'
-payload_parse "$P" CWD=.cwd SID=.session_id SUB="$HOOK_SUBAGENT" ACTIVE=.stop_hook_active \
+payload_parse "$P" CWD=.cwd SID=.session_id SUB="$SUBAGENT_EXPR" ACTIVE=.stop_hook_active \
   TOOL=.tool_name CMD=.tool_input.command EDITS=.tool_input.edits CWDS="$HOOK_CWDS"
 eq "$CWD" /c "payload: a string field"
 eq "$SID" s1 "payload: session_id"
@@ -61,7 +64,7 @@ eq "$CMD" "echo 'a b'"$'\n''ls $HOME' "payload: quotes, newlines and \$ survive 
 eq "$EDITS" '[1]' "payload: a non-string value is compact JSON"
 eq "$CWDS" /c "payload: cwd candidates"
 
-payload_parse '{"session_id":"s2"}' SID=.session_id CWD=.cwd SUB="$HOOK_SUBAGENT" ACTIVE='.stop_hook_active // false' CMD=.tool_input.command
+payload_parse '{"session_id":"s2"}' SID=.session_id CWD=.cwd SUB="$SUBAGENT_EXPR" ACTIVE='.stop_hook_active // false' CMD=.tool_input.command
 eq "$SID|$CWD|$SUB|$ACTIVE|$CMD" "s2|||false|" "payload: missing fields are empty, a // default applies"
 
 payload_parse '{"tool_input":"a string"}' CMD=.tool_input.command SID=.session_id
@@ -180,45 +183,9 @@ checkout_facts "$ROOT/plain/src"
 # shellcheck disable=SC2317 # the stub runs only if the cache misses
 eq "$(git() { return 1; }; checkout_facts "$ROOT/plain/src" && printf '%s' "${CF_ROOT#"$ROOT"/}")" "plain" "a repeated call is answered from the cache"
 
-# --- TTLs and isolation_decision --------------------------------------------------
+# --- TTL ----------------------------------------------------------------------------
 
-eq "$HOOK_DECISION_TTL|$HOOK_INHERIT_TTL" "28800|14400" "TTL constants"
-
-ISO="$ROOT/plain/.claude/state/isolation"
-mkdir -p "$ISO"
-NOW=$(date +%s)
-marker() { jq -n --arg m "$2" --arg p "${4:-}" --argjson at "$3" '{mode: $m, decided_at: $at, worktree_path: $p}' > "$ISO/$1.json"; }
-
-marker own worktree "$((NOW - 60))" /wt/path
-isolation_decision "$ROOT/plain" own ""
-eq "$ISO_MODE|$ISO_PATH" "worktree|/wt/path" "isolation: the session's own marker"
-
-marker old develop "$((NOW - HOOK_DECISION_TTL - 5))"
-isolation_decision "$ROOT/plain" old ""
-eq "$ISO_MODE" "" "isolation: an own marker past the TTL decides nothing for a top-level session"
-
-isolation_decision "$ROOT/plain" nobody ""
-eq "$ISO_MODE" "" "isolation: a top-level session never inherits (#146)"
-
-sleep 1
-marker parent develop "$((NOW - 100))"
-isolation_decision "$ROOT/plain" nobody agent-1
-eq "$ISO_MODE" "develop" "isolation: a subagent inherits the newest marker"
-
-marker parent develop "$((NOW - HOOK_INHERIT_TTL - 5))"
-isolation_decision "$ROOT/plain" nobody agent-1
-eq "$ISO_MODE" "" "isolation: not past the inherit TTL"
-
-printf '{"decided_at": %s, "worktree_path": "/p"}\n' "$((NOW - 10))" > "$ISO/nomode.json"
-isolation_decision "$ROOT/plain" nomode ""
-eq "$ISO_MODE|$ISO_PATH" "|/p" "isolation: a marker without a mode keeps its fields in place"
-
-printf 'garbage' > "$ISO/bad.json"
-isolation_decision "$ROOT/plain" bad ""
-eq "$ISO_MODE" "" "isolation: an unreadable marker decides nothing"
-
-isolation_decision "$ROOT/nogit" any agent-1
-eq "$ISO_MODE" "" "isolation: no state directory"
+eq "$HOOK_DECISION_TTL" "28800" "TTL constant (the isolation and implement lookups: session-event.test.sh)"
 
 # --- ai_dir, read_setting, pretool_deny -------------------------------------------
 

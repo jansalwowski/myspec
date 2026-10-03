@@ -128,6 +128,10 @@
       "type": "overwrite",
       "dest": ".claude/lib/hook-core.sh"
     },
+    "session-event.sh": {
+      "type": "overwrite",
+      "dest": ".claude/lib/session-event.sh"
+    },
     "dependency-map.sh": {
       "type": "overwrite",
       "dest": ".claude/lib/dependency-map.sh"

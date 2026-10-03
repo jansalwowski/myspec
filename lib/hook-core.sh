@@ -1,33 +1,29 @@
 #!/usr/bin/env bash
 # hook-core.sh
 # Sourced, never run. The primitives every hook and the worktree libs used to
-# copy: payload parsing, physical paths, checkout facts, the marker TTLs, the
-# isolation-decision lookup and the settings reader. One copy, one test file
-# (lib/tests/hook-core.test.sh).
+# copy: payload parsing, physical paths, checkout facts, the state TTL and the
+# settings reader. One copy, one test file (lib/tests/hook-core.test.sh). The
+# session-state file has its own lib, lib/session-event.sh.
 #
 # Found the way the hooks find every other lib: next to the hook's own
 # directory (hooks/../lib in the plugin, .claude/hooks/../lib in a project),
 # else under CLAUDE_PLUGIN_ROOT. A hook that cannot find it fails open, as it
 # does without jq. bash 3.2 compatible (macOS /bin/bash).
 #
-# Every function reports through globals (CF_*, ISO_*, SETTING*) that only
+# Every function reports through globals (CF_*, SETTING*) that only
 # the sourcing scripts read.
 # shellcheck disable=SC2034
 
 HOOK_LIB=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-# A session's own isolation decision, and the feature-implement marker, stay
-# valid this long (8h).
+# A session's isolation decision, and its feature-implement run, stay valid
+# this long (8h; lib/session-event.sh).
 HOOK_DECISION_TTL=28800
-# Window in which a subagent inherits the newest decision (4h).
-HOOK_INHERIT_TTL=14400
 
-# jq expressions for payload_parse. HOOK_CWDS: the payload's cwd candidates,
-# one per line. `cwd` is what Claude Code and Codex send; the tool's own
-# `cwd`/`workdir` argument is the fallback. HOOK_SUBAGENT: non-empty only
-# inside a subagent (agent_id, else agent_type).
+# jq expression for payload_parse: the payload's cwd candidates, one per line.
+# `cwd` is what Claude Code and Codex send; the tool's own `cwd`/`workdir`
+# argument is the fallback.
 HOOK_CWDS='[.cwd, .tool_input.cwd, .tool_input.workdir] | map(select(type == "string" and . != "")) | join("\n")'
-HOOK_SUBAGENT='[.agent_id, .agent_type] | map(strings | select(. != "")) | first'
 
 # glob_regex: the one glob compiler (lib/glob-regex.sh), for the scripts that
 # read glob settings.
@@ -197,43 +193,6 @@ ai_dir() {
   ai="${ai#./}"
   while [ "${ai%/}" != "$ai" ]; do ai="${ai%/}"; done
   printf '%s\n' "${ai:-.ai}"
-}
-
-# isolation_decision <main root> <session id> <subagent> -> sets ISO_MODE
-# (develop, worktree, or empty) and ISO_PATH (the recorded worktree path).
-# The session's own marker decides while younger than HOOK_DECISION_TTL.
-# Without one, a subagent (non-empty <subagent>) follows the newest marker
-# younger than HOOK_INHERIT_TTL; a top-level session never inherits another
-# session's answer (issue #146). Markers: .claude/state/isolation/<id>.json,
-# written by set-isolation.sh.
-isolation_decision() {
-  local dir="$1/.claude/state/isolation" now newest
-  ISO_MODE="" ISO_PATH=""
-  [ -d "$dir" ] || return 0
-  now=$(date +%s)
-  if [ -n "$2" ] && [ -f "$dir/$2.json" ] && _iso_read "$dir/$2.json" "$HOOK_DECISION_TTL"; then
-    return 0
-  fi
-  [ -n "$3" ] || return 0
-  # shellcheck disable=SC2012 # ls -t is the portable mtime sort; the names are generated session ids
-  # awk, not head: it reads all of ls, so no SIGPIPE under pipefail.
-  newest=$(ls -t "$dir"/*.json 2>/dev/null | awk 'NR == 1' || printf '')
-  if [ -n "$newest" ] && [ -f "$newest" ]; then
-    _iso_read "$newest" "$HOOK_INHERIT_TTL" || true
-  fi
-}
-
-# _iso_read <marker> <ttl> -> sets ISO_MODE/ISO_PATH when the marker is
-# younger than <ttl>; fails otherwise. Uses `now` from the caller.
-_iso_read() {
-  local mode path at
-  # \037, not a tab: IFS whitespace collapses, so an empty mode would shift
-  # the fields.
-  mode=$(jq -r '[.mode // "", .worktree_path // "", (.decided_at // 0 | tostring)] | join("\u001f")' "$1" 2>/dev/null || printf '')
-  IFS=$'\037' read -r mode path at <<< "$mode"
-  case "$at" in ''|*[!0-9]*) at=0 ;; esac
-  [ $(( now - at )) -lt "$2" ] || return 1
-  ISO_MODE="$mode" ISO_PATH="$path"
 }
 
 # pretool_deny <reason> -> prints the PreToolUse deny (plus the legacy fields

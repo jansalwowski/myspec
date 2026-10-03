@@ -3,16 +3,24 @@
 # PostToolUse hook (Write|Edit and Bash matchers) — records every file this
 # session writes, and keeps the session's live log.
 #
-# Ledger: /tmp/.myspec-session-writes-<session_id>, one line per written file:
-# `<code|file><TAB><checkout root><TAB><repo-relative path>`. The root is the
-# physical toplevel of the checkout holding the file, so a write in another
-# repository or in a linked worktree never arms this checkout.
-# verify-before-stop.sh runs its checks only when a `code` line for its
-# checkout is newer than its last `verified` line. It reads every line as the
-# list of files this session wrote when it decides whose failure it is. That is
-# why non-code writes are recorded too: a config file this session edited is
-# its own. It replaces the empty /tmp/.myspec-code-changed-<session_id> marker,
-# which was deleted after every run and so lost that list.
+# Ledger: `write` events in the session-state file,
+# .claude/state/sessions/<session_id>.jsonl in the main checkout of the
+# repository holding the file (lib/session-event.sh, the only reader and
+# writer), one per written file: `{"t":"write","root":<checkout>,"rel":<path>,
+# "kind":"code|file"}`. The root is the physical toplevel of the checkout
+# holding the file, so a write in another repository or in a linked worktree
+# never arms this checkout. A write in a submodule is filed with its
+# superproject, whose checks verify it. verify-before-stop.sh runs its checks
+# only when a `code` write for its checkout is newer than its last `verified`
+# event. It reads every write as the list of files this session wrote when it
+# decides whose failure it is. That is why non-code writes are recorded too: a
+# config file this session edited is its own. Only a myspec project or one
+# with a stop gate (.myspec.json or .claude/verification.json) gets the file.
+#
+# Implement events: a Bash command that runs `session-event.sh implement
+# start|stop` (feature-implement's orchestration state) is recorded here as
+# `{"t":"implement","state":...}`, in the state file of the payload cwd's
+# checkout. The model never sees its session id; this hook's payload has it.
 #
 # Session log: .claude/state/sessions/<session_id>.md in the PRIMARY checkout
 # of the repository the edited file belongs to, created on the first code edit
@@ -45,9 +53,8 @@
 #
 # Subagents (#225): a subagent's tool events carry the parent's session_id
 # plus an agent_id (and agent_type); the main session's carry neither. The
-# ledger stays keyed by session_id, so a subagent's write arms the parent's
-# Stop gate. Its lines gain a fourth field, the agent_id, which the Stop
-# hook's three-field parser ignores; a main-session line is unchanged. In the
+# state file stays keyed by session_id, so a subagent's write arms the
+# parent's Stop gate. Its events gain an "agent" field, the agent_id. In the
 # log, a subagent's path is tagged `(subagent <agent_id>[, <agent_type>])`, so
 # session-complete can tell the controller's own edits from delegated ones.
 #
@@ -65,9 +72,11 @@ set -euo pipefail
 command -v jq >/dev/null 2>&1 || exit 0
 HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
 [ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
-[ -f "$HOOK_CORE" ] || exit 0
+[ -f "$HOOK_CORE" ] && [ -f "$(dirname "$HOOK_CORE")/session-event.sh" ] || exit 0
 # shellcheck source=lib/hook-core.sh
 . "$HOOK_CORE"
+# shellcheck source=lib/session-event.sh
+. "$HOOK_LIB/session-event.sh"
 
 CODE_EXT='(ts|tsx|vue|js|jsx|mjs|cjs|mts|cts|py|rb|go|java|php|rs|cs|swift|kt|sh|bash|graphql|gql)'
 
@@ -363,22 +372,37 @@ bash_write_targets() {
   return 0
 }
 
-# ledger_add <kind> <root> <rel>: appends the line unless it is already there
-# since the root's last `verified` line. A subagent's line ends in a fourth
-# field, its agent_id; the Stop hook reads only the first three.
+# ledger_add <kind> <root> <rel>: records the write in the session-state
+# file of <root>'s repository, unless the same write is already there since
+# the root's last `verified` event. A subagent's event carries its agent_id.
 ledger_add() {
-  local line
-  line=$(printf '%s\t%s\t%s' "$1" "$2" "$3")
-  if [ -n "$AGENT_ID" ]; then
-    line="$line"$'\t'"$AGENT_ID"
-  fi
-  if [ -f "$LEDGER" ] && L="$line" R="$2" awk -F'\t' '
-      $1 == "verified" && $2 == ENVIRON["R"] { seen = 0; next }
-      $0 == ENVIRON["L"] { seen = 1 }
-      END { exit !seen }' "$LEDGER"; then
-    return 0
-  fi
-  printf '%s\n' "$line" >> "$LEDGER"
+  local home
+  home=$(session_home "$2") || return 0
+  session_tracked "$home" || return 0
+  session_seen "$home" "$SESSION_ID" "$1" "$2" "$3" "$AGENT_ID" && return 0
+  session_append "$home" "$SESSION_ID" "$(jq -nc --arg k "$1" --arg r "$2" --arg p "$3" --arg a "$AGENT_ID" \
+    '{t: "write", root: $r, rel: $p, kind: $k} + (if $a != "" then {agent: $a} else {} end)')" || true
+}
+
+# implement_requests <command> -> `start` or `stop` for each segment that
+# runs session-event.sh implement <state>, the script called by any path.
+implement_requests() {
+  local line kline seg kseg
+  local -a words kwords
+  while IFS= read -r line && IFS= read -r kline <&3; do
+    seg=$(strip_command_prefix "${line#*$'\t'}")
+    kseg=$(strip_command_prefix "${kline#*$'\t'}")
+    read -ra words <<< "$seg"
+    read -ra kwords <<< "$kseg"
+    if [ "${#kwords[@]}" -lt 3 ] || [ "${#kwords[@]}" -ne "${#words[@]}" ]; then
+      continue
+    fi
+    [ "$(basename "$(decode_word "${kwords[0]}")")" = session-event.sh ] || continue
+    [ "${words[1]}" = implement ] || continue
+    case "${words[2]}" in start|stop) printf '%s\n' "${words[2]}" ;; esac
+  done < <(printf '%s' "$1" | sanitize_command | split_segments) \
+       3< <(printf '%s' "$1" | sanitize_command keep | split_segments)
+  return 0
 }
 
 # write_session_log <checkout root> <path>...: creates or extends the live log
@@ -513,6 +537,15 @@ elif [ -n "$COMMAND" ]; then
   # shellcheck source=lib/command-scan.sh
   . "$HOOK_LIB/command-scan.sh"
 
+  # feature-implement's orchestration state, recorded with this payload's
+  # session id in the cwd's checkout.
+  if [[ "$COMMAND" == *session-event.sh*implement* ]] && IMPLEMENT_HOME=$(session_home "$BASE_DIR") \
+      && session_tracked "$IMPLEMENT_HOME"; then
+    while IFS= read -r state; do
+      session_append "$IMPLEMENT_HOME" "$SESSION_ID" "{\"t\":\"implement\",\"state\":\"$state\"}" || true
+    done < <(implement_requests "$COMMAND")
+  fi
+
   # Cheap gate before the full scan: a write verb or a redirect at some
   # segment. Most Bash calls stop here.
   WRITE_PATTERNS=(
@@ -537,7 +570,6 @@ fi
 
 [ "${#TARGETS[@]}" -gt 0 ] || exit 0
 
-LEDGER="/tmp/.myspec-session-writes-${SESSION_ID}"
 CODE_ROOTS=()
 CODE_PATHS=()
 
