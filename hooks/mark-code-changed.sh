@@ -618,7 +618,12 @@ elif [ -n "$COMMAND" ]; then
     [ -n "$p" ] && TARGETS+=("$p")
   done < <(bash_write_targets "$COMMAND")
 
-  CONTEXT="Auto-created on a Bash write: \`$(printf '%s' "$COMMAND" | tr '\n' ' ' | head -c 120)\`."
+  # Parameter expansion, not `printf | tr | head -c`: head exits after 120
+  # bytes, tr dies of SIGPIPE on a long command (a heredoc write), and under
+  # pipefail plus set -e the hook exited 141 before writing the ledger (#249).
+  CONTEXT_CMD=${COMMAND:0:120}
+  CONTEXT_CMD=${CONTEXT_CMD//$'\n'/ }
+  CONTEXT="Auto-created on a Bash write: \`$CONTEXT_CMD\`."
 else
   exit 0
 fi
