@@ -1111,6 +1111,9 @@ expect_exit 0 "containers: the container findings are warnings, not errors"
 expect_line '^WARN +verification-exec-no-runin: .*check C0 runs a container exec without runIn — in a linked worktree this check will be refused' "containers: an exec without runIn is warned about"
 expect_line '^WARN +verification-exec-no-runin: .*check C1 ' "containers: a -w does not stand in for runIn"
 expect_line 'declare runIn and a containers entry' "containers: the fix names runIn and containers"
+# docs/ exists in the plugin repository, not in the project the doctor runs in:
+# a fix pointing there sends the user to a file they do not have.
+expect_no_line '(^|[^/[:alnum:]_.-])docs/' "containers: no finding points at a bare docs/ path"
 # shellcheck disable=SC2016 # a literal $ in the pattern
 # shellcheck disable=SC2016 # a literal $ in the pattern
 expect_line '^WARN +verification-runin-no-workdir: .*check C2 has runIn but its container exec passes neither -w/--workdir nor \$MYSPEC_CHECK_WORKDIR' "containers: a runIn exec without the workdir is warned about"
