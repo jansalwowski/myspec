@@ -37,9 +37,10 @@ if [ -f "$HOOK_LIB/glob-regex.sh" ]; then
 fi
 
 # payload_parse <json> NAME=<jq expr>... -> sets each NAME to its value, with
-# one jq call. A string is taken as is, null or a missing field or a failing
-# expression as empty, anything else as compact JSON (`true`, `[...]`).
-# Unparseable input leaves every NAME empty.
+# one jq call. A string is taken as is, less trailing newlines (as the
+# per-field `$(jq ...)` calls it replaces read it), null or a missing field or
+# a failing expression as empty, anything else as compact JSON (`true`,
+# `[...]`). Unparseable input leaves every NAME empty.
 # The locals carry a _pp_ prefix so no NAME a caller picks is shadowed.
 payload_parse() {
   local _pp_json="$1" _pp_spec _pp_name _pp_prog="" _pp_out
@@ -53,7 +54,7 @@ payload_parse() {
     _pp_prog="$_pp_prog\"$_pp_name=\" + ([try (${_pp_spec#*=})][0] | _str | @sh),"
   done
   [ -n "$_pp_prog" ] || return 0
-  _pp_out=$(printf '%s' "$_pp_json" | jq -r "def _str: if type == \"string\" then . elif . == null then \"\" else tojson end; ${_pp_prog%,}" 2>/dev/null) || return 0
+  _pp_out=$(printf '%s' "$_pp_json" | jq -r "def _str: if type == \"string\" then sub(\"\\n+$\"; \"\") elif . == null then \"\" else tojson end; ${_pp_prog%,}" 2>/dev/null) || return 0
   eval "$_pp_out"
 }
 

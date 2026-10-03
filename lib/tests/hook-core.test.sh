@@ -81,6 +81,8 @@ rc=0; payload_parse '{}' 'bad-name=.x' 2>/dev/null || rc=$?
 eq "$rc" 2 "payload: a name that is not a shell identifier is refused"
 
 eq "$(payload_field '{"a":{"b":"c"}}' .a.b)" c "payload_field prints one value"
+payload_parse '{"a":"x\n\ny\n\n"}' A=.a
+eq "$A" $'x\n\ny' "payload: trailing newlines are dropped, inner ones kept"
 
 # --- first_dir / existing_dir / physical_path ----------------------------------
 
