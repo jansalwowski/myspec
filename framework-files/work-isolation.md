@@ -10,7 +10,7 @@ updated: 2026-10-01
 
 Where code gets written is the user's call, not the agent's. `require-isolation-decision.sh` (PreToolUse `Write|Edit`) blocks the first source edit in the main checkout until the answer is recorded; `guard-worktree-context.sh` (PreToolUse `Bash`) blocks branch mutations on the main checkout always, and tree-specific commands there once a session has chosen a worktree.
 
-Edits under `${aiDir}/`, `.claude/`, `docs/` and the root agent files never trigger the **question** — doc work is not gated on an isolation decision. They are *not* exempt from an answer already given: once a session is in worktree mode, a doc edit aimed at the main checkout is blocked like any other. Two paths are pinned to the main checkout whatever the answer: `.claude/state/` (live session logs, isolation markers, the ID registry) and `${aiDir}/memory/sessions/` (the session archive).
+Edits under `${aiDir}/`, `.claude/`, `docs/` and the root agent files never trigger the **question** — doc work is not gated on an isolation decision. They are *not* exempt from an answer already given: once a session is in worktree mode, a doc edit aimed at the main checkout is blocked like any other. Two paths are pinned to the main checkout whatever the answer: `.claude/state/` (live session logs, session-state files, the ID registry) and `${aiDir}/memory/sessions/` (the session archive).
 
 ## At the start
 
@@ -32,7 +32,7 @@ The session id is embedded in the block message, and that is its only source. Ne
 
 Do not ask about a PR here. That question belongs at the end, when the size of the change is known.
 
-**Subagents cannot prompt.** Decide before dispatching. A subagent that hits the gate must stop and report back, not ask. A subagent (its hook input carries `agent_id` or `agent_type`) with no decision of its own inherits the newest decision from the last 4h. A top-level session never inherits another session's answer; it is asked. `isolation: "worktree"` subagents edit inside their worktree, which needs no decision, but an edit from a worktree back into the main checkout is gated like any other.
+**Subagents cannot prompt.** Decide before dispatching. A subagent that hits the gate must stop and report back, not ask. A subagent shares its parent's session id, so it follows the parent's decision. No session inherits another session's answer: one without a decision is asked, and a subagent without one stops and reports. `isolation: "worktree"` subagents edit inside their worktree, which needs no decision, but an edit from a worktree back into the main checkout is gated like any other.
 
 ## develop mode
 

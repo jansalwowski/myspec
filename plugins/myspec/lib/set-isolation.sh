@@ -14,12 +14,17 @@
 # worktree usually does not exist yet at decision time) by re-running the same
 # command with the path appended.
 #
-# Marker: .claude/state/isolation/<session_id>.json  (gitignored)
+# Record: an `isolation` event in the session-state file,
+# .claude/state/sessions/<session_id>.jsonl (gitignored), through
+# lib/session-event.sh. The session's last one decides; --reset appends one
+# with an empty mode.
 
 set -euo pipefail
 
 # shellcheck source=lib/hook-core.sh
 . "$(dirname "${BASH_SOURCE[0]}")/hook-core.sh"
+# shellcheck source=lib/session-event.sh
+. "$HOOK_LIB/session-event.sh"
 
 if ! command -v jq >/dev/null 2>&1; then
   echo "set-isolation: jq is required" >&2
@@ -32,47 +37,30 @@ if ! REPO_ROOT=$(hook_repo_root "") || ! checkout_facts "$REPO_ROOT"; then
   exit 1
 fi
 
-# Markers live in the MAIN checkout (checkout_facts): the hooks read them
+# The state file lives in the MAIN checkout (session_home): the hooks read it
 # there, and a linked worktree may be gone by the time the decision would
 # matter. A worktree whose main checkout git cannot name (a bare repository)
 # keeps its own.
-REPO_ROOT="${CF_MAIN:-$CF_ROOT}"
-
-STATE_DIR="$REPO_ROOT/.claude/state/isolation"
-
-# Markers outlive their TTL (HOOK_DECISION_TTL, 8h) as dead files; without a sweep they accumulate
-# indefinitely. Expired markers are also what `ls -t | head -1` inheritance
-# would otherwise walk.
-prune_expired() {
-  local f age
-
-  [ -d "$STATE_DIR" ] || return 0
-
-  for f in "$STATE_DIR"/*.json; do
-    [ -f "$f" ] || continue
-    age=$(( $(date +%s) - $(jq -r '.decided_at // 0' "$f" 2>/dev/null || printf 0) ))
-    if [ "$age" -gt "$HOOK_DECISION_TTL" ]; then
-      rm -f "$f"
-    fi
-  done
-}
+REPO_ROOT=$(session_home "$REPO_ROOT")
+STATE_DIR="$REPO_ROOT/.claude/state/sessions"
 
 if [ "${1:-}" = "--show" ]; then
-  if [ ! -d "$STATE_DIR" ]; then
-    echo "(no isolation decisions recorded)"
-    exit 0
-  fi
-
-  NOW=$(date +%s)
   FOUND=0
-  for f in "$STATE_DIR"/*.json; do
+  NOW=$(date +%s)
+  for f in "$STATE_DIR"/*.jsonl; do
     [ -f "$f" ] || continue
+    ID=$(basename "$f" .jsonl)
+    # shellcheck disable=SC2016 # a jq program: $ev is a jq variable
+    LAST=$(session_query "$REPO_ROOT" "$ID" '[$ev[] | select(.t == "isolation")] | last // empty
+      | [(.mode // "" | tostring), (.at // 0 | tostring), (.note // "" | tostring), (.path // "" | tostring)] | join("\u001f")')
+    [ -n "$LAST" ] || continue
+    IFS=$'\037' read -r MODE AT NOTE WT_PATH <<< "$LAST"
+    case "$AT" in ''|*[!0-9]*) AT=0 ;; esac
+    # A reset, or a decision past HOOK_DECISION_TTL, decides nothing.
+    if [ -z "$MODE" ] || [ $(( NOW - AT )) -ge "$HOOK_DECISION_TTL" ]; then
+      continue
+    fi
     FOUND=1
-    MODE=$(jq -r '.mode // "?"' "$f")
-    AT=$(jq -r '.decided_at // 0' "$f")
-    NOTE=$(jq -r '.note // ""' "$f")
-    WT_PATH=$(jq -r '.worktree_path // ""' "$f")
-    ID=$(basename "$f" .json)
     printf '%s  mode=%-8s age=%dmin  %s%s\n' \
       "${ID:0:8}" "$MODE" "$(( (NOW - AT) / 60 ))" "$NOTE" \
       "$([ -n "$WT_PATH" ] && printf ' [%s]' "$WT_PATH")"
@@ -91,7 +79,14 @@ if [ "${1:-}" = "--reset" ]; then
     exit 1
   fi
 
-  rm -f "$STATE_DIR/${SESSION_ID}.json"
+  if ! session_file "$REPO_ROOT" "$SESSION_ID" >/dev/null; then
+    echo "set-isolation: bad session id '$SESSION_ID'" >&2
+    exit 1
+  fi
+  session_isolation "$REPO_ROOT" "$SESSION_ID"
+  if [ -n "$ISO_MODE" ]; then
+    session_append "$REPO_ROOT" "$SESSION_ID" '{"t":"isolation","mode":"","path":""}'
+  fi
   echo "isolation decision cleared for ${SESSION_ID:0:8} — the next source edit will re-ask"
   exit 0
 fi
@@ -126,19 +121,21 @@ if [ "$MODE" != "develop" ] && [ "$MODE" != "worktree" ]; then
   exit 1
 fi
 
-mkdir -p "$STATE_DIR"
-prune_expired
+if ! session_file "$REPO_ROOT" "$SESSION_ID" >/dev/null; then
+  echo "set-isolation: bad session id '$SESSION_ID'" >&2
+  exit 1
+fi
 
-# A live marker for this id is a decision already made — usually by another
+# A live decision for this id is a decision already made — usually by another
 # session whose id was guessed from .claude/state/sessions/ (issue #146). The
 # model never sees its own session id; the only reliable source is the block
 # message of require-isolation-decision.sh. So a re-run may add a worktree path
 # to the same answer, but never flip the mode or repoint the path: that takes
 # an explicit --reset first.
-EXISTING="$STATE_DIR/${SESSION_ID}.json"
-if [ -f "$EXISTING" ]; then
-  OLD_MODE=$(jq -r '.mode // empty' "$EXISTING" 2>/dev/null || printf '')
-  OLD_PATH=$(jq -r '.worktree_path // empty' "$EXISTING" 2>/dev/null || printf '')
+session_isolation "$REPO_ROOT" "$SESSION_ID"
+if [ -n "$ISO_MODE" ]; then
+  OLD_MODE="$ISO_MODE"
+  OLD_PATH="$ISO_PATH"
   if [ "$OLD_MODE" != "$MODE" ] \
       || { [ -n "$OLD_PATH" ] && [ -n "$WORKTREE_PATH" ] && [ "$OLD_PATH" != "$WORKTREE_PATH" ]; }; then
     {
@@ -151,13 +148,8 @@ if [ -f "$EXISTING" ]; then
   [ -n "$WORKTREE_PATH" ] || WORKTREE_PATH="$OLD_PATH"
 fi
 
-jq -n \
-  --arg mode "$MODE" \
-  --arg note "$NOTE" \
-  --arg worktree_path "$WORKTREE_PATH" \
-  --argjson at "$(date +%s)" \
-  '{mode: $mode, decided_at: $at, note: $note, worktree_path: $worktree_path}' \
-  > "$STATE_DIR/${SESSION_ID}.json"
+session_append "$REPO_ROOT" "$SESSION_ID" "$(jq -nc --arg m "$MODE" --arg n "$NOTE" --arg p "$WORKTREE_PATH" \
+  '{t: "isolation", mode: $m, path: $p, note: $n}')"
 
 if [ "$MODE" = "develop" ]; then
   echo "isolation: develop — edits land in the main checkout. Do NOT commit unless asked; end-of-work promotion moves an uncommitted diff."

@@ -25,14 +25,15 @@ fi
 # living outside the repo and approve it.
 ROOT=$(cd "$(mktemp -d)" && pwd -P)
 REPO="$ROOT/checkout"
-mkdir -p "$REPO/.claude/state/isolation"
+STATE="$REPO/.claude/state/sessions"
+mkdir -p "$STATE"
 git init -q -b main "$REPO"
 printf '{"aiDir":".ai","frameworkVersion":"2.0.0"}\n' > "$REPO/.myspec.json"
 trap 'rm -rf "$ROOT"' EXIT
 
-mark() {  # mark <session-id> <mode> <age-seconds>
-  printf '{"mode":"%s","decided_at":%d,"note":""}\n' \
-    "$2" "$(( $(date +%s) - $3 ))" > "$REPO/.claude/state/isolation/$1.json"
+mark() {  # mark <session-id> <mode> <age-seconds>: an isolation event that old
+  printf '{"t":"isolation","mode":"%s","path":"","note":"","at":%d}\n' \
+    "$2" "$(( $(date +%s) - $3 ))" >> "$STATE/$1.jsonl"
 }
 
 PASS=0
@@ -92,7 +93,7 @@ mark old-sess develop 30000
 check block "expired decision, source"     old-sess "$REPO/server/api/foo.js"
 
 # --- no decision: exempt paths never prompt, source paths do ----------------
-rm -f "$REPO/.claude/state/isolation/"*.json
+rm -f "$STATE/"*.jsonl
 check allow "no decision, aiDir doc"       new-sess "$REPO/.ai/features/x/spec.md"
 check allow "no decision, .claude file"    new-sess "$REPO/.claude/settings.json"
 check allow "no decision, docs/ file"      new-sess "$REPO/docs/guide.md"
@@ -119,7 +120,7 @@ if printf '%s' "$OUT" | grep -qF 'Full procedure: .ai/work-isolation.md'; then P
 mark wt-sess worktree 60
 mark dev-sess develop 60
 check allow "worktree mode, live session log"   wt-sess "$REPO/.claude/state/sessions/abc123.md"
-check allow "worktree mode, isolation marker"   wt-sess "$REPO/.claude/state/isolation/abc123.json"
+check allow "worktree mode, session-state file" wt-sess "$REPO/.claude/state/sessions/abc123.jsonl"
 check allow "worktree mode, archived session"   wt-sess "$REPO/.ai/memory/sessions/archive/2026-08-31-x.md"
 check allow "develop mode, live session log"    dev-sess "$REPO/.claude/state/sessions/abc123.md"
 
@@ -131,13 +132,13 @@ check block "worktree mode, sessions lookalike"  wt-sess "$REPO/.ai/memory/sessi
 check block "worktree mode, other .claude file"  wt-sess "$REPO/.claude/rules/paths.md"
 
 # --- a configured aiDir moves the exemption with it ---------------------------
-rm -f "$REPO/.claude/state/isolation/"*.json
+rm -f "$STATE/"*.jsonl
 printf '{"aiDir":"docs/ai","frameworkVersion":"2.0.0"}\n' > "$REPO/.myspec.json"
 check allow "no decision, configured aiDir doc"  new-sess "$REPO/docs/ai/features/x/spec.md"
 check block "no decision, the old .ai path is source now" new-sess "$REPO/.ai/thing.js"
 
 # --- output contract: silence on allow, deny on block -------------------------
-rm -f "$REPO/.claude/state/isolation/"*.json
+rm -f "$STATE/"*.jsonl
 if run_hook "$REPO" new-sess "$REPO/components/Foo.vue" | jq -e '.hookSpecificOutput.permissionDecision == "deny" and .decision == "block"' >/dev/null; then
   PASS=$((PASS + 1))
 else
@@ -188,7 +189,7 @@ WTA="$REPO/.claude/worktrees/wt-a"
 
 # Issue #224: a cwd inside a linked worktree says nothing about the edited
 # file. A main-checkout path is still judged against the session's answer.
-rm -f "$REPO/.claude/state/isolation/"*.json
+rm -f "$STATE/"*.jsonl
 mark wt-sess worktree 60
 check_as block "cwd in worktree, worktree mode, main-checkout file" "$WTA" wt-sess "$REPO/components/Foo.vue"
 check_as block "cwd in worktree, worktree mode, main-checkout doc"  "$WTA" wt-sess "$REPO/.ai/features/x/spec.md"
@@ -197,26 +198,32 @@ check_as allow "cwd in worktree, relative path stays in the worktree" "$WTA" wt-
 check_as allow "cwd in worktree, main-checkout session log"         "$WTA" wt-sess "$REPO/.claude/state/sessions/abc.md"
 mark dev-sess develop 60
 check_as allow "cwd in worktree, develop mode, main-checkout file"  "$WTA" dev-sess "$REPO/components/Foo.vue"
-rm -f "$REPO/.claude/state/isolation/"*.json
+rm -f "$STATE/"*.jsonl
 check_as block "cwd in worktree, no decision, main-checkout source" "$WTA" new-sess "$REPO/components/Foo.vue"
 
-# Issue #146: only a subagent inherits the newest marker. A top-level session
-# (no agent_id / agent_type) with no marker of its own is asked.
-rm -f "$REPO/.claude/state/isolation/"*.json
+# Issue #146: no session is handed another session's decision. A subagent
+# shares its parent's session id (#225), so it reads the parent's decision
+# from the same file; one with another id has no decision either.
+rm -f "$STATE/"*.jsonl
 mark other-sess worktree 60
 check_as allow "top-level, another session chose worktree, doc edit" "$REPO" fresh-sess "$REPO/.ai/features/x/spec.md"
 check_as block "top-level, another session chose worktree, source asks"  "$REPO" fresh-sess "$REPO/components/Foo.vue"
 if jq -cn --arg f "$REPO/components/Foo.vue" --arg c "$REPO" '{tool_input: {file_path: $f}, cwd: $c, session_id: "fresh-sess"}' | "$HOOK" | grep -qF 'no work-isolation decision'; then
   PASS=$((PASS + 1))
 else
-  FAIL=$((FAIL + 1)); echo "FAIL  a top-level session without a marker must get the ask, not an inherited block" >&2
+  FAIL=$((FAIL + 1)); echo "FAIL  a top-level session without a decision must get the ask, not an inherited block" >&2
 fi
-check_as block "subagent (agent_id) inherits worktree"      "$REPO" child-sess "$REPO/.ai/features/x/spec.md" '{"agent_id":"a1","agent_type":"general-purpose"}'
-check_as block "subagent (agent_type only) inherits worktree" "$REPO" child-sess "$REPO/.ai/features/x/spec.md" '{"agent_type":"myspec:probe-executor"}'
-rm -f "$REPO/.claude/state/isolation/"*.json
+check_as block "subagent sharing the parent id follows worktree"  "$REPO" other-sess "$REPO/.ai/features/x/spec.md" '{"agent_id":"a1","agent_type":"general-purpose"}'
+check_as allow "subagent with another id inherits nothing (doc)" "$REPO" child-sess "$REPO/.ai/features/x/spec.md" '{"agent_id":"a1","agent_type":"general-purpose"}'
+if jq -cn --arg f "$REPO/components/Foo.vue" --arg c "$REPO" '{tool_input: {file_path: $f}, cwd: $c, session_id: "child-sess", agent_id: "a1"}' | "$HOOK" | grep -qF 'no work-isolation decision'; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); echo "FAIL  a subagent with another session id must not inherit the newest decision (step 7)" >&2
+fi
+rm -f "$STATE/"*.jsonl
 mark other-sess develop 60
 check_as block "top-level, another session chose develop, source asks" "$REPO" fresh-sess "$REPO/components/Foo.vue"
-check_as allow "subagent inherits develop"                  "$REPO" child-sess "$REPO/components/Foo.vue" '{"agent_id":"a1"}'
+check_as block "subagent with another id does not inherit develop" "$REPO" child-sess "$REPO/components/Foo.vue" '{"agent_type":"myspec:probe-executor"}'
 check_as allow "subagent sharing the parent id uses it"     "$REPO" other-sess "$REPO/components/Foo.vue" '{"agent_id":"a1"}'
 check_as block "empty agent_id is not a subagent"           "$REPO" fresh-sess "$REPO/components/Foo.vue" '{"agent_id":""}'
 
@@ -225,16 +232,29 @@ check_as block "empty agent_id is not a subagent"           "$REPO" fresh-sess "
 # miss the repo prefix and approve the edit as outside the repo.
 LINKED="$ROOT/linked-checkout"
 ln -s "$REPO" "$LINKED"
-rm -f "$REPO/.claude/state/isolation/"*.json
+rm -f "$STATE/"*.jsonl
 check_as block "symlinked path, no decision, source asks"       "$LINKED" link-sess "$LINKED/components/Foo.vue"
 check_as block "symlinked path, cwd physical, no decision"      "$REPO"   link-sess "$LINKED/components/Foo.vue"
 mark link-sess worktree 60
 check_as block "symlinked path, worktree mode, main-checkout file" "$LINKED" link-sess "$LINKED/components/Foo.vue"
 check_as allow "symlinked path, worktree mode, worktree file"   "$LINKED" link-sess "$LINKED/.claude/worktrees/wt-a/components/Foo.vue"
-rm -f "$REPO/.claude/state/isolation/"*.json
+rm -f "$STATE/"*.jsonl
 mark link-sess develop 60
 check_as allow "symlinked path, develop mode"                  "$LINKED" link-sess "$LINKED/components/Foo.vue"
 check_as allow "symlinked path outside the repo"               "$LINKED" link-sess "$ROOT/elsewhere/a.ts"
+
+# The real writer: set-isolation.sh records, --reset re-asks.
+SET_ISO="$(cd "$(dirname "$HOOK")" && pwd)/../lib/set-isolation.sh"
+rm -f "$STATE/"*.jsonl
+(cd "$REPO" && bash "$SET_ISO" real-sess worktree >/dev/null)
+check_as block "set-isolation worktree: main-checkout source blocked" "$REPO" real-sess "$REPO/components/Foo.vue"
+check_as block "set-isolation worktree, from a subagent of the session" "$WTA" real-sess "$REPO/components/Foo.vue" '{"agent_id":"a9"}'
+(cd "$REPO" && bash "$SET_ISO" --reset real-sess >/dev/null)
+if jq -cn --arg f "$REPO/components/Foo.vue" --arg c "$REPO" '{tool_input: {file_path: $f}, cwd: $c, session_id: "real-sess"}' | "$HOOK" | grep -qF 'no work-isolation decision'; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); echo "FAIL  after --reset the next source edit asks again" >&2
+fi
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
