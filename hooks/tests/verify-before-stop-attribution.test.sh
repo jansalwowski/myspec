@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Fixture for the stop gate's session scope (docs/stop-gate.md, R1, R2, R4).
 #
-# Arming goes through the real mark-code-changed.sh, so the ledger contract
-# between the two hooks is under test, not a hand-written marker. The gate must
+# Arming goes through the real mark-code-changed.sh, so the session-state
+# contract between the two hooks (lib/session-event.sh) is under test, not a
+# hand-written file. The gate must
 # run only after this session wrote code in this checkout (#145), and it must
 # not block a session on failures that name only files another session left
 # uncommitted in a shared checkout (#198). When it can't tell, it still blocks,
@@ -20,7 +21,7 @@ ROOT=$(cd "$(mktemp -d)" && pwd -P)
 REPO="$ROOT/checkout"
 SID="vbs-attr-$$"
 RAN="$ROOT/ran"
-trap 'rm -rf "$ROOT"; rm -f /tmp/.myspec-session-writes-'"$SID"'-* /tmp/.myspec-code-changed-'"$SID"'-*' EXIT
+trap 'rm -rf "$ROOT"; rm -f /tmp/.myspec-session-writes-'"$SID"'-*' EXIT
 
 PASS=0
 FAIL=0
@@ -292,13 +293,31 @@ OUT=$(stop 38)
 ran && fail "the submodule write counts as verified after the run" || ok
 git -C "$REPO/mod" checkout -q -- m.ts
 
-# --- legacy marker: armed, attribution off -----------------------------------------
+# --- the /tmp ledger of the previous release is imported once ----------------------
+# One minor release of migration (docs/stop-gate.md "Session writes"). The
+# path is the old hook's, so this case writes to /tmp itself; the trap cleans up.
 set_checks "$LINT"
-printf 'BROKEN\n' >> "$REPO/other.ts"
-touch "/tmp/.myspec-code-changed-$SID-40"
-OUT=$(stop 40)
-expect_decision block "$OUT" "a legacy marker arms the gate without attribution"
-[ ! -e "/tmp/.myspec-code-changed-$SID-40" ] && ok || fail "the legacy marker is removed after the run"
+printf 'BROKEN\n' >> "$REPO/app.ts"
+printf 'code\t%s\tapp.ts\n' "$REPO" > "/tmp/.myspec-session-writes-$SID-41"
+OUT=$(stop 41)
+expect_decision block "$OUT" "a session armed by the old /tmp ledger is still verified after the upgrade"
+expect_no_text "$OUT" 'did not write' "the imported writes count as the session's"
+[ -f "/tmp/.myspec-session-writes-$SID-41.imported" ] && [ ! -e "/tmp/.myspec-session-writes-$SID-41" ] \
+  && ok || fail "the old ledger is renamed .imported"
+OUT=$(stop 41)
+ran && fail "the imported session is verified, and not re-imported" || ok
+reset_tree
+
+# --- TMPDIR does not move the state ---------------------------------------------------
+set_checks "$LINT"
+printf 'BROKEN\n' >> "$REPO/app.ts"
+mkdir -p "$ROOT/tmpdir-a" "$ROOT/tmpdir-b"
+jq -n --arg s "$SID-42" --arg d "$REPO" --arg f "$REPO/app.ts" '{session_id: $s, tool_name: "Write", cwd: $d, tool_input: {file_path: $f}}' \
+  | TMPDIR="$ROOT/tmpdir-a" bash "$MARK" >/dev/null 2>&1
+rm -f "$RAN"
+OUT=$(jq -n --arg s "$SID-42" --arg d "$REPO" '{session_id: $s, cwd: $d}' | TMPDIR="$ROOT/tmpdir-b" bash "$HOOK" 2>/dev/null)
+expect_decision block "$OUT" "a write under one TMPDIR arms a stop under another"
+[ -f "$REPO/.claude/state/sessions/$SID-42.jsonl" ] && ok || fail "the state file is in the main checkout"
 reset_tree
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"

@@ -11,8 +11,8 @@
 # mount, or an undefined container, is refused without running. A runIn check
 # satisfies the #220 container-exec refusal.
 #
-# The ledger lines are written here directly, in the format
-# mark-code-changed.sh writes (<kind> TAB <root> TAB <repo-relative path>).
+# The write events are appended here directly through lib/session-event.sh,
+# in the form mark-code-changed.sh records them.
 #
 # Usage: verify-before-stop-check-scope.test.sh [path-to-hook]
 
@@ -24,7 +24,8 @@ HOOK="${1:-$HERE/../verify-before-stop.sh}"
 ROOT=$(cd "$(mktemp -d "$(cd "${TMPDIR:-/tmp}" && pwd -P)/t2c-scope.XXXXXX")" && pwd -P)
 SID="vbs-scope-$$"
 RAN="$ROOT/ran"
-trap 'rm -rf "$ROOT"; rm -f /tmp/.myspec-session-writes-'"$SID"'-* /tmp/.myspec-code-changed-'"$SID"'-*' EXIT
+trap 'rm -rf "$ROOT"' EXIT
+SESSION_EVENT="$HERE/../../lib/session-event.sh"
 
 PASS=0
 FAIL=0
@@ -68,9 +69,8 @@ check() {
     '{name: $n, command: $c, required: true} + $x'
 }
 
-# stop <root> <kind:path>... -> hook stdout. Each argument is one ledger line
-# for <root>; an argument "legacy" arms the gate with the legacy marker
-# instead. Env from the caller reaches the hook. Each call is a new session:
+# stop <root> <kind:path>... -> hook stdout. Each argument is one write event
+# for <root>. Env from the caller reaches the hook. Each call is a new session:
 # it runs in a $( ) subshell, so the counter lives in a file.
 printf '0\n' > "$ROOT/n"
 stop() {
@@ -82,11 +82,8 @@ stop() {
   rm -rf "$RAN"
   mkdir -p "$RAN"
   for a in "$@"; do
-    if [ "$a" = legacy ]; then
-      touch "/tmp/.myspec-code-changed-$sid"
-    else
-      printf '%s\t%s\t%s\n' "${a%%:*}" "$root" "${a#*:}" >> "/tmp/.myspec-session-writes-$sid"
-    fi
+    bash "$SESSION_EVENT" --root "$root" append "$sid" \
+      "$(jq -nc --arg k "${a%%:*}" --arg r "$root" --arg p "${a#*:}" '{t: "write", root: $r, rel: $p, kind: $k}')"
   done
   jq -n --arg s "$sid" --arg d "$root" '{session_id: $s, cwd: $d}' \
     | PATH="$ROOT/bin:$PATH" bash "$HOOK" 2>/dev/null
@@ -173,13 +170,6 @@ for bad in '"api/**"' '[]' '["/abs/**"]' '["../api/**"]' '[""]' '[1]'; do
   expect yes "$(ran B)" "paths $bad is unusable, so the check runs"
   has "paths setting was ignored" "$(text "$out")" "paths $bad: the message names the ignored setting"
 done
-
-# The legacy marker carries no list of written files: scoped checks run.
-set_config "$MAIN" "{\"checks\":[$API,$WEB]}"
-out=$(stop "$MAIN" legacy)
-expect yes "$(ran Api)" "legacy marker: a scoped check runs"
-expect yes "$(ran Web)" "legacy marker: every scoped check runs"
-lacks "skipped" "$(text "$out")" "legacy marker: nothing is reported skipped"
 
 # A linked worktree is scoped by the files written in it, not in main.
 WT_P="$MAIN/.claude/worktrees/paths"

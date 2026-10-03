@@ -18,12 +18,21 @@ PROVISION="$HERE/../../lib/worktree-provision.sh"
 
 ROOT=$(cd "$(mktemp -d)" && pwd -P)
 SID="vbs-$$"
-trap 'rm -rf "$ROOT"; rm -f /tmp/.myspec-code-changed-'"$SID"'-*' EXIT
+trap 'rm -rf "$ROOT"' EXIT
 
 PASS=0
 FAIL=0
 ok()   { PASS=$((PASS + 1)); }
 fail() { FAIL=$((FAIL + 1)); printf 'FAIL  %s\n' "$1" >&2; }
+
+# arm <sid> <cwd>: a code write in the cwd's checkout, recorded the way
+# mark-code-changed.sh records it (lib/session-event.sh).
+SESSION_EVENT="$(cd "$(dirname "$HOOK")" && pwd)/../lib/session-event.sh"
+arm() {
+  local top
+  top=$(git -C "$2" rev-parse --show-toplevel)
+  bash "$SESSION_EVENT" --root "$top" append "$1" "$(jq -nc --arg r "$top" '{t: "write", root: $r, rel: "src/edited.ts", kind: "code"}')"
+}
 
 # new_repo <name> <with-lockfile:0|1> -> prints main checkout path
 new_repo() {
@@ -42,7 +51,7 @@ new_repo() {
 
 # stop <sid-suffix> <cwd> -> prints the decision
 stop() {
-  touch "/tmp/.myspec-code-changed-$SID-$1"
+  arm "$SID-$1" "$2"
   printf '{"session_id":"%s-%s","cwd":%s}' "$SID" "$1" "$(printf '%s' "$2" | jq -Rs .)" \
     | bash "$HOOK" 2>/dev/null | jq -r '.decision'
 }
@@ -62,7 +71,8 @@ expect approve "$(stop 1 "$WT")" "linked node_modules with identical lockfile is
 # --- uncommitted lockfile edit under the link: blocked ---------------------
 printf '{"lockfileVersion":3,"x":1}\n' > "$WT/package-lock.json"
 expect block "$(stop 2 "$WT")" "uncommitted lockfile change under a link blocks"
-[ -f "/tmp/.myspec-code-changed-$SID-2" ] && ok || fail "block leaves the marker in place"
+bash "$SESSION_EVENT" --root "$WT" events "$SID-2" | jq -e 'select(.t == "verified")' >/dev/null \
+  && fail "a block records no verified event, so the checkout stays armed" || ok
 
 # --- committed lockfile change, stale link: blocked -------------------------
 git -C "$WT" commit -q -am "bump lock"
@@ -260,7 +270,7 @@ compose_stop() {
   local cfg
   cfg=$(jq -n --arg c "$3" '{checks:[{name:"Lint",command:$c,required:true}]}')
   printf '%s\n' "$cfg" > "$2/.claude/verification.json"
-  touch "/tmp/.myspec-code-changed-$SID-$1"
+  arm "$SID-$1" "$2"
   printf '{"session_id":"%s-%s","cwd":%s}' "$SID" "$1" "$(printf '%s' "$2" | jq -Rs .)" \
     | PATH="$BIN:$PATH" bash "$HOOK" 2>/dev/null | jq -r '[.decision, (.reason // "")] | @tsv'
 }
@@ -349,7 +359,7 @@ printf '#!/bin/sh\nfor a in "$@"; do [ "$a" = -lname ] && { echo "find: unrecogn
 chmod +x "$SHIM/find"
 rm "$MAIN_W/apps/web/node_modules/@acme/ui"
 ln -s ../../../../packages/ui "$MAIN_W/apps/web/node_modules/@acme/ui"
-touch "/tmp/.myspec-code-changed-$SID-144"
+arm "$SID-144" "$WT_W"
 d=$(printf '{"session_id":"%s-144","cwd":%s}' "$SID" "$(printf '%s' "$WT_W" | jq -Rs .)" \
   | PATH="$SHIM:$PATH" bash "$HOOK" 2>/dev/null | jq -r '.decision')
 expect block "$d" "a find without -lname still blocks a workspace link into main"
@@ -358,7 +368,7 @@ expect block "$d" "a find without -lname still blocks a workspace link into main
 # unscanned tree is never accepted.
 # shellcheck disable=SC2016 # the shim's own "$@", expanded when it runs
 printf '#!/bin/sh\nfor a in "$@"; do [ "$a" = -mindepth ] && { echo "find: unrecognized: -mindepth" >&2; exit 1; }; done\nexec %s "$@"\n' "$REAL_FIND" > "$SHIM/find"
-touch "/tmp/.myspec-code-changed-$SID-145"
+arm "$SID-145" "$WT_W"
 d=$(printf '{"session_id":"%s-145","cwd":%s}' "$SID" "$(printf '%s' "$WT_W" | jq -Rs .)" \
   | PATH="$SHIM:$PATH" bash "$HOOK" 2>/dev/null | jq -r '.decision')
 expect block "$d" "a find without -mindepth leaves the tree unscanned, which blocks"

@@ -9,8 +9,9 @@
 # files another session left uncommitted there becomes a non-blocking
 # systemMessage warning. Requirements behind each rule: docs/stop-gate.md in
 # the plugin repository.
-# During feature-implement (.claude/state/implement-in-progress.json, at most
-# 8h old) check failures become a non-blocking systemMessage warning instead.
+# During feature-implement (an `implement start` event in the session's state
+# file, at most 8h old) check failures become a non-blocking systemMessage
+# warning instead.
 # Before any check runs, blocks when a dependency directory (each guarded
 # isolation.provision.symlink entry, plus node_modules, vendor,
 # vendor-bin/*/vendor, .venv, venv) is a symlink into a checkout whose
@@ -35,11 +36,14 @@ approve() {
 command -v jq >/dev/null 2>&1 || approve
 HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
 [ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
-if [ ! -f "$HOOK_CORE" ] || [ ! -f "$(dirname "$HOOK_CORE")/dependency-map.sh" ]; then
+if [ ! -f "$HOOK_CORE" ] || [ ! -f "$(dirname "$HOOK_CORE")/dependency-map.sh" ] \
+    || [ ! -f "$(dirname "$HOOK_CORE")/session-event.sh" ]; then
   approve
 fi
 # shellcheck source=lib/hook-core.sh
 . "$HOOK_CORE"
+# shellcheck source=lib/session-event.sh
+. "$HOOK_LIB/session-event.sh"
 # shellcheck source=lib/dependency-map.sh
 . "$HOOK_LIB/dependency-map.sh"
 
@@ -105,22 +109,21 @@ CONFIG_FILE="$REPO_ROOT/.claude/verification.json"
 [ -f "$CONFIG_FILE" ] || approve
 
 # Whether to verify, and which checkouts. mark-code-changed.sh (PostToolUse)
-# appends every file the session writes to a per-session ledger, keyed by the
-# physical root of the checkout holding it (docs/stop-gate.md in the plugin
-# repo). A checkout is armed when a `code` line for its root comes after its
-# last `verified` line. Each armed checkout of this repository (same git common
-# dir as the cwd's) is verified, once: the harness cwd is not necessarily where
-# the edits are, and verifying an untouched main checkout while the session
-# edited a linked worktree reports a green that describes the wrong tree. A
-# research session over a dirty tree, and a session whose writes all landed in
-# another repository, run no checks. The empty marker the ledger replaced
-# (/tmp/.myspec-code-changed-<id>, written by an older hook) arms the cwd's
-# checkout, with attribution off: it carries no list of what the session wrote.
-LEDGER="/tmp/.myspec-session-writes-${SESSION_ID}"
-LEGACY_MARKER="/tmp/.myspec-code-changed-${SESSION_ID}"
+# records every file the session writes as a `write` event in the session's
+# state file (lib/session-event.sh), keyed by the physical root of the
+# checkout holding it (docs/stop-gate.md in the plugin repo). A checkout is
+# armed when a `code` write for its root comes after its last `verified`
+# event. Each armed checkout of this repository (same git common dir as the
+# cwd's) is verified, once: the harness cwd is not necessarily where the edits
+# are, and verifying an untouched main checkout while the session edited a
+# linked worktree reports a green that describes the wrong tree. A research
+# session over a dirty tree, and a session whose writes all landed in another
+# repository, run no checks.
 ORIG_ROOT=$(cd "$REPO_ROOT" && pwd -P)
+# The state file lives in the main checkout of the cwd's repository, where
+# the writes to every checkout of it are filed.
+STATE_HOME=$(session_home "$ORIG_ROOT") || STATE_HOME="$ORIG_ROOT"
 VERIFY_ROOTS=()
-ATTRIBUTE=1
 
 # common_dir <dir> -> the physical git common dir of the checkout at <dir>.
 common_dir() {
@@ -134,18 +137,6 @@ add_verify_root() {
     [ "$r" = "$1" ] && return 0
   done
   VERIFY_ROOTS+=("$1")
-}
-
-# armed_roots -> each root with a `code` line after its last `verified` line,
-# in first-written order.
-armed_roots() {
-  awk -F'\t' '
-    $1 == "verified" { armed[$2] = 0; next }
-    $1 == "code" {
-      if (!($2 in seen)) { seen[$2] = 1; roots[++n] = $2 }
-      armed[$2] = 1
-    }
-    END { for (i = 1; i <= n; i++) if (armed[roots[i]]) print roots[i] }' "$LEDGER"
 }
 
 # same_repo <root> -> 0 when <root> is a checkout of the cwd's repository (the
@@ -162,28 +153,22 @@ same_repo() {
 # A checkout nested inside the cwd's tree that is not a checkout of this
 # repository (a submodule, whose common dir is .git/modules/<name>) is
 # verified through the cwd's checkout, whose checks may build or test it. Its
-# root still gets its `verified` line (NESTED_ROOTS).
+# root still gets its `verified` event (NESTED_ROOTS).
 NESTED_ROOTS=()
 if [ -n "$SESSION_ID" ]; then
-  if [ -f "$LEDGER" ]; then
-    while IFS= read -r root; do
-      [ -d "$root" ] || continue
-      if same_repo "$root"; then
-        add_verify_root "$root"
-      else
-        case "$root/" in
-          "$ORIG_ROOT"/*)
-            add_verify_root "$ORIG_ROOT"
-            NESTED_ROOTS+=("$root")
-            ;;
-        esac
-      fi
-    done < <(armed_roots)
-  fi
-  if [ -f "$LEGACY_MARKER" ]; then
-    ATTRIBUTE=0
-    add_verify_root "$ORIG_ROOT"
-  fi
+  while IFS= read -r root; do
+    [ -d "$root" ] || continue
+    if same_repo "$root"; then
+      add_verify_root "$root"
+    else
+      case "$root/" in
+        "$ORIG_ROOT"/*)
+          add_verify_root "$ORIG_ROOT"
+          NESTED_ROOTS+=("$root")
+          ;;
+      esac
+    fi
+  done < <(session_armed_roots "$STATE_HOME" "$SESSION_ID")
 fi
 
 # No code written in this repository since the last run — skip verification
@@ -192,9 +177,9 @@ fi
 # A symlinked dependency directory (node_modules, vendor, .venv, ...) makes
 # every check below run against ANOTHER checkout dependency tree, so the gate
 # reports a green that describes the wrong tree. That silent false pass is
-# worse than no gate at all, so block. The marker is deliberately left in
-# place (the EXIT trap is registered below) so the block persists until a
-# real install exists.
+# worse than no gate at all, so block. No `verified` event is recorded (the
+# EXIT trap is registered below), so the block persists until a real install
+# exists.
 # Checked: every isolation.provision.symlink entry, plus each built-in
 # dependency directory at the root (DEP_DIRS) the config does not list, so a
 # hand-made link into another checkout of this repo is caught too (one into a
@@ -311,18 +296,15 @@ if [ "$ALLOW_LINKED" != "true" ] && [ "${MYSPEC_ALLOW_LINKED_MODULES:-}" != "1" 
 fi
 done
 
-# Once the checks run (success or failure), the ledger gets a `verified` line
-# for each verified checkout, so only a later code write re-arms it, and a
-# legacy marker is removed. The ledger itself stays: it is the list of what
-# this session wrote, which attribution below needs on every later run.
+# Once the checks run (success or failure), the state file gets a `verified`
+# event for each verified checkout, so only a later code write re-arms it.
+# The writes stay: they are the list of what this session wrote, which
+# attribution below needs on every later run.
 finish_run() {
   local r
-  rm -f "$LEGACY_MARKER"
-  if [ -f "$LEDGER" ]; then
-    for r in "${VERIFY_ROOTS[@]}" ${NESTED_ROOTS[@]+"${NESTED_ROOTS[@]}"}; do
-      printf 'verified\t%s\t-\n' "$r" >> "$LEDGER"
-    done
-  fi
+  for r in "${VERIFY_ROOTS[@]}" ${NESTED_ROOTS[@]+"${NESTED_ROOTS[@]}"}; do
+    session_append "$STATE_HOME" "$SESSION_ID" "$(jq -nc --arg r "$r" '{t: "verified", root: $r}')" || true
+  done
 }
 trap 'finish_run' EXIT
 
@@ -458,10 +440,7 @@ run_capped() {
 # session_files -> repo-relative paths this session wrote in this checkout,
 # including those in a checkout nested inside it (a submodule).
 session_files() {
-  R="$ROOT_KEY" awk -F'\t' '
-    $1 != "code" && $1 != "file" { next }
-    $2 == ENVIRON["R"] { print $3; next }
-    index($2, ENVIRON["R"] "/") == 1 { print substr($2, length(ENVIRON["R"]) + 2) "/" $3 }' "$LEDGER" | sort -u
+  session_written "$STATE_HOME" "$SESSION_ID" "$ROOT_KEY"
 }
 
 # changed_files -> uncommitted and untracked paths, both sides of a rename.
@@ -720,9 +699,6 @@ paths_verdict() {
     fi
     alt="${alt:+$alt|}$re"
   done < <(printf '%s' "$1" | jq -r '.paths[]')
-  # The legacy marker carries no list of what the session wrote, so nothing
-  # can be ruled out: the check runs.
-  [ "$ATTRIBUTE" -eq 1 ] || return 0
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     [[ "$f" =~ $alt ]] && return 0
@@ -834,38 +810,24 @@ check_workdir() {
   [ -n "$CHECK_WORKDIR" ] || CHECK_WORKDIR=/
 }
 
-# Orchestration marker. While /myspec:feature-implement runs, the controller
+# Orchestration state. While /myspec:feature-implement runs, the controller
 # ends many turns on a tree that is red by design: a barrier accepted with a
 # recorded failure, a fix round in flight in a subagent, a failing test owned
 # by the next phase. Blocking there forces a turn the controller cannot use
 # (it may not fix code itself), so failures downgrade to a non-blocking
-# warning. The skill writes the marker at setup and removes it before its
-# final verification; feature-complete removes it too. It lives in the
-# checkout the controller works in (the cwd's, ORIG_ROOT), and it is read
-# once, there, for the whole session: the task worktrees its subagents edit
-# share the session id, so their writes arm this gate too, and they carry no
-# marker of their own. A concurrent run in another checkout has another cwd
-# and keeps its own gate. A marker older than HOOK_DECISION_TTL (8h, the
-# isolation-decision TTL) or without a readable started_at is a crashed run:
-# it is deleted and the gate blocks.
+# warning. The skill runs `session-event.sh implement start` at setup and
+# `implement stop` before its final verification; feature-complete stops it
+# too. The state is the session's own (lib/session-event.sh), read once for
+# the whole session: the task worktrees its subagents edit share the session
+# id, so their writes arm this gate too and the same state covers them.
+# Another session's run, in this checkout or another, keeps its own gate. A
+# start older than HOOK_DECISION_TTL (8h, the isolation-decision TTL) is a
+# crashed run, and the gate blocks.
 # Only the verification.json checks are downgraded; the conformance and
 # symlink blocks above are session damage, not expected red.
-IMPLEMENT_MARKER="$ORIG_ROOT/.claude/state/implement-in-progress.json"
 IMPLEMENT_ACTIVE=0
-if [ -f "$IMPLEMENT_MARKER" ]; then
-  STARTED_AT=$(jq -r '.started_at // empty' "$IMPLEMENT_MARKER" 2>/dev/null || printf '')
-  case "$STARTED_AT" in
-    ''|*[!0-9]*) STARTED_AT="" ;;
-  esac
-  if [ -n "$STARTED_AT" ]; then
-    MARKER_AGE=$(( $(date +%s) - STARTED_AT ))
-    if [ "$MARKER_AGE" -ge 0 ] && [ "$MARKER_AGE" -le "$HOOK_DECISION_TTL" ]; then
-      IMPLEMENT_ACTIVE=1
-    fi
-  fi
-  if [ "$IMPLEMENT_ACTIVE" -eq 0 ]; then
-    rm -f "$IMPLEMENT_MARKER"
-  fi
+if session_implement_active "$STATE_HOME" "$SESSION_ID"; then
+  IMPLEMENT_ACTIVE=1
 fi
 
 # Run each required check, once per checkout to verify.
@@ -877,8 +839,8 @@ TIMED_OUT_CHECKS=()
 # Checks refused without running: their result would describe another tree.
 UNVERIFIABLE_CHECKS=()
 FAILED_OUTPUT=()
-# A failure blocks unless its checkout carries a live feature-implement marker
-# or attribution clears it (above). Notes say which, for the report.
+# A failure blocks unless the session is in a live feature-implement run or
+# attribution clears it (above). Notes say which, for the report.
 BLOCKING_FAILURE=0
 WARN_NOTES=()
 BLOCK_NOTES=()
@@ -901,12 +863,8 @@ ROOT_KEY="$REPO_ROOT"
 ROOT_IS_LINKED=0
 is_linked_worktree "$REPO_ROOT" && ROOT_IS_LINKED=1
 # The files this session wrote in this checkout, one repo-relative path per
-# line, for a check that scopes itself to them (a per-file linter). Empty
-# when a legacy marker armed the gate.
-MYSPEC_SESSION_FILES=""
-if [ "$ATTRIBUTE" -eq 1 ] && [ -f "$LEDGER" ]; then
-  MYSPEC_SESSION_FILES=$(session_files)
-fi
+# line, for a check that scopes itself to them (a per-file linter).
+MYSPEC_SESSION_FILES=$(session_files)
 export MYSPEC_SESSION_FILES
 UNSEEN_READY=0
 
@@ -1053,11 +1011,11 @@ for i in $(seq 0 $((CHECKS_COUNT - 1))); do
 done
 if [ "${#FAILED_OUTPUT[@]}" -gt "$ROOT_FAILURES" ]; then
   if [ "$IMPLEMENT_ACTIVE" -eq 1 ]; then
-    WARN_NOTES+=("Failing${ROOT_LABEL} during feature-implement orchestration; not blocking (marker .claude/state/implement-in-progress.json). The final verification step still gates.")
+    WARN_NOTES+=("Failing${ROOT_LABEL} during feature-implement orchestration; not blocking (session-event.sh implement start). The final verification step still gates.")
   else
     ATTRIBUTION=""
     ATTRIBUTION_WARN=0
-    if [ "$ATTRIBUTE" -eq 1 ] && [ "${#FAILED_CHECKS[@]}" -gt "$ROOT_FAILED_START" ]; then
+    if [ "${#FAILED_CHECKS[@]}" -gt "$ROOT_FAILED_START" ]; then
       attribute_failures
     fi
     if [ "$ATTRIBUTION_WARN" -eq 1 ]; then

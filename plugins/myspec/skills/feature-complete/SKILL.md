@@ -106,7 +106,7 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 
 ### Phase 2 — Verification
 
-1. Remove any leftover feature-implement orchestration marker (`rm -f "$(git rev-parse --show-toplevel)/.claude/state/implement-in-progress.json"`) — while it exists the Stop hook only warns on failing checks. Then read `.claude/verification.json` and run each required check. Export a fresh `MYSPEC_CHECK_RUN_ID` per check. When a check is killed or times out, run its `cleanup` (if it declares one) with the same `MYSPEC_CHECK_RUN_ID` before running that check again: a kill stops only the local client, and work it started in a container or on another host keeps running
+1. Remove any leftover feature-implement orchestration marker (`.claude/lib/session-event.sh implement stop`) — while it is set the Stop hook only warns on failing checks. Then read `.claude/verification.json` and run each required check. Export a fresh `MYSPEC_CHECK_RUN_ID` per check. When a check is killed or times out, run its `cleanup` (if it declares one) with the same `MYSPEC_CHECK_RUN_ID` before running that check again: a kill stops only the local client, and work it started in a container or on another host keeps running
 2. Run project documentation audit command if configured
 3. If all pass → continue to Phase 3
 

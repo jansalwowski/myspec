@@ -7,16 +7,19 @@
 # that list is how a skill finds its own session. Bash writes create a log
 # too, but only for what the command writes: a doc heredoc that merely mentions
 # a code path, a grep over one, a script it runs, or a redirect to /dev/null
-# must not (#145, #179). The ledger for the Stop hook records every written
-# file under the root of the checkout holding it, so a write elsewhere never
-# arms this checkout. And a repository without .myspec.json gets ledger lines
-# (code did change) but no log.
+# must not (#145, #179). The ledger for the Stop hook (write events in the
+# session-state file, lib/session-event.sh) records every written file under
+# the root of the checkout holding it, so a write elsewhere never arms this
+# checkout. A repository with neither .myspec.json nor a stop gate gets
+# neither ledger nor log. A Bash command running `session-event.sh implement
+# start|stop` records the implement event with the payload's session id.
 #
 # Usage: mark-code-changed.test.sh [path-to-hook]
 
 set -uo pipefail
 
 HOOK="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../mark-code-changed.sh}"
+SESSION_EVENT="$(cd "$(dirname "$HOOK")" && pwd)/../lib/session-event.sh"
 
 if [ ! -x "$HOOK" ]; then
   echo "FATAL: hook not executable: $HOOK" >&2
@@ -33,12 +36,20 @@ git -C "$REPO" commit -q --allow-empty -m init
 printf '{"aiDir":".ai","frameworkVersion":"2.0.0"}\n' > "$REPO/.myspec.json"
 STATE="$REPO/.claude/state/sessions"
 SID="mct-$$"
-trap 'rm -rf "$ROOT"; rm -f /tmp/.myspec-session-writes-'"$SID"'-*' EXIT
+trap 'rm -rf "$ROOT"' EXIT
 
 PASS=0
 FAIL=0
 ok()   { PASS=$((PASS + 1)); }
 fail() { FAIL=$((FAIL + 1)); printf 'FAIL  %s\n' "$1" >&2; }
+
+# ledger <sid>: the session's write events as `<kind>\t<root>\t<rel>[\t<agent>]`,
+# from every session-state file under $ROOT: each lives in the main checkout
+# of the repository written to.
+ledger() {
+  find "$ROOT" -path "*/.claude/state/sessions/$1.jsonl" -exec cat {} + 2>/dev/null \
+    | jq -r 'select(.t == "write") | [.kind, .root, .rel] + (if .agent then [.agent] else [] end) | join("\t")' 2>/dev/null
+}
 
 write() {  # write <sid> <cwd> <file-path>
   printf '{"session_id":%s,"tool_name":"Write","cwd":%s,"tool_input":{"file_path":%s}}' \
@@ -60,12 +71,12 @@ expect_no_log() {
 
 # ledger_has <sid> <kind> <root> <rel>: the Stop-hook ledger holds that line.
 ledger_has() {
-  grep -qxF -- "$(printf '%s\t%s\t%s' "$2" "$3" "$4")" "/tmp/.myspec-session-writes-$1" 2>/dev/null
+  grep -qxF -- "$(printf '%s\t%s\t%s' "$2" "$3" "$4")" <(ledger "$1") 2>/dev/null
 }
 
 # no_code_for <sid> <root>: nothing in the ledger arms <root>.
 no_code_for() {
-  ! grep -q -- "^code	$2	" "/tmp/.myspec-session-writes-$1" 2>/dev/null
+  ! grep -q -- "^code	$2	" <(ledger "$1") 2>/dev/null
 }
 
 expect_in() {  # expect_in <sid> <fixed-string> <desc>
@@ -134,7 +145,7 @@ for c in 'cat src/router.js 2>/dev/null' \
   N=$((N + 1))
   bashcmd "$SID-$N" "$REPO" "$c"
   expect_no_log "$SID-$N" "read-only command creates no log: $c"
-  [ ! -s "/tmp/.myspec-session-writes-$SID-$N" ] && ok || fail "read-only command records nothing: $c"
+  [ -z "$(ledger "$SID-$N")" ] && ok || fail "read-only command records nothing: $c"
 done
 
 # --- only the write target is recorded, not every code path in the command -----
@@ -151,7 +162,7 @@ bashcmd "$SID-31" "$REPO" 'mv src/m1.ts src/m2.ts && cp src/m2.ts src/m3.ts'
 ledger_has "$SID-31" code "$REPO" src/m1.ts && ok || fail "a move records its source"
 ledger_has "$SID-31" code "$REPO" src/m2.ts && ok || fail "a move records its destination"
 ledger_has "$SID-31" code "$REPO" src/m3.ts && ok || fail "a copy records its destination"
-[ "$(grep -c 'src/m2.ts' "/tmp/.myspec-session-writes-$SID-31")" -eq 1 ] && ok || fail "a copy does not record its source"
+[ "$(grep -c 'src/m2.ts' <(ledger "$SID-31"))" -eq 1 ] && ok || fail "a copy does not record its source"
 
 mkdir -p "$REPO/lib"
 printf 'x\n' > "$REPO/src/m4.ts"
@@ -178,10 +189,10 @@ expect_no_log "$SID-36" "a scratch write outside any checkout creates no log"
 # --- a non-code write is recorded, once per verification cycle -----------------
 write "$SID-37" "$REPO" "$REPO/package.json"
 write "$SID-37" "$REPO" "$REPO/package.json"
-[ "$(grep -c 'package.json' "/tmp/.myspec-session-writes-$SID-37")" -eq 1 ] && ok || fail "a repeated write is recorded once"
-printf 'verified\t%s\t-\n' "$REPO" >> "/tmp/.myspec-session-writes-$SID-37"
+[ "$(grep -c 'package.json' <(ledger "$SID-37"))" -eq 1 ] && ok || fail "a repeated write is recorded once"
+bash "$SESSION_EVENT" --root "$REPO" append "$SID-37" "$(jq -nc --arg r "$REPO" '{t: "verified", root: $r}')"
 write "$SID-37" "$REPO" "$REPO/package.json"
-[ "$(grep -c 'package.json' "/tmp/.myspec-session-writes-$SID-37")" -eq 2 ] && ok || fail "a write after a verified run is recorded again"
+[ "$(grep -c 'package.json' <(ledger "$SID-37"))" -eq 2 ] && ok || fail "a write after a verified run is recorded again"
 
 # --- only what a segment WRITES is recorded (#201) ----------------------------
 bashcmd "$SID-40" "$REPO" 'cat src/a.ts 2>/dev/null'
@@ -228,14 +239,14 @@ ledger_has "$SID-50" code "$REPO" src/r1.ts && ok || fail "sed by its full path 
 bashcmd "$SID-51" "$REPO" "sed -e 's/a/b/' -i '' src/r2.ts"
 ledger_has "$SID-51" code "$REPO" src/r2.ts && ok || fail "sed with -i after another option still arms"
 bashcmd "$SID-52" "$REPO" "sed --silent -n 's/a/b/p' src/r2.ts"
-[ ! -s "/tmp/.myspec-session-writes-$SID-52" ] && ok || fail "sed without -i records nothing"
+[ -z "$(ledger "$SID-52")" ] && ok || fail "sed without -i records nothing"
 bashcmd "$SID-53" "$REPO" "perl -pi -e 's/a/b/' src/r3.ts"
 ledger_has "$SID-53" code "$REPO" src/r3.ts && ok || fail "perl -pi arms"
 bashcmd "$SID-54" "$REPO" "perl -Mstrict -e 'print 1' src/r3.ts"
-[ ! -s "/tmp/.myspec-session-writes-$SID-54" ] && ok || fail "a perl -M module name is not -i"
+[ -z "$(ledger "$SID-54")" ] && ok || fail "a perl -M module name is not -i"
 bashcmd "$SID-55" "$REPO" 'patch -i fix.diff src/r4.ts'
 ledger_has "$SID-55" code "$REPO" src/r4.ts && ok || fail "patch -i records the file it edits"
-grep -q 'fix.diff' "/tmp/.myspec-session-writes-$SID-55" && fail "patch -i does not record the diff it reads" || ok
+grep -q 'fix.diff' <(ledger "$SID-55") && fail "patch -i does not record the diff it reads" || ok
 bashcmd "$SID-56" "$REPO" 'patch -o src/r5.ts src/r4.ts fix.diff'
 ledger_has "$SID-56" code "$REPO" src/r5.ts && ok || fail "patch -o records the file it writes"
 bashcmd "$SID-57" "$REPO" "sed -i '' 's/a/b/' \"src/r6.ts\""
@@ -246,7 +257,7 @@ bashcmd "$SID-59" "$REPO" 'cd "src" && echo x > r8.ts'
 ledger_has "$SID-59" code "$REPO" src/r8.ts && ok || fail "a quoted cd target moves the base directory"
 bashcmd "$SID-60" "$REPO" 'echo "a > b.ts" > src/r9.ts'
 ledger_has "$SID-60" code "$REPO" src/r9.ts && ok || fail "the real redirect target is recorded"
-[ "$(wc -l < "/tmp/.myspec-session-writes-$SID-60")" -eq 1 ] && ok || fail "a > inside quotes is not a redirect"
+[ "$(ledger "$SID-60" | wc -l)" -eq 1 ] && ok || fail "a > inside quotes is not a redirect"
 # shellcheck disable=SC2016 # literal text, not an expansion
 bashcmd "$SID-61" "$REPO" 'sed -i "" "s/a/b/" "$F" src/r10.ts'
 ledger_has "$SID-61" code "$REPO" src/r10.ts && ok || fail "a variable operand does not hide the literal one after it"
@@ -387,13 +398,13 @@ write_agent() {  # write_agent <sid> <cwd> <file-path> <agent_id> [agent_type]
      + (if $t == "" then {} else {agent_type: $t} end)' | bash "$HOOK" >/dev/null 2>&1
 }
 write_agent "$SID-90" "$REPO" "$REPO/src/sub.ts" a6baef07 general-purpose
-grep -qxF -- "$(printf 'code\t%s\tsrc/sub.ts\ta6baef07' "$REPO")" "/tmp/.myspec-session-writes-$SID-90" \
+grep -qxF -- "$(printf 'code\t%s\tsrc/sub.ts\ta6baef07' "$REPO")" <(ledger "$SID-90") \
   && ok || fail "a subagent write is recorded with its agent_id under the parent's session_id"
 expect_log "$SID-90" "a subagent's first code edit creates the parent's log"
 # shellcheck disable=SC2016 # literal text, not an expansion
 expect_in "$SID-90" '- `src/sub.ts` (subagent a6baef07, general-purpose)' "the log tags a subagent's path"
 write "$SID-90" "$REPO" "$REPO/src/sub.ts"
-grep -qxF -- "$(printf 'code\t%s\tsrc/sub.ts' "$REPO")" "/tmp/.myspec-session-writes-$SID-90" \
+grep -qxF -- "$(printf 'code\t%s\tsrc/sub.ts' "$REPO")" <(ledger "$SID-90") \
   && ok || fail "the main session's write of the same path gets its own three-field line"
 # shellcheck disable=SC2016 # literal text, not an expansion
 grep -qxF -- '- `src/sub.ts`' "$STATE/$SID-90.md" && ok || fail "the main session's own edit is logged untagged beside the subagent's"
@@ -401,18 +412,37 @@ write_agent "$SID-90" "$REPO" "$REPO/src/sub.ts" a6baef07 general-purpose
 # shellcheck disable=SC2016 # literal text, not an expansion
 [ "$(grep -cF -- '- `src/sub.ts`' "$STATE/$SID-90.md")" -eq 2 ] && ok || fail "each line is logged once"
 write_agent "$SID-91" "$REPO" "$REPO/src/odd.ts" $'b1\tx`y'
-grep -qxF -- "$(printf 'code\t%s\tsrc/odd.ts\tb1xy' "$REPO")" "/tmp/.myspec-session-writes-$SID-91" \
+grep -qxF -- "$(printf 'code\t%s\tsrc/odd.ts\tb1xy' "$REPO")" <(ledger "$SID-91") \
   && ok || fail "an agent_id is reduced to id-safe characters"
 # shellcheck disable=SC2016 # literal text, not an expansion
 expect_in "$SID-91" '- `src/odd.ts` (subagent b1xy)' "a tag without agent_type names the id only"
 
-# --- not a myspec project: marker, but no log -----------------------------------
+# --- not a myspec project: no state there; a stop gate alone gets the ledger ----
 OTHER="$ROOT/other"
 mkdir -p "$OTHER/src"
 git init -q -b main "$OTHER"
 write "$SID-11" "$OTHER" "$OTHER/src/x.ts"
-ledger_has "$SID-11" code "$OTHER" src/x.ts && ok || fail "the ledger still records a write outside a myspec project"
-[ ! -e "$OTHER/.claude/state" ] && ok || fail "no log outside a myspec project"
+[ -z "$(ledger "$SID-11")" ] && ok || fail "a repository without .myspec.json or a stop gate gets no ledger"
+[ ! -e "$OTHER/.claude/state" ] && ok || fail "no state tree outside a myspec project"
+mkdir -p "$OTHER/.claude"
+printf '{"checks":[]}\n' > "$OTHER/.claude/verification.json"
+write "$SID-12" "$OTHER" "$OTHER/src/x.ts"
+ledger_has "$SID-12" code "$OTHER" src/x.ts && ok || fail "a repository with a stop gate gets the ledger"
+[ ! -e "$OTHER/.claude/state/sessions/$SID-12.md" ] && ok || fail "but no log outside a myspec project"
+
+# --- feature-implement's state: recorded from the command, by session id -----
+implement_events() {  # implement_events <sid> -> the implement states, in order
+  find "$ROOT" -path "*/.claude/state/sessions/$1.jsonl" -exec cat {} + 2>/dev/null \
+    | jq -r 'select(.t == "implement") | .state' | tr '\n' ' '
+}
+bashcmd "$SID-95" "$REPO" '"$(git rev-parse --show-toplevel)"/.claude/lib/session-event.sh implement start'
+[ "$(implement_events "$SID-95")" = "start " ] && ok || fail "implement start is recorded for the payload's session (got: $(implement_events "$SID-95"))"
+bashcmd "$SID-95" "$REPO/src" '"$(git rev-parse --show-toplevel)/.claude/lib/session-event.sh" implement stop && echo done'
+[ "$(implement_events "$SID-95")" = "start stop " ] && ok || fail "a fully quoted path and a cwd below the root still record (got: $(implement_events "$SID-95"))"
+bashcmd "$SID-96" "$REPO" 'echo "session-event.sh implement start" > notes.txt; grep implement session-event.sh'
+[ -z "$(implement_events "$SID-96")" ] && ok || fail "a mention of the command is not a run of it"
+bashcmd "$SID-97" "$REPO/.claude/worktrees/wt-a" '.claude/lib/session-event.sh implement start'
+[ -f "$STATE/$SID-97.jsonl" ] && [ "$(implement_events "$SID-97")" = "start " ] && ok || fail "from a linked worktree the event lands in the main checkout's file"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
