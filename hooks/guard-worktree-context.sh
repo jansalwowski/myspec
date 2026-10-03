@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # guard-worktree-context.sh
 # PreToolUse hook (Bash matcher) — the Bash half of work isolation. Two gates,
-# both scoped to the MAIN checkout (a linked worktree is never guarded:
-# worktrees have .git as a FILE, the main checkout as a DIRECTORY):
+# both scoped to the MAIN checkout (a linked worktree or a submodule is never
+# guarded; checkout_facts in lib/hook-core.sh tells them apart):
 #
 #   A. Branch mutations are blocked always. `git checkout`, `switch`, `merge`,
 #      `rebase`, `pull`, and `branch -m/-c/-f` on the main checkout are how a
@@ -59,89 +59,37 @@
 # Sanctioned branch cleanup needs no bypass: lib/branch-cleanup.sh makes its
 # git calls in a child process this hook never sees.
 #
-# Output contract: a block prints
-#   {"hookSpecificOutput": {"hookEventName": "PreToolUse",
-#     "permissionDecision": "deny", "permissionDecisionReason": "..."},
-#    "decision": "block", "reason": "..."}
-# (the current PreToolUse form plus the legacy fields older hosts read). An
-# allowed command prints NOTHING and exits 0. It must never print
-# {"decision": "approve"}: for PreToolUse that is the deprecated spelling of
-# permissionDecision "allow", which skips the user's permission prompt — a
-# guard that only means "I have no objection" would auto-approve every command.
+# Output contract: a block prints the PreToolUse deny form (pretool_deny in
+# lib/hook-core.sh). An allowed command prints NOTHING and exits 0.
 
 set -euo pipefail
 
-OWN_TTL=28800      # 8h — a session's own isolation decision stays valid this long
-INHERIT_TTL=14400  # 4h — window in which a subagent inherits a parent's decision
 MAX_DEPTH=3        # nested `bash -c` / `eval` payloads scanned
 
-approve() {
-  exit 0
-}
-
-block() {
-  local reason
-  reason=$(printf '%s' "$1" | jq -Rs .)
-  printf '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": %s}, "decision": "block", "reason": %s}\n' "$reason" "$reason"
-  exit 0
-}
-
-if ! command -v jq >/dev/null 2>&1; then
-  approve
-fi
-
-INPUT=$(cat)
-COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
-SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
-# Non-empty only inside a subagent. Gates marker inheritance in gate B.
-SUBAGENT=$(printf '%s' "$INPUT" | jq -r '[.agent_id, .agent_type] | map(strings | select(. != "")) | first // empty' 2>/dev/null || printf '')
-
-[ -n "$COMMAND" ] || approve
-
-# The directory the command starts in: the first cwd-like payload field that
-# exists, else the hook's own cwd.
-START_DIR=""
-while IFS= read -r candidate; do
-  if [ -n "$candidate" ] && [ -d "$candidate" ]; then
-    START_DIR="$candidate"
-    break
-  fi
-done <<JSON
-$(printf '%s' "$INPUT" | jq -r '
-  [
-    .cwd,
-    .workdir,
-    .workspace.cwd,
-    .session.cwd,
-    .tool_input.cwd,
-    .tool_input.workdir
-  ] | map(select(type == "string" and . != "")) | .[]
-' 2>/dev/null)
-JSON
-[ -n "$START_DIR" ] || START_DIR="$PWD"
-
-# The hook + lib ship as a pair:
-#   myspec repo:      hooks/guard-worktree-context.sh + lib/command-scan.sh
-#   adopting project: .claude/hooks/...              + .claude/lib/...
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-START_ROOT=$(git -C "$START_DIR" rev-parse --show-toplevel 2>/dev/null || printf '')
-LIB=""
-for cand in \
-  "$SCRIPT_DIR/../lib/command-scan.sh" \
-  ${START_ROOT:+"$START_ROOT/.claude/lib/command-scan.sh"} \
-  ${START_ROOT:+"$START_ROOT/lib/command-scan.sh"}; do
-  if [ -f "$cand" ]; then
-    LIB="$cand"
-    break
-  fi
+# The hook and its libs ship as a set: hooks/ + lib/ in the plugin,
+# .claude/hooks/ + .claude/lib/ in a project. A missing jq or lib fails open
+# rather than block on an infra error.
+command -v jq >/dev/null 2>&1 || exit 0
+HOOK_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+for HOOK_CORE in "$HOOK_DIR/../lib/hook-core.sh" "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"; do
+  [ -f "$HOOK_CORE" ] && break
 done
+if [ ! -f "$HOOK_CORE" ] || [ ! -f "$(dirname "$HOOK_CORE")/command-scan.sh" ]; then
+  exit 0
+fi
+# shellcheck source=lib/hook-core.sh
+. "$HOOK_CORE"
+# shellcheck source=lib/command-scan.sh
+. "$HOOK_LIB/command-scan.sh"
 
-# Scanner missing — fail open rather than block on infra error, matching how
-# the hook already treats a missing jq.
-[ -n "$LIB" ] || approve
+# SUBAGENT is non-empty only inside a subagent; it gates marker inheritance
+# in gate B.
+payload_parse "$(cat)" COMMAND=.tool_input.command SESSION_ID=.session_id \
+  SUBAGENT="$HOOK_SUBAGENT" CWDS="$HOOK_CWDS"
+[ -n "$COMMAND" ] || exit 0
 
-# shellcheck source=/dev/null
-. "$LIB"
+# The directory the command starts in: the payload's cwd, else the hook's own.
+START_DIR=$(first_dir "$CWDS") || START_DIR="$PWD"
 
 ALLOW_BRANCH_OPS=0
 # Here-strings, not `printf | grep -q`, throughout: grep -q exits on the
@@ -214,12 +162,12 @@ resolve_dir() {
 
 # classify <dir> <git-dir or empty> -> sets CLS_ROOT to the main checkout the
 # segment would act on, or empty when it acts on a linked worktree, a
-# submodule, or no repository at all. One-entry cache: a command almost always
-# runs in one place.
+# submodule, or no repository at all (checkout_facts). One-entry cache: a
+# command almost always runs in one place.
 CLS_KEY=""
 CLS_ROOT=""
 classify() {
-  local key="$1|$2" abs top
+  local key="$1|$2" abs
   [ "$key" = "$CLS_KEY" ] && return 0
   CLS_KEY="$key"
   CLS_ROOT=""
@@ -232,21 +180,16 @@ classify() {
     esac
     return 0
   fi
-  top=$(git -C "$1" rev-parse --show-toplevel 2>/dev/null) || return 0
-  [ -f "$top/.git" ] && return 0
-  CLS_ROOT="$top"
+  checkout_facts "$1" || return 0
+  [ "$CF_LINKED" = 0 ] && [ "$CF_SUBMODULE" = 0 ] && CLS_ROOT="$CF_ROOT"
+  return 0
 }
 
 # procedure_doc <main root> -> where init/update install the isolation
 # procedure (manifest `files` entry work-isolation.md, under the aiDir). Block
 # messages cite it so the full procedure is read only when a block fires.
 procedure_doc() {
-  local ai=""
-  if [ -f "$1/.myspec.json" ]; then
-    ai=$(jq -r '.aiDir // empty' "$1/.myspec.json" 2>/dev/null || printf '')
-  fi
-  ai="${ai%/}"
-  printf '%s/work-isolation.md' "${ai:-.ai}"
+  printf '%s/work-isolation.md' "$(ai_dir "$1")"
 }
 
 # --- gate A: `git branch` delete / force ---------------------------------------
@@ -327,53 +270,18 @@ branch_verdict() {
 
 # --- gate B: the session's isolation mode --------------------------------------
 
+# session_mode <main root> -> sets ISO_MODE and ISO_PATH for that checkout:
+# the session's own decision, or, in a subagent, the newest recent one
+# (isolation_decision in lib/hook-core.sh).
 MODE_ROOT=""
-MODE=""
-MARKER_PATH=""
-
-# session_mode <main root> -> sets MODE and MARKER_PATH for that checkout.
 session_mode() {
-  local state_dir="$1/.claude/state/isolation" now newest marker_mode marker_path marker_age
   [ "$1" = "$MODE_ROOT" ] && return 0
   MODE_ROOT="$1"
-  MODE=""
-  MARKER_PATH=""
-  [ -d "$state_dir" ] || return 0
-  now=$(date +%s)
-
-  read_marker() {
-    marker_mode=$(jq -r '.mode // empty' "$1" 2>/dev/null || printf '')
-    marker_path=$(jq -r '.worktree_path // empty' "$1" 2>/dev/null || printf '')
-    marker_age=$(( now - $(jq -r '.decided_at // 0' "$1" 2>/dev/null || printf 0) ))
-  }
-
-  # 1. This session's own decision.
-  if [ -n "$SESSION_ID" ] && [ -f "$state_dir/${SESSION_ID}.json" ]; then
-    read_marker "$state_dir/${SESSION_ID}.json"
-    if [ "$marker_age" -lt "$OWN_TTL" ]; then
-      MODE="$marker_mode"
-      MARKER_PATH="$marker_path"
-      return 0
-    fi
-  fi
-
-  # 2. Inherited decision — subagents cannot prompt, so they follow the newest
-  #    recent marker. A top-level session (no agent_id / agent_type in the
-  #    input) never inherits another session's answer (issue #146).
-  [ -n "$SUBAGENT" ] || return 0
-  # shellcheck disable=SC2012 # ls -t is the portable mtime sort; the names are generated session ids
-  newest=$(ls -t "$state_dir"/*.json 2>/dev/null | awk 'NR == 1' || printf '')
-  if [ -n "$newest" ] && [ -f "$newest" ]; then
-    read_marker "$newest"
-    if [ "$marker_age" -lt "$INHERIT_TTL" ]; then
-      MODE="$marker_mode"
-      MARKER_PATH="$marker_path"
-    fi
-  fi
+  isolation_decision "$1" "$SESSION_ID" "$SUBAGENT"
 }
 
 block_heavy() {  # block_heavy <main root> <segment>
-  local root="$1" target="$MARKER_PATH" candidates where
+  local root="$1" target="$ISO_PATH" candidates where
   # Name the worktree if we can: recorded path first, then a lone linked worktree.
   if [ -z "$target" ]; then
     candidates=$(git -C "$root" worktree list --porcelain 2>/dev/null \
@@ -390,7 +298,7 @@ block_heavy() {  # block_heavy <main root> <segment>
     where="Run it in the session's worktree instead (see \`git worktree list\`); no worktree path was recorded for this session."
   fi
 
-  block "BLOCKED: this session chose WORKTREE isolation, but this command is about to run in the main checkout.
+  pretool_deny "BLOCKED: this session chose WORKTREE isolation, but this command is about to run in the main checkout.
 
 $where
 
@@ -422,7 +330,7 @@ check_segment() {
         && ! grep -qE -- "$BRANCH_CARVE_OUT" <<< "$segment"; then
       classify "$dir" "$gitdir"
       if [ -n "$CLS_ROOT" ]; then
-        block "BLOCKED: Branch-mutating git commands are not allowed on the main checkout. Do the work in a linked worktree (procedure: $(procedure_doc "$CLS_ROOT")) or pass isolation: \"worktree\" in your Agent tool call. If you need to restore a file, use \`git restore <file>\` not \`git checkout\`. Blocked: ${segment:0:200}"
+        pretool_deny "BLOCKED: Branch-mutating git commands are not allowed on the main checkout. Do the work in a linked worktree (procedure: $(procedure_doc "$CLS_ROOT")) or pass isolation: \"worktree\" in your Agent tool call. If you need to restore a file, use \`git restore <file>\` not \`git checkout\`. Blocked: ${segment:0:200}"
       fi
     fi
 
@@ -430,7 +338,7 @@ check_segment() {
       classify "$dir" "$gitdir"
       if [ -n "$CLS_ROOT" ]; then
         verdict=$(branch_verdict "$segment" "$CLS_ROOT")
-        [ -z "$verdict" ] || block "$verdict"
+        [ -z "$verdict" ] || pretool_deny "$verdict"
       fi
     fi
   fi
@@ -441,7 +349,7 @@ check_segment() {
   classify "$dir" "$gitdir"
   [ -n "$CLS_ROOT" ] || return 0
   session_mode "$CLS_ROOT"
-  [ "$MODE" = "worktree" ] || return 0
+  [ "$ISO_MODE" = "worktree" ] || return 0
 
   if matches_any "$segment" "${HEAVY_PATTERNS[@]}" \
       && ! grep -qE -- "$HEAVY_CARVE_OUT" <<< "$segment"; then
@@ -618,4 +526,4 @@ walk() {
 }
 
 walk "$COMMAND" "$START_DIR" 0
-approve
+exit 0
