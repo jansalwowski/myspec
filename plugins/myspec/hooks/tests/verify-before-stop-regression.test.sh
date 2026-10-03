@@ -12,6 +12,10 @@
 #            the clean main checkout but whose edits were in a linked worktree
 #            verified the untouched tree and passed. The checkouts to verify
 #            now come from the session log's `## Files touched`.
+#   (pipefail) The memory and setup conformance gates were armed by
+#            `git status --porcelain | grep -q .`. grep exits on the first
+#            line, so a status longer than a pipe buffer killed git with
+#            SIGPIPE, pipefail made the `if` false, and the gate was skipped.
 #
 # Usage: verify-before-stop-regression.test.sh [path-to-hook]
 
@@ -117,6 +121,41 @@ OUT=$(run_ledger)
 OUT=$(run_ledger)
 [ "$(decision "$OUT")" = approve ] && ok || fail "a verified checkout is not re-run without a new write (got: ${OUT:0:200})"
 rm -f "$REPO/BROKEN"
+
+# --- (pipefail) a long status still arms the conformance gates --------------
+# Each doctor stub always fails, so the gate must block whenever it is armed.
+# About 2000 untracked files directly in a tracked directory give a porcelain
+# status well past a 64 KiB pipe buffer.
+if command -v node >/dev/null 2>&1; then
+  CONF="$ROOT/conformance"
+  mkdir -p "$CONF/.claude/lib" "$CONF/.ai/memory" "$CONF/src"
+  git init -q -b main "$CONF"
+  git -C "$CONF" config user.email t@t
+  git -C "$CONF" config user.name t
+  printf '{"aiDir":".ai"}\n' > "$CONF/.myspec.json"
+  printf '{"checks":[{"name":"ok","command":"true","required":true}]}\n' > "$CONF/.claude/verification.json"
+  printf 'process.stdout.write("doctor stub: error\\n"); process.exit(1);\n' > "$CONF/.claude/lib/memory-doctor.mjs"
+  printf 'process.stdout.write("setup stub: error\\n"); process.exit(1);\n' > "$CONF/.claude/lib/setup-doctor.mjs"
+  : > "$CONF/.ai/memory/index.md"
+  : > "$CONF/src/a.ts"
+  git -C "$CONF" add -A && git -C "$CONF" commit -q -m init
+  conf_run() {
+    printf 'code\t%s\tsrc/a.ts\n' "$CONF" > "$LEDGER"
+    printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$CONF" | bash "$HOOK" 2>/dev/null
+  }
+  pad=untracked-file-with-a-long-enough-name-to-fill-the-pipe-buffer
+  for dir in .ai/memory .claude; do
+    i=0
+    while [ "$i" -lt 2000 ]; do : > "$CONF/$dir/$pad-$i.md"; i=$((i + 1)); done
+    bytes=$(git -C "$CONF" status --porcelain -- "$dir" | wc -c | tr -d ' ')
+    [ "$bytes" -gt 65536 ] && ok || fail "the $dir fixture status exceeds a pipe buffer (got $bytes bytes)"
+    OUT=$(conf_run)
+    [ "$(decision "$OUT")" = block ] && ok || fail "a $bytes-byte status under $dir still runs its conformance doctor (got: ${OUT:0:200})"
+    find "$CONF/$dir" -maxdepth 1 -name "$pad-*" -delete
+  done
+else
+  printf 'SKIP  conformance pipefail cases: node not found\n' >&2
+fi
 
 printf '%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

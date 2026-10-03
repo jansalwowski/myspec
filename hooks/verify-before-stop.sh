@@ -104,7 +104,10 @@ if [ -f "$DOCTOR" ] && [ -f "$REPO_ROOT/.myspec.json" ] && command -v node >/dev
   # the same resolution memory-files.mjs uses.
   MEMORY_AI_DIR=$(jq -r '.aiDir // empty' "$REPO_ROOT/.myspec.json" 2>/dev/null | sed 's#/*$##')
   MEMORY_AI_DIR="${MEMORY_AI_DIR:-.ai}"
-  if [ -n "$MEMORY_AI_DIR" ] && git -C "$REPO_ROOT" status --porcelain -- "$MEMORY_AI_DIR/memory" 2>/dev/null | grep -q .; then
+  # $(...) and -n, not `| grep -q .`: grep exits on the first line, a status
+  # longer than a pipe buffer then kills git with SIGPIPE, and under pipefail
+  # the `if` read false and skipped the gate.
+  if [ -n "$MEMORY_AI_DIR" ] && [ -n "$(git -C "$REPO_ROOT" status --porcelain -- "$MEMORY_AI_DIR/memory" 2>/dev/null)" ]; then
     if ! DOCTOR_OUT=$(cd "$REPO_ROOT" && node "$DOCTOR" --quiet 2>&1); then
       REASON=$(printf 'Memory conformance check failed for changes under %s/memory. Fix these before stopping (node .claude/lib/memory-index.mjs regenerates the tables; the doctor names the rest):\n\n%s' "$MEMORY_AI_DIR" "$(printf '%s' "$DOCTOR_OUT" | tail -30)" | jq -Rs .)
       echo "{\"decision\": \"block\", \"reason\": $REASON}"
@@ -126,7 +129,8 @@ fi
 # check above is gated.
 SETUP_DOCTOR="$REPO_ROOT/.claude/lib/setup-doctor.mjs"
 if [ -f "$SETUP_DOCTOR" ] && [ -f "$REPO_ROOT/.myspec.json" ] && command -v node >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
-  if git -C "$REPO_ROOT" status --porcelain -- .claude .myspec.json 2>/dev/null | grep -q .; then
+  # Not `| grep -q .`, for the SIGPIPE reason given at the memory gate.
+  if [ -n "$(git -C "$REPO_ROOT" status --porcelain -- .claude .myspec.json 2>/dev/null)" ]; then
     if ! SETUP_OUT=$(cd "$REPO_ROOT" && node "$SETUP_DOCTOR" --quiet wiring schema 2>&1); then
       REASON=$(printf 'Setup conformance check failed for changes under .claude/ or .myspec.json. Each of these makes a hook or a gate silently stop working, so fix them before stopping:\n\n%s' "$(printf '%s' "$SETUP_OUT" | tail -30)" | jq -Rs .)
       echo "{\"decision\": \"block\", \"reason\": $REASON}"
