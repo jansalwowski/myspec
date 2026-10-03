@@ -10,66 +10,18 @@
 
 set -euo pipefail
 
-# Requires jq
-if ! command -v jq &>/dev/null; then
-  exit 0
-fi
+command -v jq >/dev/null 2>&1 || exit 0
+HOOK_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+for HOOK_CORE in "$HOOK_DIR/../lib/hook-core.sh" "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"; do
+  [ -f "$HOOK_CORE" ] && break
+done
+[ -f "$HOOK_CORE" ] || exit 0
+# shellcheck source=lib/hook-core.sh
+. "$HOOK_CORE"
 
-# Read stdin JSON
-INPUT=$(cat)
-
-resolve_repo_root() {
-  local candidate resolved
-
-  if command -v jq >/dev/null 2>&1; then
-    while IFS= read -r candidate; do
-      [ -n "$candidate" ] || continue
-      if resolved=$(git -C "$candidate" rev-parse --show-toplevel 2>/dev/null); then
-        printf '%s\n' "$resolved"
-        return 0
-      fi
-      if [ -f "$candidate/.myspec.json" ]; then
-        printf '%s\n' "$candidate"
-        return 0
-      fi
-    done <<EOF
-$(printf '%s' "$INPUT" | jq -r '
-  [
-    .cwd,
-    .workdir,
-    .workspace.cwd,
-    .session.cwd,
-    .tool_input.cwd,
-    .tool_input.workdir
-  ] | map(select(type == "string" and . != "")) | .[]
-' 2>/dev/null)
-EOF
-  fi
-
-  if resolved=$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null); then
-    printf '%s\n' "$resolved"
-    return 0
-  fi
-
-  candidate="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-  if resolved=$(git -C "$candidate" rev-parse --show-toplevel 2>/dev/null); then
-    printf '%s\n' "$resolved"
-    return 0
-  fi
-
-  return 1
-}
-
-# Extract file path from tool input
-FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
-
-if [ -z "$FILE_PATH" ]; then
-  exit 0
-fi
-
-if ! REPO_ROOT="$(resolve_repo_root)"; then
-  exit 0
-fi
+payload_parse "$(cat)" FILE_PATH=.tool_input.file_path CWDS="$HOOK_CWDS"
+[ -n "$FILE_PATH" ] || exit 0
+REPO_ROOT=$(hook_repo_root "$CWDS" myspec) || exit 0
 
 # Resolve to absolute path
 if [[ "$FILE_PATH" != /* ]]; then
@@ -81,13 +33,8 @@ fi
 # the aiDir prefix test below never matches — validation silently skipped every
 # file written in a worktree, which for doc-heavy projects is most of them.
 # Matches how mark-code-changed.sh and require-reuse-audit.sh already resolve.
-FILE_DIR="$(dirname "$FILE_PATH")"
-while [ -n "$FILE_DIR" ] && [ "$FILE_DIR" != "/" ] && [ ! -d "$FILE_DIR" ]; do
-  FILE_DIR="$(dirname "$FILE_DIR")"
-done
-
-if FILE_ROOT="$(git -C "$FILE_DIR" rev-parse --show-toplevel 2>/dev/null)"; then
-  REPO_ROOT="$FILE_ROOT"
+if checkout_facts "$FILE_PATH"; then
+  REPO_ROOT="$CF_ROOT"
 fi
 
 # Only check .md files
@@ -95,21 +42,15 @@ if [[ "$FILE_PATH" != *.md ]]; then
   exit 0
 fi
 
-# aiDir from .myspec.json. The trailing slash is stripped here too: the prefix
-# test below builds the glob ${AI_DIR}/*, and a configured ".ai/" would make
-# that ".ai//*", which matches nothing and silently disables this hook — the
-# same derived-pattern break the doctor flags as aidir-trailing-slash.
-AI_DIR=""
-if [ -f "$REPO_ROOT/.myspec.json" ] && command -v jq &>/dev/null; then
-  AI_DIR=$(jq -r '.aiDir // empty' "$REPO_ROOT/.myspec.json" 2>/dev/null)
-  AI_DIR="${AI_DIR%/}"
-fi
-# No configured value: the documented default, never a guess from disk. aiDir
-# is required since 2.0; the setup doctor reports its absence and `update`
-# writes it. memory-files.mjs resolves the same way.
-if [ -z "$AI_DIR" ]; then
-  AI_DIR=".ai"
-fi
+# aiDir from .myspec.json (ai_dir in lib/hook-core.sh). The trailing slash is
+# stripped: the prefix test below builds the glob ${AI_DIR}/*, and a
+# configured ".ai/" would make that ".ai//*", which matches nothing and
+# silently disables this hook — the same derived-pattern break the doctor
+# flags as aidir-trailing-slash. No configured value: the documented default,
+# never a guess from disk. aiDir is required since 2.0; the setup doctor
+# reports its absence and `update` writes it. memory-files.mjs resolves the
+# same way.
+AI_DIR=$(ai_dir "$REPO_ROOT")
 
 # Only check files inside the AI documentation directory (pure-shell prefix
 # strip — no python3 dependency, no quote-injection via the file path)
