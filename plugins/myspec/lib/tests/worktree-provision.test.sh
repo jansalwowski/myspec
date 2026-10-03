@@ -489,7 +489,7 @@ out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
 # The scripts that read a glob setting source it and keep no copy, so one
 # glob means one thing in clean, ignorePaths and checks[].paths.
 # shellcheck disable=SC2031 # tlc's subshell sources the script, whose own HERE stays there
-for f in "$SCRIPT" "$HERE/../../hooks/mark-code-changed.sh" "$HERE/../../hooks/verify-before-stop.sh"; do
+for f in "$SCRIPT" "$HERE/../../hooks/mark-code-changed.sh" "$HERE/../stop-gate/run.sh"; do
   grep -qE '^(glob_regex|glob_ere)\(\)' "$f" && fail "$(basename "$f") keeps its own glob compiler" || ok
   grep -qF 'glob-regex.sh' "$f" && ok || fail "$(basename "$f") uses lib/glob-regex.sh"
 done

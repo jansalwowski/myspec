@@ -181,7 +181,7 @@ else
 fi
 
 # --- the variable cannot raise the cap ----------------------------------------
-grep -q 'MYSPEC_CHECK_CAP_SECONDS' "$HOOK" && ok || fail "the hook reads MYSPEC_CHECK_CAP_SECONDS"
+grep -q 'MYSPEC_CHECK_CAP_SECONDS' "$(dirname "$HOOK")/../lib/stop-gate/run.sh" && ok || fail "the gate reads MYSPEC_CHECK_CAP_SECONDS"
 
 printf 'verify-before-stop-timeout: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
