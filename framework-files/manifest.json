@@ -124,6 +124,10 @@
       "type": "overwrite",
       "dest": ".claude/lib/glob-regex.sh"
     },
+    "hook-core.sh": {
+      "type": "overwrite",
+      "dest": ".claude/lib/hook-core.sh"
+    },
     "branch-cleanup.sh": {
       "type": "overwrite",
       "dest": ".claude/lib/branch-cleanup.sh"
