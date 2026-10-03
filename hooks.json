@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "./hooks/guard-worktree-context.sh"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/guard-worktree-context.sh"
           }
         ]
       },
@@ -15,7 +15,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "./hooks/require-isolation-decision.sh"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/require-isolation-decision.sh"
           }
         ]
       }
@@ -26,19 +26,19 @@
         "hooks": [
           {
             "type": "command",
-            "command": "./hooks/validate-frontmatter.sh"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/validate-frontmatter.sh"
           },
           {
             "type": "command",
-            "command": "./hooks/mark-code-changed.sh"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/mark-code-changed.sh"
           },
           {
             "type": "command",
-            "command": "./hooks/no-absolute-paths.sh"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/no-absolute-paths.sh"
           },
           {
             "type": "command",
-            "command": "./hooks/require-reuse-audit.sh"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/require-reuse-audit.sh"
           }
         ]
       },
@@ -47,7 +47,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "./hooks/mark-code-changed.sh"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/mark-code-changed.sh"
           }
         ]
       }
@@ -57,7 +57,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "./hooks/verify-before-stop.sh"
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/verify-before-stop.sh"
           }
         ]
       }
