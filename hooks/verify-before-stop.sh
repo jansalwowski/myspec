@@ -26,69 +26,34 @@
 
 set -euo pipefail
 
-# Read stdin JSON (Stop hook receives session context)
-INPUT=$(cat)
+# Every gate below reads JSON, so without jq or the shared lib there is
+# nothing to verify with.
+approve() {
+  echo '{"decision": "approve"}'
+  exit 0
+}
+command -v jq >/dev/null 2>&1 || approve
+HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
+[ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
+if [ ! -f "$HOOK_CORE" ] || [ ! -f "$(dirname "$HOOK_CORE")/dependency-map.sh" ]; then
+  approve
+fi
+# shellcheck source=lib/hook-core.sh
+. "$HOOK_CORE"
+# shellcheck source=lib/dependency-map.sh
+. "$HOOK_LIB/dependency-map.sh"
+
+payload_parse "$(cat)" STOP_HOOK_ACTIVE=.stop_hook_active SESSION_ID=.session_id CWDS="$HOOK_CWDS"
 
 # Prevent infinite loop on re-entry. The harness signals this via
 # stop_hook_active in the stdin JSON (the continuation after a prior block);
 # env vars kept as a fallback for hosts that set them instead.
-if command -v jq >/dev/null 2>&1; then
-  if [ "$(printf '%s' "$INPUT" | jq -r '.stop_hook_active // false' 2>/dev/null)" = "true" ]; then
-    echo '{"decision": "approve"}'
-    exit 0
-  fi
-fi
-if [ "${CLAUDE_STOP_HOOK_ACTIVE:-}" = "1" ] || [ "${MYSPEC_STOP_HOOK_ACTIVE:-}" = "1" ]; then
-  echo '{"decision": "approve"}'
-  exit 0
+if [ "$STOP_HOOK_ACTIVE" = "true" ] || [ "${CLAUDE_STOP_HOOK_ACTIVE:-}" = "1" ] \
+    || [ "${MYSPEC_STOP_HOOK_ACTIVE:-}" = "1" ]; then
+  approve
 fi
 
-resolve_repo_root() {
-  local candidate resolved
-
-  if command -v jq >/dev/null 2>&1; then
-    while IFS= read -r candidate; do
-      [ -n "$candidate" ] || continue
-      if resolved=$(git -C "$candidate" rev-parse --show-toplevel 2>/dev/null); then
-        printf '%s\n' "$resolved"
-        return 0
-      fi
-      if [ -f "$candidate/.myspec.json" ]; then
-        printf '%s\n' "$candidate"
-        return 0
-      fi
-    done <<EOF
-$(printf '%s' "$INPUT" | jq -r '
-  [
-    .cwd,
-    .workdir,
-    .workspace.cwd,
-    .session.cwd,
-    .tool_input.cwd,
-    .tool_input.workdir
-  ] | map(select(type == "string" and . != "")) | .[]
-' 2>/dev/null)
-EOF
-  fi
-
-  if resolved=$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null); then
-    printf '%s\n' "$resolved"
-    return 0
-  fi
-
-  candidate="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-  if resolved=$(git -C "$candidate" rev-parse --show-toplevel 2>/dev/null); then
-    printf '%s\n' "$resolved"
-    return 0
-  fi
-
-  return 1
-}
-
-if ! REPO_ROOT="$(resolve_repo_root)"; then
-  echo '{"decision": "approve"}'
-  exit 0
-fi
+REPO_ROOT=$(hook_repo_root "$CWDS" myspec) || approve
 
 # Memory conformance. The index tables are generated and the ID allocator
 # refuses on drift, so drift a session leaves behind (an unregenerated index, a
@@ -99,19 +64,16 @@ fi
 # on errors alone): a duplicate ID that lives only on stale branches is a
 # warning, since no change in this session can fix it (issue #124).
 DOCTOR="$REPO_ROOT/.claude/lib/memory-doctor.mjs"
-if [ -f "$DOCTOR" ] && [ -f "$REPO_ROOT/.myspec.json" ] && command -v node >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+if [ -f "$DOCTOR" ] && [ -f "$REPO_ROOT/.myspec.json" ] && command -v node >/dev/null 2>&1; then
   # aiDir is required since 2.0; .ai is the documented default when absent,
   # the same resolution memory-files.mjs uses.
-  MEMORY_AI_DIR=$(jq -r '.aiDir // empty' "$REPO_ROOT/.myspec.json" 2>/dev/null | sed 's#/*$##')
-  MEMORY_AI_DIR="${MEMORY_AI_DIR:-.ai}"
+  MEMORY_AI_DIR=$(ai_dir "$REPO_ROOT")
   # $(...) and -n, not `| grep -q .`: grep exits on the first line, a status
   # longer than a pipe buffer then kills git with SIGPIPE, and under pipefail
   # the `if` read false and skipped the gate.
   if [ -n "$MEMORY_AI_DIR" ] && [ -n "$(git -C "$REPO_ROOT" status --porcelain -- "$MEMORY_AI_DIR/memory" 2>/dev/null)" ]; then
     if ! DOCTOR_OUT=$(cd "$REPO_ROOT" && node "$DOCTOR" --quiet 2>&1); then
-      REASON=$(printf 'Memory conformance check failed for changes under %s/memory. Fix these before stopping (node .claude/lib/memory-index.mjs regenerates the tables; the doctor names the rest):\n\n%s' "$MEMORY_AI_DIR" "$(printf '%s' "$DOCTOR_OUT" | tail -30)" | jq -Rs .)
-      echo "{\"decision\": \"block\", \"reason\": $REASON}"
-      exit 0
+      decision_block 'Memory conformance check failed for changes under %s/memory. Fix these before stopping (node .claude/lib/memory-index.mjs regenerates the tables; the doctor names the rest):\n\n%s' "$MEMORY_AI_DIR" "$(printf '%s' "$DOCTOR_OUT" | tail -30)"
     fi
   fi
 fi
@@ -128,13 +90,11 @@ fi
 # uncommitted changes to the harness config, for the same reason the memory
 # check above is gated.
 SETUP_DOCTOR="$REPO_ROOT/.claude/lib/setup-doctor.mjs"
-if [ -f "$SETUP_DOCTOR" ] && [ -f "$REPO_ROOT/.myspec.json" ] && command -v node >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
+if [ -f "$SETUP_DOCTOR" ] && [ -f "$REPO_ROOT/.myspec.json" ] && command -v node >/dev/null 2>&1; then
   # Not `| grep -q .`, for the SIGPIPE reason given at the memory gate.
   if [ -n "$(git -C "$REPO_ROOT" status --porcelain -- .claude .myspec.json 2>/dev/null)" ]; then
     if ! SETUP_OUT=$(cd "$REPO_ROOT" && node "$SETUP_DOCTOR" --quiet wiring schema 2>&1); then
-      REASON=$(printf 'Setup conformance check failed for changes under .claude/ or .myspec.json. Each of these makes a hook or a gate silently stop working, so fix them before stopping:\n\n%s' "$(printf '%s' "$SETUP_OUT" | tail -30)" | jq -Rs .)
-      echo "{\"decision\": \"block\", \"reason\": $REASON}"
-      exit 0
+      decision_block 'Setup conformance check failed for changes under .claude/ or .myspec.json. Each of these makes a hook or a gate silently stop working, so fix them before stopping:\n\n%s' "$(printf '%s' "$SETUP_OUT" | tail -30)"
     fi
   fi
 fi
@@ -142,16 +102,7 @@ fi
 CONFIG_FILE="$REPO_ROOT/.claude/verification.json"
 
 # If no config file, skip (graceful degradation)
-if [ ! -f "$CONFIG_FILE" ]; then
-  echo '{"decision": "approve"}'
-  exit 0
-fi
-
-# Check if jq is available
-if ! command -v jq &>/dev/null; then
-  echo '{"decision": "approve"}'
-  exit 0
-fi
+[ -f "$CONFIG_FILE" ] || approve
 
 # Whether to verify, and which checkouts. mark-code-changed.sh (PostToolUse)
 # appends every file the session writes to a per-session ledger, keyed by the
@@ -165,18 +116,16 @@ fi
 # another repository, run no checks. The empty marker the ledger replaced
 # (/tmp/.myspec-code-changed-<id>, written by an older hook) arms the cwd's
 # checkout, with attribution off: it carries no list of what the session wrote.
-SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
 LEDGER="/tmp/.myspec-session-writes-${SESSION_ID}"
 LEGACY_MARKER="/tmp/.myspec-code-changed-${SESSION_ID}"
 ORIG_ROOT=$(cd "$REPO_ROOT" && pwd -P)
 VERIFY_ROOTS=()
 ATTRIBUTE=1
 
-# physical_common_dir <dir> -> the physical git common dir of the checkout.
-physical_common_dir() {
-  local d
-  d=$(git -C "$1" rev-parse --git-common-dir 2>/dev/null) || return 1
-  (cd "$1" && cd "$d" && pwd -P)
+# common_dir <dir> -> the physical git common dir of the checkout at <dir>.
+common_dir() {
+  checkout_facts "$1" || return 1
+  printf '%s\n' "$CF_COMMON_DIR"
 }
 
 add_verify_root() {
@@ -201,10 +150,10 @@ armed_roots() {
 
 # same_repo <root> -> 0 when <root> is a checkout of the cwd's repository (the
 # cwd's own root, for a project without git).
-ORIG_COMMON=$(physical_common_dir "$ORIG_ROOT" 2>/dev/null || printf '')
+ORIG_COMMON=$(common_dir "$ORIG_ROOT" || printf '')
 same_repo() {
   if [ -n "$ORIG_COMMON" ]; then
-    [ "$(physical_common_dir "$1" 2>/dev/null || printf '')" = "$ORIG_COMMON" ]
+    [ "$(common_dir "$1" || printf '')" = "$ORIG_COMMON" ]
   else
     [ "$1" = "$ORIG_ROOT" ]
   fi
@@ -237,11 +186,8 @@ if [ -n "$SESSION_ID" ]; then
   fi
 fi
 
-if [ "${#VERIFY_ROOTS[@]}" -eq 0 ]; then
-  # No code written in this repository since the last run — skip verification
-  echo '{"decision": "approve"}'
-  exit 0
-fi
+# No code written in this repository since the last run — skip verification
+[ "${#VERIFY_ROOTS[@]}" -gt 0 ] || approve
 
 # A symlinked dependency directory (node_modules, vendor, .venv, ...) makes
 # every check below run against ANOTHER checkout dependency tree, so the gate
@@ -268,153 +214,8 @@ fi
 # (project-wide, for repos whose worktrees share the main checkout
 # dependencies by construction) or MYSPEC_ALLOW_LINKED_MODULES=1. Both cover
 # every dependency directory, not only node_modules.
-# BEGIN dependency-lockfile map
-# Byte-identical in hooks/verify-before-stop.sh and lib/worktree-provision.sh
-# (the two ship separately, so neither can source the other); a test in
-# lib/tests/worktree-provision.test.sh fails when they drift.
-#
-# An isolation.provision.symlink entry is a string ("vendor") or an object
-# ({"path": "vendor", "lockfiles": ["composer.lock"]}). An object with
-# "lockfiles" names the files that pin that tree, repo-relative, globs allowed
-# (a * stays within one directory, as in the shell); "lockfiles": [] declares
-# it unguarded. A string, or an object without a usable "lockfiles", takes the
-# lockfiles of a well-known dependency directory from dep_lockfiles below and
-# matches them both beside the project that owns the entry and at the repo
-# root (a nested apps/web/node_modules is pinned by either). Anything else (an
-# .env file, a cache) is unguarded: it pins no dependency set, and guarding it
-# would block every stop that links one.
-# DEP_DIRS entries are repo-relative; a * stays within one directory and is
-# expanded against the checkout root (vendor-bin/*/vendor: the per-tool vendor
-# trees the Composer bin plugin installs).
-# shellcheck disable=SC2034 # only verify-before-stop.sh reads it; the block is byte-identical in both files
-DEP_DIRS="node_modules vendor vendor/bundle vendor-bin/*/vendor .venv venv"
-
-# dep_lockfiles <path> -> the lockfile names that pin that directory.
-# vendor is shared by Composer, Bundler and Go modules, so it lists all three;
-# only the lockfiles that exist take part in a comparison. vendor/bundle is
-# Bundler's own install path, keyed by path because "bundle" alone is generic.
-dep_lockfiles() {
-  case "$1" in
-    vendor/bundle|*/vendor/bundle) printf '%s\n' Gemfile.lock; return ;;
-  esac
-  case "${1##*/}" in
-    node_modules) printf '%s\n' package-lock.json npm-shrinkwrap.json yarn.lock pnpm-lock.yaml bun.lockb bun.lock ;;
-    vendor) printf '%s\n' composer.lock Gemfile.lock go.sum ;;
-    .venv|venv) printf '%s\n' poetry.lock Pipfile.lock uv.lock pdm.lock 'requirements*.txt' ;;
-  esac
-}
-
-# infer_entry <path> -> "path<TAB>lockfile<TAB>..." from the built-in map.
-infer_entry() {
-  local path="$1" parent lock line
-  case "$path" in
-    vendor/bundle|*/vendor/bundle) parent=$(dirname "$(dirname "$path")") ;;
-    *) parent=$(dirname "$path") ;;
-  esac
-  line="$path"
-  while IFS= read -r lock; do
-    [ -n "$lock" ] || continue
-    [ "$parent" = "." ] || line="$line"$'\t'"$parent/$lock"
-    line="$line"$'\t'"$lock"
-  done < <(dep_lockfiles "$path")
-  printf '%s\n' "$line"
-}
-
-# symlink_entries <.myspec.json> -> one "path<TAB>lockfile<TAB>..." line per
-# configured entry; a line with no lockfile is an unguarded entry. A missing
-# config means the default ["node_modules"]; an unreadable one means none. A
-# malformed entry is dropped on its own, never taking the others with it, and
-# a "lockfiles" that is not a list falls back to the built-in map.
-symlink_entries() {
-  local raw line path mode rest
-  if [ -f "$1" ] && command -v jq >/dev/null 2>&1; then
-    raw=$(jq -r '(.isolation.provision.symlink // ["node_modules"])
-      | if type == "array" then .[] elif type == "string" then . else empty end
-      | if type == "string" then [., "-"]
-        elif type == "object" and (.path | type) == "string" then
-          (.lockfiles | if type == "array" then . elif type == "string" then [.] else null end) as $l
-          | if $l == null then [.path, "-"]
-            else [.path, "="] + [$l[] | select(type == "string" and . != "")] end
-        else empty end
-      | @tsv' "$1" 2>/dev/null) || raw=""
-  else
-    raw=$'node_modules\t-'
-  fi
-  while IFS= read -r line; do
-    [ -n "$line" ] || continue
-    path="${line%%$'\t'*}"
-    rest="${line#*$'\t'}"
-    mode="${rest%%$'\t'*}"
-    while [ "${path#./}" != "$path" ]; do path="${path#./}"; done
-    path="${path%/}"
-    [ -n "$path" ] || continue
-    if [ "$mode" = "-" ]; then
-      infer_entry "$path"
-    elif [ "$rest" = "=" ]; then
-      printf '%s\n' "$path"
-    else
-      printf '%s\t%s\n' "$path" "${rest#=$'\t'}"
-    fi
-  done <<< "$raw"
-}
-
-# tree_loads_checkout <tree> <checkout> -> 0 when the dependency tree at
-# <tree> loads the project's OWN source from <checkout> (a physical path).
-# A link to such a tree runs that checkout's code, not this one's, however
-# identical the lockfiles are. Composer writes the root package's autoload
-# rules against $baseDir, which PHP resolves through the link; an editable
-# Python install (poetry, uv, pip -e) records its source in direct_url.json.
-# A workspace link is a directory symlink in the tree's top two levels
-# (<name>, @scope/<name>, vendor/<name>), or in a nested link directory
-# (NESTED_LINK_DIRS), that resolves out of the tree: an npm, Yarn, pnpm or
-# Bun workspace package, a Composer path repository. A relative one resolves
-# from the physical tree, so through a link it lands in the other checkout's
-# packages. Every such link is resolved physically, because its text says
-# little about where it lands (.., ./../x, a/../../x, or a hop into a deeper
-# link that leaves the tree). The cd calls run in one subshell, so a tree of
-# thousands of links costs no fork per link. A find that cannot run the
-# scan (one without -mindepth, say) counts as loading: an unscanned tree is
-# never accepted. The scan's own exit status is ignored: find also fails on
-# an unreadable directory inside the tree, after listing every link it
-# could read, and that failure says nothing about those links.
-# NESTED_LINK_DIRS are tree-relative directories that hold links of their
-# own one or two levels down, such as the pnpm hidden hoist
-# (.pnpm/node_modules/@scope/<name>, four levels below the tree). Data, so
-# another layout is one more entry.
-NESTED_LINK_DIRS=".pnpm/node_modules"
-tree_loads_checkout() {
-  local tree="$1" checkout="$2" f url dir real links nested
-  local -a nests
-  # shellcheck disable=SC2016 # the literal $baseDir text Composer writes, not a variable
-  grep -qsF '$baseDir . ' "$tree"/composer/autoload_*.php && return 0
-  for f in "$tree"/lib/python*/site-packages/*.dist-info/direct_url.json; do
-    [ -f "$f" ] || continue
-    url=$(jq -r 'select(.dir_info.editable == true) | .url // empty' "$f" 2>/dev/null) || continue
-    case "$url" in file://*) ;; *) continue ;; esac
-    dir=$(cd "${url#file://}" 2>/dev/null && pwd -P) || continue
-    case "$dir/" in "$checkout"/*) return 0 ;; esac
-  done
-  real=$(cd "$tree" 2>/dev/null && pwd -P) || return 1
-  find "$real" -mindepth 1 -maxdepth 0 -type l >/dev/null 2>&1 || return 0
-  links=$(find "$real" -mindepth 1 -maxdepth 2 -type l 2>/dev/null || true)
-  read -ra nests <<< "$NESTED_LINK_DIRS"
-  for nested in ${nests[@]+"${nests[@]}"}; do
-    [ -d "$real/$nested" ] || continue
-    links="$links"$'\n'$(find "$real/$nested" -mindepth 1 -maxdepth 2 -type l 2>/dev/null || true)
-  done
-  (
-    while IFS= read -r f; do
-      [ -n "$f" ] || continue
-      cd -P "$f" 2>/dev/null || continue
-      case "$PWD/" in
-        "$real"/*) ;;
-        "$checkout"/*) exit 0 ;;
-      esac
-    done <<< "$links"
-    exit 1
-  )
-}
-# END dependency-lockfile map
+# DEP_DIRS, symlink_entries and tree_loads_checkout come from
+# lib/dependency-map.sh, shared with lib/worktree-provision.sh.
 
 # link_source <entry> -> the checkout <entry> links into: the link target
 # with <entry> removed. Fails when the target is not <checkout>/<entry>, or is
@@ -428,13 +229,6 @@ link_source() {
   esac
   [ "$src" != "$REPO_ROOT" ] || return 1
   printf '%s\n' "$src"
-}
-
-# common_dir <dir> -> the physical git common dir of the checkout at <dir>.
-common_dir() {
-  local d
-  d=$(git -C "$1" rev-parse --git-common-dir 2>/dev/null) || return 1
-  (cd "$1" && cd "$d" && pwd -P)
 }
 
 # lockfiles_match <src> <lockfile-pattern>... -> 0 when checkout <src> holds
@@ -512,9 +306,7 @@ if [ "$ALLOW_LINKED" != "true" ] && [ "${MYSPEC_ALLOW_LINKED_MODULES:-}" != "1" 
     fi
   done < <(guarded_entries)
   if [ -n "$STALE_LINKS" ]; then
-    REASON=$(printf 'Symlinked dependency directory in %s: %s. The lockfiles that pin it differ from the checkout it points into (or none exists), or the tree loads the project source from that checkout, so lint, type-check and test results here describe a different dependency tree. Run a real install in this worktree before reporting any result as verified (or, if this repo shares one tree by design, set isolation.allowLinkedModules: true in .myspec.json).' "$REPO_ROOT" "$STALE_LINKS" | jq -Rs .)
-    echo "{\"decision\": \"block\", \"reason\": $REASON}"
-    exit 0
+    decision_block 'Symlinked dependency directory in %s: %s. The lockfiles that pin it differ from the checkout it points into (or none exists), or the tree loads the project source from that checkout, so lint, type-check and test results here describe a different dependency tree. Run a real install in this worktree before reporting any result as verified (or, if this repo shares one tree by design, set isolation.allowLinkedModules: true in .myspec.json).' "$REPO_ROOT" "$STALE_LINKS"
   fi
 fi
 done
@@ -551,7 +343,7 @@ CAP_SENTINEL=$(mktemp "${TMPDIR:-/tmp}/.myspec-cap.XXXXXX")
 rm -f "$CAP_SENTINEL"
 CHECK_LOG=""
 CHECK_RUN_LOG=""
-trap 'finish_run; rm -f "$CAP_SENTINEL" ${SETTING_ERR:+"$SETTING_ERR"} ${CHECK_LOG:+"$CHECK_LOG"} ${CHECK_RUN_LOG:+"$CHECK_RUN_LOG"} ${FAILED_LOGS[@]+"${FAILED_LOGS[@]}"}' EXIT
+trap 'finish_run; rm -f "$CAP_SENTINEL" ${CHECK_LOG:+"$CHECK_LOG"} ${CHECK_RUN_LOG:+"$CHECK_RUN_LOG"} ${FAILED_LOGS[@]+"${FAILED_LOGS[@]}"}' EXIT
 
 # run_with_cap <seconds> <command>: runs it under the cap and kills the whole
 # process group at the deadline. Killing only the direct child is not enough:
@@ -813,15 +605,9 @@ CONTAINER_VALUE_SHORT="fpHcleu"
 # linked worktree sits in that worktree's tree, and the containers its
 # checks reach were started from the main checkout's copy.
 is_linked_worktree() {
-  local gd cd_ sp
-  gd=$(git -C "$1" rev-parse --git-dir 2>/dev/null) || return 1
-  [ -n "$gd" ] || return 1
-  gd=$(cd "$1" && cd "$gd" && pwd -P) || return 1
-  cd_=$(physical_common_dir "$1" 2>/dev/null) || return 1
-  [ -n "$cd_" ] || return 1
-  [ "$gd" != "$cd_" ] && return 0
-  sp=$(git -C "$1" rev-parse --show-superproject-working-tree 2>/dev/null) || return 1
-  [ -n "$sp" ] && is_linked_worktree "$sp"
+  checkout_facts "$1" || return 1
+  [ "$CF_LINKED" = 1 ] && return 0
+  [ "$CF_SUBMODULE" = 1 ] && is_linked_worktree "$CF_SUPER"
 }
 
 # exec_short_cluster <-abc> -> 0 when the cluster sets the workdir (a w in
@@ -895,53 +681,20 @@ container_exec_unpinned() {
   return 1
 }
 
-# Settings, through the one reader (lib/myspec-config.sh): next to this hook's
-# directory in the plugin and in a project (.claude/hooks, .claude/lib), or
-# in the plugin root. Without it, the checks are read from the file as before
-# and a check with runIn is refused: its container cannot be read.
-CONFIG_READER=""
-for CANDIDATE in "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/myspec-config.sh" \
-    "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/myspec-config.sh"; do
-  if [ -f "$CANDIDATE" ]; then
-    CONFIG_READER="$CANDIDATE"
-    break
-  fi
-done
-
-# read_setting <key> <root> -> sets SETTING to the value as JSON and
-# SETTING_NOTES to the reader's notes on an ignored key. Fails without the
-# reader, or when it fails.
-SETTING_ERR=$(mktemp "${TMPDIR:-/tmp}/.myspec-cfg.XXXXXX")
-read_setting() {
-  SETTING=""
-  SETTING_NOTES=""
-  [ -n "$CONFIG_READER" ] || return 1
-  SETTING=$(bash "$CONFIG_READER" get "$1" --root "$2" 2>"$SETTING_ERR") || return 1
-  SETTING_NOTES=$(sed 's/^myspec-config: //' "$SETTING_ERR")
-}
+# Settings, through the one reader (read_setting in lib/hook-core.sh, which
+# runs lib/myspec-config.sh beside it). Without it, the checks are read from
+# the file as before and a check with runIn is refused: its container cannot
+# be read.
 
 # Path scope (#232). A check's `paths` is a list of repo-relative globs
 # matched against each file this session wrote in the checkout. They compile
 # through lib/glob-regex.sh, the one glob compiler (semantics there and in
-# docs/stop-gate.md "Globs"), found where the settings reader is. A glob
-# that is empty, absolute or has a `..` segment is unusable, and so is a
-# `paths` that is not a non-empty list of strings: the check then runs, and
-# the stop message names the ignored setting (fail closed). Without the
-# compiler every `paths` is ignored the same way.
-GLOB_LIB=""
-for CANDIDATE in "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/glob-regex.sh" \
-    "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/glob-regex.sh"; do
-  if [ -f "$CANDIDATE" ]; then
-    GLOB_LIB="$CANDIDATE"
-    break
-  fi
-done
-if [ -n "$GLOB_LIB" ]; then
-  # shellcheck source=/dev/null
-  . "$GLOB_LIB"
-else
-  glob_regex() { return 1; }
-fi
+# docs/stop-gate.md "Globs"), which hook-core sources. A glob that is empty,
+# absolute or has a `..` segment is unusable, and so is a `paths` that is not
+# a non-empty list of strings: the check then runs, and the stop message
+# names the ignored setting (fail closed). Without the compiler every
+# `paths` is ignored the same way.
+declare -F glob_regex >/dev/null || glob_regex() { return 1; }
 
 # paths_verdict <check json> -> sets PATHS_VERDICT to run (no paths, or a
 # file matches), skip (no file matches) or ignored (unusable; the check
@@ -1013,26 +766,19 @@ unseen_files() {
 # main_checkout <root> -> the physical path of the repository's main
 # checkout. A submodule's is its superproject's main checkout plus the
 # submodule's path, so a submodule of a linked worktree is not its own main.
+# Otherwise checkout_facts decides (none for a bare repository).
 main_checkout() {
-  local sp main first
-  if ! git -C "$1" rev-parse --git-dir >/dev/null 2>&1; then
-    printf '%s\n' "$1"
-    return 0
-  fi
-  sp=$(git -C "$1" rev-parse --show-superproject-working-tree 2>/dev/null || printf '')
-  if [ -n "$sp" ]; then
-    sp=$(cd "$sp" && pwd -P) || return 1
+  local sp main
+  checkout_facts "$1" || { printf '%s\n' "$1"; return 0; }
+  if [ "$CF_SUBMODULE" = 1 ]; then
+    sp="$CF_SUPER"
     case "$1/" in "$sp"/*) ;; *) return 1 ;; esac
     main=$(main_checkout "$sp") || return 1
     printf '%s/%s\n' "$main" "${1#"$sp"/}"
     return 0
   fi
-  # The first entry of the worktree list is the main working tree; a bare
-  # repository has none.
-  first=$(git -C "$1" worktree list --porcelain 2>/dev/null \
-    | awk 'NR == 1 && /^worktree / { p = substr($0, 10); next } /^bare$/ { p = "" } /^$/ { exit } END { print p }')
-  [ -n "$first" ] || return 1
-  (cd "$first" 2>/dev/null && pwd -P)
+  [ -n "$CF_MAIN" ] || return 1
+  printf '%s\n' "$CF_MAIN"
 }
 
 # check_workdir <root> <container name> -> sets CHECK_WORKDIR, or
@@ -1099,13 +845,12 @@ check_workdir() {
 # once, there, for the whole session: the task worktrees its subagents edit
 # share the session id, so their writes arm this gate too, and they carry no
 # marker of their own. A concurrent run in another checkout has another cwd
-# and keeps its own gate. A marker older than IMPLEMENT_MARKER_TTL (8h, the
+# and keeps its own gate. A marker older than HOOK_DECISION_TTL (8h, the
 # isolation-decision TTL) or without a readable started_at is a crashed run:
 # it is deleted and the gate blocks.
 # Only the verification.json checks are downgraded; the conformance and
 # symlink blocks above are session damage, not expected red.
 IMPLEMENT_MARKER="$ORIG_ROOT/.claude/state/implement-in-progress.json"
-IMPLEMENT_MARKER_TTL=28800
 IMPLEMENT_ACTIVE=0
 if [ -f "$IMPLEMENT_MARKER" ]; then
   STARTED_AT=$(jq -r '.started_at // empty' "$IMPLEMENT_MARKER" 2>/dev/null || printf '')
@@ -1114,7 +859,7 @@ if [ -f "$IMPLEMENT_MARKER" ]; then
   esac
   if [ -n "$STARTED_AT" ]; then
     MARKER_AGE=$(( $(date +%s) - STARTED_AT ))
-    if [ "$MARKER_AGE" -ge 0 ] && [ "$MARKER_AGE" -le "$IMPLEMENT_MARKER_TTL" ]; then
+    if [ "$MARKER_AGE" -ge 0 ] && [ "$MARKER_AGE" -le "$HOOK_DECISION_TTL" ]; then
       IMPLEMENT_ACTIVE=1
     fi
   fi
@@ -1379,10 +1124,7 @@ if [ ${#FAILED_CHECKS[@]} -gt 0 ] || [ ${#TIMED_OUT_CHECKS[@]} -gt 0 ] || [ ${#U
     done
     NOTES+="Fix what your changes broke. Do not edit files changed outside this session to make a check pass: another session sharing this checkout may be working on them. If a failure comes from those changes, say so and stop. A Bash side effect (an install, code generation) is not recorded as this session's write, so if you made one of those changes, it is yours."$'\n\n'
   fi
-  # Escape for JSON
-  REASON=$(printf "Verification did not pass (%s). Fix the failures your changes caused before completing; for a timeout, get the real result first.\n\n%s%s" "$NAMES" "$NOTES" "$DETAILS" | jq -Rs .)
-  echo "{\"decision\": \"block\", \"reason\": $REASON}"
-  exit 0
+  decision_block "Verification did not pass (%s). Fix the failures your changes caused before completing; for a timeout, get the real result first.\n\n%s%s" "$NAMES" "$NOTES" "$DETAILS"
 fi
 
 if [ -n "$SCOPE" ]; then

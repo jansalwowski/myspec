@@ -37,11 +37,13 @@ build() {
   local name="$1"; shift
   REPO="$ROOT/$name"
   rm -rf "$REPO"
-  mkdir -p "$REPO/.claude/hooks"
+  mkdir -p "$REPO/.claude/hooks" "$REPO/.claude/lib"
   (cd "$REPO" && git init -q -b main .)
   printf '{"frameworkVersion":"0.0.0","project":{"name":"fx"}}\n' > "$REPO/.myspec.json"
   for d in "$@"; do mkdir -p "$REPO/$d"; done
   cp "$PLUGIN/hooks/validate-frontmatter.sh" "$REPO/.claude/hooks/"
+  # The installed layout: the hook sources .claude/lib/hook-core.sh.
+  cp "$PLUGIN/lib/hook-core.sh" "$REPO/.claude/lib/"
   chmod +x "$REPO/.claude/hooks/"*.sh
 }
 

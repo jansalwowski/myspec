@@ -5,15 +5,15 @@
 # session. Contract: .claude/rules/work-isolation.md; the procedure the block
 # messages cite: <aiDir>/work-isolation.md.
 #
-# Worktree detection: worktrees have .git as a FILE (gitdir: pointer); the main
-# checkout has .git as a DIRECTORY. Inside a worktree the decision is already
-# made, so everything is approved.
+# Worktree detection: checkout_facts (lib/hook-core.sh). Inside a linked
+# worktree the decision is already made, so its own files are approved.
 #
 # Marker: .claude/state/isolation/<session_id>.json  (gitignored), written by
 # .claude/lib/set-isolation.sh.
 #
 # Subagents cannot call AskUserQuestion. Rather than prompting, a subagent with
-# no marker of its own inherits the newest marker written within INHERIT_TTL.
+# no marker of its own inherits the newest marker written within
+# HOOK_INHERIT_TTL.
 # Only a subagent does: inside one the hook input carries `agent_id` or
 # `agent_type`. A top-level session (neither field) with no marker of its own
 # is asked, never handed another session's answer (issue #146). Whether a
@@ -25,106 +25,41 @@
 #   aiDir                       doc tree; edits there never trigger the prompt
 #   isolation.worktreeRoot      where worktrees live (default .claude/worktrees)
 #
-# Output contract: a block prints the PreToolUse deny form plus the legacy
-# fields older hosts read ({"hookSpecificOutput": {"permissionDecision":
-# "deny", ...}, "decision": "block", "reason": "..."}). An allowed edit prints
-# NOTHING: {"decision": "approve"} is the deprecated PreToolUse spelling of
-# permissionDecision "allow", which skips the user's permission prompt.
+# Output contract: a block prints the PreToolUse deny form (pretool_deny in
+# lib/hook-core.sh). An allowed edit prints NOTHING.
 
 set -euo pipefail
 
-OWN_TTL=28800      # 8h — a session's own decision stays valid this long
-INHERIT_TTL=14400  # 4h — window in which a subagent inherits a parent's decision
+command -v jq >/dev/null 2>&1 || exit 0
+HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
+[ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
+[ -f "$HOOK_CORE" ] || exit 0
+# shellcheck source=lib/hook-core.sh
+. "$HOOK_CORE"
 
-approve() {
-  exit 0
-}
-
-block() {
-  local reason
-  reason=$(printf '%s' "$1" | jq -Rs .)
-  printf '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": %s}, "decision": "block", "reason": %s}\n' "$reason" "$reason"
-  exit 0
-}
-
-if ! command -v jq >/dev/null 2>&1; then
-  approve
-fi
-
-INPUT=$(cat)
-
-resolve_repo_root() {
-  local candidate resolved
-
-  while IFS= read -r candidate; do
-    [ -n "$candidate" ] || continue
-    if resolved=$(git -C "$candidate" rev-parse --show-toplevel 2>/dev/null); then
-      printf '%s\n' "$resolved"
-      return 0
-    fi
-  done <<JSON
-$(printf '%s' "$INPUT" | jq -r '
-    [
-      .cwd,
-      .workdir,
-      .workspace.cwd,
-      .session.cwd,
-      .tool_input.cwd,
-      .tool_input.workdir
-    ] | map(select(type == "string" and . != "")) | .[]
-  ' 2>/dev/null)
-JSON
-
-  if resolved=$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null); then
-    printf '%s\n' "$resolved"
-    return 0
-  fi
-
-  candidate="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-  if resolved=$(git -C "$candidate" rev-parse --show-toplevel 2>/dev/null); then
-    printf '%s\n' "$resolved"
-    return 0
-  fi
-
-  return 1
-}
-
-FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
-SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
-# Non-empty only inside a subagent. Gates inheritance (branch 2).
-SUBAGENT=$(printf '%s' "$INPUT" | jq -r '[.agent_id, .agent_type] | map(strings | select(. != "")) | first // empty' 2>/dev/null || printf '')
-
-if [ -z "$FILE_PATH" ]; then
-  approve
-fi
-
-if ! REPO_ROOT="$(resolve_repo_root)"; then
-  approve
-fi
+# SUBAGENT is non-empty only inside a subagent; it gates inheritance (branch 2).
+payload_parse "$(cat)" FILE_PATH=.tool_input.file_path SESSION_ID=.session_id \
+  SUBAGENT="$HOOK_SUBAGENT" CWDS="$HOOK_CWDS"
+[ -n "$FILE_PATH" ] || exit 0
+REPO_ROOT=$(hook_repo_root "$CWDS") || exit 0
 
 # The cwd is a linked worktree. That says nothing about the edited file: an
 # absolute path can still point into the main checkout, which is the edit a
 # worktree answer forbids (issue #224). Judge it against the main checkout the
 # worktree belongs to; a file inside the worktree is approved below by its own
-# root. A submodule also has a .git file, but its common dir is not a `.git`
-# directory, so it keeps the approve.
+# root. A submodule, or a worktree whose main checkout git cannot name (a bare
+# repository), keeps the approve.
 CWD_ROOT="$REPO_ROOT"
-if [ -f "$REPO_ROOT/.git" ]; then
-  COMMON=$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || printf '')
-  if [ -n "$COMMON" ] && [ -d "$COMMON" ] && [ "$(basename "$COMMON")" = ".git" ]; then
-    REPO_ROOT=$(dirname "$COMMON")
-  else
-    approve
-  fi
+checkout_facts "$REPO_ROOT" || exit 0
+if [ "$CF_SUBMODULE" = 1 ] || [ -z "$CF_MAIN" ]; then
+  exit 0
 fi
+REPO_ROOT="$CF_MAIN"
 
 # Only a myspec project carries the isolation contract.
-[ -f "$REPO_ROOT/.myspec.json" ] || approve
+[ -f "$REPO_ROOT/.myspec.json" ] || exit 0
 
-# aiDir is required since 2.0; .ai is the documented default when absent.
-AI_DIR=$(jq -r '.aiDir // empty' "$REPO_ROOT/.myspec.json" 2>/dev/null)
-AI_DIR="${AI_DIR%/}"
-AI_DIR="${AI_DIR:-.ai}"
+AI_DIR=$(ai_dir "$REPO_ROOT")
 WORKTREE_ROOT=$(jq -r '.isolation.worktreeRoot // ".claude/worktrees"' "$REPO_ROOT/.myspec.json" 2>/dev/null)
 WORKTREE_ROOT="${WORKTREE_ROOT%/}"
 # Installed by init/update from the manifest `files` entry work-isolation.md.
@@ -168,44 +103,31 @@ case "$FILE_PATH" in
   *)  ABS_PATH="$CWD_ROOT/$FILE_PATH" ;;
 esac
 
-# A linked worktree lives INSIDE the repo (<worktreeRoot>/<slug>/), so a file
-# there is reached by a main-checkout-relative path and would otherwise be
-# judged a main-checkout edit. Resolve the root from the FILE's own directory:
-# in a worktree that root has .git as a FILE, which is the whole point of the
-# session's isolation choice — approve it.
-FILE_DIR="$(dirname "$ABS_PATH")"
-while [ -n "$FILE_DIR" ] && [ "$FILE_DIR" != "/" ] && [ ! -d "$FILE_DIR" ]; do
-  FILE_DIR="$(dirname "$FILE_DIR")"
-done
-
 # Compare physical paths. The tool's file_path is the path as the session
 # spelled it, which can run through a symlink (a linked home directory,
 # macOS /tmp), while git reports the physical toplevel: the prefix strip
 # below then failed and the edit was approved as outside the repo.
-if [ "$FILE_DIR" != "/" ] && PHYS_DIR=$(cd "$FILE_DIR" 2>/dev/null && pwd -P); then
-  ABS_PATH="$PHYS_DIR/${ABS_PATH#"$FILE_DIR"/}"
-  FILE_DIR="$PHYS_DIR"
-fi
-REPO_ROOT=$(cd "$REPO_ROOT" && pwd -P)
+ABS_PATH=$(physical_path "$ABS_PATH")
 
-if FILE_ROOT="$(git -C "$FILE_DIR" rev-parse --show-toplevel 2>/dev/null)"; then
-  if [ -f "$FILE_ROOT/.git" ]; then
-    approve
-  fi
+# A linked worktree lives INSIDE the repo (<worktreeRoot>/<slug>/), so a file
+# there is reached by a main-checkout-relative path and would otherwise be
+# judged a main-checkout edit. Resolve the checkout from the FILE's own
+# directory: a linked worktree there is the whole point of the session's
+# isolation choice — approve it. So is a submodule.
+if checkout_facts "$ABS_PATH" && { [ "$CF_LINKED" = 1 ] || [ "$CF_SUBMODULE" = 1 ]; }; then
+  exit 0
 fi
 
 REL_PATH="${ABS_PATH#"$REPO_ROOT"/}"
 
 # Prefix strip was a no-op → the file lives outside the repo (scratchpad, /tmp).
-if [ "$REL_PATH" = "$ABS_PATH" ]; then
-  approve
-fi
+[ "$REL_PATH" != "$ABS_PATH" ] || exit 0
 
 # Checked BEFORE any mode logic: these paths have exactly one correct location,
 # so no isolation answer can redirect them. See the list's comment above.
 for PREFIX in "${MAIN_CHECKOUT_ONLY_PREFIXES[@]}"; do
   case "$REL_PATH" in
-    "$PREFIX"*) approve ;;
+    "$PREFIX"*) exit 0 ;;
   esac
 done
 
@@ -227,16 +149,6 @@ for EXEMPT in "${EXEMPT_FILES[@]}"; do
   fi
 done
 
-STATE_DIR="$REPO_ROOT/.claude/state/isolation"
-NOW=$(date +%s)
-MARKER_MODE=""
-MARKER_AGE=0
-
-read_marker() {
-  MARKER_MODE=$(jq -r '.mode // empty' "$1" 2>/dev/null || printf '')
-  MARKER_AGE=$(( NOW - $(jq -r '.decided_at // 0' "$1" 2>/dev/null || printf 0) ))
-}
-
 DEFAULT_BRANCH=$(git -C "$REPO_ROOT" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || printf '')
 DEFAULT_BRANCH="${DEFAULT_BRANCH#origin/}"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
@@ -251,45 +163,19 @@ Use absolute paths and \`git -C <worktree>\` for all git operations. Full proced
 
 Blocked edit: $REL_PATH"
 
-# 1. This session's own decision.
-if [ -n "$SESSION_ID" ] && [ -f "$STATE_DIR/${SESSION_ID}.json" ]; then
-  read_marker "$STATE_DIR/${SESSION_ID}.json"
-
-  if [ "$MARKER_AGE" -lt "$OWN_TTL" ] && [ "$MARKER_MODE" = "develop" ]; then
-    approve
-  fi
-
-  if [ "$MARKER_AGE" -lt "$OWN_TTL" ] && [ "$MARKER_MODE" = "worktree" ]; then
-    block "$WORKTREE_REASON"
-  fi
-fi
-
-# 2. Inherited decision — subagents cannot prompt, so they follow the parent.
-#    A top-level session never inherits; it falls through to the ask.
-if [ -n "$SUBAGENT" ] && [ -d "$STATE_DIR" ]; then
-  # shellcheck disable=SC2012 # ls -t is the portable mtime sort; the names are generated session ids
-  # awk, not head: it reads all of ls, so no SIGPIPE under pipefail.
-  NEWEST=$(ls -t "$STATE_DIR"/*.json 2>/dev/null | awk 'NR == 1' || printf '')
-
-  if [ -n "$NEWEST" ] && [ -f "$NEWEST" ]; then
-    read_marker "$NEWEST"
-
-    if [ "$MARKER_AGE" -lt "$INHERIT_TTL" ] && [ "$MARKER_MODE" = "develop" ]; then
-      approve
-    fi
-
-    if [ "$MARKER_AGE" -lt "$INHERIT_TTL" ] && [ "$MARKER_MODE" = "worktree" ]; then
-      block "$WORKTREE_REASON"
-    fi
-  fi
-fi
+# 1. This session's own decision; 2. in a subagent, the inherited one
+#    (subagents cannot prompt, so they follow the parent). A top-level
+#    session never inherits; it falls through to the ask.
+isolation_decision "$REPO_ROOT" "$SESSION_ID" "$SUBAGENT"
+case "$ISO_MODE" in
+  develop) exit 0 ;;
+  worktree) pretool_deny "$WORKTREE_REASON" ;;
+esac
 
 # 3. No decision anywhere — ask, unless the file is exempt from prompting.
-if [ "$IS_EXEMPT" -eq 1 ]; then
-  approve
-fi
+[ "$IS_EXEMPT" -eq 0 ] || exit 0
 
-block "BLOCKED: no work-isolation decision recorded for this session.
+pretool_deny "BLOCKED: no work-isolation decision recorded for this session.
 
 Before editing source files in the main checkout, ask where the work should happen. Call AskUserQuestion with ONE question:
 

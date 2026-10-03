@@ -47,9 +47,12 @@ REFS=$(grep -rhoE '\.claude/(lib|hooks)/[A-Za-z0-9._-]+' \
     --exclude-dir=tests --exclude=manifest.json "${SHIPPED[@]}" 2>/dev/null \
   | sed -E 's/[.]+$//' | sort -u)
 
-# A hook that sources a sibling lib by relative path ships with the same need.
-REL_REFS=$(grep -hoE '\.\./lib/[A-Za-z0-9._-]+' "$PLUGIN"/hooks/*.sh 2>/dev/null \
-  | sed -E 's#^\.\./lib/#.claude/lib/#; s/[.]+$//' | sort -u)
+# A hook that sources a sibling lib by relative path ships with the same need,
+# and so does a lib the hooks or hook-core reach through $HOOK_LIB (the
+# directory hook-core.sh was found in).
+# shellcheck disable=SC2016 # a literal $HOOK_LIB, matched in the scripts' text
+REL_REFS=$(grep -hoE '(\.\./lib|\$HOOK_LIB)/[A-Za-z0-9._-]+' "$PLUGIN"/hooks/*.sh "$PLUGIN"/lib/hook-core.sh 2>/dev/null \
+  | sed -E 's#^(\.\./lib|\$HOOK_LIB)/#.claude/lib/#; s/[.]+$//' | sort -u)
 
 CHECKED=0
 while IFS= read -r ref; do

@@ -24,13 +24,21 @@
 
 set -euo pipefail
 
-if ! command -v jq >/dev/null 2>&1; then
+# The hook and its libs ship as a set: hooks/ + lib/ in the plugin,
+# .claude/hooks/ + .claude/lib/ in a project. A missing jq or lib fails open
+# rather than block on an infra error.
+command -v jq >/dev/null 2>&1 || exit 0
+HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
+[ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
+if [ ! -f "$HOOK_CORE" ] || [ ! -f "$(dirname "$HOOK_CORE")/markdown-section-check.sh" ]; then
   exit 0
 fi
+# shellcheck source=lib/hook-core.sh
+. "$HOOK_CORE"
+# shellcheck source=lib/markdown-section-check.sh
+. "$HOOK_LIB/markdown-section-check.sh"
 
-INPUT=$(cat)
-
-FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
+payload_parse "$(cat)" FILE_PATH=.tool_input.file_path
 [ -n "$FILE_PATH" ] || exit 0
 
 # Only tech-spec.md files under a features/ tree (any aiDir prefix, allows
@@ -43,14 +51,11 @@ esac
 # Edit that removed the file (or never created it) — nothing to validate.
 [ -f "$FILE_PATH" ] || exit 0
 
-# Resolve repo root (best effort) for the opt-out lookup + lib resolution.
+# Opt-out: reuseAudit.enabled === false in the .myspec.json of the file's
+# checkout (best effort). Any other state (missing file, missing key, parse
+# error, true) → validate (fail-open).
 REPO_ROOT=""
-if R=$(git -C "$(dirname "$FILE_PATH")" rev-parse --show-toplevel 2>/dev/null); then
-  REPO_ROOT="$R"
-fi
-
-# Opt-out: reuseAudit.enabled === false in .myspec.json. Any other state
-# (missing file, missing key, parse error, true) → validate (fail-open).
+checkout_facts "$FILE_PATH" && REPO_ROOT="$CF_ROOT"
 if [ -n "$REPO_ROOT" ] && [ -f "$REPO_ROOT/.myspec.json" ]; then
   # NOTE: do not use `// empty` — jq's `//` treats boolean false as absent,
   # so `.reuseAudit.enabled // empty` would yield "" for an explicit false.
@@ -59,29 +64,6 @@ if [ -n "$REPO_ROOT" ] && [ -f "$REPO_ROOT/.myspec.json" ]; then
     exit 0
   fi
 fi
-
-# Locate the shared validator. The hook + lib ship as a pair:
-#   myspec repo:      hooks/require-reuse-audit.sh  + lib/markdown-section-check.sh
-#   adopting project: .claude/hooks/...             + .claude/lib/...
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-LIB=""
-for cand in \
-  "$SCRIPT_DIR/../lib/markdown-section-check.sh" \
-  "${REPO_ROOT:-}/.claude/lib/markdown-section-check.sh" \
-  "${REPO_ROOT:-}/lib/markdown-section-check.sh"; do
-  if [ -n "$cand" ] && [ -f "$cand" ]; then
-    LIB="$cand"
-    break
-  fi
-done
-
-if [ -z "$LIB" ]; then
-  # Helper missing — fail open rather than block on infra error.
-  exit 0
-fi
-
-# shellcheck source=/dev/null
-. "$LIB"
 
 HEADING="Reuse audit"
 DIAG=""
@@ -122,5 +104,4 @@ To opt a project out entirely, set "reuseAudit": { "enabled": false } in .myspec
 EOF
 )
 
-printf '{"decision":"block","reason":%s}\n' "$(printf '%s' "$REASON" | jq -Rs .)"
-exit 0
+decision_block '%s' "$REASON"
