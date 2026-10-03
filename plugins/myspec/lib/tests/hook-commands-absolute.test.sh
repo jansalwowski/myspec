@@ -35,6 +35,7 @@ const relative = (command) => command.trim().split(/\s+/)
 
 # Every command value in the JSON files, as "<file>\t<command>".
 JSON_COMMANDS=$(cd "$PLUGIN" && find templates framework-files -name '*.json' -print 2>/dev/null; echo hooks.json)
+# shellcheck disable=SC2016 # literal text, not an expansion
 COMMANDS=$(cd "$PLUGIN" && printf '%s\n' "$JSON_COMMANDS" | node -e '
 const fs = require("fs");
 const files = fs.readFileSync(0, "utf8").split("\n").filter(Boolean);
@@ -53,6 +54,7 @@ console.log(out.join("\n"));
 ')
 
 # "command": "..." lines in Markdown, JSON-unescaped, as "<file>:<line>\t<command>".
+# shellcheck disable=SC2016 # literal text, not an expansion
 MD_COMMANDS=$(cd "$PLUGIN" && grep -rnE '"command"[[:space:]]*:[[:space:]]*"' --include='*.md' \
   templates framework-files skills/init skills/update skills/doctor 2>/dev/null | node -e '
 const lines = require("fs").readFileSync(0, "utf8").split("\n").filter(Boolean);
@@ -71,6 +73,7 @@ HOOK_COMMANDS=$(printf '%s\n%s\n' "$COMMANDS" "$MD_COMMANDS" | grep -E 'hooks/[^
 if printf '%s\n' "$HOOK_COMMANDS" | grep -q '^templates/settings-hooks.json	'; then ok; else fail "the scan reads templates/settings-hooks.json"; fi
 if printf '%s\n' "$HOOK_COMMANDS" | grep -q '^hooks.json	'; then ok; else fail "the scan reads the plugin hooks.json"; fi
 
+# shellcheck disable=SC2016 # literal text, not an expansion
 OFFENDERS=$(printf '%s\n' "$HOOK_COMMANDS" | node -e "$SCAN"'
 require("fs").readFileSync(0, "utf8").split("\n").filter(Boolean).forEach((line) => {
   const [where, command] = line.split("\t");
@@ -87,6 +90,7 @@ else
 fi
 
 # The scanner itself: each relative spelling is caught, each portable one passes.
+# shellcheck disable=SC2016 # literal text, not an expansion
 SELF=$(node -e "$SCAN"'
 const cases = [
   [".claude/hooks/verify-before-stop.sh", 1],

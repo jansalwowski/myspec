@@ -163,6 +163,7 @@ expect_no_line 'WARN +hook-command-relative' "no relative framework hook command
 # Every template entry is reported, whatever its event and matcher: update
 # rewrites what the doctor lists, so an entry the scan skipped stays bare. The
 # expected list is read from the template, not written out here.
+# shellcheck disable=SC2016 # literal text, not an expansion
 TEMPLATE_COMMANDS=$(node -e '
 const walk = (n, out) => {
   if (Array.isArray(n)) { n.forEach((x) => walk(x, out)); return out; }
@@ -190,6 +191,7 @@ chmod 755 "$REPO/scripts/own-hook.sh"
 set_json .claude/settings.json 'd.hooks.Stop[0].hooks.push({type:"command",command:"scripts/own-hook.sh"})'
 run_doctor hook-command-relative
 expect_line 'WARN +hook-command-relative: .claude/settings.json: hook command "scripts/own-hook.sh"' "a project-owned relative hook command is a warning"
+# shellcheck disable=SC2016 # literal text, not an expansion
 expect_line 'fix: prefix the script with "\$CLAUDE_PROJECT_DIR"/' "a project-owned relative hook command names the prefix fix"
 set_json .claude/settings.json 'd.hooks.Stop[0].hooks.pop()'
 rm "$REPO/scripts/own-hook.sh"
