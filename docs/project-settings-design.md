@@ -69,7 +69,7 @@ Polyglot example:
 ]
 ```
 
-Interaction with the guards: a tree that `install` built in the worktree is a real directory, not a link, so the linked-dependency guard (#229 / PR #236) passes it. That is why #236 should merge together with #230: #236 refuses the false pass, and `install` is the supported way to a true one. When a dependency tree holds workspace links that resolve into the main checkout and `install` is unset, provisioning skips that link and prints "set `isolation.provision.install` or run a real install", as it does today for a lockfile change. A workspace config alone skips nothing, so a tree with no such links (a pnpm workspace's Composer `vendor`) is still linked.
+Interaction with the guards: a tree that `install` built in the worktree is a real directory, not a link, so provision neither links nor records it and the Stop gate has nothing to compare. That is why #236 should merge together with #230: #236 refuses the false pass, and `install` is the supported way to a true one. When a dependency tree holds workspace links that resolve into the main checkout and `install` is unset, provisioning skips that link and prints "set `isolation.provision.install` or run a real install", as it does today for a lockfile change. A workspace config alone skips nothing, so a tree with no such links (a pnpm workspace's Composer `vendor`) is still linked.
 
 `--no-install` on `worktree-provision.sh` skips the install steps, for restricted environments, and prints each step it skipped.
 
@@ -104,7 +104,7 @@ The framework never names a container runtime: the command is the project's, and
 |---|---|---|---|---|
 | `blockInMain` | list of anchored ERE | the built-in list (see schema) | exists; default #250 | Commands blocked in the main checkout while a session is in worktree mode. The default is the guard's former `HEAVY_PATTERNS`: builds, installs, e2e runs, `lint:fix`, `docker compose exec`, `git push`, `git worktree prune`, for the JS, PHP, Python, Ruby, Rust, Go, JVM (Maven, Gradle), .NET and Make stacks. A project's entries extend it. |
 | `ignoreBlockInMain` | list of anchored ERE | `[]` | #250 | Default `blockInMain` entries, by their exact text, that the guard drops. Loosens the gate, so doctor lists it. |
-| `allowLinkedModules` | bool | `false` | exists | Accept a linked dependency tree at the Stop gate. Loosens the gate. |
+| `allowLinkedModules` | bool | `false` | exists | Read by `worktree-provision.sh` only (#239): link a dependency tree even when its lockfiles differ from the main checkout's, and record it without lockfile hashes, so the Stop gate does not compare them. Loosens the gate. |
 | `worktreeRoot` | repo-relative path | `.claude/worktrees` | exists | Where worktrees are created. |
 
 ### Deferred

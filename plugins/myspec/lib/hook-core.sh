@@ -107,6 +107,25 @@ physical_dir() {
   (cd "$1" 2>/dev/null && pwd -P)
 }
 
+# file_sha256 <file> -> the file's SHA-256, hex. Fails when the file is not
+# a readable regular file or no hash tool exists (sha256sum on Linux and
+# BusyBox, shasum on macOS, openssl as the last resort).
+file_sha256() {
+  local out
+  [ -f "$1" ] && [ -r "$1" ] || return 1
+  if command -v sha256sum >/dev/null 2>&1; then
+    out=$(sha256sum < "$1") || return 1
+  elif command -v shasum >/dev/null 2>&1; then
+    out=$(shasum -a 256 < "$1") || return 1
+  elif command -v openssl >/dev/null 2>&1; then
+    out=$(openssl dgst -sha256 < "$1") || return 1
+    out="${out##* }"
+  else
+    return 1
+  fi
+  printf '%s\n' "${out%% *}"
+}
+
 # checkout_facts <path> -> facts about the checkout holding <path> (or its
 # nearest existing directory), from one `git rev-parse` call:
 #   CF_ROOT        its toplevel, physical

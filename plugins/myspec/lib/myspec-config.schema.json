@@ -117,7 +117,7 @@
       "default": false,
       "issue": ["exists"],
       "loosens": true,
-      "description": "Accept a linked dependency tree at the Stop gate."
+      "description": "Read by worktree-provision.sh only: link a dependency tree even when its lockfiles differ from the main checkout's, and record it without lockfile hashes, so the Stop gate does not compare them."
     },
     "isolation.worktreeRoot": {
       "file": "project",
@@ -353,7 +353,7 @@
       "match": "^1$",
       "value": true,
       "issue": ["exists"],
-      "description": "Session override of isolation.allowLinkedModules."
+      "description": "Session override of isolation.allowLinkedModules, read while worktree-provision.sh runs."
     },
     "MYSPEC_DISABLE_METRICS": {
       "kind": "override",
