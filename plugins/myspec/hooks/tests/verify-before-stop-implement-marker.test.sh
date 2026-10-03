@@ -8,6 +8,11 @@
 # the marker is stale or unreadable, deleting it so a crashed run cannot
 # disable the gate for good.
 #
+# The marker is the session's, read in the cwd's checkout: a failing check in
+# a linked task worktree the session's subagents edited (armed through the
+# shared session id) warns like one in the cwd's checkout, and a marker in
+# that worktree alone does not downgrade a session whose cwd has none.
+#
 # Usage: verify-before-stop.test.sh [path-to-hook]
 
 set -uo pipefail
@@ -30,7 +35,8 @@ printf '{"checks":[{"name":"always-red","command":"echo boom; exit 1","required"
 MARKER="$REPO/.claude/state/implement-in-progress.json"
 SID="vbs-$$"
 CHANGED="/tmp/.myspec-code-changed-$SID"
-trap 'rm -rf "$ROOT"; rm -f "$CHANGED"' EXIT
+LEDGER="/tmp/.myspec-session-writes-$SID"
+trap 'rm -rf "$ROOT"; rm -f "$CHANGED" "$LEDGER"' EXIT
 
 PASS=0
 FAIL=0
@@ -81,6 +87,30 @@ if [ -f "$MARKER" ]; then fail "unreadable marker deleted"; else ok; fi
 write_marker "$(( $(date +%s) + 3600 ))"
 OUT=$(run_hook)
 expect_block "$OUT" "future-dated marker blocks"
+
+# --- the marker covers the task worktrees the session armed -----------------
+rm -f "$MARKER" "$CHANGED"
+printf '.claude/state/\n.claude/worktrees/\n' > "$REPO/.gitignore"
+git -C "$REPO" add -A && git -C "$REPO" commit -q -m checks
+TASK="$REPO/.claude/worktrees/t1"
+git -C "$REPO" worktree add -q -b main--t1 "$TASK"
+run_ledger() {  # run_ledger: a subagent's code write in the task worktree
+  printf 'code\t%s\tsrc/a.ts\tagent-1\n' "$TASK" > "$LEDGER"
+  printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$REPO" | bash "$HOOK"
+}
+
+OUT=$(run_ledger)
+expect_block "$OUT" "no marker: a failure in an armed task worktree blocks"
+
+write_marker "$(date +%s)"
+OUT=$(run_ledger)
+expect_warn "$OUT" "the cwd's fresh marker downgrades a failure in an armed task worktree"
+
+rm -f "$MARKER"
+mkdir -p "$TASK/.claude/state"
+printf '{"started_at":%s,"feature":"other"}\n' "$(date +%s)" > "$TASK/.claude/state/implement-in-progress.json"
+OUT=$(run_ledger)
+expect_block "$OUT" "a marker in the task worktree alone does not downgrade this session"
 
 printf '%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

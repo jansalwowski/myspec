@@ -1109,6 +1109,41 @@ check_workdir() {
   [ -n "$CHECK_WORKDIR" ] || CHECK_WORKDIR=/
 }
 
+# Orchestration marker. While /myspec:feature-implement runs, the controller
+# ends many turns on a tree that is red by design: a barrier accepted with a
+# recorded failure, a fix round in flight in a subagent, a failing test owned
+# by the next phase. Blocking there forces a turn the controller cannot use
+# (it may not fix code itself), so failures downgrade to a non-blocking
+# warning. The skill writes the marker at setup and removes it before its
+# final verification; feature-complete removes it too. It lives in the
+# checkout the controller works in (the cwd's, ORIG_ROOT), and it is read
+# once, there, for the whole session: the task worktrees its subagents edit
+# share the session id, so their writes arm this gate too, and they carry no
+# marker of their own. A concurrent run in another checkout has another cwd
+# and keeps its own gate. A marker older than IMPLEMENT_MARKER_TTL (8h, the
+# isolation-decision TTL) or without a readable started_at is a crashed run:
+# it is deleted and the gate blocks.
+# Only the verification.json checks are downgraded; the conformance and
+# symlink blocks above are session damage, not expected red.
+IMPLEMENT_MARKER="$ORIG_ROOT/.claude/state/implement-in-progress.json"
+IMPLEMENT_MARKER_TTL=28800
+IMPLEMENT_ACTIVE=0
+if [ -f "$IMPLEMENT_MARKER" ]; then
+  STARTED_AT=$(jq -r '.started_at // empty' "$IMPLEMENT_MARKER" 2>/dev/null || printf '')
+  case "$STARTED_AT" in
+    ''|*[!0-9]*) STARTED_AT="" ;;
+  esac
+  if [ -n "$STARTED_AT" ]; then
+    MARKER_AGE=$(( $(date +%s) - STARTED_AT ))
+    if [ "$MARKER_AGE" -ge 0 ] && [ "$MARKER_AGE" -le "$IMPLEMENT_MARKER_TTL" ]; then
+      IMPLEMENT_ACTIVE=1
+    fi
+  fi
+  if [ "$IMPLEMENT_ACTIVE" -eq 0 ]; then
+    rm -f "$IMPLEMENT_MARKER"
+  fi
+fi
+
 # Run each required check, once per checkout to verify.
 FAILED_CHECKS=()
 # The output file of each failed check, parallel to FAILED_CHECKS, for
@@ -1175,38 +1210,6 @@ if [ -n "$DEFAULT_REF" ]; then
   MYSPEC_BASE_REF=$(git -C "$REPO_ROOT" merge-base HEAD "$DEFAULT_REF" 2>/dev/null || printf '')
 fi
 export MYSPEC_BASE_REF
-
-# Orchestration marker. While /myspec:feature-implement runs, the controller
-# ends many turns on a tree that is red by design: a barrier accepted with a
-# recorded failure, a fix round in flight in a subagent, a failing test owned
-# by the next phase. Blocking there forces a turn the controller cannot use
-# (it may not fix code itself), so failures downgrade to a non-blocking
-# warning. The skill writes the marker at setup and removes it before its
-# final verification; feature-complete removes it too. It lives in the
-# checkout the session works in, not the primary one: it describes this tree,
-# and a concurrent run in another worktree must keep its own gate. A marker
-# older than IMPLEMENT_MARKER_TTL (8h, the isolation-decision TTL) or without
-# a readable started_at is a crashed run: it is deleted and the gate blocks.
-# Only the verification.json checks are downgraded; the conformance and
-# symlink blocks above are session damage, not expected red.
-IMPLEMENT_MARKER="$REPO_ROOT/.claude/state/implement-in-progress.json"
-IMPLEMENT_MARKER_TTL=28800
-IMPLEMENT_ACTIVE=0
-if [ -f "$IMPLEMENT_MARKER" ]; then
-  STARTED_AT=$(jq -r '.started_at // empty' "$IMPLEMENT_MARKER" 2>/dev/null || printf '')
-  case "$STARTED_AT" in
-    ''|*[!0-9]*) STARTED_AT="" ;;
-  esac
-  if [ -n "$STARTED_AT" ]; then
-    MARKER_AGE=$(( $(date +%s) - STARTED_AT ))
-    if [ "$MARKER_AGE" -ge 0 ] && [ "$MARKER_AGE" -le "$IMPLEMENT_MARKER_TTL" ]; then
-      IMPLEMENT_ACTIVE=1
-    fi
-  fi
-  if [ "$IMPLEMENT_ACTIVE" -eq 0 ]; then
-    rm -f "$IMPLEMENT_MARKER"
-  fi
-fi
 
 # The checks and containers, through the reader, from the checkout whose
 # verification.json is in use. Without the reader, the checks are read from
