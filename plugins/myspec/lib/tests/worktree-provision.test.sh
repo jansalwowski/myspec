@@ -4,8 +4,9 @@
 # Each isolation.provision.symlink entry is skipped when the branch changes a
 # lockfile that pins it, for any ecosystem: a vendor/ link survived a
 # composer.lock change before, because the guard only knew node_modules. The
-# entry-to-lockfile map is duplicated in hooks/verify-before-stop.sh (the two
-# ship separately), so this also fails when the two copies drift.
+# entry-to-lockfile map is lib/dependency-map.sh, which
+# hooks/verify-before-stop.sh sources too; this fails if either script grows
+# a copy of its own again.
 #
 # Usage: worktree-provision.test.sh [path-to-script]
 
@@ -14,6 +15,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 SCRIPT="${1:-$HERE/../worktree-provision.sh}"
 HOOK="$HERE/../../hooks/verify-before-stop.sh"
+MAP="$(dirname "$SCRIPT")/dependency-map.sh"
 
 ROOT=$(cd "$(mktemp -d)" && pwd -P)
 trap 'rm -rf "$ROOT"' EXIT
@@ -23,13 +25,12 @@ FAIL=0
 ok()   { PASS=$((PASS + 1)); }
 fail() { FAIL=$((FAIL + 1)); printf 'FAIL  %s\n' "$1" >&2; }
 
-# map_block <file> -> the shared dependency-lockfile map section
-map_block() {
-  sed -n '/^# BEGIN dependency-lockfile map$/,/^# END dependency-lockfile map$/p' "$1"
-}
-A=$(map_block "$SCRIPT")
-B=$(map_block "$HOOK")
-[ -n "$A" ] && [ "$A" = "$B" ] && ok || fail "dependency-lockfile map is identical in worktree-provision.sh and verify-before-stop.sh"
+# The dependency-directory map lives in lib/dependency-map.sh, which both
+# scripts source; neither keeps a copy of its own.
+for f in "$SCRIPT" "$HOOK"; do
+  grep -qE '^(dep_lockfiles|infer_entry|symlink_entries|tree_loads_checkout)\(\)' "$f" && fail "$(basename "$f") keeps its own dependency map" || ok
+  grep -qF 'dependency-map.sh' "$f" && ok || fail "$(basename "$f") sources lib/dependency-map.sh"
+done
 
 # run_case <name> <dir> <lockfile> <symlink-json> -> checks link, then skip
 run_case() {
@@ -169,14 +170,15 @@ bash "$SCRIPT" "$ROOT/pathrepo-wt" --base main >/dev/null
 [ ! -e "$ROOT/pathrepo-wt/vendor" ] && ok || fail "pathrepo: a vendor with a path-repository link into main is not linked"
 
 # --- every link is resolved physically, whatever its text (PR #236 review) ---
-# tree_loads_checkout is called directly, from the shared block, on a tree
+# tree_loads_checkout is called directly, from lib/dependency-map.sh, on a tree
 # inside a checkout. Each link below leaves the tree for the checkout, but
 # its text matches no ../-prefixed pattern, or it sits in pnpm's hidden
 # hoist four levels down.
 REAL_FIND=$(command -v find)
 # tlc <tree> <checkout> [PATH prefix] -> tree_loads_checkout's exit status
 tlc() {
-  ( PATH="${3:+$3:}$PATH"; eval "$A"; tree_loads_checkout "$1" "$2" ) >/dev/null 2>&1
+  # shellcheck source=lib/dependency-map.sh
+  ( PATH="${3:+$3:}$PATH"; . "$MAP"; tree_loads_checkout "$1" "$2" ) >/dev/null 2>&1
 }
 # link_case <desc> <link path, tree-relative> <link text>
 link_case() {
@@ -371,7 +373,7 @@ printf '#!/bin/sh\nfor a in "$@"; do case "$a" in -c|--reflink*) echo "cp: illeg
 chmod +x "$SHIMDIR/cp"
 sed "s#/bin/cp #$SHIMDIR/cp #g" "$SCRIPT" > "$SHIMDIR/lib/worktree-provision.sh"
 cp "$(dirname "$SCRIPT")/myspec-config.sh" "$(dirname "$SCRIPT")/myspec-config.schema.json" "$(dirname "$SCRIPT")/glob-regex.sh" \
-  "$(dirname "$SCRIPT")/hook-core.sh" "$SHIMDIR/lib/"
+  "$(dirname "$SCRIPT")/hook-core.sh" "$(dirname "$SCRIPT")/dependency-map.sh" "$SHIMDIR/lib/"
 W=$(wt_for "$M" copydir-fallback)
 out=$(bash "$SHIMDIR/lib/worktree-provision.sh" "$W" --base main 2>&1)
 [ -f "$W/vendor/acme/lib/a.php" ] && printf '%s' "$out" | grep -qF "no copy-on-write clone on this filesystem — copied vendor" && ok \

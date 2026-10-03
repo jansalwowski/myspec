@@ -128,6 +128,10 @@
       "type": "overwrite",
       "dest": ".claude/lib/hook-core.sh"
     },
+    "dependency-map.sh": {
+      "type": "overwrite",
+      "dest": ".claude/lib/dependency-map.sh"
+    },
     "branch-cleanup.sh": {
       "type": "overwrite",
       "dest": ".claude/lib/branch-cleanup.sh"
