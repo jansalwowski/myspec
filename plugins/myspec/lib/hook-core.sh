@@ -58,13 +58,6 @@ payload_parse() {
   eval "$_pp_out"
 }
 
-# payload_field <json> <jq expr> -> the one value, as payload_parse reads it.
-payload_field() {
-  local _pf_value
-  payload_parse "$1" "_pf_value=$2"
-  printf '%s' "$_pf_value"
-}
-
 # first_dir <candidates, one per line> -> the first that is a directory.
 first_dir() {
   local c
@@ -250,6 +243,17 @@ pretool_deny() {
   local reason
   reason=$(printf '%s' "$1" | jq -Rs .)
   printf '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": %s}, "decision": "block", "reason": %s}\n' "$reason" "$reason"
+  exit 0
+}
+
+# decision_block <printf format> [arg...] -> prints the formatted reason as
+# {"decision": "block", "reason": ...}, the PostToolUse and Stop form the
+# harness shows the agent, and exits 0.
+decision_block() {
+  local reason
+  # shellcheck disable=SC2059 # the format is the caller's
+  reason=$(printf "$@" | jq -Rs .)
+  printf '{"decision": "block", "reason": %s}\n' "$reason"
   exit 0
 }
 

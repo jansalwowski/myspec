@@ -31,10 +31,8 @@
 set -euo pipefail
 
 command -v jq >/dev/null 2>&1 || exit 0
-HOOK_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-for HOOK_CORE in "$HOOK_DIR/../lib/hook-core.sh" "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"; do
-  [ -f "$HOOK_CORE" ] && break
-done
+HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
+[ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
 [ -f "$HOOK_CORE" ] || exit 0
 # shellcheck source=lib/hook-core.sh
 . "$HOOK_CORE"
@@ -192,5 +190,4 @@ Checked by .claude/hooks/no-absolute-paths.sh on doc files and on files under .c
 EOF
 )
 
-printf '{"decision":"block","reason":%s}\n' "$(printf '%s' "$REASON" | jq -Rs .)"
-exit 0
+decision_block '%s' "$REASON"

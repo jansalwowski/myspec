@@ -80,7 +80,6 @@ eq "$CWDS" "" "payload: the guessed fields (.workdir, .workspace.cwd, .session.c
 rc=0; payload_parse '{}' 'bad-name=.x' 2>/dev/null || rc=$?
 eq "$rc" 2 "payload: a name that is not a shell identifier is refused"
 
-eq "$(payload_field '{"a":{"b":"c"}}' .a.b)" c "payload_field prints one value"
 payload_parse '{"a":"x\n\ny\n\n"}' A=.a
 eq "$A" $'x\n\ny' "payload: trailing newlines are dropped, inner ones kept"
 
@@ -241,6 +240,12 @@ rc=0; read_setting '.bad' "$ROOT/plain" 2>/dev/null || rc=$?
 # shellcheck disable=SC2317 # reached only if pretool_deny fails to exit
 out=$(pretool_deny 'no "way"'; echo unreachable)
 eq "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision + "|" + .reason')" 'deny|no "way"' "pretool_deny prints the deny form and exits"
+
+# shellcheck disable=SC2317 # reached only if decision_block fails to exit
+out=$(decision_block 'Fix %s:\n\n%s\n' "a.ts" 'line "1"'; echo unreachable)
+eq "$(printf '%s' "$out" | jq -r '.decision')" block "decision_block prints the block form and exits"
+eq "$(printf '%s' "$out" | jq -r '.reason')" $'Fix a.ts:\n\nline "1"' "decision_block formats the reason with printf"
+eq "$(printf '%s' "$out" | jq -j '.reason' | tail -c 1 | od -An -c | tr -d ' ')" '\n' "decision_block keeps a trailing newline"
 
 # --- glob-regex comes along -------------------------------------------------------
 

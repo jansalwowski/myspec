@@ -28,10 +28,8 @@ set -euo pipefail
 # .claude/hooks/ + .claude/lib/ in a project. A missing jq or lib fails open
 # rather than block on an infra error.
 command -v jq >/dev/null 2>&1 || exit 0
-HOOK_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-for HOOK_CORE in "$HOOK_DIR/../lib/hook-core.sh" "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"; do
-  [ -f "$HOOK_CORE" ] && break
-done
+HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
+[ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
 if [ ! -f "$HOOK_CORE" ] || [ ! -f "$(dirname "$HOOK_CORE")/markdown-section-check.sh" ]; then
   exit 0
 fi
@@ -106,5 +104,4 @@ To opt a project out entirely, set "reuseAudit": { "enabled": false } in .myspec
 EOF
 )
 
-printf '{"decision":"block","reason":%s}\n' "$(printf '%s' "$REASON" | jq -Rs .)"
-exit 0
+decision_block '%s' "$REASON"

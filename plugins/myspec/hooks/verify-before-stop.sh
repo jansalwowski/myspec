@@ -33,10 +33,8 @@ approve() {
   exit 0
 }
 command -v jq >/dev/null 2>&1 || approve
-HOOK_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-for HOOK_CORE in "$HOOK_DIR/../lib/hook-core.sh" "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"; do
-  [ -f "$HOOK_CORE" ] && break
-done
+HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
+[ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
 [ -f "$HOOK_CORE" ] || approve
 # shellcheck source=lib/hook-core.sh
 . "$HOOK_CORE"
@@ -71,9 +69,7 @@ if [ -f "$DOCTOR" ] && [ -f "$REPO_ROOT/.myspec.json" ] && command -v node >/dev
   # the `if` read false and skipped the gate.
   if [ -n "$MEMORY_AI_DIR" ] && [ -n "$(git -C "$REPO_ROOT" status --porcelain -- "$MEMORY_AI_DIR/memory" 2>/dev/null)" ]; then
     if ! DOCTOR_OUT=$(cd "$REPO_ROOT" && node "$DOCTOR" --quiet 2>&1); then
-      REASON=$(printf 'Memory conformance check failed for changes under %s/memory. Fix these before stopping (node .claude/lib/memory-index.mjs regenerates the tables; the doctor names the rest):\n\n%s' "$MEMORY_AI_DIR" "$(printf '%s' "$DOCTOR_OUT" | tail -30)" | jq -Rs .)
-      echo "{\"decision\": \"block\", \"reason\": $REASON}"
-      exit 0
+      decision_block 'Memory conformance check failed for changes under %s/memory. Fix these before stopping (node .claude/lib/memory-index.mjs regenerates the tables; the doctor names the rest):\n\n%s' "$MEMORY_AI_DIR" "$(printf '%s' "$DOCTOR_OUT" | tail -30)"
     fi
   fi
 fi
@@ -94,9 +90,7 @@ if [ -f "$SETUP_DOCTOR" ] && [ -f "$REPO_ROOT/.myspec.json" ] && command -v node
   # Not `| grep -q .`, for the SIGPIPE reason given at the memory gate.
   if [ -n "$(git -C "$REPO_ROOT" status --porcelain -- .claude .myspec.json 2>/dev/null)" ]; then
     if ! SETUP_OUT=$(cd "$REPO_ROOT" && node "$SETUP_DOCTOR" --quiet wiring schema 2>&1); then
-      REASON=$(printf 'Setup conformance check failed for changes under .claude/ or .myspec.json. Each of these makes a hook or a gate silently stop working, so fix them before stopping:\n\n%s' "$(printf '%s' "$SETUP_OUT" | tail -30)" | jq -Rs .)
-      echo "{\"decision\": \"block\", \"reason\": $REASON}"
-      exit 0
+      decision_block 'Setup conformance check failed for changes under .claude/ or .myspec.json. Each of these makes a hook or a gate silently stop working, so fix them before stopping:\n\n%s' "$(printf '%s' "$SETUP_OUT" | tail -30)"
     fi
   fi
 fi
@@ -453,9 +447,7 @@ if [ "$ALLOW_LINKED" != "true" ] && [ "${MYSPEC_ALLOW_LINKED_MODULES:-}" != "1" 
     fi
   done < <(guarded_entries)
   if [ -n "$STALE_LINKS" ]; then
-    REASON=$(printf 'Symlinked dependency directory in %s: %s. The lockfiles that pin it differ from the checkout it points into (or none exists), or the tree loads the project source from that checkout, so lint, type-check and test results here describe a different dependency tree. Run a real install in this worktree before reporting any result as verified (or, if this repo shares one tree by design, set isolation.allowLinkedModules: true in .myspec.json).' "$REPO_ROOT" "$STALE_LINKS" | jq -Rs .)
-    echo "{\"decision\": \"block\", \"reason\": $REASON}"
-    exit 0
+    decision_block 'Symlinked dependency directory in %s: %s. The lockfiles that pin it differ from the checkout it points into (or none exists), or the tree loads the project source from that checkout, so lint, type-check and test results here describe a different dependency tree. Run a real install in this worktree before reporting any result as verified (or, if this repo shares one tree by design, set isolation.allowLinkedModules: true in .myspec.json).' "$REPO_ROOT" "$STALE_LINKS"
   fi
 fi
 done
@@ -1273,10 +1265,7 @@ if [ ${#FAILED_CHECKS[@]} -gt 0 ] || [ ${#TIMED_OUT_CHECKS[@]} -gt 0 ] || [ ${#U
     done
     NOTES+="Fix what your changes broke. Do not edit files changed outside this session to make a check pass: another session sharing this checkout may be working on them. If a failure comes from those changes, say so and stop. A Bash side effect (an install, code generation) is not recorded as this session's write, so if you made one of those changes, it is yours."$'\n\n'
   fi
-  # Escape for JSON
-  REASON=$(printf "Verification did not pass (%s). Fix the failures your changes caused before completing; for a timeout, get the real result first.\n\n%s%s" "$NAMES" "$NOTES" "$DETAILS" | jq -Rs .)
-  echo "{\"decision\": \"block\", \"reason\": $REASON}"
-  exit 0
+  decision_block "Verification did not pass (%s). Fix the failures your changes caused before completing; for a timeout, get the real result first.\n\n%s%s" "$NAMES" "$NOTES" "$DETAILS"
 fi
 
 if [ -n "$SCOPE" ]; then

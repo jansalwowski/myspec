@@ -32,10 +32,8 @@ command -v jq || exit 0
 
 # The scan and hook-core ship next to this hook: .claude/lib/ in a project
 # (manifest `lib`), lib/ at the plugin root.
-HOOK_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-for HOOK_CORE in "$HOOK_DIR/../lib/hook-core.sh" "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"; do
-  [ -f "$HOOK_CORE" ] && break
-done
+HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
+[ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
 [ -f "$HOOK_CORE" ] || exit 0
 # shellcheck source=lib/hook-core.sh
 . "$HOOK_CORE"
