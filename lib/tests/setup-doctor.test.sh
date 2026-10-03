@@ -947,6 +947,50 @@ for f in '\.myspec\.json' '\.claude/verification\.json'; do
   if [ "$N" -eq 1 ]; then ok; else fail "settings: a non-object $f is one finding, got $N"; fi
 done
 
+# --- container checks (#220, #221): what the stop gate no longer parses -------
+# exec_checks <json array of [command, runIn or ""]> -> verification.json
+# with one required check per pair, named C0, C1, ... and one container "app".
+exec_checks() {
+  set_json .claude/verification.json "d.containers={app:{mountSource:'.', mountTarget:'/srv/app'}}; d.checks=$1.map(([c, r], i) => Object.assign({name: 'C' + i, command: c, required: true}, r ? {runIn: r} : {}));"
+}
+build_fixture
+# shellcheck disable=SC2016 # literal $MYSPEC_CHECK_WORKDIR in the commands
+exec_checks '[
+  ["docker compose exec app make lint", ""],
+  ["docker compose -p x exec -w /srv/app app make lint", ""],
+  ["docker compose exec app make lint", "app"],
+  ["docker compose exec -Tw /srv/app/wt app make lint", "app"],
+  ["docker exec -ew app make lint", "app"],
+  ["docker exec --workdir=/srv/app app make lint", "app"],
+  ["docker compose exec -w \"$MYSPEC_CHECK_WORKDIR\" app make lint", "app"],
+  ["docker compose exec app sh -c \"cd $MYSPEC_CHECK_WORKDIR && make\"", "app"],
+  ["docker compose exec -T app make -w lint", "app"],
+  ["docker compose run --rm app make lint", ""],
+  ["npm run lint", ""]
+]'
+run_doctor_env -- schema
+expect_exit 0 "containers: the container findings are warnings, not errors"
+expect_line '^WARN +verification-exec-no-runin: .*check C0 runs a container exec without runIn — in a linked worktree this check will be refused' "containers: an exec without runIn is warned about"
+expect_line '^WARN +verification-exec-no-runin: .*check C1 ' "containers: a -w does not stand in for runIn"
+expect_line 'declare runIn and a containers entry' "containers: the fix names runIn and containers"
+# shellcheck disable=SC2016 # a literal $ in the pattern
+# shellcheck disable=SC2016 # a literal $ in the pattern
+expect_line '^WARN +verification-runin-no-workdir: .*check C2 has runIn but its container exec passes neither -w/--workdir nor \$MYSPEC_CHECK_WORKDIR' "containers: a runIn exec without the workdir is warned about"
+expect_no_line 'check C3 ' "containers: a -Tw <dir> cluster sets the workdir"
+expect_line '^WARN +verification-runin-no-workdir: .*check C4 ' "containers: -ew is -e w, not a workdir"
+expect_no_line 'check C5 ' "containers: --workdir= sets the workdir"
+expect_no_line 'check C6 ' "containers: -w \"\$MYSPEC_CHECK_WORKDIR\" is the workdir"
+expect_no_line 'check C7 ' "containers: a command that names MYSPEC_CHECK_WORKDIR is trusted"
+expect_line '^WARN +verification-runin-no-workdir: .*check C8 ' "containers: a -w after the service name belongs to the inner command"
+expect_no_line 'check C9 |check C10 ' "containers: a compose run and a host command raise nothing"
+
+# runIn naming an undefined container: an error before a stop refuses it.
+build_fixture
+exec_checks '[["docker compose exec -w /x app make lint", "nope"]]'
+run_doctor_env -- schema
+expect_exit 1 "containers: runIn naming an undefined container is an error"
+expect_line '^ERROR setting-unknown-ref: .*checks\[0\]\.runIn names "nope"' "containers: the error names the container"
+
 # --- pass 4: argument handling ------------------------------------------------
 
 OUTPUT=$(node "$SCRIPT" --list-checks 2>&1); STATUS=$?
