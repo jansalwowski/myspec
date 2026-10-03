@@ -15,6 +15,7 @@ set -uo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 SCRIPT="${1:-$HERE/../worktree-provision.sh}"
+DOCTOR="$HERE/../setup-doctor.mjs"
 
 ROOT=$(cd "$(mktemp -d)" && pwd -P)
 trap 'rm -rf "$ROOT"' EXIT
@@ -484,6 +485,39 @@ mkdir -p "$W/node_modules/own"
 out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
 [ "$st" -eq 0 ] && printf '%s' "$out" | grep -qF "node_modules already exists in the worktree — not linking node_modules" && ok \
   || fail "exists: an untracked directory in the worktree is skipped by name (got $st: $out)"
+
+# --- a glob symlink entry expands against the main checkout (R8) -------------
+# vendor-bin/*/vendor, the Composer bin-plugin layout: each match is its own
+# link with its own lockfile record. Read as a literal path it matched nothing
+# and was skipped without a word.
+M=$(new_main binglob '{"isolation":{"provision":{"symlink":["vendor-bin/*/vendor"]}}}')
+for t in a b; do
+  mkdir -p "$M/vendor-bin/$t/vendor/pkg"
+  printf '{}\n' > "$M/vendor-bin/$t/composer.json"; printf '%s1\n' "$t" > "$M/vendor-bin/$t/composer.lock"
+done
+printf 'vendor-bin/*/vendor\n' >> "$M/.gitignore"; commit_all "$M" init
+W=$(wt_for "$M" binglob-wt)
+out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
+[ "$st" -eq 0 ] && [ -L "$W/vendor-bin/a/vendor" ] && [ -L "$W/vendor-bin/b/vendor" ] && ok \
+  || fail "glob: vendor-bin/*/vendor links each match (got $st: $out)"
+[ "$(rec "$W" '[.links[].path] | sort | join(",")')" = "vendor-bin/a/vendor,vendor-bin/b/vendor" ] && ok \
+  || fail "glob: each match is recorded as its own link (got: $(rec "$W" '[.links[].path]'))"
+[ "$(rec "$W" '.links[] | select(.path == "vendor-bin/b/vendor") | .lockfiles["vendor-bin/b/composer.lock"]')" = "$(sha "$M/vendor-bin/b/composer.lock")" ] && ok \
+  || fail "glob: each match records the lockfile beside it"
+out=$(node "$DOCTOR" --root "$W" link-unrecorded 2>&1)
+printf '%s' "$out" | grep -q 'link-unrecorded' && fail "glob: doctor reports a recorded glob-expanded link as unrecorded (got: $out)" || ok
+# The control: without the record, doctor does see the link.
+mv "$W/.claude/state/provision.json" "$ROOT/binglob-record.json"
+out=$(node "$DOCTOR" --root "$W" link-unrecorded 2>&1)
+printf '%s' "$out" | grep -q 'link-unrecorded: vendor-bin/a/vendor' && ok || fail "glob: doctor scans vendor-bin/<tool>/vendor at all (got: $out)"
+mv "$ROOT/binglob-record.json" "$W/.claude/state/provision.json"
+# No match at all is said, and provisioning goes on.
+M=$(new_main binnone '{"isolation":{"provision":{"symlink":["vendor-bin/*/vendor","node_modules"]}}}')
+mkdir -p "$M/node_modules/dep"; commit_all "$M" init
+W=$(wt_for "$M" binnone-wt)
+out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
+[ "$st" -eq 0 ] && printf '%s' "$out" | grep -qF "no match for vendor-bin/*/vendor" && [ -L "$W/node_modules" ] && ok \
+  || fail "glob: a glob with no match is named and provisioning goes on (got $st: $out)"
 
 # Globs compile through lib/glob-regex.sh (its own fixture covers the rules).
 # The scripts that read a glob setting source it and keep no copy, so one
