@@ -920,53 +920,28 @@ read_setting() {
   SETTING_NOTES=$(sed 's/^myspec-config: //' "$SETTING_ERR")
 }
 
-# Path scope (#232). A check's `paths` is a list of globs matched against
-# each file this session wrote in the checkout, as a repo-relative path:
-#   - a glob matches the whole path, from the repo root (`*.php` is a file at
-#     the root only; `**/*.php` is one at any depth);
-#   - `*` matches any run of characters within one path segment, `?` one
-#     character other than `/`;
-#   - `**` as a whole segment matches zero or more segments (`api/**` is
-#     everything under api/, `a/**/b` matches a/b and a/x/y/b); `**` inside
-#     a segment is a plain `*`;
-#   - a trailing `/` means everything under it (`api/` is `api/**`), and a
-#     leading `./` is dropped;
-#   - every other character is literal, `[`, `{` and `\` included.
-# A glob that is empty, absolute or has a `..` segment is unusable, and so
-# is a `paths` that is not a non-empty list of strings: the check then runs,
-# and the stop message names the ignored setting (fail closed).
-
-# glob_ere <glob> -> the anchored ERE for it; fails when it is unusable.
-glob_ere() {
-  local g="$1" re="" c seg=1
-  while [ "${g#./}" != "$g" ]; do g="${g#./}"; done
-  case "$g" in ''|/*) return 1 ;; esac
-  case "/$g/" in */../*) return 1 ;; esac
-  case "$g" in */) g="$g**" ;; esac
-  while [ -n "$g" ]; do
-    if [ "$seg" -eq 1 ] && [ "$g" = '**' ]; then
-      re="$re.*"
-      break
-    fi
-    if [ "$seg" -eq 1 ] && [ "${g#'**/'}" != "$g" ]; then
-      re="$re(.*/)?"
-      g="${g#'**/'}"
-      continue
-    fi
-    c="${g:0:1}"
-    g="${g:1}"
-    seg=0
-    case "$c" in
-      '*') while [ "${g:0:1}" = '*' ]; do g="${g:1}"; done; re="${re}[^/]*" ;;
-      '?') re="${re}[^/]" ;;
-      /) re="$re/"; seg=1 ;;
-      .|+|\(|\)|\||\$|\{|\}) re="${re}[$c]" ;;
-      ^|\[|\\) re="$re\\$c" ;;
-      *) re="$re$c" ;;
-    esac
-  done
-  printf '^%s$\n' "$re"
-}
+# Path scope (#232). A check's `paths` is a list of repo-relative globs
+# matched against each file this session wrote in the checkout. They compile
+# through lib/glob-regex.sh, the one glob compiler (semantics there and in
+# docs/stop-gate.md "Globs"), found where the settings reader is. A glob
+# that is empty, absolute or has a `..` segment is unusable, and so is a
+# `paths` that is not a non-empty list of strings: the check then runs, and
+# the stop message names the ignored setting (fail closed). Without the
+# compiler every `paths` is ignored the same way.
+GLOB_LIB=""
+for CANDIDATE in "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/glob-regex.sh" \
+    "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/glob-regex.sh"; do
+  if [ -f "$CANDIDATE" ]; then
+    GLOB_LIB="$CANDIDATE"
+    break
+  fi
+done
+if [ -n "$GLOB_LIB" ]; then
+  # shellcheck source=/dev/null
+  . "$GLOB_LIB"
+else
+  glob_regex() { return 1; }
+fi
 
 # paths_verdict <check json> -> sets PATHS_VERDICT to run (no paths, or a
 # file matches), skip (no file matches) or ignored (unusable; the check
@@ -986,7 +961,7 @@ paths_verdict() {
   fi
   while IFS= read -r glob; do
     PATHS_GLOBS="${PATHS_GLOBS:+$PATHS_GLOBS, }$glob"
-    if ! re=$(glob_ere "$glob"); then
+    if ! re=$(glob_regex "$glob"); then
       PATHS_VERDICT=ignored
       return 0
     fi

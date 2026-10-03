@@ -35,7 +35,8 @@
 #      supports one (--reflink=auto on Btrfs/XFS, cp -c on APFS) and falls
 #      back to a plain copy.
 #   3. clean: deletes the untracked files and directories in the worktree
-#      that match a repo-relative glob (#193), e.g. **/*.tsbuildinfo, so the
+#      that match a repo-relative glob (#193, lib/glob-regex.sh), e.g.
+#      **/*.tsbuildinfo, so the
 #      first incremental check there is cold. It never follows or deletes a
 #      link.
 #   4. install: runs a command, or each {run, cwd, when} step, in the
@@ -276,26 +277,10 @@ clone_tree() {
   return 1
 }
 
-# glob_regex <glob> -> an anchored ERE: ** crosses directories, * and ? stay
-# within one, everything else is literal.
-glob_regex() {
-  local g="$1" re="" c i=0
-  while [ "$i" -lt "${#g}" ]; do
-    c="${g:$i:1}"
-    if [ "$c" = "*" ] && [ "${g:$i:3}" = "**/" ]; then re="$re(.*/)?"; i=$((i + 3)); continue; fi
-    if [ "$c" = "*" ] && [ "${g:$i:2}" = "**" ]; then re="$re.*"; i=$((i + 2)); continue; fi
-    case "$c" in
-      "*") re="${re}[^/]*" ;;
-      "?") re="${re}[^/]" ;;
-      # The ERE metacharacters, one quoted literal each: a bracket
-      # expression here matched none of them on bash 3.2 or 5.
-      "."|"["|"\\"|"("|")"|"+"|"{"|"|"|"^"|'$') re="$re\\$c" ;;
-      *) re="$re$c" ;;
-    esac
-    i=$((i + 1))
-  done
-  printf '^%s$\n' "$re"
-}
+# glob_regex: the one glob compiler, shared with the Stop hook's `paths`
+# and mark-code-changed's ignorePaths, so one glob means one thing.
+# shellcheck source=lib/glob-regex.sh
+. "$HERE/glob-regex.sh"
 
 # repo_relative <path> -> 0 when the path stays inside the checkout.
 repo_relative() {
@@ -431,11 +416,11 @@ done <<< "$COPY_LINES"
 REGEXES=()
 while IFS= read -r glob; do
   [ -n "$glob" ] || continue
-  if ! repo_relative "$glob"; then
+  if ! re=$(glob_regex "$glob"); then
     echo "worktree-provision: clean glob $glob leaves the checkout — skipped"
     continue
   fi
-  REGEXES+=("$(glob_regex "${glob#./}")")
+  REGEXES+=("$re")
 done <<< "$CLEAN_GLOBS"
 if [ "${#REGEXES[@]}" -gt 0 ]; then
   REMOVED=""

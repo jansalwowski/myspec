@@ -8,6 +8,9 @@
 #   #249     a Bash command longer than a pipe buffer (a heredoc that writes a
 #            file) killed the hook with SIGPIPE: `printf | tr | head -c 120`
 #            under pipefail and set -e exited 141 before the ledger line.
+#   (globs)  ignorePaths had its own glob compiler, where a trailing `/`
+#            matched nothing, unlike checks[].paths; all three glob settings
+#            now share lib/glob-regex.sh.
 #
 # Usage: mark-code-changed-regression.test.sh [path-to-hook]
 
@@ -60,6 +63,19 @@ printf '{"session_id":%s,"tool_name":"Bash","cwd":%s,"tool_input":{"command":%s}
   | bash "$HOOK" >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 0 ] && ok || fail "a 100 KiB Bash heredoc write exits 0 (got $rc)"
 grep -q "^code	$REPO	src/big.ts$" "/tmp/.myspec-session-writes-$sid" 2>/dev/null && ok || fail "a 100 KiB Bash heredoc write lands in the ledger"
+
+# --- (globs) ignorePaths "gen/" covers everything under gen/ ------------------
+GLOBREPO="$ROOT/globs"
+mkdir -p "$GLOBREPO/gen/x" "$GLOBREPO/src"
+git init -q -b main "$GLOBREPO"
+printf '{"aiDir":".ai","hooks":{"markCodeChanged":{"ignorePaths":["gen/"]}}}\n' > "$GLOBREPO/.myspec.json"
+for f in gen/x/a.ts src/b.ts; do
+  sid="$SID-glob-${f//\//-}"
+  printf '{"session_id":"%s","tool_name":"Write","cwd":"%s","tool_input":{"file_path":"%s/%s"}}' "$sid" "$GLOBREPO" "$GLOBREPO" "$f" \
+    | bash "$HOOK" >/dev/null 2>&1
+done
+grep -q "^file	$GLOBREPO	gen/x/a.ts$" "/tmp/.myspec-session-writes-$SID-glob-gen-x-a.ts" 2>/dev/null && ok || fail "ignorePaths gen/ records gen/x/a.ts as file"
+grep -q "^code	$GLOBREPO	src/b.ts$" "/tmp/.myspec-session-writes-$SID-glob-src-b.ts" 2>/dev/null && ok || fail "ignorePaths gen/ leaves src/b.ts code"
 
 # --- control: a non-code file still does not count ----------------------------
 write "$SID-txt" "$REPO/src/notes.txt"

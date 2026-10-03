@@ -120,6 +120,10 @@
       "type": "overwrite",
       "dest": ".claude/lib/command-scan.sh"
     },
+    "glob-regex.sh": {
+      "type": "overwrite",
+      "dest": ".claude/lib/glob-regex.sh"
+    },
     "branch-cleanup.sh": {
       "type": "overwrite",
       "dest": ".claude/lib/branch-cleanup.sh"
