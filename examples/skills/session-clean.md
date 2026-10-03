@@ -25,6 +25,7 @@ The user hasn't run a sweep in a while. `.claude/state/sessions/` contains:
 2026-04-24-0900-autocalibration.md  (mtime 7d ago,   3 log rows + 1 insight, status: active)
 2026-04-27-1432-bugfix-oauth.md     (mtime 4d ago,   empty template, status: active)
 2026-04-30-1100-currentwork.md      (mtime 12m ago,  in progress — this agent's own session)
+<three session ids>.jsonl           (hook state: two 7–8d old, one 12m old)
 ```
 
 The first three are leftovers from earlier sessions where the auto-create hook fired but `/myspec:session-complete` was never run.
@@ -71,10 +72,11 @@ All three pass. Safe to act.
 | 1 | a1b2c3d4           | auto:mockups       | empty          | 8d ago | DELETE  | no log/insights/outcome |
 | 2 | f73e26d3           | auto:calibration   | substantive    | 7d ago | ARCHIVE | 3 log rows, 1 insight   |
 | 3 | 9e8d7c6b           | bugfix-oauth       | empty          | 4d ago | DELETE  | no log/insights/outcome |
+| 4 | —                  | 2 state files (.jsonl) | hook state | 7–8d ago | DELETE | older than 24h          |
 
-Skipped: 2026-04-30-1100-currentwork.md (running agent's own session)
+Skipped: 2026-04-30-1100-currentwork.md (running agent's own session); one .jsonl state file under 24h old
 
-Summary: 2 to delete, 1 to archive, 1 skipped, 0 ambiguous.
+Summary: 2 logs and 2 state files to delete, 1 to archive, 1 skipped, 0 ambiguous.
 
 Proceed? (yes / no / selective)
 ```
@@ -85,7 +87,7 @@ User: `yes`.
 
 For row 2 (archive): edits frontmatter `status: active` → `status: abandoned`, then `mv .claude/state/sessions/2026-04-24-0900-autocalibration.md ai/memory/sessions/archive/2026-04-24-0900-autocalibration.md`.
 
-For rows 1 and 3 (delete): `rm` (untracked auto-created files).
+For rows 1, 3 and 4 (delete): `rm` (untracked auto-created files).
 
 #### 6. Final summary
 

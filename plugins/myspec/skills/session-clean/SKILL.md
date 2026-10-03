@@ -26,6 +26,8 @@ List `.claude/state/sessions/*.md` and `${aiDir}/memory/sessions/archive/*.md`. 
 - Tracked files under `archive/` (committed history — out of scope).
 - Your own session: the live log whose `## Files touched` lists a path you edited this session. The harness never exposes the session id to the model; if no file lists your edits, treat the most recently mtime-bumped live log as potentially yours and route it to ambiguous in Step 3.
 
+**State files.** `.claude/state/sessions/*.jsonl` are hook state (the stop gate's write ledger, isolation decisions, the feature-implement marker), not logs: never classify or archive one. Those with `mtime` more than 24h ago go in the audit table as one DELETE row and are removed with `rm` on confirmation; a younger one may belong to a session that is still running, and deleting it loses that session's record of what it wrote.
+
 ### Step 2: Classify Content
 
 For each file, parse the body. A session is **empty / no value** if it contains only template scaffolding or auto-generated boilerplate with no human or agent insight added:
@@ -109,6 +111,7 @@ Print one-line summary on completion.
 - [ ] Substantive active sessions archived to `archive/YYYY-MM-DD-{slug}.md` with `status: abandoned` set in frontmatter
 - [ ] Substantive terminal-status live logs archived with their existing `status:` preserved
 - [ ] Empty live logs removed (`rm`)
+- [ ] `.jsonl` state files older than 24h listed as one row and removed on confirmation; none classified or archived
 - [ ] Empty orphaned archive sessions removed (`rm` only)
 - [ ] No tracked file under `archive/` was touched
 - [ ] Final one-line summary printed
