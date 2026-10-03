@@ -81,10 +81,35 @@
     "isolation.blockInMain": {
       "file": "project",
       "type": ["array"],
+      "default": [
+        "^(yarn|npm|pnpm|bun)[[:space:]]+((run|run-script)[[:space:]]+)?build([[:space:]]|:|$)",
+        "^composer[[:space:]]+((run|run-script)[[:space:]]+)?build([[:space:]]|:|$)",
+        "^(docker[[:space:]]+compose|docker-compose)([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+exec([[:space:]]|$)",
+        "^(yarn|pnpm|bun)[[:space:]]+(install|add|upgrade|remove|dedupe|up)([[:space:]]|$)",
+        "^npm[[:space:]]+(install|ci|i|uninstall|update)([[:space:]]|$)",
+        "^(yarn|npm|pnpm|bun)[[:space:]]+(run[[:space:]]+)?test:e2e",
+        "^(yarn|npm|pnpm|bun)[[:space:]]+(run[[:space:]]+)?lint:fix([[:space:]]|$)",
+        "^(pip|pip3|poetry|composer|bundle)[[:space:]]+install([[:space:]]|$)",
+        "^(cargo|go)[[:space:]]+build([[:space:]]|$)",
+        "^(\\./)?mvnw?([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+(clean|compile|package|install|verify|deploy)([[:space:]]|$)",
+        "^(\\./)?gradlew?([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+([^[:space:]]*:)?(build|assemble|clean)([[:space:]]|$)",
+        "^make([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*([[:space:]]+(all|build|install))?[[:space:]]*$",
+        "^dotnet[[:space:]]+(build|publish|restore|pack|clean)([[:space:]]|$)",
+        "^git[[:space:]]+push([[:space:]]|$)",
+        "^git[[:space:]]+worktree[[:space:]]+prune([[:space:]]|$)"
+      ],
+      "merge": "extend",
+      "issue": ["exists", "#250"],
+      "description": "Anchored EREs over a command segment: commands guard-worktree-context.sh blocks in the main checkout while a session is in worktree mode. The default covers builds, installs and other tree-specific commands across the common stacks; a project's entries are added to it."
+    },
+    "isolation.ignoreBlockInMain": {
+      "file": "project",
+      "type": ["array"],
       "default": [],
       "merge": "extend",
-      "issue": ["exists"],
-      "description": "Anchored EREs: extra commands blocked in the main checkout while a session is in worktree mode."
+      "issue": ["#250"],
+      "loosens": true,
+      "description": "Entries of isolation.blockInMain, by their exact text, that the guard does not apply: how a project drops a default pattern."
     },
     "isolation.allowLinkedModules": {
       "file": "project",
@@ -259,7 +284,7 @@
       "type": ["string"],
       "issue": ["exists"],
       "catalogue": false,
-      "description": "Command run from the repo root."
+      "description": "Command run from the repo root, or from the check's cwd."
     },
     "verification.checks[].diffCommand": {
       "file": "verification",
@@ -310,8 +335,15 @@
       "file": "verification",
       "type": ["string"],
       "issue": ["#221"],
-      "description": "Name of the container (in containers) the check's command runs in. The check gets MYSPEC_CHECK_WORKDIR and is exempt from the linked-worktree container-exec refusal; it is refused when the container is undefined or cannot see this checkout.",
+      "description": "Name of the container (in containers) the check's command runs in. The check gets MYSPEC_CHECK_WORKDIR and its command is trusted to use it; without runIn, a container exec is refused in a linked worktree. It is refused when the container is undefined or cannot see this checkout.",
       "refersTo": "verification.containers"
+    },
+    "verification.checks[].cwd": {
+      "file": "verification",
+      "type": ["string"],
+      "issue": ["#250"],
+      "format": "dir",
+      "description": "Repo-relative directory of the verified checkout the command runs from (default the root). An absolute value or one with a .. segment is ignored and named in the stop message. With runIn, MYSPEC_CHECK_WORKDIR includes it."
     }
   },
   "env": {

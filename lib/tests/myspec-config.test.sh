@@ -77,17 +77,21 @@ read_both "$D" isolation.worktreeRoot; expect "default worktreeRoot" '".claude/w
 read_both "$D" verification.checks; expect "no verification.json" 'null'
 read_both "$D" no.such.key; expect "unknown key" 'null'
 
+# The guard's default list (#250), as the schema holds it.
+BLOCK_DEFAULT=$(jq -c '.keys["isolation.blockInMain"].default' "$SCHEMA")
+[ "$(jq 'length' <<< "$BLOCK_DEFAULT")" -gt 0 ] && ok || fail "blockInMain has a non-empty default"
+
 # Objects merge key by key: a project value replaces one leaf, defaults keep the rest.
 D=$(fixture objects '{"isolation":{"worktreeRoot":"wt","provision":{"clean":["**/*.tsbuildinfo"]}},"custom":{"a":1}}')
 read_both "$D" isolation
-expect "object merge" '{"blockInMain":[],"allowLinkedModules":false,"worktreeRoot":"wt","provision":{"symlink":["node_modules"],"copy":[".eslintcache"],"clean":["**/*.tsbuildinfo"]}}'
+expect "object merge" '{"blockInMain":'"$BLOCK_DEFAULT"',"ignoreBlockInMain":[],"allowLinkedModules":false,"worktreeRoot":"wt","provision":{"symlink":["node_modules"],"copy":[".eslintcache"],"clean":["**/*.tsbuildinfo"]}}'
 read_both "$D" custom.a; expect "unknown keys pass through" '1'
 
 # A replace list (existing keys, principle 2) drops the default; an extend list keeps it.
 D=$(fixture lists '{"isolation":{"provision":{"symlink":["vendor"],"copy":[".mypy_cache"]},"blockInMain":["^make( |$)"]}}')
 read_both "$D" isolation.provision.symlink; expect "symlink replaces the default" '["vendor"]'
 read_both "$D" isolation.provision.copy; expect "copy replaces the default" '[".mypy_cache"]'
-read_both "$D" isolation.blockInMain; expect "blockInMain extends" '["^make( |$)"]'
+read_both "$D" isolation.blockInMain; expect "blockInMain extends its default" "$(jq -c '. + ["^make( |$)"]' <<< "$BLOCK_DEFAULT")"
 
 # A wrong-typed value falls back to the default and is named on stderr.
 D=$(fixture wrongtype '{"aiDir":3,"isolation":{"allowLinkedModules":"yes","provision":{"symlink":"vendor","install":{"run":"x"}}}}')
@@ -183,9 +187,8 @@ for args in "" "get" "set aiDir" "get .aiDir" "get a..b" "get aiDir --root"; do
   node "$MJS" $args >/dev/null 2>&1; [ $? -eq 2 ] && ok || fail "node: '$args' is a usage error"
 done
 
-# Extend vs replace is visible only against a non-empty default, which no
-# shipped extend list has: run copies of both readers beside a schema that
-# gives blockInMain one.
+# Extend vs replace against a small known default: run copies of both readers
+# beside a schema that gives blockInMain one.
 ALT="$ROOT/alt"
 mkdir -p "$ALT"
 cp "$SH" "$MJS" "$ALT/"
@@ -211,7 +214,7 @@ OUT=$(node --input-type=module -e "
   const r = (k) => getSetting(k, { root: '$D', env: {}, layers }).value;
   console.log(JSON.stringify([r('isolation.blockInMain'), r('isolation.provision.symlink')]));
 ")
-expect "machine layer between project and session" '[["^a","^b"],[".venv"]]'
+expect "machine layer between project and session" "[$(jq -c '. + ["^a","^b"]' <<< "$BLOCK_DEFAULT"),[\".venv\"]]"
 # shellcheck disable=SC2016 # a literal $LAYERS in the jq program
 grep -qE '^\s*\[layer_default, layer_project, layer_session\] as \$LAYERS' "$SH" && ok \
   || fail "sh: the layers are one ordered list"
@@ -257,7 +260,11 @@ for (const section of sections) {
     const d = cells[2].match(/^`([^`]+)`$/)?.[1];
     let want;
     if (d !== undefined) { try { want = JSON.parse(d); } catch { want = d; } }
-    if (JSON.stringify(want) !== JSON.stringify(entry.default)) {
+    // A default too long for a cell (a list of regexes) is "(see schema)":
+    // the schema must then have one.
+    if (/\(see schema\)/.test(cells[2])) {
+      if (!Array.isArray(entry.default) || entry.default.length === 0) { problems.push(`${full}: catalogue says see schema, schema has no list default`); }
+    } else if (JSON.stringify(want) !== JSON.stringify(entry.default)) {
       problems.push(`${full}: catalogue default ${JSON.stringify(want)}, schema default ${JSON.stringify(entry.default)}`);
     }
     const issue = [...new Set([...(cells[3].match(/#\d+/g) ?? []), ...(/\bexists\b/.test(cells[3]) ? ['exists'] : [])])];

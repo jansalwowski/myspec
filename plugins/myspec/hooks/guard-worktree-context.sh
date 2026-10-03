@@ -21,8 +21,10 @@
 #      are blocked as well: builds, installs, e2e runs, `lint:fix`,
 #      `docker compose exec`, `git push` and `git worktree prune` (not its
 #      `--dry-run`) silently target the wrong tree and are noticed
-#      only when the output looks wrong. `.myspec.json` `isolation.blockInMain`
-#      adds project patterns (anchored extended regexes over a command segment).
+#      only when the output looks wrong. The list is the setting
+#      `isolation.blockInMain` (anchored extended regexes over a command
+#      segment): a default in the settings schema, which a project extends
+#      there and trims with `isolation.ignoreBlockInMain`.
 #
 # Until 2.0 gate A was its own hook, guard-git-branch.sh; folding the two keeps
 # one root resolver, one scanner, one worktree lookup, one block message.
@@ -114,29 +116,15 @@ BRANCH_PATTERNS=(
 # Resuming or unwinding an operation already in progress.
 BRANCH_CARVE_OUT='^git[[:space:]]+(rebase|merge)[[:space:]]+--(continue|abort|skip)[[:space:]]*$'
 
-# Commands whose result depends on which tree they run in, or which write to it.
-# `build` also covers a `build:<target>` script (`build:web`, `build:prod`):
-# projects whose builds are all targets otherwise got no gate B (issue #164).
-# `docker compose exec` runs inside the container of the compose project in
-# the current directory, which mounts that tree; global options before `exec`
-# (`-f <file>`, `--project-name <n>`) are looked through.
-HEAVY_PATTERNS=(
-  '^(yarn|npm|pnpm|bun)[[:space:]]+((run|run-script)[[:space:]]+)?build([[:space:]]|:|$)'
-  '^composer[[:space:]]+((run|run-script)[[:space:]]+)?build([[:space:]]|:|$)'
-  '^(docker[[:space:]]+compose|docker-compose)([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+exec([[:space:]]|$)'
-  '^(yarn|pnpm|bun)[[:space:]]+(install|add|upgrade|remove|dedupe|up)([[:space:]]|$)'
-  '^npm[[:space:]]+(install|ci|i|uninstall|update)([[:space:]]|$)'
-  '^(yarn|npm|pnpm|bun)[[:space:]]+(run[[:space:]]+)?test:e2e'
-  '^(yarn|npm|pnpm|bun)[[:space:]]+(run[[:space:]]+)?lint:fix([[:space:]]|$)'
-  '^(pip|pip3|poetry|composer|bundle)[[:space:]]+install([[:space:]]|$)'
-  '^(cargo|go)[[:space:]]+build([[:space:]]|$)'
-  '^git[[:space:]]+push([[:space:]]|$)'
-  '^git[[:space:]]+worktree[[:space:]]+prune([[:space:]]|$)'
-)
+# Commands whose result depends on which tree they run in, or which write to
+# it, are data: `isolation.blockInMain`, read through the settings reader. Its
+# default (lib/myspec-config.schema.json) covers builds, installs, e2e runs,
+# lint:fix, `docker compose exec`, `git push` and `git worktree prune` across
+# the common stacks; a project adds anchored EREs there and removes default
+# entries, by their exact text, with `isolation.ignoreBlockInMain`.
 
-# Built-in patterns above that a read-only form would otherwise trip.
-# `git worktree prune -n` / `--dry-run` only reports (issue #223). Not applied
-# to the project's own isolation.blockInMain patterns.
+# A read-only form the default patterns would otherwise trip.
+# `git worktree prune -n` / `--dry-run` only reports (issue #223).
 HEAVY_CARVE_OUT='^git[[:space:]]+worktree[[:space:]]+prune([[:space:]]+[^[:space:]]+)*[[:space:]]+(-v*nv*|--dry-run)([[:space:]]|$)'
 
 # --- where does a segment run? -------------------------------------------------
@@ -308,6 +296,24 @@ If the main checkout really is the right place (refreshing the symlinked node_mo
 Full procedure: $(procedure_doc "$root")"
 }
 
+# heavy_patterns <main root> -> sets HEAVY to that checkout's
+# isolation.blockInMain minus isolation.ignoreBlockInMain, read once per root.
+# Without the reader there is no list, and gate B blocks nothing.
+HEAVY_ROOT=""
+HEAVY=()
+heavy_patterns() {
+  local p
+  [ "$1" != "$HEAVY_ROOT" ] || return 0
+  HEAVY_ROOT="$1"
+  HEAVY=()
+  read_setting isolation "$1" || return 0
+  while IFS= read -r p; do
+    [ -n "$p" ] && HEAVY+=("$p")
+  done < <(jq -r '(.ignoreBlockInMain // [] | if type == "array" then . else [] end) as $skip
+    | .blockInMain // [] | if type == "array" then .[] else empty end
+    | select(type == "string") | select(. as $p | $skip | index([$p]) | not)' <<< "$SETTING" 2>/dev/null)
+}
+
 matches_any() {  # matches_any <segment> <pattern>...
   local segment="$1" pattern
   shift
@@ -321,8 +327,7 @@ matches_any() {  # matches_any <segment> <pattern>...
 
 # check_segment <normalized segment> <dir> <git-dir> — applies both gates.
 check_segment() {
-  local segment="$1" dir="$2" gitdir="$3" verdict extra
-  local -a patterns
+  local segment="$1" dir="$2" gitdir="$3" verdict
 
   if [ "$ALLOW_BRANCH_OPS" = 0 ]; then
     if matches_any "$segment" "${BRANCH_PATTERNS[@]}" \
@@ -350,19 +355,9 @@ check_segment() {
   session_mode "$CLS_ROOT"
   [ "$ISO_MODE" = "worktree" ] || return 0
 
-  if matches_any "$segment" "${HEAVY_PATTERNS[@]}" \
+  heavy_patterns "$CLS_ROOT"
+  if [ "${#HEAVY[@]}" -gt 0 ] && matches_any "$segment" "${HEAVY[@]}" \
       && ! grep -qE -- "$HEAVY_CARVE_OUT" <<< "$segment"; then
-    block_heavy "$CLS_ROOT" "$segment"
-  fi
-
-  patterns=()
-  if [ -f "$CLS_ROOT/.myspec.json" ]; then
-    while IFS= read -r extra; do
-      [ -n "$extra" ] && patterns+=("$extra")
-    done < <(jq -r '.isolation.blockInMain // [] | .[] | select(type == "string")' "$CLS_ROOT/.myspec.json" 2>/dev/null)
-  fi
-
-  if [ "${#patterns[@]}" -gt 0 ] && matches_any "$segment" "${patterns[@]}"; then
     block_heavy "$CLS_ROOT" "$segment"
   fi
 }

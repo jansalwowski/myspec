@@ -47,7 +47,8 @@
 //   --quiet        errors and the summary only (no warnings, notes or settings)
 //   --json         { errors: [...], warnings: [...], notes: [...] } of
 //                  { id, group, path, detail, remediation: { commands, text } },
-//                  plus settings: [...] of { key, value, source, loosens }
+//                  plus settings: [...] of { key, value, source, loosens },
+//                  and added: the entries over a list's default
 //   positional     limit the run to one or more groups (install, wiring,
 //                  schema, features, budget, refs, settings) or to a single
 //                  check id
@@ -90,7 +91,7 @@ const RULE_BUDGET = 1000;
 const GROUPS = {
   install: ['framework-missing', 'framework-renamed', 'framework-removed', 'framework-drift', 'marker-missing', 'doctor-rule-unrenamed', 'sessions-unmigrated', 'shipped-missing', 'shipped-drift'],
   wiring: ['settings-unparseable', 'hook-missing', 'hook-not-executable', 'hook-unregistered', 'hook-syntax', 'wiring-incomplete', 'hook-command-relative', 'tooling-absent'],
-  schema: ['myspec-unparseable', 'myspec-missing-key', 'myspec-schema-stale', 'aidir-trailing-slash', 'aidir-missing', 'verification-unparseable', 'verification-empty', 'verification-diff-unscoped', 'setting-unknown-key', 'setting-wrong-type', 'setting-unknown-ref', 'setting-glob-unusable', 'setting-dir-missing'],
+  schema: ['myspec-unparseable', 'myspec-missing-key', 'myspec-schema-stale', 'aidir-trailing-slash', 'aidir-missing', 'verification-unparseable', 'verification-empty', 'verification-diff-unscoped', 'verification-exec-no-runin', 'verification-runin-no-workdir', 'setting-unknown-key', 'setting-wrong-type', 'setting-unknown-ref', 'setting-glob-unusable', 'setting-dir-missing'],
   // Separate from `schema` on purpose: the stop hook blocks on `wiring` and
   // `schema`, and it triggers on uncommitted changes under `.claude/` and
   // `.myspec.json`. The features manifest lives under ${aiDir}, so leaving it
@@ -474,6 +475,137 @@ if (verification.present && verification.error) {
       text: 'scope the command to the base ref, e.g. git diff --name-only --diff-filter=ACMR "$MYSPEC_BASE_REF"',
     });
   }
+}
+
+// --- container checks (#220, #221) ---------------------------------------------
+//
+// The stop gate does not read a check's exec options. In a linked worktree it
+// refuses a check without runIn whose command contains a container exec form
+// (CONTAINER_EXEC_FORMS in hooks/verify-before-stop.sh, matched the same way
+// here), and it trusts a runIn check to use the workdir it exports. Both are
+// knowable from the file, so they are warned about here, before a stop.
+
+const CONTAINER_EXEC_FORMS = ['docker exec', 'docker container exec', 'docker compose exec', 'docker-compose exec', 'podman exec', 'podman container exec', 'podman compose exec', 'podman-compose exec'];
+// Options that take a separate value, among the program and the exec
+// options; any other option is a flag. -w/--workdir is handled apart.
+const CONTAINER_VALUE_OPTS = new Set(['-f', '--file', '-p', '--project-name', '--project-directory', '--env-file', '--profile', '--ansi', '--progress', '--parallel', '-H', '--host', '-c', '--context', '--config', '-l', '--log-level', '--connection', '--url', '--identity', '--root', '--runroot', '-e', '--env', '-u', '--user', '--index', '--detach-keys', '--preserve-fds']);
+// The short options among those, for a cluster such as -it or -Tw.
+const CONTAINER_VALUE_SHORT = 'fpHcleu';
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// The hook's match: a form's words, options (and a value after each)
+// allowed between them, the program called by any path.
+function containerExecForm(command) {
+  const c = ` ${command.replace(/[\t\n;|&()"']/g, ' ').replace(/ {2,}/g, ' ')} `;
+
+  return CONTAINER_EXEC_FORMS.some((form) => new RegExp(`[ /]${form.split(' ').map(escapeRegExp).join('( -[^ ]+( [^ -][^ ]*)?)* ')} `).test(c));
+}
+
+// A short-flag cluster: 'workdir' when it sets the workdir (a w in it),
+// 'value' when its last option takes the next word, 'flags' otherwise. The
+// rest of a cluster after an option that takes a value is that value, as in
+// the engines' parsers: -ew is -e w, not -e -w.
+function shortCluster(word) {
+  const s = word.slice(1);
+
+  for (let i = 0; i < s.length; i += 1) {
+    if (s[i] === 'w') {
+      return 'workdir';
+    }
+
+    if (CONTAINER_VALUE_SHORT.includes(s[i])) {
+      return i === s.length - 1 ? 'value' : 'flags';
+    }
+  }
+
+  return 'flags';
+}
+
+// True when one of the command's simple commands is a container exec whose
+// exec options, those before the container or service name, carry no
+// -w/--workdir. A -w after the name belongs to the command run in the
+// container. Quotes are dropped, so a `sh -c "docker exec ..."` is read too.
+function execWithoutWorkdir(command) {
+  const forms = CONTAINER_EXEC_FORMS.map((form) => form.split(' '));
+  const segments = command.replace(/["']/g, '').split(/&&|\|\||[;|&()\n]/);
+
+  return segments.some((segment) => {
+    const words = segment.split(/\s+/).filter(Boolean);
+    let path = null;
+    let state = 'scan';
+
+    for (let i = 0; i < words.length; i += 1) {
+      const word = words[i];
+
+      if (state === 'scan') {
+        const name = word.split('/').pop();
+
+        if (forms.some((form) => form[0] === name)) {
+          path = [name];
+          state = 'words';
+        }
+      } else if (state === 'words') {
+        if (word.startsWith('-')) {
+          if (CONTAINER_VALUE_OPTS.has(word)) {
+            i += 1;
+          }
+        } else {
+          path = [...path, word];
+          const prefix = forms.filter((form) => path.every((w, j) => form[j] === w));
+
+          if (prefix.some((form) => form.length === path.length)) {
+            state = 'opts';
+          } else if (prefix.length === 0) {
+            state = 'scan';
+          }
+        }
+      } else if (word === '--workdir' || word.startsWith('--workdir=')) {
+        return false;
+      } else if (word.startsWith('--')) {
+        if (CONTAINER_VALUE_OPTS.has(word)) {
+          i += 1;
+        }
+      } else if (word.length > 1 && word.startsWith('-')) {
+        const kind = shortCluster(word);
+
+        if (kind === 'workdir') {
+          return false;
+        }
+
+        if (kind === 'value') {
+          i += 1;
+        }
+      } else {
+        return true;
+      }
+    }
+
+    return state === 'opts';
+  });
+}
+
+if (verification.value && Array.isArray(verification.value.checks)) {
+  verification.value.checks.forEach((check) => {
+    if (!check || typeof check !== 'object' || Array.isArray(check) || check.required !== true) {
+      return;
+    }
+
+    const name = String(check.name || '?');
+    const commands = [check.command, check.diffCommand].filter((command) => typeof command === 'string' && command.trim());
+    const runIn = typeof check.runIn === 'string' && check.runIn !== '';
+
+    if (!runIn && commands.some(containerExecForm)) {
+      warn('verification-exec-no-runin', 'schema', '.claude/verification.json', `.claude/verification.json: check ${name} runs a container exec without runIn — in a linked worktree this check will be refused, because the container mounts another checkout`, {
+        text: 'declare runIn and a containers entry, and pass -w "$MYSPEC_CHECK_WORKDIR" in its exec options (docs/stop-gate.md, Per-check settings)',
+      });
+    }
+
+    if (runIn && commands.some((command) => !command.includes('MYSPEC_CHECK_WORKDIR') && execWithoutWorkdir(command))) {
+      warn('verification-runin-no-workdir', 'schema', '.claude/verification.json', `.claude/verification.json: check ${name} has runIn but its container exec passes neither -w/--workdir nor $MYSPEC_CHECK_WORKDIR — it will verify the container's default workdir, which mounts the main checkout, not a worktree`, {
+        text: 'pass -w "$MYSPEC_CHECK_WORKDIR" in the exec options, before the container or service name',
+      });
+    }
+  });
 }
 
 // --- settings schema (#233) ----------------------------------------------------
@@ -1917,6 +2049,17 @@ function listSettings(schema) {
 
       const source = sourceOf(key, entry);
       const label = fileLabel(entry.file, key);
+      const base = defaultOf(entry);
+
+      // An extend list over a non-empty default (isolation.blockInMain) is
+      // shown as the default plus what the layers added, so the project's
+      // entries are not cut off behind the default's.
+      if (entry.merge === 'extend' && Array.isArray(base) && base.length > 0 && Array.isArray(value)
+          && base.every((item, i) => stableJson(item) === stableJson(value[i]))) {
+        settingsInForce.push({ key: label, value, added: value.slice(base.length), source, loosens: entry.loosens === true });
+
+        return;
+      }
       const fields = Object.entries(keys).filter(([other]) => other.startsWith(`${key}[].`));
 
       // An emptied list has no items to list, so it is listed whole.
@@ -1990,8 +2133,8 @@ if (json) {
       lines.push('SET   every setting is at its default');
     }
 
-    settingsInForce.forEach(({ key, value, source, loosens }) => {
-      const shown = JSON.stringify(value);
+    settingsInForce.forEach(({ key, value, added, source, loosens }) => {
+      const shown = added ? `default + ${JSON.stringify(added)}` : JSON.stringify(value);
 
       lines.push(`SET   ${key} = ${shown.length > 160 ? `${shown.slice(0, 157)}...` : shown} (${source})${loosens ? ' — loosens a gate' : ''}`);
     });

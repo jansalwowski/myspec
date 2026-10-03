@@ -16,9 +16,10 @@
 # isolation.provision.symlink entry, plus node_modules, vendor,
 # vendor-bin/*/vendor, .venv, venv) is a symlink into a checkout whose
 # lockfiles for it differ from this tree, or whose tree loads that checkout's
-# own source. In a linked worktree (or a submodule inside one), a check that
-# runs a container exec (docker exec, docker compose exec, podman exec, ...)
-# without -w/--workdir is refused as unverifiable, not run.
+# own source. In a linked worktree (or a submodule inside one), a check
+# without runIn whose command contains a container exec (CONTAINER_EXEC_FORMS)
+# is refused as unverifiable, not run. A check with `cwd` runs from that
+# repo-relative directory of the checkout.
 # A check with `paths` runs only when a file the session wrote in that
 # checkout matches one of its globs (#232); a skipped one is named in the
 # stop message. A check with `runIn` gets MYSPEC_CHECK_WORKDIR, this
@@ -400,9 +401,10 @@ capped() {
 }
 
 # run_capped <seconds> <command> <run id> [keep]: runs <command> from the repo
-# root under run_with_cap. Sets RUN_EXIT, RUN_ELAPSED and RUN_OUTPUT. With
-# keep, the output file stays and RUN_LOG names it: the caller removes it, or
-# keeps a failed check's log for attribution to read.
+# root, or the check's cwd under it (CHECK_CWD), under run_with_cap. Sets
+# RUN_EXIT, RUN_ELAPSED and RUN_OUTPUT. With keep, the output file stays and
+# RUN_LOG names it: the caller removes it, or keeps a failed check's log for
+# attribution to read.
 # Output goes to a file, not a $(...) capture: a process that escapes the
 # group kill (it called setsid, or it is a detaching daemon) would otherwise
 # hold the pipe open and keep the hook waiting until it exits on its own,
@@ -414,7 +416,7 @@ run_capped() {
   rm -f "$CAP_SENTINEL"
   CHECK_LOG=$(mktemp "${TMPDIR:-/tmp}/.myspec-check.XXXXXX")
   start=$(date +%s)
-  (cd "$REPO_ROOT" && MYSPEC_STOP_HOOK_ACTIVE=1 MYSPEC_CHECK_RUN_ID="$3" run_with_cap "$1" "$2") \
+  (cd "$REPO_ROOT${CHECK_CWD:+/$CHECK_CWD}" && MYSPEC_STOP_HOOK_ACTIVE=1 MYSPEC_CHECK_RUN_ID="$3" run_with_cap "$1" "$2") \
     >"$CHECK_LOG" 2>&1 </dev/null && RUN_EXIT=0 || RUN_EXIT=$?
   RUN_ELAPSED=$(( $(date +%s) - start ))
   RUN_OUTPUT=$(cat "$CHECK_LOG")
@@ -560,23 +562,30 @@ attribute_failures() {
 
 # Container checks in a linked worktree (#220). A container exec runs in the
 # container's working directory, which mounts the checkout the container (or
-# compose project) was started from, as a rule the main checkout. A named
-# container does not depend on the cwd at all, and compose names the project
-# after the directory it runs in. From a linked worktree the check either
-# finds no running service (a false failure) or lints and tests the main
-# checkout's tree (a false pass). Such a check is refused as unverifiable
-# instead of run, unless its exec options pass -w/--workdir. That -w is
-# trusted, not verified: nothing here knows what the container mounts there.
+# compose project) was started from, as a rule the main checkout. From a
+# linked worktree such a check either finds no running service or verifies
+# the main checkout's tree. A check declares where its work runs with runIn
+# (R12); one that does not, and whose command contains a declared exec form,
+# is refused there instead of run. Nothing is inferred from the command's
+# options: setup-doctor parses those and warns ahead of a stop.
 
-# The exec forms, as the program and its subcommand words joined by ":"
-# (program options between them are skipped). Data, so another engine or
-# wrapper is one more entry.
-CONTAINER_EXEC_FORMS="docker:exec docker:container:exec docker:compose:exec docker-compose:exec podman:exec podman:container:exec podman:compose:exec podman-compose:exec"
-# Options that take a separate value, among the program options and the exec
-# options. Any other option is read as a flag. -w/--workdir is handled apart.
-CONTAINER_VALUE_OPTS="-f --file -p --project-name --project-directory --env-file --profile --ansi --progress --parallel -H --host -c --context --config -l --log-level --connection --url --identity --root --runroot -e --env -u --user --index --detach-keys --preserve-fds"
-# The short options among those, for a cluster such as -it or -Tw.
-CONTAINER_VALUE_SHORT="fpHcleu"
+# The exec forms, as data: another engine or wrapper is one more entry.
+CONTAINER_EXEC_FORMS=("docker exec" "docker container exec" "docker compose exec" "docker-compose exec" "podman exec" "podman container exec" "podman compose exec" "podman-compose exec")
+
+# container_exec_form <command> -> 0 when the command contains one of the
+# forms as whole words, the program called by any path, with options (and a
+# value after each) allowed between the words: `docker compose -p x exec`.
+# What follows `exec` is never read.
+container_exec_form() {
+  local seps=$'\t\n;|&()"\'' gap='( -[^ ]+( [^ -][^ ]*)?)* ' c form re
+  c=" ${1//[$seps]/ } "
+  while [ "${c//  / }" != "$c" ]; do c=${c//  / }; done
+  for form in "${CONTAINER_EXEC_FORMS[@]}"; do
+    re="[ /]${form// /$gap} "
+    [[ "$c" =~ $re ]] && return 0
+  done
+  return 1
+}
 
 # is_linked_worktree <dir> -> 0 when <dir> is a linked worktree, or a
 # submodule checked out inside one, not a main checkout. A submodule's git
@@ -589,75 +598,27 @@ is_linked_worktree() {
   [ "$CF_SUBMODULE" = 1 ] && is_linked_worktree "$CF_SUPER"
 }
 
-# exec_short_cluster <-abc> -> 0 when the cluster sets the workdir (a w in
-# it), 1 when its last option takes the next word as its value, 2 otherwise.
-# As in the engines' flag parsers, the rest of a cluster after an option that
-# takes a value is that value (-ew is -e w, not -e -w).
-exec_short_cluster() {
-  local s="${1#-}" c
-  while [ -n "$s" ]; do
-    c=${s:0:1}
-    s=${s:1}
-    [ "$c" = w ] && return 0
-    case "$CONTAINER_VALUE_SHORT" in
-      *"$c"*) [ -n "$s" ] && return 2; return 1 ;;
-    esac
-  done
-  return 2
-}
-
-# container_exec_unpinned <command> -> 0 when one of the command's simple
-# commands is a container exec (CONTAINER_EXEC_FORMS) whose exec options,
-# those before the container or service name, carry no -w/--workdir. A -w
-# after the name belongs to the command run in the container, so it does not
-# count. Quotes are dropped, so a `bash -c "docker exec ..."` is read too.
-container_exec_unpinned() {
-  local cmd="$1" seg i n word path state rc
-  local -a t
-  cmd=${cmd//&&/$'\n'}
-  cmd=${cmd//||/$'\n'}
-  cmd=${cmd//[;|&()]/$'\n'}
-  cmd=${cmd//[\"\']/}
-  while IFS= read -r seg; do
-    read -ra t <<< "$seg"
-    n=${#t[@]} i=0 path="" state=scan
-    while [ "$i" -lt "$n" ]; do
-      word=${t[$i]}
-      i=$((i + 1))
-      case "$state" in
-        scan)
-          case " $CONTAINER_EXEC_FORMS " in
-            *" ${word##*/}:"*) path=${word##*/} state=words ;;
-          esac ;;
-        words)
-          case "$word" in
-            -*) case " $CONTAINER_VALUE_OPTS " in *" $word "*) i=$((i + 1)) ;; esac ;;
-            *)
-              path="$path:$word"
-              case " $CONTAINER_EXEC_FORMS " in
-                *" $path "*) state=opts ;;
-                *" $path:"*) ;;
-                *) state=scan ;;
-              esac ;;
-          esac ;;
-        opts)
-          case "$word" in
-            --workdir|--workdir=*) continue 2 ;;
-            --*) case " $CONTAINER_VALUE_OPTS " in *" $word "*) i=$((i + 1)) ;; esac ;;
-            -?*)
-              rc=0
-              exec_short_cluster "$word" || rc=$?
-              case "$rc" in
-                0) continue 2 ;;
-                1) i=$((i + 1)) ;;
-              esac ;;
-            *) return 0 ;;
-          esac ;;
-      esac
-    done
-    [ "$state" = opts ] && return 0
-  done <<< "$cmd"
-  return 1
+# check_cwd <check json> -> sets CHECK_CWD to the check's repo-relative cwd
+# ("" for the checkout root), and CWD_IGNORED to the raw value when it is
+# unusable (not a string, empty, absolute, or with a .. segment): the check
+# then runs from the root and the stop message names it, as for paths.
+CHECK_CWD=""
+check_cwd() {
+  local raw
+  CHECK_CWD="" CWD_IGNORED=""
+  raw=$(printf '%s' "$1" | jq -r 'if has("cwd") then (.cwd | if type == "string" then "s" + . else "x" + tojson end) else "" end')
+  [ -n "$raw" ] || return 0
+  case "$raw" in
+    x*) CWD_IGNORED=${raw#x}; return 0 ;;
+  esac
+  raw=${raw#s}
+  case "$raw" in
+    ''|/*|..|../*|*/..|*/../*) CWD_IGNORED="\"$raw\""; return 0 ;;
+  esac
+  while [ "${raw#./}" != "$raw" ]; do raw="${raw#./}"; done
+  while [ "${raw%/}" != "$raw" ]; do raw="${raw%/}"; done
+  [ "$raw" != "." ] || raw=""
+  CHECK_CWD=$raw
 }
 
 # Settings, through the one reader (read_setting in lib/hook-core.sh, which
@@ -738,6 +699,7 @@ unseen_files() {
 # check gets MYSPEC_CHECK_WORKDIR: where this checkout's mountSource sits in
 # the container, mountTarget plus the path of <checkout>/<mountSource> under
 # <main checkout>/<mountSource>. In the main checkout that is mountTarget.
+# A check's cwd under mountSource is appended (#250).
 
 # main_checkout <root> -> the physical path of the repository's main
 # checkout. A submodule's is its superproject's main checkout plus the
@@ -757,10 +719,10 @@ main_checkout() {
   printf '%s\n' "$CF_MAIN"
 }
 
-# check_workdir <root> <container name> -> sets CHECK_WORKDIR, or
+# check_workdir <root> <container name> <cwd> -> sets CHECK_WORKDIR, or
 # REFUSE_REASON when the check cannot run there.
 check_workdir() {
-  local spec src tgt main base self rel
+  local spec src tgt main base self rel sub=""
   CHECK_WORKDIR=""
   REFUSE_REASON=""
   if [ -z "$CONTAINERS_JSON" ]; then
@@ -806,7 +768,15 @@ check_workdir() {
         return 1 ;;
     esac
   fi
-  CHECK_WORKDIR="$tgt$rel"
+  if [ -n "$3" ] && [ "$3" != "$src" ]; then
+    case "$3/" in
+      "${src:+$src/}"*) sub="/${3#"${src:+$src/}"}" ;;
+      *)
+        REFUSE_REASON="its cwd \"$3\" is not under mountSource \"$src\" of container \"$2\", so it is not visible inside the container."
+        return 1 ;;
+    esac
+  fi
+  CHECK_WORKDIR="$tgt$rel$sub"
   [ -n "$CHECK_WORKDIR" ] || CHECK_WORKDIR=/
 }
 
@@ -924,6 +894,7 @@ for i in $(seq 0 $((CHECKS_COUNT - 1))); do
   CLEANUP=$(printf '%s' "$CHECK" | jq -r '.cleanup // ""')
   RUN_IN=$(printf '%s' "$CHECK" | jq -r '.runIn // empty | if type == "string" then . else "\(.)" end')
   unset MYSPEC_CHECK_WORKDIR
+  check_cwd "$CHECK"
 
   # Path scope (#232): a required check skipped here is named in the stop
   # message, so the loosening never goes unseen.
@@ -935,33 +906,26 @@ for i in $(seq 0 $((CHECKS_COUNT - 1))); do
     ignored)
       SCOPE_NOTES+=("$NAME: its paths setting was ignored, so the check ran. paths must be a non-empty list of repo-relative globs, none absolute or with a .. segment${PATHS_GLOBS:+ (got $PATHS_GLOBS)}.") ;;
   esac
+  [ -z "$CWD_IGNORED" ] || SCOPE_NOTES+=("$NAME: its cwd setting was ignored, so the check ran from the checkout root. cwd must be a repo-relative directory, not absolute and without a .. segment (got $CWD_IGNORED).")
 
   if [ -n "${DIFF_COMMAND// /}" ] && [ -n "$MYSPEC_BASE_REF" ]; then
     COMMAND="$DIFF_COMMAND"
   fi
 
   # A check with runIn names where its work runs, so the gate can say where
-  # this checkout is inside the container (or refuse when it is not there).
-  # That satisfies the #220 refusal below: the command gets the workdir.
+  # this checkout is inside the container (or refuse when it is not there),
+  # and its command is trusted to use that workdir. In a linked worktree, a
+  # container exec without runIn would verify another tree (R8a).
   if [ -n "$RUN_IN" ]; then
-    if ! check_workdir "$REPO_ROOT" "$RUN_IN"; then
+    if ! check_workdir "$REPO_ROOT" "$RUN_IN" "$CHECK_CWD"; then
       UNVERIFIABLE_CHECKS+=("$NAME")
       FAILED_OUTPUT+=("[$NAME not run: runIn $RUN_IN] $REFUSE_REASON This is not a test failure.")
       continue
     fi
     export MYSPEC_CHECK_WORKDIR="$CHECK_WORKDIR"
-    # runIn exempts a command from the #220 refusal only when it uses the
-    # workdir: an exec with neither -w/--workdir nor MYSPEC_CHECK_WORKDIR
-    # still runs in the container's default directory.
-    if [ "$ROOT_IS_LINKED" -eq 1 ] && container_exec_unpinned "$COMMAND" \
-        && [ "${COMMAND#*MYSPEC_CHECK_WORKDIR}" = "$COMMAND" ]; then
-      UNVERIFIABLE_CHECKS+=("$NAME")
-      FAILED_OUTPUT+=("[$NAME not run: runIn $RUN_IN without its workdir] $COMMAND runs a container exec without -w/--workdir and does not use MYSPEC_CHECK_WORKDIR, so it runs in the container's default working directory, which mounts the main checkout's tree, not $REPO_ROOT. A result would describe another tree. This is not a test failure. Pass -w \"\$MYSPEC_CHECK_WORKDIR\" in the exec options, before the container or service name, then report the check's real result.")
-      continue
-    fi
-  elif [ "$ROOT_IS_LINKED" -eq 1 ] && container_exec_unpinned "$COMMAND"; then
+  elif [ "$ROOT_IS_LINKED" -eq 1 ] && container_exec_form "$COMMAND"; then
     UNVERIFIABLE_CHECKS+=("$NAME")
-    FAILED_OUTPUT+=("[$NAME not run: unverifiable in a linked worktree] $COMMAND runs a container exec (docker exec, docker compose exec, podman exec and the like) without -w/--workdir, so it runs in the container's working directory. That directory mounts the checkout the container or compose project was started from (as a rule the main checkout), not $REPO_ROOT, so a result would describe another tree; and compose names the project after the directory it runs in, so from here it may find no running service at all. This is not a test failure. Make the check verify this worktree: give it runIn with the container's mount in containers (.claude/verification.json) and pass -w \"\$MYSPEC_CHECK_WORKDIR\", or mount it in the container and pass -w/--workdir with its path there, or run the tool on the host. The gate trusts a -w/--workdir without verifying it: it cannot see what the container mounts at that path, so the path must be this worktree's mount.")
+    FAILED_OUTPUT+=("[$NAME not run: unverifiable in a linked worktree] $COMMAND runs a container exec, which runs in the container's mount of the checkout it was started from (as a rule the main checkout), not $REPO_ROOT, so a result would describe another tree. This is not a test failure. Declare where it runs: give the check runIn, with the container's mount under containers in .claude/verification.json, and pass -w \"\$MYSPEC_CHECK_WORKDIR\" in its exec options; or run the tool on the host.")
     continue
   fi
 
