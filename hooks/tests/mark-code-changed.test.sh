@@ -435,8 +435,10 @@ implement_events() {  # implement_events <sid> -> the implement states, in order
   find "$ROOT" -path "*/.claude/state/sessions/$1.jsonl" -exec cat {} + 2>/dev/null \
     | jq -r 'select(.t == "implement") | .state' | tr '\n' ' '
 }
+# shellcheck disable=SC2016 # literal text, not an expansion
 bashcmd "$SID-95" "$REPO" '"$(git rev-parse --show-toplevel)"/.claude/lib/session-event.sh implement start'
 [ "$(implement_events "$SID-95")" = "start " ] && ok || fail "implement start is recorded for the payload's session (got: $(implement_events "$SID-95"))"
+# shellcheck disable=SC2016 # literal text, not an expansion
 bashcmd "$SID-95" "$REPO/src" '"$(git rev-parse --show-toplevel)/.claude/lib/session-event.sh" implement stop && echo done'
 [ "$(implement_events "$SID-95")" = "start stop " ] && ok || fail "a fully quoted path and a cwd below the root still record (got: $(implement_events "$SID-95"))"
 bashcmd "$SID-96" "$REPO" 'echo "session-event.sh implement start" > notes.txt; grep implement session-event.sh'

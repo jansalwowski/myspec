@@ -50,9 +50,9 @@ wrote() {  # wrote <sid> <root>: a code write in <root>, as mark-code-changed.sh
   bash "$SESSION_EVENT" --root "$2" append "$1" "$(jq -nc --arg r "$2" '{t: "write", root: $r, rel: "src/a.ts", kind: "code", agent: "agent-1"}')"
 }
 
-run_hook() {  # run_hook [sid] -> hook stdout, after a code write in the cwd's checkout
-  wrote "${1:-$SID}" "$REPO"
-  printf '{"session_id":"%s","cwd":"%s"}' "${1:-$SID}" "$REPO" | bash "$HOOK"
+run_hook() {  # run_hook -> hook stdout, after a code write in the cwd's checkout
+  wrote "$SID" "$REPO"
+  printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$REPO" | bash "$HOOK"
 }
 
 implement() {  # implement <state> <at> [sid]: an implement event dated <at>
