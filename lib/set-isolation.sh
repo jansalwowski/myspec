@@ -18,45 +18,29 @@
 
 set -euo pipefail
 
-resolve_repo_root() {
-  local candidate resolved
-
-  if resolved=$(git -C "$PWD" rev-parse --show-toplevel 2>/dev/null); then
-    printf '%s\n' "$resolved"
-    return 0
-  fi
-
-  candidate="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-  if resolved=$(git -C "$candidate" rev-parse --show-toplevel 2>/dev/null); then
-    printf '%s\n' "$resolved"
-    return 0
-  fi
-
-  return 1
-}
+# shellcheck source=lib/hook-core.sh
+. "$(dirname "${BASH_SOURCE[0]}")/hook-core.sh"
 
 if ! command -v jq >/dev/null 2>&1; then
   echo "set-isolation: jq is required" >&2
   exit 1
 fi
 
-if ! REPO_ROOT="$(resolve_repo_root)"; then
+# The checkout of the cwd, else of the project this lib is installed in.
+if ! REPO_ROOT=$(hook_repo_root "") || ! checkout_facts "$REPO_ROOT"; then
   echo "set-isolation: not inside a git repository" >&2
   exit 1
 fi
 
-# Markers live in the MAIN checkout: the hooks read them there, and a linked
-# worktree may be gone by the time the decision would matter.
-if [ -f "$REPO_ROOT/.git" ]; then
-  COMMON=$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null || printf '')
-  if [ -n "$COMMON" ] && [ "$(basename "$COMMON")" = ".git" ]; then
-    REPO_ROOT=$(dirname "$COMMON")
-  fi
-fi
+# Markers live in the MAIN checkout (checkout_facts): the hooks read them
+# there, and a linked worktree may be gone by the time the decision would
+# matter. A worktree whose main checkout git cannot name (a bare repository)
+# keeps its own.
+REPO_ROOT="${CF_MAIN:-$CF_ROOT}"
 
 STATE_DIR="$REPO_ROOT/.claude/state/isolation"
 
-# Markers outlive their 8h TTL as dead files; without a sweep they accumulate
+# Markers outlive their TTL (MYSPEC_DECISION_TTL, 8h) as dead files; without a sweep they accumulate
 # indefinitely. Expired markers are also what `ls -t | head -1` inheritance
 # would otherwise walk.
 prune_expired() {
@@ -67,7 +51,7 @@ prune_expired() {
   for f in "$STATE_DIR"/*.json; do
     [ -f "$f" ] || continue
     age=$(( $(date +%s) - $(jq -r '.decided_at // 0' "$f" 2>/dev/null || printf 0) ))
-    if [ "$age" -gt 28800 ]; then
+    if [ "$age" -gt "$MYSPEC_DECISION_TTL" ]; then
       rm -f "$f"
     fi
   done
