@@ -104,7 +104,10 @@ if [ -f "$DOCTOR" ] && [ -f "$REPO_ROOT/.myspec.json" ] && command -v node >/dev
   # the same resolution memory-files.mjs uses.
   MEMORY_AI_DIR=$(jq -r '.aiDir // empty' "$REPO_ROOT/.myspec.json" 2>/dev/null | sed 's#/*$##')
   MEMORY_AI_DIR="${MEMORY_AI_DIR:-.ai}"
-  if [ -n "$MEMORY_AI_DIR" ] && git -C "$REPO_ROOT" status --porcelain -- "$MEMORY_AI_DIR/memory" 2>/dev/null | grep -q .; then
+  # $(...) and -n, not `| grep -q .`: grep exits on the first line, a status
+  # longer than a pipe buffer then kills git with SIGPIPE, and under pipefail
+  # the `if` read false and skipped the gate.
+  if [ -n "$MEMORY_AI_DIR" ] && [ -n "$(git -C "$REPO_ROOT" status --porcelain -- "$MEMORY_AI_DIR/memory" 2>/dev/null)" ]; then
     if ! DOCTOR_OUT=$(cd "$REPO_ROOT" && node "$DOCTOR" --quiet 2>&1); then
       REASON=$(printf 'Memory conformance check failed for changes under %s/memory. Fix these before stopping (node .claude/lib/memory-index.mjs regenerates the tables; the doctor names the rest):\n\n%s' "$MEMORY_AI_DIR" "$(printf '%s' "$DOCTOR_OUT" | tail -30)" | jq -Rs .)
       echo "{\"decision\": \"block\", \"reason\": $REASON}"
@@ -126,7 +129,8 @@ fi
 # check above is gated.
 SETUP_DOCTOR="$REPO_ROOT/.claude/lib/setup-doctor.mjs"
 if [ -f "$SETUP_DOCTOR" ] && [ -f "$REPO_ROOT/.myspec.json" ] && command -v node >/dev/null 2>&1 && command -v jq >/dev/null 2>&1; then
-  if git -C "$REPO_ROOT" status --porcelain -- .claude .myspec.json 2>/dev/null | grep -q .; then
+  # Not `| grep -q .`, for the SIGPIPE reason given at the memory gate.
+  if [ -n "$(git -C "$REPO_ROOT" status --porcelain -- .claude .myspec.json 2>/dev/null)" ]; then
     if ! SETUP_OUT=$(cd "$REPO_ROOT" && node "$SETUP_DOCTOR" --quiet wiring schema 2>&1); then
       REASON=$(printf 'Setup conformance check failed for changes under .claude/ or .myspec.json. Each of these makes a hook or a gate silently stop working, so fix them before stopping:\n\n%s' "$(printf '%s' "$SETUP_OUT" | tail -30)" | jq -Rs .)
       echo "{\"decision\": \"block\", \"reason\": $REASON}"
@@ -368,8 +372,11 @@ symlink_entries() {
 # packages. Every such link is resolved physically, because its text says
 # little about where it lands (.., ./../x, a/../../x, or a hop into a deeper
 # link that leaves the tree). The cd calls run in one subshell, so a tree of
-# thousands of links costs no fork per link. A find that fails (one without
-# -mindepth, say) counts as loading: an unscanned tree is never accepted.
+# thousands of links costs no fork per link. A find that cannot run the
+# scan (one without -mindepth, say) counts as loading: an unscanned tree is
+# never accepted. The scan's own exit status is ignored: find also fails on
+# an unreadable directory inside the tree, after listing every link it
+# could read, and that failure says nothing about those links.
 # NESTED_LINK_DIRS are tree-relative directories that hold links of their
 # own one or two levels down, such as the pnpm hidden hoist
 # (.pnpm/node_modules/@scope/<name>, four levels below the tree). Data, so
@@ -388,11 +395,12 @@ tree_loads_checkout() {
     case "$dir/" in "$checkout"/*) return 0 ;; esac
   done
   real=$(cd "$tree" 2>/dev/null && pwd -P) || return 1
-  links=$(find "$real" -mindepth 1 -maxdepth 2 -type l 2>/dev/null) || return 0
+  find "$real" -mindepth 1 -maxdepth 0 -type l >/dev/null 2>&1 || return 0
+  links=$(find "$real" -mindepth 1 -maxdepth 2 -type l 2>/dev/null || true)
   read -ra nests <<< "$NESTED_LINK_DIRS"
   for nested in ${nests[@]+"${nests[@]}"}; do
     [ -d "$real/$nested" ] || continue
-    links="$links"$'\n'$(find "$real/$nested" -mindepth 1 -maxdepth 2 -type l 2>/dev/null) || return 0
+    links="$links"$'\n'$(find "$real/$nested" -mindepth 1 -maxdepth 2 -type l 2>/dev/null || true)
   done
   (
     while IFS= read -r f; do
@@ -912,53 +920,28 @@ read_setting() {
   SETTING_NOTES=$(sed 's/^myspec-config: //' "$SETTING_ERR")
 }
 
-# Path scope (#232). A check's `paths` is a list of globs matched against
-# each file this session wrote in the checkout, as a repo-relative path:
-#   - a glob matches the whole path, from the repo root (`*.php` is a file at
-#     the root only; `**/*.php` is one at any depth);
-#   - `*` matches any run of characters within one path segment, `?` one
-#     character other than `/`;
-#   - `**` as a whole segment matches zero or more segments (`api/**` is
-#     everything under api/, `a/**/b` matches a/b and a/x/y/b); `**` inside
-#     a segment is a plain `*`;
-#   - a trailing `/` means everything under it (`api/` is `api/**`), and a
-#     leading `./` is dropped;
-#   - every other character is literal, `[`, `{` and `\` included.
-# A glob that is empty, absolute or has a `..` segment is unusable, and so
-# is a `paths` that is not a non-empty list of strings: the check then runs,
-# and the stop message names the ignored setting (fail closed).
-
-# glob_ere <glob> -> the anchored ERE for it; fails when it is unusable.
-glob_ere() {
-  local g="$1" re="" c seg=1
-  while [ "${g#./}" != "$g" ]; do g="${g#./}"; done
-  case "$g" in ''|/*) return 1 ;; esac
-  case "/$g/" in */../*) return 1 ;; esac
-  case "$g" in */) g="$g**" ;; esac
-  while [ -n "$g" ]; do
-    if [ "$seg" -eq 1 ] && [ "$g" = '**' ]; then
-      re="$re.*"
-      break
-    fi
-    if [ "$seg" -eq 1 ] && [ "${g#'**/'}" != "$g" ]; then
-      re="$re(.*/)?"
-      g="${g#'**/'}"
-      continue
-    fi
-    c="${g:0:1}"
-    g="${g:1}"
-    seg=0
-    case "$c" in
-      '*') while [ "${g:0:1}" = '*' ]; do g="${g:1}"; done; re="${re}[^/]*" ;;
-      '?') re="${re}[^/]" ;;
-      /) re="$re/"; seg=1 ;;
-      .|+|\(|\)|\||\$|\{|\}) re="${re}[$c]" ;;
-      ^|\[|\\) re="$re\\$c" ;;
-      *) re="$re$c" ;;
-    esac
-  done
-  printf '^%s$\n' "$re"
-}
+# Path scope (#232). A check's `paths` is a list of repo-relative globs
+# matched against each file this session wrote in the checkout. They compile
+# through lib/glob-regex.sh, the one glob compiler (semantics there and in
+# docs/stop-gate.md "Globs"), found where the settings reader is. A glob
+# that is empty, absolute or has a `..` segment is unusable, and so is a
+# `paths` that is not a non-empty list of strings: the check then runs, and
+# the stop message names the ignored setting (fail closed). Without the
+# compiler every `paths` is ignored the same way.
+GLOB_LIB=""
+for CANDIDATE in "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/glob-regex.sh" \
+    "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/glob-regex.sh"; do
+  if [ -f "$CANDIDATE" ]; then
+    GLOB_LIB="$CANDIDATE"
+    break
+  fi
+done
+if [ -n "$GLOB_LIB" ]; then
+  # shellcheck source=/dev/null
+  . "$GLOB_LIB"
+else
+  glob_regex() { return 1; }
+fi
 
 # paths_verdict <check json> -> sets PATHS_VERDICT to run (no paths, or a
 # file matches), skip (no file matches) or ignored (unusable; the check
@@ -978,7 +961,7 @@ paths_verdict() {
   fi
   while IFS= read -r glob; do
     PATHS_GLOBS="${PATHS_GLOBS:+$PATHS_GLOBS, }$glob"
-    if ! re=$(glob_ere "$glob"); then
+    if ! re=$(glob_regex "$glob"); then
       PATHS_VERDICT=ignored
       return 0
     fi
@@ -1105,6 +1088,41 @@ check_workdir() {
   [ -n "$CHECK_WORKDIR" ] || CHECK_WORKDIR=/
 }
 
+# Orchestration marker. While /myspec:feature-implement runs, the controller
+# ends many turns on a tree that is red by design: a barrier accepted with a
+# recorded failure, a fix round in flight in a subagent, a failing test owned
+# by the next phase. Blocking there forces a turn the controller cannot use
+# (it may not fix code itself), so failures downgrade to a non-blocking
+# warning. The skill writes the marker at setup and removes it before its
+# final verification; feature-complete removes it too. It lives in the
+# checkout the controller works in (the cwd's, ORIG_ROOT), and it is read
+# once, there, for the whole session: the task worktrees its subagents edit
+# share the session id, so their writes arm this gate too, and they carry no
+# marker of their own. A concurrent run in another checkout has another cwd
+# and keeps its own gate. A marker older than IMPLEMENT_MARKER_TTL (8h, the
+# isolation-decision TTL) or without a readable started_at is a crashed run:
+# it is deleted and the gate blocks.
+# Only the verification.json checks are downgraded; the conformance and
+# symlink blocks above are session damage, not expected red.
+IMPLEMENT_MARKER="$ORIG_ROOT/.claude/state/implement-in-progress.json"
+IMPLEMENT_MARKER_TTL=28800
+IMPLEMENT_ACTIVE=0
+if [ -f "$IMPLEMENT_MARKER" ]; then
+  STARTED_AT=$(jq -r '.started_at // empty' "$IMPLEMENT_MARKER" 2>/dev/null || printf '')
+  case "$STARTED_AT" in
+    ''|*[!0-9]*) STARTED_AT="" ;;
+  esac
+  if [ -n "$STARTED_AT" ]; then
+    MARKER_AGE=$(( $(date +%s) - STARTED_AT ))
+    if [ "$MARKER_AGE" -ge 0 ] && [ "$MARKER_AGE" -le "$IMPLEMENT_MARKER_TTL" ]; then
+      IMPLEMENT_ACTIVE=1
+    fi
+  fi
+  if [ "$IMPLEMENT_ACTIVE" -eq 0 ]; then
+    rm -f "$IMPLEMENT_MARKER"
+  fi
+fi
+
 # Run each required check, once per checkout to verify.
 FAILED_CHECKS=()
 # The output file of each failed check, parallel to FAILED_CHECKS, for
@@ -1171,38 +1189,6 @@ if [ -n "$DEFAULT_REF" ]; then
   MYSPEC_BASE_REF=$(git -C "$REPO_ROOT" merge-base HEAD "$DEFAULT_REF" 2>/dev/null || printf '')
 fi
 export MYSPEC_BASE_REF
-
-# Orchestration marker. While /myspec:feature-implement runs, the controller
-# ends many turns on a tree that is red by design: a barrier accepted with a
-# recorded failure, a fix round in flight in a subagent, a failing test owned
-# by the next phase. Blocking there forces a turn the controller cannot use
-# (it may not fix code itself), so failures downgrade to a non-blocking
-# warning. The skill writes the marker at setup and removes it before its
-# final verification; feature-complete removes it too. It lives in the
-# checkout the session works in, not the primary one: it describes this tree,
-# and a concurrent run in another worktree must keep its own gate. A marker
-# older than IMPLEMENT_MARKER_TTL (8h, the isolation-decision TTL) or without
-# a readable started_at is a crashed run: it is deleted and the gate blocks.
-# Only the verification.json checks are downgraded; the conformance and
-# symlink blocks above are session damage, not expected red.
-IMPLEMENT_MARKER="$REPO_ROOT/.claude/state/implement-in-progress.json"
-IMPLEMENT_MARKER_TTL=28800
-IMPLEMENT_ACTIVE=0
-if [ -f "$IMPLEMENT_MARKER" ]; then
-  STARTED_AT=$(jq -r '.started_at // empty' "$IMPLEMENT_MARKER" 2>/dev/null || printf '')
-  case "$STARTED_AT" in
-    ''|*[!0-9]*) STARTED_AT="" ;;
-  esac
-  if [ -n "$STARTED_AT" ]; then
-    MARKER_AGE=$(( $(date +%s) - STARTED_AT ))
-    if [ "$MARKER_AGE" -ge 0 ] && [ "$MARKER_AGE" -le "$IMPLEMENT_MARKER_TTL" ]; then
-      IMPLEMENT_ACTIVE=1
-    fi
-  fi
-  if [ "$IMPLEMENT_ACTIVE" -eq 0 ]; then
-    rm -f "$IMPLEMENT_MARKER"
-  fi
-fi
 
 # The checks and containers, through the reader, from the checkout whose
 # verification.json is in use. Without the reader, the checks are read from

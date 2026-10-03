@@ -144,11 +144,14 @@ done
 . "$LIB"
 
 ALLOW_BRANCH_OPS=0
-if printf '%s' "$COMMAND" | grep -qE '(^|[[:space:]])MYSPEC_ALLOW_BRANCH_OPS=1[[:space:]]'; then
+# Here-strings, not `printf | grep -q`, throughout: grep -q exits on the
+# first match, a long input then kills printf with SIGPIPE, and under
+# pipefail the match reads as a miss.
+if grep -qE '(^|[[:space:]])MYSPEC_ALLOW_BRANCH_OPS=1[[:space:]]' <<< "$COMMAND"; then
   ALLOW_BRANCH_OPS=1
 fi
 ALLOW_MAIN_CHECKOUT=0
-if printf '%s' "$COMMAND" | grep -qE '(^|[[:space:]])MYSPEC_ALLOW_MAIN_CHECKOUT=1[[:space:]]'; then
+if grep -qE '(^|[[:space:]])MYSPEC_ALLOW_MAIN_CHECKOUT=1[[:space:]]' <<< "$COMMAND"; then
   ALLOW_MAIN_CHECKOUT=1
 fi
 
@@ -290,13 +293,13 @@ branch_verdict() {
   if [ "$is_delete" != 1 ]; then
     # `branch -f <name> [<start>]` moves an existing branch ref.
     if [ "$is_force" = 1 ]; then
-      printf 'BLOCKED: git branch -f rewrites a branch ref on the main checkout. Do the work in a linked worktree (procedure: %s). Blocked: %s' "$(procedure_doc "$root")" "$(printf '%s' "$segment" | head -c 200)"
+      printf 'BLOCKED: git branch -f rewrites a branch ref on the main checkout. Do the work in a linked worktree (procedure: %s). Blocked: %s' "$(procedure_doc "$root")" "${segment:0:200}"
     fi
     return 0
   fi
 
   if [ -n "$unknown" ]; then
-    printf 'BLOCKED: git branch delete combined with an unrecognised flag (%s) on the main checkout. Run the delete on its own. Blocked: %s' "$unknown" "$(printf '%s' "$segment" | head -c 200)"
+    printf 'BLOCKED: git branch delete combined with an unrecognised flag (%s) on the main checkout. Run the delete on its own. Blocked: %s' "$unknown" "${segment:0:200}"
     return 0
   fi
 
@@ -309,14 +312,14 @@ branch_verdict() {
   for word in ${names[@]+"${names[@]}"}; do
     # Q is the scanner placeholder for a quoted span.
     if [ "$word" = Q ] || [ "$word" = - ] || [[ "$word" == *[\$@*?[]* ]]; then
-      printf 'BLOCKED: git branch delete names a branch the guard cannot resolve (%s): a quoted name, variable, glob or @{-N}. Write the branch name literally so the guard can confirm no worktree has it checked out. Blocked: %s' "$word" "$(printf '%s' "$segment" | head -c 200)"
+      printf 'BLOCKED: git branch delete names a branch the guard cannot resolve (%s): a quoted name, variable, glob or @{-N}. Write the branch name literally so the guard can confirm no worktree has it checked out. Blocked: %s' "$word" "${segment:0:200}"
       return 0
     fi
     # -i: on a case-insensitive filesystem (macOS default) git resolves
     # WT-A to the ref file of wt-a, so a case-variant name deletes it too.
-    if printf '%s\n' "$checked_out" | grep -qixF -- "$word"; then
+    if grep -qixF -- "$word" <<< "$checked_out"; then
       # shellcheck disable=SC2016 # literal backticks: the message quotes a command
-      printf 'BLOCKED: branch %s is checked out in a worktree (see `git worktree list`), and deleting it would leave that working tree on a missing branch. Remove the worktree first, or clean up with .claude/lib/branch-cleanup.sh. Blocked: %s' "$word" "$(printf '%s' "$segment" | head -c 200)"
+      printf 'BLOCKED: branch %s is checked out in a worktree (see `git worktree list`), and deleting it would leave that working tree on a missing branch. Remove the worktree first, or clean up with .claude/lib/branch-cleanup.sh. Blocked: %s' "$word" "${segment:0:200}"
       return 0
     fi
   done
@@ -359,7 +362,7 @@ session_mode() {
   #    input) never inherits another session's answer (issue #146).
   [ -n "$SUBAGENT" ] || return 0
   # shellcheck disable=SC2012 # ls -t is the portable mtime sort; the names are generated session ids
-  newest=$(ls -t "$state_dir"/*.json 2>/dev/null | head -1 || printf '')
+  newest=$(ls -t "$state_dir"/*.json 2>/dev/null | awk 'NR == 1' || printf '')
   if [ -n "$newest" ] && [ -f "$newest" ]; then
     read_marker "$newest"
     if [ "$marker_age" -lt "$INHERIT_TTL" ]; then
@@ -391,7 +394,7 @@ block_heavy() {  # block_heavy <main root> <segment>
 
 $where
 
-Blocked: $(printf '%s' "$2" | head -c 160)
+Blocked: ${2:0:160}
 
 If the main checkout really is the right place (refreshing the symlinked node_modules, for example), re-run it prefixed with MYSPEC_ALLOW_MAIN_CHECKOUT=1.
 
@@ -402,7 +405,7 @@ matches_any() {  # matches_any <segment> <pattern>...
   local segment="$1" pattern
   shift
   for pattern in "$@"; do
-    if printf '%s' "$segment" | grep -qE -- "$pattern"; then
+    if grep -qE -- "$pattern" <<< "$segment"; then
       return 0
     fi
   done
@@ -416,10 +419,10 @@ check_segment() {
 
   if [ "$ALLOW_BRANCH_OPS" = 0 ]; then
     if matches_any "$segment" "${BRANCH_PATTERNS[@]}" \
-        && ! printf '%s' "$segment" | grep -qE -- "$BRANCH_CARVE_OUT"; then
+        && ! grep -qE -- "$BRANCH_CARVE_OUT" <<< "$segment"; then
       classify "$dir" "$gitdir"
       if [ -n "$CLS_ROOT" ]; then
-        block "BLOCKED: Branch-mutating git commands are not allowed on the main checkout. Do the work in a linked worktree (procedure: $(procedure_doc "$CLS_ROOT")) or pass isolation: \"worktree\" in your Agent tool call. If you need to restore a file, use \`git restore <file>\` not \`git checkout\`. Blocked: $(printf '%s' "$segment" | head -c 200)"
+        block "BLOCKED: Branch-mutating git commands are not allowed on the main checkout. Do the work in a linked worktree (procedure: $(procedure_doc "$CLS_ROOT")) or pass isolation: \"worktree\" in your Agent tool call. If you need to restore a file, use \`git restore <file>\` not \`git checkout\`. Blocked: ${segment:0:200}"
       fi
     fi
 
@@ -441,7 +444,7 @@ check_segment() {
   [ "$MODE" = "worktree" ] || return 0
 
   if matches_any "$segment" "${HEAVY_PATTERNS[@]}" \
-      && ! printf '%s' "$segment" | grep -qE -- "$HEAVY_CARVE_OUT"; then
+      && ! grep -qE -- "$HEAVY_CARVE_OUT" <<< "$segment"; then
     block_heavy "$CLS_ROOT" "$segment"
   fi
 

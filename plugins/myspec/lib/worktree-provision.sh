@@ -35,7 +35,8 @@
 #      supports one (--reflink=auto on Btrfs/XFS, cp -c on APFS) and falls
 #      back to a plain copy.
 #   3. clean: deletes the untracked files and directories in the worktree
-#      that match a repo-relative glob (#193), e.g. **/*.tsbuildinfo, so the
+#      that match a repo-relative glob (#193, lib/glob-regex.sh), e.g.
+#      **/*.tsbuildinfo, so the
 #      first incremental check there is cold. It never follows or deletes a
 #      link.
 #   4. install: runs a command, or each {run, cwd, when} step, in the
@@ -207,8 +208,11 @@ symlink_entries() {
 # packages. Every such link is resolved physically, because its text says
 # little about where it lands (.., ./../x, a/../../x, or a hop into a deeper
 # link that leaves the tree). The cd calls run in one subshell, so a tree of
-# thousands of links costs no fork per link. A find that fails (one without
-# -mindepth, say) counts as loading: an unscanned tree is never accepted.
+# thousands of links costs no fork per link. A find that cannot run the
+# scan (one without -mindepth, say) counts as loading: an unscanned tree is
+# never accepted. The scan's own exit status is ignored: find also fails on
+# an unreadable directory inside the tree, after listing every link it
+# could read, and that failure says nothing about those links.
 # NESTED_LINK_DIRS are tree-relative directories that hold links of their
 # own one or two levels down, such as the pnpm hidden hoist
 # (.pnpm/node_modules/@scope/<name>, four levels below the tree). Data, so
@@ -227,11 +231,12 @@ tree_loads_checkout() {
     case "$dir/" in "$checkout"/*) return 0 ;; esac
   done
   real=$(cd "$tree" 2>/dev/null && pwd -P) || return 1
-  links=$(find "$real" -mindepth 1 -maxdepth 2 -type l 2>/dev/null) || return 0
+  find "$real" -mindepth 1 -maxdepth 0 -type l >/dev/null 2>&1 || return 0
+  links=$(find "$real" -mindepth 1 -maxdepth 2 -type l 2>/dev/null || true)
   read -ra nests <<< "$NESTED_LINK_DIRS"
   for nested in ${nests[@]+"${nests[@]}"}; do
     [ -d "$real/$nested" ] || continue
-    links="$links"$'\n'$(find "$real/$nested" -mindepth 1 -maxdepth 2 -type l 2>/dev/null) || return 0
+    links="$links"$'\n'$(find "$real/$nested" -mindepth 1 -maxdepth 2 -type l 2>/dev/null || true)
   done
   (
     while IFS= read -r f; do
@@ -272,26 +277,10 @@ clone_tree() {
   return 1
 }
 
-# glob_regex <glob> -> an anchored ERE: ** crosses directories, * and ? stay
-# within one, everything else is literal.
-glob_regex() {
-  local g="$1" re="" c i=0
-  while [ "$i" -lt "${#g}" ]; do
-    c="${g:$i:1}"
-    if [ "$c" = "*" ] && [ "${g:$i:3}" = "**/" ]; then re="$re(.*/)?"; i=$((i + 3)); continue; fi
-    if [ "$c" = "*" ] && [ "${g:$i:2}" = "**" ]; then re="$re.*"; i=$((i + 2)); continue; fi
-    case "$c" in
-      "*") re="${re}[^/]*" ;;
-      "?") re="${re}[^/]" ;;
-      # The ERE metacharacters, one quoted literal each: a bracket
-      # expression here matched none of them on bash 3.2 or 5.
-      "."|"["|"\\"|"("|")"|"+"|"{"|"|"|"^"|'$') re="$re\\$c" ;;
-      *) re="$re$c" ;;
-    esac
-    i=$((i + 1))
-  done
-  printf '^%s$\n' "$re"
-}
+# glob_regex: the one glob compiler, shared with the Stop hook's `paths`
+# and mark-code-changed's ignorePaths, so one glob means one thing.
+# shellcheck source=lib/glob-regex.sh
+. "$HERE/glob-regex.sh"
 
 # repo_relative <path> -> 0 when the path stays inside the checkout.
 repo_relative() {
@@ -370,7 +359,7 @@ while IFS= read -r line; do
   fi
   # ${arr[@]+"${arr[@]}"}: an empty array is "unbound" under set -u in bash < 4.4
   if [ "$BASE_OK" -eq 1 ] && [ "${#SPECS[@]}" -gt 0 ] \
-      && git -C "$WORKTREE" diff --name-only "$BASE...HEAD" -- ${SPECS[@]+"${SPECS[@]}"} 2>/dev/null | grep -q .; then
+      && [ -n "$(git -C "$WORKTREE" diff --name-only "$BASE...HEAD" -- ${SPECS[@]+"${SPECS[@]}"} 2>/dev/null)" ]; then
     echo "worktree-provision: lockfile differs from $BASE — not linking $entry; run a real install in the worktree"
     continue
   fi
@@ -427,11 +416,11 @@ done <<< "$COPY_LINES"
 REGEXES=()
 while IFS= read -r glob; do
   [ -n "$glob" ] || continue
-  if ! repo_relative "$glob"; then
+  if ! re=$(glob_regex "$glob"); then
     echo "worktree-provision: clean glob $glob leaves the checkout — skipped"
     continue
   fi
-  REGEXES+=("$(glob_regex "${glob#./}")")
+  REGEXES+=("$re")
 done <<< "$CLEAN_GLOBS"
 if [ "${#REGEXES[@]}" -gt 0 ]; then
   REMOVED=""
@@ -441,7 +430,7 @@ if [ "${#REGEXES[@]}" -gt 0 ]; then
     [ -n "$REMOVED" ] && case "$rel/" in "$REMOVED"/*) continue ;; esac
     for re in "${REGEXES[@]}"; do
       [[ "$rel" =~ $re ]] || continue
-      if [ -n "$(git -C "$WORKTREE" ls-files -- ":(literal)$rel" | head -n 1)" ]; then
+      if [ -n "$(git -C "$WORKTREE" ls-files -- ":(literal)$rel")" ]; then
         echo "worktree-provision: not cleaning $rel — it is tracked"
       else
         rm -rf "$path"

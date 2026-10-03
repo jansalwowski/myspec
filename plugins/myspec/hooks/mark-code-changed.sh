@@ -54,7 +54,8 @@
 # Settings (#231, docs/project-settings-design.md), read through
 # lib/myspec-config.sh from the checkout that holds the written file:
 # hooks.markCodeChanged.extraCodeExtensions adds to CODE_EXT, and a write to a
-# path matching a hooks.markCodeChanged.ignorePaths glob is recorded as
+# path matching a hooks.markCodeChanged.ignorePaths glob (lib/glob-regex.sh,
+# the same semantics as checks[].paths) is recorded as
 # `file`, never `code`, so it does not arm the gate by itself. A default
 # extension cannot be removed; ignoring the paths that hold it is the lever.
 
@@ -68,28 +69,6 @@ INPUT=$(cat)
 
 CODE_EXT='(ts|tsx|vue|js|jsx|mjs|cjs|mts|cts|py|rb|go|java|php|rs|cs|swift|kt|sh|bash|graphql|gql)'
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-
-# glob_regex <glob> -> an anchored ERE: ** crosses directories, * and ? stay
-# within one, everything else is literal. The same semantics as
-# lib/worktree-provision.sh's clean globs, so one glob means one thing.
-glob_regex() {
-  local g="$1" re="" c i=0
-  while [ "$i" -lt "${#g}" ]; do
-    c="${g:$i:1}"
-    if [ "$c" = "*" ] && [ "${g:$i:3}" = "**/" ]; then re="$re(.*/)?"; i=$((i + 3)); continue; fi
-    if [ "$c" = "*" ] && [ "${g:$i:2}" = "**" ]; then re="$re.*"; i=$((i + 2)); continue; fi
-    case "$c" in
-      "*") re="${re}[^/]*" ;;
-      "?") re="${re}[^/]" ;;
-      # The ERE metacharacters, one quoted literal each: a bracket
-      # expression here matched none of them on bash 3.2 or 5.
-      "."|"["|"\\"|"("|")"|"+"|"{"|"|"|"^"|'$') re="$re\\$c" ;;
-      *) re="$re$c" ;;
-    esac
-    i=$((i + 1))
-  done
-  printf '^%s$\n' "$re"
-}
 
 # ere_literal <text> -> the text as an ERE matching only itself, so an
 # extension such as c++ is the literal suffix.
@@ -133,7 +112,7 @@ SET_IGNORE=()
 # .myspec.json (as worktree-provision.sh does). No .myspec.json, no reader or
 # an unreadable value: the defaults, and the reader names what it ignored.
 load_settings() {
-  local root="$1" src cfg json ext exts="" g i
+  local root="$1" src cfg json ext exts="" g i re
   for ((i = 0; i < ${#SET_ROOTS[@]}; i++)); do
     if [ "${SET_ROOTS[$i]}" = "$root" ]; then
       CODE_RE="${SET_CODE_RE[$i]}"
@@ -167,15 +146,23 @@ load_settings() {
       if [ -n "$exts" ]; then
         CODE_RE=$(code_re_or_default "\\.(${CODE_EXT:1:${#CODE_EXT}-2}${exts})\$")
       fi
+      # The globs compile through lib/glob-regex.sh, the one compiler the
+      # Stop hook's `paths` and provisioning's `clean` use too.
+      if ! declare -F glob_regex >/dev/null && [ -f "$(dirname "$cfg")/glob-regex.sh" ]; then
+        # shellcheck source=/dev/null
+        . "$(dirname "$cfg")/glob-regex.sh"
+      fi
       while IFS= read -r g; do
         [ -n "$g" ] || continue
-        case "/$g/" in
-          //*|*/../*)
-            echo "mark-code-changed: ignoring hooks.markCodeChanged.ignorePaths glob '$g': it leaves the checkout" >&2
-            continue
-            ;;
-        esac
-        IGNORE_RES="$IGNORE_RES$(glob_regex "${g#./}")"$'\n'
+        if ! declare -F glob_regex >/dev/null; then
+          echo "mark-code-changed: ignoring hooks.markCodeChanged.ignorePaths: lib/glob-regex.sh was not found next to $cfg" >&2
+          break
+        fi
+        if ! re=$(glob_regex "$g"); then
+          echo "mark-code-changed: ignoring hooks.markCodeChanged.ignorePaths glob '$g': it leaves the checkout" >&2
+          continue
+        fi
+        IGNORE_RES="$IGNORE_RES$re"$'\n'
       done < <(printf '%s' "$json" | jq -r '(.ignorePaths // [])[] | strings' 2>/dev/null)
     fi
   fi
@@ -618,7 +605,12 @@ elif [ -n "$COMMAND" ]; then
     [ -n "$p" ] && TARGETS+=("$p")
   done < <(bash_write_targets "$COMMAND")
 
-  CONTEXT="Auto-created on a Bash write: \`$(printf '%s' "$COMMAND" | tr '\n' ' ' | head -c 120)\`."
+  # Parameter expansion, not `printf | tr | head -c`: head exits after 120
+  # bytes, tr dies of SIGPIPE on a long command (a heredoc write), and under
+  # pipefail plus set -e the hook exited 141 before writing the ledger (#249).
+  CONTEXT_CMD=${COMMAND:0:120}
+  CONTEXT_CMD=${CONTEXT_CMD//$'\n'/ }
+  CONTEXT="Auto-created on a Bash write: \`$CONTEXT_CMD\`."
 else
   exit 0
 fi

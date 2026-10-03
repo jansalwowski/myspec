@@ -155,13 +155,13 @@ else
   # Check an identity field (matches every framework template:
   # docs use title, skills use name, sessions use topic, memories use id,
   # type indexes use type)
-  if ! echo "$FRONTMATTER" | grep -qE "^(title|name|topic|id|type):"; then
+  if ! grep -qE "^(title|name|topic|id|type):" <<< "$FRONTMATTER"; then
     ISSUES+=("missing identity field: one of 'title', 'name', 'topic', 'id', 'type'")
   fi
 
   # Check at least one temporal field (sessions use started, episodic
   # memories use date)
-  if ! echo "$FRONTMATTER" | grep -qE "^(updated|last_updated|created|started|date):"; then
+  if ! grep -qE "^(updated|last_updated|created|started|date):" <<< "$FRONTMATTER"; then
     ISSUES+=("missing temporal field: one of 'updated', 'last_updated', 'created', 'started', 'date'")
   fi
 fi

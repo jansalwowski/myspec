@@ -221,6 +221,17 @@ mkdir -p "$FAILSHIM"
 printf '#!/bin/sh\necho "find: bad option" >&2\nexit 1\n' > "$FAILSHIM/find"
 chmod +x "$FAILSHIM/find"
 tlc "$ROOT/lc-inside/node_modules" "$ROOT/lc-inside" "$FAILSHIM" && ok || fail "links: a failing find makes the tree count as loading the checkout"
+# An unreadable directory makes find exit non-zero after it listed every link
+# it could read: the tree is judged on that list, not counted as loading.
+if [ "$(id -u)" -ne 0 ]; then
+  C="$ROOT/lc-unreadable"
+  mkdir -p "$C/packages/ui" "$C/node_modules/pkg" "$C/node_modules/.cache/locked"
+  chmod 000 "$C/node_modules/.cache"
+  tlc "$C/node_modules" "$C" && fail "links: an unreadable directory alone does not count as loading" || ok
+  ln -s ../packages/ui "$C/node_modules/ui"
+  tlc "$C/node_modules" "$C" && ok || fail "links: a workspace link beside an unreadable directory is still caught"
+  chmod 755 "$C/node_modules/.cache"
+fi
 
 # --- install, copy, clean (#230, #222, #193) ---------------------------------
 # Install steps are fake commands that leave marker files, so no network is
@@ -359,7 +370,7 @@ mkdir -p "$SHIMDIR/lib"
 printf '#!/bin/sh\nfor a in "$@"; do case "$a" in -c|--reflink*) echo "cp: illegal option" >&2; exit 64 ;; esac; done\nexec /bin/cp "$@"\n' > "$SHIMDIR/cp"
 chmod +x "$SHIMDIR/cp"
 sed "s#/bin/cp #$SHIMDIR/cp #g" "$SCRIPT" > "$SHIMDIR/lib/worktree-provision.sh"
-cp "$(dirname "$SCRIPT")/myspec-config.sh" "$(dirname "$SCRIPT")/myspec-config.schema.json" "$SHIMDIR/lib/"
+cp "$(dirname "$SCRIPT")/myspec-config.sh" "$(dirname "$SCRIPT")/myspec-config.schema.json" "$(dirname "$SCRIPT")/glob-regex.sh" "$SHIMDIR/lib/"
 W=$(wt_for "$M" copydir-fallback)
 out=$(bash "$SHIMDIR/lib/worktree-provision.sh" "$W" --base main 2>&1)
 [ -f "$W/vendor/acme/lib/a.php" ] && printf '%s' "$out" | grep -qF "no copy-on-write clone on this filesystem — copied vendor" && ok \
@@ -384,36 +395,13 @@ out=$(bash "$SCRIPT" "$W" --base main 2>&1)
 [ -L "$W/node_modules" ] && [ -e "$M/node_modules/pkg/linked.tsbuildinfo" ] && ok || fail "clean: never deletes through a link"
 [ -z "$(git -C "$W" status --porcelain)" ] && ok || fail "clean: the worktree stays clean"
 
-# glob_regex escapes every ERE metacharacter but its own * ** ? (PR #243
-# review): the bracket expression that tried to matched none of them. The
-# hook keeps a copy for ignorePaths, so the two must not drift.
-fn_block() { sed -n '/^glob_regex()/,/^}/p' "$1"; }
-G1=$(fn_block "$SCRIPT")
-G2=$(fn_block "$HERE/../../hooks/mark-code-changed.sh")
-[ -n "$G1" ] && [ "$G1" = "$G2" ] && ok || fail "glob_regex is identical in worktree-provision.sh and mark-code-changed.sh"
-glob_case() {  # glob_case <glob> <path> <yes|no>
-  local got
-  got=$(bash -c "$G1"'
-    re=$(glob_regex "$1"); [[ "$2" =~ $re ]] && echo yes || echo no' _ "$1" "$2")
-  [ "$got" = "$3" ] && ok || fail "glob_regex: '$1' vs '$2' should be $3 (got: $got)"
-}
-glob_case '*.gen.ts' x.gen.ts yes
-glob_case '*.gen.ts' codegen.ts no
-glob_case 'src/(old)/**' 'src/(old)/a.ts' yes
-glob_case 'src/(old)/**' src/old/a.ts no
-# shellcheck disable=SC2016 # literal text, not an expansion
-glob_case 'lib/a$b.ts' 'lib/a$b.ts' yes
-glob_case 'a+b.txt' a+b.txt yes
-glob_case 'a+b.txt' aab.txt no
-glob_case 'x[1].log' 'x[1].log' yes
-glob_case 'x[1].log' x1.log no
-glob_case 'v?.ts' v1.ts yes
-glob_case 'v?.ts' v12.ts no
-glob_case 'v?.ts' v/.ts no
-glob_case '**/*.tsbuildinfo' a/b/c/d.tsbuildinfo yes
-glob_case '**/*.tsbuildinfo' d.tsbuildinfo yes
-glob_case 'a/**/z.ts' a/b/c/z.ts yes
-glob_case '*.ts' a/b.ts no
+# Globs compile through lib/glob-regex.sh (its own fixture covers the rules).
+# The scripts that read a glob setting source it and keep no copy, so one
+# glob means one thing in clean, ignorePaths and checks[].paths.
+for f in "$SCRIPT" "$HERE/../../hooks/mark-code-changed.sh" "$HERE/../../hooks/verify-before-stop.sh"; do
+  grep -qE '^(glob_regex|glob_ere)\(\)' "$f" && fail "$(basename "$f") keeps its own glob compiler" || ok
+  grep -qF 'glob-regex.sh' "$f" && ok || fail "$(basename "$f") uses lib/glob-regex.sh"
+done
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

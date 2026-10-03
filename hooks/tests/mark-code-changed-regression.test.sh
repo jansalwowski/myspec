@@ -5,6 +5,12 @@
 #   67f0814  .mjs, .cjs, .sh and .bash were not code extensions, so a session
 #            that only edited those files left no marker: the Stop hook never
 #            ran verification and no session log was created.
+#   #249     a Bash command longer than a pipe buffer (a heredoc that writes a
+#            file) killed the hook with SIGPIPE: `printf | tr | head -c 120`
+#            under pipefail and set -e exited 141 before the ledger line.
+#   (globs)  ignorePaths had its own glob compiler, where a trailing `/`
+#            matched nothing, unlike checks[].paths; all three glob settings
+#            now share lib/glob-regex.sh.
 #
 # Usage: mark-code-changed-regression.test.sh [path-to-hook]
 
@@ -46,6 +52,30 @@ for ext in mjs cjs sh bash; do
   grep -q "^code	" "/tmp/.myspec-session-writes-$sid" 2>/dev/null && ok || fail "a .$ext edit arms the Stop hook"
   [ -f "$REPO/.claude/state/sessions/$sid.md" ] && ok || fail "a .$ext edit creates the session log"
 done
+
+# --- #249: a 100 KiB Bash heredoc write still reaches the ledger -------------
+sid="$SID-big"
+big_cmd=$(awk 'BEGIN { printf "cat > src/big.ts <<'"'"'EOF'"'"'\n"; for (i = 0; i < 4000; i++) printf "export const value%05d = %05d;\n", i, i; printf "EOF" }')
+[ "${#big_cmd}" -ge 102400 ] && ok || fail "the #249 fixture command is at least 100 KiB (got ${#big_cmd})"
+rc=0
+printf '{"session_id":%s,"tool_name":"Bash","cwd":%s,"tool_input":{"command":%s}}' \
+  "$(printf '%s' "$sid" | jq -Rs .)" "$(printf '%s' "$REPO" | jq -Rs .)" "$(printf '%s' "$big_cmd" | jq -Rs .)" \
+  | bash "$HOOK" >/dev/null 2>&1 || rc=$?
+[ "$rc" -eq 0 ] && ok || fail "a 100 KiB Bash heredoc write exits 0 (got $rc)"
+grep -q "^code	$REPO	src/big.ts$" "/tmp/.myspec-session-writes-$sid" 2>/dev/null && ok || fail "a 100 KiB Bash heredoc write lands in the ledger"
+
+# --- (globs) ignorePaths "gen/" covers everything under gen/ ------------------
+GLOBREPO="$ROOT/globs"
+mkdir -p "$GLOBREPO/gen/x" "$GLOBREPO/src"
+git init -q -b main "$GLOBREPO"
+printf '{"aiDir":".ai","hooks":{"markCodeChanged":{"ignorePaths":["gen/"]}}}\n' > "$GLOBREPO/.myspec.json"
+for f in gen/x/a.ts src/b.ts; do
+  sid="$SID-glob-${f//\//-}"
+  printf '{"session_id":"%s","tool_name":"Write","cwd":"%s","tool_input":{"file_path":"%s/%s"}}' "$sid" "$GLOBREPO" "$GLOBREPO" "$f" \
+    | bash "$HOOK" >/dev/null 2>&1
+done
+grep -q "^file	$GLOBREPO	gen/x/a.ts$" "/tmp/.myspec-session-writes-$SID-glob-gen-x-a.ts" 2>/dev/null && ok || fail "ignorePaths gen/ records gen/x/a.ts as file"
+grep -q "^code	$GLOBREPO	src/b.ts$" "/tmp/.myspec-session-writes-$SID-glob-src-b.ts" 2>/dev/null && ok || fail "ignorePaths gen/ leaves src/b.ts code"
 
 # --- control: a non-code file still does not count ----------------------------
 write "$SID-txt" "$REPO/src/notes.txt"
