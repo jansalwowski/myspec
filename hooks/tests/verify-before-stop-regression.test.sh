@@ -12,6 +12,10 @@
 #            the clean main checkout but whose edits were in a linked worktree
 #            verified the untouched tree and passed. The checkouts to verify
 #            now come from the session log's `## Files touched`.
+#   (lib)    A hook installed without the settings reader read the checks
+#            its own way and refused every runIn check; it now blocks once
+#            with the repair. The hook's own MYSPEC_STOP_HOOK_ACTIVE (which
+#            it exports to checks) no longer counts as a re-entry.
 #   (pipefail) The memory and setup conformance gates were armed by
 #            `git status --porcelain | grep -q .`. grep exits on the first
 #            line, so a status longer than a pipe buffer killed git with
@@ -69,6 +73,13 @@ OUT=$(run_hook ',"stop_hook_active":true')
 [ "$(decision "$OUT")" = approve ] && ok || fail "stop_hook_active:true approves (got: ${OUT:0:200})"
 [ ! -e "$RAN" ] && ok || fail "stop_hook_active:true runs no check"
 
+# --- MYSPEC_STOP_HOOK_ACTIVE in the hook's own environment is not a re-entry --
+# The gate exports it to its checks; only the payload's stop_hook_active ends
+# a re-entry, so a stop under a check that inherited it still verifies.
+OUT=$(also_wrote "$REPO" src/edited.ts; rm -f "$RAN"; printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$REPO" \
+  | MYSPEC_STOP_HOOK_ACTIVE=1 CLAUDE_STOP_HOOK_ACTIVE=1 bash "$HOOK" 2>/dev/null)
+[ "$(decision "$OUT")" = block ] && ok || fail "MYSPEC_STOP_HOOK_ACTIVE in the environment does not approve (got: ${OUT:0:200})"
+
 # --- 4eb8ccb: the failure report is readable ----------------------------------
 OUT=$(run_hook '')
 [ "$(decision "$OUT")" = block ] && ok || fail "two failing checks block (got: ${OUT:0:200})"
@@ -80,6 +91,21 @@ printf '%s\n' "$R" | grep -qx -- '---' && ok || fail "per-check sections are sep
 printf '%s' "$R" | grep -qF '\' && fail "the report holds no literal backslash (got: $(printf '%s' "$R" | grep -F '\' | head -1))" || ok
 printf '%s\n' "$R" | grep -qx 'ALPHA-OUT' && ok || fail "check output starts on its own line"
 printf '%s\n' "$R" | grep -qx 'BETA-OUT' && ok || fail "the second check's output is reported too"
+
+# --- a missing lib blocks with the repair, once -------------------------------
+# The libs ship with the hook; without one the gate does not guess at the
+# checks. A copy of the hook beside a lib/ that lacks the settings reader.
+BROKEN="$ROOT/broken"
+mkdir -p "$BROKEN/hooks"
+cp "$HOOK" "$BROKEN/hooks/"
+cp -R "$(cd "$(dirname "$HOOK")/.." && pwd)/lib" "$BROKEN/lib"
+rm "$BROKEN/lib/myspec-config.sh"
+OUT=$(printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$REPO" | CLAUDE_PLUGIN_ROOT=/nonexistent bash "$BROKEN/hooks/verify-before-stop.sh" 2>/dev/null)
+[ "$(decision "$OUT")" = block ] && ok || fail "a missing settings reader blocks (got: ${OUT:0:200})"
+reason "$OUT" | grep -qF 'myspec lib missing, run /myspec:update' && ok || fail "the block says how to repair the install (got: $(reason "$OUT"))"
+reason "$OUT" | grep -qF 'myspec-config.sh' && ok || fail "the block names the missing lib"
+OUT=$(printf '{"session_id":"%s","cwd":"%s","stop_hook_active":true}' "$SID" "$REPO" | bash "$BROKEN/hooks/verify-before-stop.sh" 2>/dev/null)
+[ "$(decision "$OUT")" = approve ] && ok || fail "a missing lib blocks once: the continuation approves (got: ${OUT:0:200})"
 
 # --- (#201) the checkout the session edited is the one verified -------------
 # The worktree carries a marker file that makes its copy of the check fail;

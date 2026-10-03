@@ -385,6 +385,12 @@
       "issue": ["exists"],
       "description": "Lowers the Stop gate's per-check time cap; it cannot raise it."
     },
+    "MYSPEC_GATE_BUDGET_SECONDS": {
+      "kind": "standalone",
+      "type": "integer",
+      "issue": ["#250"],
+      "description": "Lowers the Stop gate's time budget for the whole stop (300 s); it cannot raise it."
+    },
     "MYSPEC_METRICS_CAP_SECONDS": {
       "kind": "standalone",
       "type": "integer",
@@ -433,7 +439,7 @@
       "kind": "exported",
       "type": "flag",
       "issue": ["exists"],
-      "description": "Exported by the Stop gate to checks so a check that ends a nested session does not re-enter the gate."
+      "description": "Exported by the Stop gate to every check it runs, so a check can tell it runs under the gate. The gate itself does not read it: only the payload's stop_hook_active ends a re-entry."
     },
     "MYSPEC_WORKTREE": {
       "kind": "exported",

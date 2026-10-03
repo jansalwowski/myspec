@@ -57,7 +57,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "./hooks/verify-before-stop.sh"
+            "command": "./hooks/verify-before-stop.sh",
+            "timeout": 330
           }
         ]
       }

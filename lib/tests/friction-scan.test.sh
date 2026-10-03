@@ -237,14 +237,19 @@ run
 expect_exit 1 "no arguments: usage error"
 
 # ── 10. the signature table matches the hook sources ──
+# A hook's messages may live in the modules it sources: verify-before-stop.sh
+# is a shim over lib/stop-gate/.
 OUTPUT=$(node --input-type=module -e "
   import { HOOK_SIGNATURES, MYSPEC_HOOKS } from '$SCRIPT'
-  import { readFileSync, existsSync } from 'node:fs'
+  import { readFileSync, existsSync, readdirSync } from 'node:fs'
   const retired = ['guard-git-branch.sh']
+  const modules = { 'verify-before-stop.sh': '$HERE/../stop-gate' }
+  const text = (h) => [readFileSync('$HOOKS_DIR/' + h, 'utf8')]
+    .concat(modules[h] ? readdirSync(modules[h]).map((f) => readFileSync(modules[h] + '/' + f, 'utf8')) : []).join('\\n')
   for (const s of HOOK_SIGNATURES) {
     const src = '$HOOKS_DIR/' + s.hook
     if (!existsSync(src)) { console.log('missing hook ' + s.hook); continue }
-    if (!readFileSync(src, 'utf8').includes(s.match)) { console.log('stale signature ' + s.id) }
+    if (!text(s.hook).includes(s.match)) { console.log('stale signature ' + s.id) }
   }
   for (const h of MYSPEC_HOOKS) {
     if (!retired.includes(h) && !existsSync('$HOOKS_DIR/' + h)) { console.log('unknown hook ' + h) }
