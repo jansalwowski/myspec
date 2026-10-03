@@ -148,6 +148,10 @@
       "type": "overwrite",
       "dest": ".claude/lib/stop-gate/attribute.sh"
     },
+    "stop-gate/report.sh": {
+      "type": "overwrite",
+      "dest": ".claude/lib/stop-gate/report.sh"
+    },
     "branch-cleanup.sh": {
       "type": "overwrite",
       "dest": ".claude/lib/branch-cleanup.sh"

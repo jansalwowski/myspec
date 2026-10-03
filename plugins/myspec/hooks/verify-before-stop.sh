@@ -28,7 +28,7 @@ command -v jq >/dev/null 2>&1 || approve
 HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
 [ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
 LIB_DIR=$(dirname "$HOOK_CORE")
-for f in session-event.sh stop-gate/arm.sh stop-gate/provision.sh stop-gate/run.sh stop-gate/attribute.sh; do
+for f in session-event.sh stop-gate/arm.sh stop-gate/provision.sh stop-gate/run.sh stop-gate/attribute.sh stop-gate/report.sh; do
   if [ ! -f "$HOOK_CORE" ] || [ ! -f "$LIB_DIR/$f" ]; then approve; fi
 done
 # shellcheck source=lib/hook-core.sh
@@ -43,105 +43,8 @@ done
 . "$HOOK_LIB/stop-gate/run.sh"
 # shellcheck source=lib/stop-gate/attribute.sh
 . "$HOOK_LIB/stop-gate/attribute.sh"
-# conformance_gates <repo root> -> blocks (decision_block exits) on memory or
-# setup conformance errors under uncommitted changes.
-# Memory: the index tables are generated and the ID allocator refuses on
-# drift, so drift a session leaves behind (an unregenerated index, a memory
-# without hook:, a duplicate ID) should surface here, in the session that
-# caused it. Gated on uncommitted changes under the memory tree: pre-existing
-# drift the agent never touched is bootstrap's to report. Only errors block
-# (the doctor exits 1 on errors alone): a duplicate ID that lives only on
-# stale branches is a warning, since no change in this session can fix it
-# (#124).
-# Setup: only the wiring and schema groups. A hook that is registered but
-# missing, not executable, or fails bash -n is silently inert, and an
-# unparseable .myspec.json or verification.json degrades this very gate: all
-# of them are damage the session just did and can undo now. Framework drift
-# is excluded (its usual cause is a pending /myspec:update), and so is the
-# features group, which reads a file outside the trigger below. Gated on
-# uncommitted changes to the harness config, as the memory check is.
-# Both use $(...) and -n, not `| grep -q .`: grep exits on the first line, a
-# status longer than a pipe buffer then kills git with SIGPIPE, and under
-# pipefail the `if` read false and skipped the gate.
-conformance_gates() {
-  local root="$1" doctor="$1/.claude/lib/memory-doctor.mjs" setup="$1/.claude/lib/setup-doctor.mjs" ai out
-  [ -f "$root/.myspec.json" ] && command -v node >/dev/null 2>&1 || return 0
-  if [ -f "$doctor" ]; then
-    # aiDir is required since 2.0; .ai is the documented default when absent,
-    # the same resolution memory-files.mjs uses.
-    ai=$(ai_dir "$root")
-    if [ -n "$ai" ] && [ -n "$(git -C "$root" status --porcelain -- "$ai/memory" 2>/dev/null)" ]; then
-      if ! out=$(cd "$root" && node "$doctor" --quiet 2>&1); then
-        decision_block 'Memory conformance check failed for changes under %s/memory. Fix these before stopping (node .claude/lib/memory-index.mjs regenerates the tables; the doctor names the rest):\n\n%s' "$ai" "$(printf '%s' "$out" | tail -30)"
-      fi
-    fi
-  fi
-  if [ -f "$setup" ] && [ -n "$(git -C "$root" status --porcelain -- .claude .myspec.json 2>/dev/null)" ]; then
-    if ! out=$(cd "$root" && node "$setup" --quiet wiring schema 2>&1); then
-      decision_block 'Setup conformance check failed for changes under .claude/ or .myspec.json. Each of these makes a hook or a gate silently stop working, so fix them before stopping:\n\n%s' "$(printf '%s' "$out" | tail -30)"
-    fi
-  fi
-}
-
-# report_decision -> prints the decision and exits 0. Reads the run.sh
-# arrays, the attribute.sh notes and SCOPE_NOTES.
-report_decision() {
-  local scope="" names="" timed unver details="" notes entry headline message
-  # One line per note, deduplicated (a note from the reader repeats per root).
-  if [ "${#SCOPE_NOTES[@]}" -gt 0 ]; then
-    scope="Scope: $(printf '%s\n' "${SCOPE_NOTES[@]}" | awk '!seen[$0]++ { printf "%s%s", (n++ ? " " : ""), $0 }')"
-  fi
-
-  if [ ${#FAILED_CHECKS[@]} -gt 0 ] || [ ${#TIMED_OUT_CHECKS[@]} -gt 0 ] || [ ${#UNVERIFIABLE_CHECKS[@]} -gt 0 ]; then
-    # The headline separates the outcomes: "failed" is a result, "timed out"
-    # and "not run" are the absence of one.
-    if [ ${#FAILED_CHECKS[@]} -gt 0 ]; then
-      names=$(printf '%s, ' "${FAILED_CHECKS[@]}"); names="failed: ${names%, }"
-    fi
-    if [ ${#TIMED_OUT_CHECKS[@]} -gt 0 ]; then
-      timed=$(printf '%s, ' "${TIMED_OUT_CHECKS[@]}"); timed="timed out after ${CHECK_CAP_SECONDS}s, result unknown: ${timed%, }"
-      names="${names:+$names; }$timed"
-    fi
-    if [ ${#UNVERIFIABLE_CHECKS[@]} -gt 0 ]; then
-      unver=$(printf '%s, ' "${UNVERIFIABLE_CHECKS[@]}"); unver="not run, unverifiable here: ${unver%, }"
-      names="${names:+$names; }$unver"
-    fi
-    # Real newline-delimited separators: a multi-char IFS join uses only its
-    # first character (4eb8ccb).
-    for entry in "${FAILED_OUTPUT[@]}"; do
-      details+="${entry}"$'\n---\n'
-    done
-    details=${details%$'\n---\n'}
-    notes="${scope:+$scope$'\n\n'}"
-    for entry in ${WARN_NOTES[@]+"${WARN_NOTES[@]}"}; do
-      notes+="${entry}"$'\n\n'
-    done
-    if [ "$BLOCKING_FAILURE" -eq 0 ]; then
-      # Non-blocking: no decision block, so the stop proceeds; systemMessage
-      # surfaces the failure to the user.
-      message=$(printf "Verification failing (%s).\n\n%s%s" "$names" "$notes" "$details" | jq -Rs .)
-      echo "{\"decision\": \"approve\", \"systemMessage\": $message}"
-      exit 0
-    fi
-    if [ "${#BLOCK_NOTES[@]}" -gt 0 ]; then
-      for entry in "${BLOCK_NOTES[@]}"; do
-        notes+="${entry}"$'\n\n'
-      done
-      notes+="Fix what your changes broke. Do not edit files changed outside this session to make a check pass: another session sharing this checkout may be working on them. If a failure comes from those changes, say so and stop. A Bash side effect (an install, code generation) is not recorded as this session's write, so if you made one of those changes, it is yours."$'\n\n'
-    fi
-    decision_block "Verification did not pass (%s). Fix the failures your changes caused before completing; for a timeout, get the real result first.\n\n%s%s" "$names" "$notes" "$details"
-  fi
-
-  if [ -n "$scope" ]; then
-    headline="Verification passed."
-    [ "$CHECKS_RAN" -gt 0 ] || headline="Verification ran no check."
-    message=$(printf '%s %s' "$headline" "$scope" | jq -Rs .)
-    echo "{\"decision\": \"approve\", \"systemMessage\": $message}"
-    exit 0
-  fi
-  echo '{"decision": "approve"}'
-  exit 0
-}
+# shellcheck source=lib/stop-gate/report.sh
+. "$HOOK_LIB/stop-gate/report.sh"
 
 payload_parse "$(cat)" STOP_HOOK_ACTIVE=.stop_hook_active SESSION_ID=.session_id CWDS="$HOOK_CWDS"
 
