@@ -1,6 +1,6 @@
 # Review Output Conventions
 
-Shared format for all review skills (feature-spec-review, feature-tech-spec-review, code-review, feature-implement-review, skill-verify). Each skill defines its own severity *definitions* and gate ("must fix before") — the output shapes below are common.
+Shared format for all review skills (feature-spec-review, feature-tech-spec-review, feature-implement-review, skill-verify). Each skill defines its own severity *definitions* and gate ("must fix before") — the output shapes below are common.
 
 ## Findings Table
 
