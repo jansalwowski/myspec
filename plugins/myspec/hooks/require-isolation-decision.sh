@@ -8,18 +8,14 @@
 # Worktree detection: checkout_facts (lib/hook-core.sh). Inside a linked
 # worktree the decision is already made, so its own files are approved.
 #
-# Marker: .claude/state/isolation/<session_id>.json  (gitignored), written by
-# .claude/lib/set-isolation.sh.
+# Decision: the session's last `isolation` event in
+# .claude/state/sessions/<session_id>.jsonl (gitignored), written by
+# .claude/lib/set-isolation.sh and read through lib/session-event.sh.
 #
-# Subagents cannot call AskUserQuestion. Rather than prompting, a subagent with
-# no marker of its own inherits the newest marker written within
-# HOOK_INHERIT_TTL.
-# Only a subagent does: inside one the hook input carries `agent_id` or
-# `agent_type`. A top-level session (neither field) with no marker of its own
-# is asked, never handed another session's answer (issue #146). Whether a
-# subagent shares its parent's session_id is unsettled (issue #225); either way
-# it lands on the parent's decision, through branch 1 if the id is shared and
-# branch 2 if it is not.
+# Subagents cannot call AskUserQuestion. They share their parent's session_id
+# (issue #225), so a subagent reads its parent's decision from the same file.
+# No session is handed another session's answer (issue #146): there is no
+# lookup across session files.
 #
 # Configuration (all optional, .myspec.json):
 #   aiDir                       doc tree; edits there never trigger the prompt
@@ -33,13 +29,14 @@ set -euo pipefail
 command -v jq >/dev/null 2>&1 || exit 0
 HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
 [ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
-[ -f "$HOOK_CORE" ] || exit 0
+[ -f "$HOOK_CORE" ] && [ -f "$(dirname "$HOOK_CORE")/session-event.sh" ] || exit 0
 # shellcheck source=lib/hook-core.sh
 . "$HOOK_CORE"
+# shellcheck source=lib/session-event.sh
+. "$HOOK_LIB/session-event.sh"
 
-# SUBAGENT is non-empty only inside a subagent; it gates inheritance (branch 2).
 payload_parse "$(cat)" FILE_PATH=.tool_input.file_path SESSION_ID=.session_id \
-  SUBAGENT="$HOOK_SUBAGENT" CWDS="$HOOK_CWDS"
+  CWDS="$HOOK_CWDS"
 [ -n "$FILE_PATH" ] || exit 0
 REPO_ROOT=$(hook_repo_root "$CWDS") || exit 0
 
@@ -82,13 +79,13 @@ EXEMPT_FILES=(
 
 # Paths that must resolve to the MAIN CHECKOUT whatever the session answered.
 #
-# Distinct from EXEMPT_PREFIXES, which only suppress the prompt (branch 3) and
+# Distinct from EXEMPT_PREFIXES, which only suppress the prompt (branch 2) and
 # are still subject to a worktree answer. These bypass the worktree block
 # itself, so the list stays narrow: per-checkout state that another rule pins
 # to the main checkout.
 #
 #   .claude/state/           gitignored harness state — live session logs,
-#                            isolation markers, the memory ID registry
+#                            session-state files, the memory ID registry
 #   <aiDir>/memory/sessions/ the session archive, written by session-complete
 #                            in the main checkout whatever mode the session
 #                            chose; a worktree session would otherwise have no
@@ -132,7 +129,7 @@ for PREFIX in "${MAIN_CHECKOUT_ONLY_PREFIXES[@]}"; do
 done
 
 # Exemption is about the PROMPT, not about the tree. A doc edit never triggers
-# the isolation question (branch 3 below), but once a session has answered
+# the isolation question (branch 2 below), but once a session has answered
 # "worktree", docs obey that answer like everything else — otherwise the guard
 # is off for exactly the file types a docs-PR session edits.
 IS_EXEMPT=0
@@ -163,16 +160,15 @@ Use absolute paths and \`git -C <worktree>\` for all git operations. Full proced
 
 Blocked edit: $REL_PATH"
 
-# 1. This session's own decision; 2. in a subagent, the inherited one
-#    (subagents cannot prompt, so they follow the parent). A top-level
-#    session never inherits; it falls through to the ask.
-isolation_decision "$REPO_ROOT" "$SESSION_ID" "$SUBAGENT"
+# 1. This session's decision; a subagent's is its parent's, by the shared
+#    session id (subagents cannot prompt, so they follow the parent).
+session_isolation "$REPO_ROOT" "$SESSION_ID"
 case "$ISO_MODE" in
   develop) exit 0 ;;
   worktree) pretool_deny "$WORKTREE_REASON" ;;
 esac
 
-# 3. No decision anywhere — ask, unless the file is exempt from prompting.
+# 2. No decision — ask, unless the file is exempt from prompting.
 [ "$IS_EXEMPT" -eq 0 ] || exit 0
 
 pretool_deny "BLOCKED: no work-isolation decision recorded for this session.

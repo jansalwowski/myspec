@@ -23,7 +23,8 @@ fi
 
 # `pwd -P`: on macOS mktemp returns /var/..., git reports /private/var/...
 REPO=$(cd "$(mktemp -d)" && pwd -P)/checkout
-mkdir -p "$REPO/.claude/state/isolation"
+STATE="$REPO/.claude/state/sessions"
+mkdir -p "$STATE"
 git init -q -b main "$REPO"
 git -C "$REPO" config user.email t@t
 git -C "$REPO" config user.name t
@@ -33,9 +34,9 @@ git -C "$REPO" worktree add -q "$REPO/.claude/worktrees/wt-a" -b wt-a
 WT="$REPO/.claude/worktrees/wt-a"
 trap 'rm -rf "$(dirname "$REPO")"' EXIT
 
-mark() {  # mark <session-id> <mode> <age-seconds> [worktree-path]
-  printf '{"mode":"%s","decided_at":%d,"note":"","worktree_path":"%s"}\n' \
-    "$2" "$(( $(date +%s) - $3 ))" "${4:-}" > "$REPO/.claude/state/isolation/$1.json"
+mark() {  # mark <session-id> <mode> <age-seconds> [worktree-path]: an isolation event that old
+  printf '{"t":"isolation","mode":"%s","path":"%s","note":"","at":%d}\n' \
+    "$2" "${4:-}" "$(( $(date +%s) - $3 ))" >> "$STATE/$1.jsonl"
 }
 
 PASS=0
@@ -284,12 +285,15 @@ check_in "$REPO" allow "develop mode, install" dev-sess 'yarn install'
 check_in "$REPO" allow "develop mode, push"    dev-sess 'git push origin HEAD'
 
 # --- no decision / expired: gate B stays out of the way ----------------------
-rm -f "$REPO/.claude/state/isolation/"*.json
+rm -f "$STATE/"*.jsonl
 check_in "$REPO" allow "no decision recorded"  none-sess 'yarn build'
 mark old-sess worktree 30000 "/tmp/wt/old"
 check_in "$REPO" allow "expired decision"      old-sess 'yarn build'
 
-# --- issue #146: only a subagent inherits another session's answer ----------
+# --- issue #146: no session inherits another session's answer ---------------
+# A subagent shares its parent's session id (#225) and reads its decision
+# from the same file; one with another id gets nothing (step 7 removed the
+# newest-marker fallback).
 check_as() {  # check_as <want> <desc> <session-id> <command> <extra input fields as JSON>
   local want="$1" desc="$2" sid="$3" cmd="$4" extra="$5" got out rc
   out=$(jq -cn --arg c "$REPO" --arg s "$sid" --arg k "$cmd" --argjson x "$extra" \
@@ -306,15 +310,15 @@ check_as() {  # check_as <want> <desc> <session-id> <command> <extra input field
       "$want" "$got" "$desc" "$cmd" "$rc" "$out" >&2
   fi
 }
-rm -f "$REPO/.claude/state/isolation/"*.json
+rm -f "$STATE/"*.jsonl
 mark other-sess worktree 60 "/tmp/wt/other"
-check_as allow "top-level session ignores another session's worktree marker" fresh-sess 'yarn build' '{}'
-check_as block "subagent (agent_id) inherits it"         child-sess 'yarn build' '{"agent_id":"a1","agent_type":"general-purpose"}'
-check_as block "subagent (agent_type only) inherits it"  child-sess 'yarn build' '{"agent_type":"Explore"}'
-check_as allow "empty agent fields are a top-level session" fresh-sess 'yarn build' '{"agent_id":"","agent_type":""}'
-mark old-sess worktree 20000 "/tmp/wt/old"
-check_as allow "subagent, newest marker past the inherit window" child-sess 'yarn build' '{"agent_id":"a1"}'
-rm -f "$REPO/.claude/state/isolation/"*.json
+check_as allow "top-level session ignores another session's worktree decision" fresh-sess 'yarn build' '{}'
+check_as block "subagent sharing the parent id follows it"  other-sess 'yarn build' '{"agent_id":"a1","agent_type":"general-purpose"}'
+check_as allow "subagent with another id inherits nothing"  child-sess 'yarn build' '{"agent_id":"a1","agent_type":"general-purpose"}'
+check_as allow "subagent (agent_type only) with another id inherits nothing" child-sess 'yarn build' '{"agent_type":"Explore"}'
+mark other-sess develop 30
+check_as allow "the session's last decision wins"           other-sess 'yarn build' '{"agent_id":"a1"}'
+rm -f "$STATE/"*.jsonl
 
 # --- the block names the recorded worktree -----------------------------------
 mark path-sess worktree 60 "/tmp/wt/feature-x"

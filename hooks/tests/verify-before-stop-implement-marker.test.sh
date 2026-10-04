@@ -1,23 +1,28 @@
 #!/usr/bin/env bash
-# Regression fixture for the feature-implement orchestration marker in
-# verify-before-stop.sh (issue #95).
+# Regression fixture for the feature-implement orchestration state in
+# verify-before-stop.sh (issue #95, R6).
 #
-# A failing required check must block the stop when no marker exists, must
-# only warn (no block decision, a systemMessage instead) while a fresh
-# .claude/state/implement-in-progress.json exists, and must block again when
-# the marker is stale or unreadable, deleting it so a crashed run cannot
-# disable the gate for good.
+# A failing required check must block the stop when the session has no
+# implement run, must only warn (no block decision, a systemMessage instead)
+# while its last `implement` event in the session-state file is a start under
+# 8h old, and must block again when that start is stale, unreadable,
+# future-dated or followed by a stop, so a crashed run cannot disable the gate
+# for good.
 #
-# The marker is the session's, read in the cwd's checkout: a failing check in
-# a linked task worktree the session's subagents edited (armed through the
-# shared session id) warns like one in the cwd's checkout, and a marker in
-# that worktree alone does not downgrade a session whose cwd has none.
+# The state is the session's own: a failing check in a linked task worktree
+# the session's subagents edited (armed through the shared session id) warns
+# like one in the cwd's checkout, and another session's run does not
+# downgrade this one. The start is recorded by mark-code-changed.sh when a
+# Bash command runs `session-event.sh implement start`, with the payload's
+# session id: the model never sees it.
 #
-# Usage: verify-before-stop.test.sh [path-to-hook]
+# Usage: verify-before-stop-implement-marker.test.sh [path-to-hook]
 
 set -uo pipefail
 
 HOOK="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../verify-before-stop.sh}"
+MARK="$(cd "$(dirname "$HOOK")" && pwd)/mark-code-changed.sh"
+SESSION_EVENT="$(cd "$(dirname "$HOOK")" && pwd)/../lib/session-event.sh"
 
 if [ ! -x "$HOOK" ]; then
   echo "FATAL: hook not executable: $HOOK" >&2
@@ -32,25 +37,27 @@ git -C "$REPO" config user.email t@t
 git -C "$REPO" config user.name t
 git -C "$REPO" commit -q --allow-empty -m init
 printf '{"checks":[{"name":"always-red","command":"echo boom; exit 1","required":true}]}\n' > "$REPO/.claude/verification.json"
-MARKER="$REPO/.claude/state/implement-in-progress.json"
 SID="vbs-$$"
-CHANGED="/tmp/.myspec-code-changed-$SID"
-LEDGER="/tmp/.myspec-session-writes-$SID"
-trap 'rm -rf "$ROOT"; rm -f "$CHANGED" "$LEDGER"' EXIT
+STATE="$REPO/.claude/state/sessions"
+trap 'rm -rf "$ROOT"' EXIT
 
 PASS=0
 FAIL=0
 ok()   { PASS=$((PASS + 1)); }
 fail() { FAIL=$((FAIL + 1)); printf 'FAIL  %s\n' "$1" >&2; }
 
-run_hook() {
-  touch "$CHANGED"
+wrote() {  # wrote <sid> <root>: a code write in <root>, as mark-code-changed.sh records it
+  bash "$SESSION_EVENT" --root "$2" append "$1" "$(jq -nc --arg r "$2" '{t: "write", root: $r, rel: "src/a.ts", kind: "code", agent: "agent-1"}')"
+}
+
+run_hook() {  # run_hook -> hook stdout, after a code write in the cwd's checkout
+  wrote "$SID" "$REPO"
   printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$REPO" | bash "$HOOK"
 }
 
-write_marker() {  # write_marker <started_at>
-  mkdir -p "$(dirname "$MARKER")"
-  printf '{"started_at":%s,"feature":"demo"}\n' "$1" > "$MARKER"
+implement() {  # implement <state> <at> [sid]: an implement event dated <at>
+  mkdir -p "$STATE"
+  printf '{"t":"implement","state":"%s","at":%s}\n' "$1" "$2" >> "$STATE/${3:-$SID}.jsonl"
 }
 
 expect_block() {  # expect_block <output> <desc>
@@ -66,51 +73,59 @@ expect_warn() {
   fi
 }
 
+NOW=$(date +%s)
 OUT=$(run_hook)
-expect_block "$OUT" "no marker blocks"
+expect_block "$OUT" "no implement run blocks"
 
-write_marker "$(date +%s)"
+implement start "$NOW"
 OUT=$(run_hook)
-expect_warn "$OUT" "fresh marker downgrades to warning"
-if [ -f "$MARKER" ]; then ok; else fail "fresh marker kept"; fi
+expect_warn "$OUT" "a fresh start downgrades to warning"
 
-write_marker "$(( $(date +%s) - 28801 ))"
+implement stop "$NOW"
 OUT=$(run_hook)
-expect_block "$OUT" "stale marker blocks"
-if [ -f "$MARKER" ]; then fail "stale marker deleted"; else ok; fi
+expect_block "$OUT" "a stop ends the downgrade"
 
-write_marker '"garbage"'
+implement start "$(( NOW - 28801 ))"
 OUT=$(run_hook)
-expect_block "$OUT" "unreadable marker blocks"
-if [ -f "$MARKER" ]; then fail "unreadable marker deleted"; else ok; fi
+expect_block "$OUT" "a stale start blocks"
 
-write_marker "$(( $(date +%s) + 3600 ))"
+implement start '"garbage"'
 OUT=$(run_hook)
-expect_block "$OUT" "future-dated marker blocks"
+expect_block "$OUT" "an unreadable start blocks"
 
-# --- the marker covers the task worktrees the session armed -----------------
-rm -f "$MARKER" "$CHANGED"
+implement start "$(( NOW + 3600 ))"
+OUT=$(run_hook)
+expect_block "$OUT" "a future-dated start blocks"
+
+# The real path: the skill's command, seen by mark-code-changed.sh.
+jq -n --arg s "$SID" --arg d "$REPO" \
+  '{session_id: $s, tool_name: "Bash", cwd: $d, tool_input: {command: "\"$(git rev-parse --show-toplevel)\"/.claude/lib/session-event.sh implement start"}}' \
+  | bash "$MARK" >/dev/null 2>&1
+OUT=$(run_hook)
+expect_warn "$OUT" "a start recorded by mark-code-changed.sh from the skill's command downgrades"
+
+# --- the state covers the task worktrees the session armed -------------------
+rm -rf "$STATE"
 printf '.claude/state/\n.claude/worktrees/\n' > "$REPO/.gitignore"
 git -C "$REPO" add -A && git -C "$REPO" commit -q -m checks
 TASK="$REPO/.claude/worktrees/t1"
 git -C "$REPO" worktree add -q -b main--t1 "$TASK"
-run_ledger() {  # run_ledger: a subagent's code write in the task worktree
-  printf 'code\t%s\tsrc/a.ts\tagent-1\n' "$TASK" > "$LEDGER"
+run_task() {  # run_task: a subagent's code write in the task worktree
+  wrote "$SID" "$TASK"
   printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$REPO" | bash "$HOOK"
 }
 
-OUT=$(run_ledger)
-expect_block "$OUT" "no marker: a failure in an armed task worktree blocks"
+OUT=$(run_task)
+expect_block "$OUT" "no implement run: a failure in an armed task worktree blocks"
 
-write_marker "$(date +%s)"
-OUT=$(run_ledger)
-expect_warn "$OUT" "the cwd's fresh marker downgrades a failure in an armed task worktree"
+implement start "$(date +%s)"
+OUT=$(run_task)
+expect_warn "$OUT" "the session's start downgrades a failure in an armed task worktree"
 
-rm -f "$MARKER"
-mkdir -p "$TASK/.claude/state"
-printf '{"started_at":%s,"feature":"other"}\n' "$(date +%s)" > "$TASK/.claude/state/implement-in-progress.json"
-OUT=$(run_ledger)
-expect_block "$OUT" "a marker in the task worktree alone does not downgrade this session"
+implement stop "$(date +%s)"
+implement start "$(date +%s)" other-session
+OUT=$(run_task)
+expect_block "$OUT" "another session's run does not downgrade this session"
 
 printf '%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

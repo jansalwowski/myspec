@@ -32,12 +32,20 @@ git -C "$REPO" config user.name t
 git -C "$REPO" commit -q --allow-empty -m init
 printf '{"aiDir":".ai","frameworkVersion":"2.0.0"}\n' > "$REPO/.myspec.json"
 SID="mcr-$$"
-trap 'rm -rf "$ROOT"; rm -f /tmp/.myspec-session-writes-'"$SID"'-*' EXIT
+trap 'rm -rf "$ROOT"' EXIT
 
 PASS=0
 FAIL=0
 ok()   { PASS=$((PASS + 1)); }
 fail() { FAIL=$((FAIL + 1)); printf 'FAIL  %s\n' "$1" >&2; }
+
+# ledger <sid>: the session's write events as `<kind>\t<root>\t<rel>[\t<agent>]`,
+# from every session-state file under $ROOT: each lives in the main checkout
+# of the repository written to.
+ledger() {
+  find "$ROOT" -path "*/.claude/state/sessions/$1.jsonl" -exec cat {} + 2>/dev/null \
+    | jq -r 'select(.t == "write") | [.kind, .root, .rel] + (if .agent then [.agent] else [] end) | join("\t")' 2>/dev/null
+}
 
 write() {  # write <sid> <file-path>
   printf '{"session_id":%s,"tool_name":"Write","cwd":%s,"tool_input":{"file_path":%s}}' \
@@ -49,7 +57,7 @@ write() {  # write <sid> <file-path>
 for ext in mjs cjs sh bash; do
   sid="$SID-$ext"
   write "$sid" "$REPO/src/tool.$ext"
-  grep -q "^code	" "/tmp/.myspec-session-writes-$sid" 2>/dev/null && ok || fail "a .$ext edit arms the Stop hook"
+  grep -q "^code	" <(ledger "$sid") 2>/dev/null && ok || fail "a .$ext edit arms the Stop hook"
   [ -f "$REPO/.claude/state/sessions/$sid.md" ] && ok || fail "a .$ext edit creates the session log"
 done
 
@@ -62,7 +70,7 @@ printf '{"session_id":%s,"tool_name":"Bash","cwd":%s,"tool_input":{"command":%s}
   "$(printf '%s' "$sid" | jq -Rs .)" "$(printf '%s' "$REPO" | jq -Rs .)" "$(printf '%s' "$big_cmd" | jq -Rs .)" \
   | bash "$HOOK" >/dev/null 2>&1 || rc=$?
 [ "$rc" -eq 0 ] && ok || fail "a 100 KiB Bash heredoc write exits 0 (got $rc)"
-grep -q "^code	$REPO	src/big.ts$" "/tmp/.myspec-session-writes-$sid" 2>/dev/null && ok || fail "a 100 KiB Bash heredoc write lands in the ledger"
+grep -q "^code	$REPO	src/big.ts$" <(ledger "$sid") 2>/dev/null && ok || fail "a 100 KiB Bash heredoc write lands in the ledger"
 
 # --- (globs) ignorePaths "gen/" covers everything under gen/ ------------------
 GLOBREPO="$ROOT/globs"
@@ -74,12 +82,12 @@ for f in gen/x/a.ts src/b.ts; do
   printf '{"session_id":"%s","tool_name":"Write","cwd":"%s","tool_input":{"file_path":"%s/%s"}}' "$sid" "$GLOBREPO" "$GLOBREPO" "$f" \
     | bash "$HOOK" >/dev/null 2>&1
 done
-grep -q "^file	$GLOBREPO	gen/x/a.ts$" "/tmp/.myspec-session-writes-$SID-glob-gen-x-a.ts" 2>/dev/null && ok || fail "ignorePaths gen/ records gen/x/a.ts as file"
-grep -q "^code	$GLOBREPO	src/b.ts$" "/tmp/.myspec-session-writes-$SID-glob-src-b.ts" 2>/dev/null && ok || fail "ignorePaths gen/ leaves src/b.ts code"
+grep -q "^file	$GLOBREPO	gen/x/a.ts$" <(ledger "$SID-glob-gen-x-a.ts") 2>/dev/null && ok || fail "ignorePaths gen/ records gen/x/a.ts as file"
+grep -q "^code	$GLOBREPO	src/b.ts$" <(ledger "$SID-glob-src-b.ts") 2>/dev/null && ok || fail "ignorePaths gen/ leaves src/b.ts code"
 
 # --- control: a non-code file still does not count ----------------------------
 write "$SID-txt" "$REPO/src/notes.txt"
-! grep -q "^code	" "/tmp/.myspec-session-writes-$SID-txt" 2>/dev/null && ok || fail "a .txt edit does not arm the Stop hook"
+! grep -q "^code	" <(ledger "$SID-txt") 2>/dev/null && ok || fail "a .txt edit does not arm the Stop hook"
 
 printf '%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

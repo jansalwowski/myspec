@@ -72,18 +72,19 @@ MAX_DEPTH=3        # nested `bash -c` / `eval` payloads scanned
 command -v jq >/dev/null 2>&1 || exit 0
 HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
 [ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
-if [ ! -f "$HOOK_CORE" ] || [ ! -f "$(dirname "$HOOK_CORE")/command-scan.sh" ]; then
+if [ ! -f "$HOOK_CORE" ] || [ ! -f "$(dirname "$HOOK_CORE")/command-scan.sh" ] \
+    || [ ! -f "$(dirname "$HOOK_CORE")/session-event.sh" ]; then
   exit 0
 fi
 # shellcheck source=lib/hook-core.sh
 . "$HOOK_CORE"
+# shellcheck source=lib/session-event.sh
+. "$HOOK_LIB/session-event.sh"
 # shellcheck source=lib/command-scan.sh
 . "$HOOK_LIB/command-scan.sh"
 
-# SUBAGENT is non-empty only inside a subagent; it gates marker inheritance
-# in gate B.
 payload_parse "$(cat)" COMMAND=.tool_input.command SESSION_ID=.session_id \
-  SUBAGENT="$HOOK_SUBAGENT" CWDS="$HOOK_CWDS"
+  CWDS="$HOOK_CWDS"
 [ -n "$COMMAND" ] || exit 0
 
 # The directory the command starts in: the payload's cwd, else the hook's own.
@@ -269,13 +270,13 @@ branch_verdict() {
 # --- gate B: the session's isolation mode --------------------------------------
 
 # session_mode <main root> -> sets ISO_MODE and ISO_PATH for that checkout:
-# the session's own decision, or, in a subagent, the newest recent one
-# (isolation_decision in lib/hook-core.sh).
+# the session's decision, which a subagent shares with its parent through the
+# session id (session_isolation in lib/session-event.sh).
 MODE_ROOT=""
 session_mode() {
   [ "$1" = "$MODE_ROOT" ] && return 0
   MODE_ROOT="$1"
-  isolation_decision "$1" "$SESSION_ID" "$SUBAGENT"
+  session_isolation "$1" "$SESSION_ID"
 }
 
 block_heavy() {  # block_heavy <main root> <segment>
