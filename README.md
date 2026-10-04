@@ -229,7 +229,7 @@ After updating the plugin (`/plugin marketplace update`), run in each project:
 
 This updates framework-owned files while preserving your project customizations. Since 2.0 it also runs the one-shot migrations listed in the manifest (recorded in `.myspec.json` `migrations`) and deletes files the framework retired. Since 3.0 it removes the framework hook entries a 2.x install wrote to `.claude/settings.json` and moves the `.claude/hooks/` and `.claude/lib/` copies to `.claude/state/retired-3.0/` (the `3.0.0-plugin-hooks` migration): the plugin runs the hooks itself.
 
-**Upgrading from 1.x:** see [docs/upgrading-to-2.0.md](docs/upgrading-to-2.0.md) — `/myspec:update` does the mechanical work, and that page covers what it cannot: references in your own files, and the behaviour changes with no file to grep. 2.0 migrates from 1.28.0 or later; a project on an older version runs the 1.28 update first (check out the plugin at tag `v1.28.0`, start Claude with `--plugin-dir` pointing at it, run `/myspec:update`, then return to the current plugin).
+**Upgrading to 3.0:** see [docs/upgrading-to-3.0.md](docs/upgrading-to-3.0.md). 3.0 migrates from 2.12.0 or later; a project on an older version runs the 2.12 update first (check out the plugin at tag `v2.12.0`, start Claude with `--plugin-dir` pointing at it, run `/myspec:update`, then return to the current plugin). A 1.x project steps through `v1.28.0` and then `v2.12.0`; [docs/upgrading-to-2.0.md](docs/upgrading-to-2.0.md) covers the 2.0 step.
 
 ## Framework rules shipped to `.claude/rules/`
 
