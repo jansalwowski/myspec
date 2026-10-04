@@ -138,7 +138,7 @@ The same file holds `seed` and `resamples`.
 |-------|---------------------------------------------------------------------------------------------------|
 | Patch | Bug fixes in skill bodies. No new files, no manifest changes, no `.myspec.json` schema changes.   |
 | Minor | New skills, new framework files, new manifest entries. Backward-compatible.                       |
-| Major | Breaking changes to `.myspec.json` schema, removed/renamed skills, workflows requiring migration. |
+| Major | Anything under "Breaking changes" below: `.myspec.json` schema, removed/renamed skills, hook and state contracts, a raised host floor, workflows requiring migration. |
 
 ## Breaking changes
 
@@ -152,6 +152,15 @@ Breaking, unless a migration ships with it:
 - A changed or dropped manifest key without `renamedFrom` or a `removed` entry
 - A dropped harness (Codex, #143) or a dropped supported stack
 - A workflow change that needs consumers to act, such as a new required plan field that old plans lack and a skill now rejects
+- A changed hook contract: the JSON a hook reads or returns, or a renamed, removed or repurposed exported variable (`MYSPEC_SESSION_FILES`, `MYSPEC_BASE_REF`, `MYSPEC_CHECK_RUN_ID`, `MYSPEC_CHECK_WORKDIR`; the `env` section of `lib/myspec-config.schema.json`). Consumers' checks, cleanups and install steps read them. A new variable is minor.
+- A changed session-state file format (`.claude/state/sessions/<sid>.jsonl`, the event types and fields `lib/session-event.sh` documents): a renamed, dropped or retyped event or field. A new event or field is minor, as is a one-minor import of the old store (`docs/stop-gate.md`).
+- A renamed, dropped or retyped `verification.json` key (`checks[].paths`, `checks[].runIn`, `checks[].cleanup`, `checks[].diffCommand`, `containers`; the `verification.*` entries of the schema). A new optional key is minor (`cleanup`, `docs/verify-check-escapes.md`).
+- A changed `.claude/state/` layout (AGENTS.md, "Config contracts"): a moved or renamed `sessions/<sid>.md`, `sessions/<sid>.jsonl` or `memory-ids.json`, which the hooks of a session open across the upgrade still write at the old path.
+- A changed framework-file marker (`<!-- myspec:framework-start -->`/`-end`, `<!-- BEGIN myspec:paths -->`/`END`) or a moved `${aiDir}` directory (`features/`, `memory/`, `ideas/`). The 2.0 move of live session logs out of `${aiDir}/memory/sessions/active/` was major for this reason (`docs/upgrading-to-2.0.md`).
+- A raised host floor: the minimum Claude Code or git version the plugin runs on, as README.md states it. Declaring a floor where none was stated is not breaking; raising one is.
+- A changed always-loaded rule file (`framework-files/rules/` without `paths:`) when a consumer's pin of it would then do the opposite of what it was set for: the 2.0 trim shrank four rules "for the always-loaded context budget", the reason consumers had pinned them, and `update` never writes over a pin, so the pinned copy was now the larger one (`docs/myspec-2.0-breaking-changes.md`, change 4). A new always-loaded rule file is minor; a rewording that leaves routing and size alone is a patch.
+
+**Retirement stubs.** A removed or renamed skill leaves a stub at the old name (`skills/<old>/SKILL.md` with `disable-model-invocation: true`, "Retired in myspec X.Y" in its description and a "Remove this stub" rule) that names the replacement and stops; plugins have no alias mechanism. A stub ships for one minor cycle after the release that retired it and is deleted in the next: retired in X.Y, it ships through X.(Y+1).*, and X.(Y+2).0 ships without it. `scripts/overdue-stubs.sh --version <X.Y.Z being cut>` lists every stub as `shipping`, `due` or `overdue` and exits 1 while one is overdue; `/release` runs it in its breaking gate and refuses a minor while any is overdue. A patch is never refused for a stub, so a maintenance branch can ship fixes while a stub waits for the next major. The 2.0 stubs shipped for eleven minors because nothing checked (#267).
 
 **Tracking.** Every candidate gets an issue with the `breaking` label, in the next major's milestone (currently [v3.0.0](https://github.com/jansalwowski/myspec/milestone/1)). That milestone is the major's roadmap; do not keep one anywhere else. A PR that lands a breaking change carries the `breaking` label too, which is what the release gate reads.
 
