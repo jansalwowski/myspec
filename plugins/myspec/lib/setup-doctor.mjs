@@ -104,7 +104,7 @@ const GROUPS = {
   refs: ['dead-path-ref', 'dead-skill-ref', 'topology-missing'],
   // Linked dependencies the Stop hook does not compare (#239). Not in the
   // stop hook's groups: a hand-made link is a lead, not a block.
-  worktree: ['link-unrecorded', 'provision-stale'],
+  worktree: ['link-unrecorded', 'provision-stale', 'provision-link-dangling', 'provision-link-moved', 'provision-record-unreadable'],
   // Not findings: the settings that differ from their defaults, as SET lines
   // (`settings` in --json). Never in the stop hook's groups.
   settings: ['setting-in-force'],
@@ -2058,6 +2058,10 @@ if (typeof settings.topologyFile === 'string' && settings.topologyFile !== '') {
 //                    record does not list. Checks through it may describe
 //                    the main checkout. A link git tracks is the project's
 //                    own content and is left alone.
+//   provision-link-dangling / provision-link-moved  a recorded link whose
+//                    target is gone, or that resolves somewhere other than
+//                    its recorded target.
+//   provision-record-unreadable  a record that is not JSON or has no source.
 //   provision-stale  a recorded lockfile whose hash no longer matches, or a
 //                    lockfile pattern recorded absent (null hash) that now
 //                    matches a file the record does not hash, in the
@@ -2168,6 +2172,19 @@ function checkWorktreeLinks() {
 
   const recordPath = join(root, '.claude', 'state', 'provision.json');
   const record = readJson(recordPath);
+  // The Stop hook blocks on a record it cannot read (no JSON, or no source),
+  // so that is the finding, not one link-unrecorded line per recorded link.
+  const unreadable = record.present
+    && (record.error !== null || !isPlainObject(record.value) || typeof record.value.source !== 'string');
+
+  if (unreadable) {
+    warn('provision-record-unreadable', 'worktree', '.claude/state/provision.json', `.claude/state/provision.json cannot be read (${record.error || 'it has no source'}); the Stop hook blocks until provision runs again`, {
+      text: 'run .claude/lib/worktree-provision.sh on this worktree: it rewrites the record',
+    });
+
+    return;
+  }
+
   const links = record.value && Array.isArray(record.value.links)
     ? record.value.links.filter((link) => link && typeof link.path === 'string')
     : [];
@@ -2251,6 +2268,32 @@ function checkWorktreeLinks() {
         return;
       }
     } catch {
+      return;
+    }
+
+    // A recorded link that no longer resolves to its recorded target: the
+    // Stop hook compares the physical target and blocks on either case.
+    let resolved = null;
+
+    try {
+      resolved = realpathSync(join(root, link.path));
+    } catch {
+      // dangling
+    }
+
+    if (resolved === null) {
+      warn('provision-link-dangling', 'worktree', link.path, `${link.path} was linked by provision but its target no longer exists; the Stop hook blocks until provision runs again`, {
+        text: 'run .claude/lib/worktree-provision.sh on this worktree: it links again where the lockfiles match and says what to install where they do not',
+      });
+
+      return;
+    }
+
+    if (typeof link.target === 'string' && resolved !== link.target) {
+      warn('provision-link-moved', 'worktree', link.path, `${link.path} was linked by provision to ${link.target} and now resolves to ${resolved}; the Stop hook blocks until provision runs again`, {
+        text: 'run .claude/lib/worktree-provision.sh on this worktree: it links again where the lockfiles match and says what to install where they do not',
+      });
+
       return;
     }
 

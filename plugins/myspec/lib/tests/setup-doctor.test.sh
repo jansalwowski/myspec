@@ -921,6 +921,25 @@ OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STA
 expect_line "WARN +provision-stale: vendor was provisioned while packages/cx/package-lock.json did not exist" "worktree: [!ab] negates the class"
 rm -rf "$WT/packages"
 
+# A recorded link that dangles or moved, and a record that cannot be read,
+# are named as the Stop hook blocks on them (#256 review).
+cp "$WT/.claude/state/provision.json" "$ROOT/prov.bak"
+rm "$WT/vendor" && ln -s "$ROOT/nowhere/vendor" "$WT/vendor"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +provision-link-dangling: vendor was linked by provision but its target no longer exists" "worktree: a dangling recorded link is reported"
+mkdir -p "$ROOT/elsewhere/vendor"
+rm "$WT/vendor" && ln -s "$ROOT/elsewhere/vendor" "$WT/vendor"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +provision-link-moved: vendor was linked by provision to $REPO/vendor and now resolves to $ROOT/elsewhere/vendor" "worktree: a recorded link that moved is reported"
+rm "$WT/vendor" && ln -s "$REPO/vendor" "$WT/vendor"
+printf '{"source":' > "$WT/.claude/state/provision.json"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +provision-record-unreadable: \.claude/state/provision\.json cannot be read" "worktree: a truncated record is reported as unreadable"
+expect_no_line "link-unrecorded" "worktree: a truncated record is not read as no record"
+cp "$ROOT/prov.bak" "$WT/.claude/state/provision.json"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_no_line "provision-link|provision-record" "worktree: a recorded link back on its target is not reported"
+
 ln -s "$ROOT/outside" "$REPO/elsewhere"
 run_doctor worktree
 expect_no_line "link-unrecorded" "worktree: the main checkout is never checked"
