@@ -251,6 +251,22 @@ rm -f "$STATE/"*.jsonl
 check_as block "unenterable ancestor, no decision, source asks" "$REPO" lock-sess "$REPO/locked/sub/x.ts"
 chmod 0755 "$REPO/locked"
 
+# A plugin can update its hooks ahead of the project's .claude/lib: the 2.x
+# set-isolation.sh then still writes .claude/state/isolation/<sid>.json in
+# the main checkout. The hook's read imports it (lib/session-event.sh), so
+# the decision is seen rather than asked for again forever.
+rm -f "$STATE/"*.jsonl
+mkdir -p "$REPO/.claude/state/isolation"
+printf '{"mode":"develop","decided_at":%d,"note":"","worktree_path":""}\n' "$(date +%s)" > "$REPO/.claude/state/isolation/old-sess.json"
+check_as allow "2.x isolation marker, develop: the edit is allowed" "$REPO" old-sess "$REPO/components/Foo.vue"
+printf '{"mode":"worktree","decided_at":%d,"note":"","worktree_path":"%s"}\n' "$(date +%s)" "$WTA" > "$REPO/.claude/state/isolation/old-wt.json"
+check_as block "2.x isolation marker, worktree, from the worktree" "$WTA" old-wt "$REPO/components/Foo.vue"
+if jq -cn --arg f "$REPO/components/Foo.vue" --arg c "$REPO" '{tool_input: {file_path: $f}, cwd: $c, session_id: "old-wt"}' | "$HOOK" | grep -qF 'chose WORKTREE isolation'; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); echo "FAIL  a 2.x worktree marker blocks with the worktree message, not the ask" >&2
+fi
+
 # The real writer: set-isolation.sh records, --reset re-asks.
 SET_ISO="$(cd "$(dirname "$HOOK")" && pwd)/../lib/set-isolation.sh"
 rm -f "$STATE/"*.jsonl
