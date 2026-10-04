@@ -447,6 +447,7 @@ check_workdir() {
 load_checks() {
   local config_root
   config_root=$(dirname "$(dirname "$1")")
+  CONFIG_ROOT=$config_root
   read_setting verification.checks "$config_root" || load_checks_failed
   CHECKS_JSON=$SETTING
   [ -z "$SETTING_NOTES" ] || SCOPE_NOTES+=("$SETTING_NOTES")
@@ -455,9 +456,17 @@ load_checks() {
   CONTAINERS_NOTES=$SETTING_NOTES
 }
 
+# load_checks_failed -> blocks. The hook shim already blocks on a missing lib
+# file, so "lib missing" is said only when the reader itself is absent; a
+# reader that is there and failed (a jq without --rawfile, say) is reported
+# with its own error and what to check, since /myspec:update cannot fix it.
 load_checks_failed() {
   GATE_UNVERIFIED=1
-  decision_block 'myspec lib missing, run /myspec:update. The settings reader (lib/myspec-config.sh) could not read the checks: %s' "${SETTING_NOTES:-no reason given}"
+  if [ ! -f "$HOOK_LIB/myspec-config.sh" ]; then
+    decision_block 'myspec lib missing, run /myspec:update. The settings reader (lib/myspec-config.sh) is not in %s, so no check ran.' "$HOOK_LIB"
+  fi
+  decision_block 'The settings reader (%s/myspec-config.sh) failed, so no check ran: %s. Check that jq is 1.6 or later (jq --version; the reader uses jq --rawfile), and run the reader to see its stderr: bash "%s/myspec-config.sh" get verification.checks --root "%s"' \
+    "$HOOK_LIB" "${SETTING_NOTES:-no reason given}" "$HOOK_LIB" "${CONFIG_ROOT:-.}"
 }
 
 # run_checks <config file> -> runs each required check of the checkout

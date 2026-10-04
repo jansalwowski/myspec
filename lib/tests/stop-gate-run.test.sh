@@ -271,6 +271,22 @@ out=$( (HOOK_LIB="$ROOT/nolib"; run_init; load_checks "$REPO/.claude/verificatio
 has "$out" '"decision": "block"' "no reader: the gate blocks"
 has "$out" "myspec lib missing, run /myspec:update" "no reader: the block says how to repair it"
 lacks "$out" "not reached" "no reader: nothing runs after the block"
+# A reader that is present but fails (a jq without --rawfile, jq 1.5) is not
+# a missing lib: the block reports the reader's own error and what to check,
+# and does not send the session to /myspec:update (#257 review).
+REAL_JQ=$(command -v jq)
+mkdir -p "$ROOT/oldjq"
+# shellcheck disable=SC2016 # the wrapper's own "$@", expanded when it runs
+printf '#!/bin/sh\nfor a in "$@"; do [ "$a" = --rawfile ] && { echo "jq: Unknown arguments: --rawfile" >&2; exit 2; }; done\nexec %s "$@"\n' "$REAL_JQ" > "$ROOT/oldjq/jq"
+chmod +x "$ROOT/oldjq/jq"
+# shellcheck disable=SC2030 # the wrapper is on PATH for this subshell only
+out=$( (PATH="$ROOT/oldjq:$PATH"; run_init; load_checks "$REPO/.claude/verification.json"; echo "not reached") )
+has "$out" '"decision": "block"' "failing reader: the gate still blocks"
+has "$out" "Unknown arguments: --rawfile" "failing reader: the block carries the reader's own error"
+has "$out" "jq is 1.6 or later" "failing reader: the block says what to check"
+lacks "$out" "lib missing" "failing reader: not reported as a missing lib"
+lacks "$out" "/myspec:update" "failing reader: update is not the fix"
+lacks "$out" "not reached" "failing reader: nothing runs after the block"
 SESSION_ID=unverified STATE_HOME="$REPO" VERIFY_ROOTS=("$REPO") NESTED_ROOTS=()
 (GATE_UNVERIFIED=1; finish_run)
 eq "$(session_events "$REPO" unverified)" "" "no reader: no verified event, so the checkout stays armed"
@@ -280,6 +296,7 @@ CONTAINERS='{"app":{"mountSource":".","mountTarget":"/var/www/html"}}'
 mkdir -p "$ROOT/bin"
 printf '#!/bin/sh\nexit 0\n' > "$ROOT/bin/docker"
 chmod +x "$ROOT/bin/docker"
+# shellcheck disable=SC2031 # the jq wrapper above was subshell-only on purpose
 PATH="$ROOT/bin:$PATH"
 EXEC="docker compose exec app make lint"
 WD="printf '%s' \"\${MYSPEC_CHECK_WORKDIR-unset}\" > $RAN/wd; $EXEC"

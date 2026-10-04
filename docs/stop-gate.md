@@ -53,7 +53,7 @@ It applies per verified checkout, when its checks fail and the session is not in
 
 ## Per-check settings (R5, R7, R11, R12)
 
-The gate reads `checks` and `containers` through `lib/myspec-config.sh`, the one settings reader (`docs/project-settings-design.md`), from the checkout whose `.claude/verification.json` is in use. The reader ships with the hook; when it or another lib the gate sources is missing, the gate blocks once with "myspec lib missing, run /myspec:update" and runs no check, rather than guess at the settings. Order per required check: `paths` first (a skipped check is never refused), then `cwd`, then `runIn` or the R8a refusal, then the run.
+The gate reads `checks` and `containers` through `lib/myspec-config.sh`, the one settings reader (`docs/project-settings-design.md`), from the checkout whose `.claude/verification.json` is in use. The reader ships with the hook; when it or another lib the gate sources is missing, the gate blocks once with "myspec lib missing, run /myspec:update" and runs no check, rather than guess at the settings. A reader that is there and fails (a jq older than 1.6, which lacks `--rawfile`) also blocks, with the reader's own error and what to check instead of the update advice, and the checkout stays armed until it reads. Order per required check: `paths` first (a skipped check is never refused), then `cwd`, then `runIn` or the R8a refusal, then the run.
 
 **Globs (`paths`).** Each glob is matched against each session file as a repo-relative path. These are the semantics doctor validates (#233):
 
