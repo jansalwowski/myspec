@@ -18,6 +18,9 @@
 #            `verified`, so the next stop approved. Attribution's awk runs
 #            under LC_ALL=C, and `verified` is recorded only after a
 #            decision was printed.
+#   (once)   attribute_failures ran session_files again, a second jq pass
+#            over the state file per failing checkout for the list the root
+#            loop already exported as MYSPEC_SESSION_FILES (#254 review).
 #   (pipefail) The memory and setup conformance gates were armed by
 #            `git status --porcelain | grep -q .`. grep exits on the first
 #            line, so a status longer than a pipe buffer killed git with
@@ -164,6 +167,30 @@ OUT=$(inv_run 2 "$ABORT/hooks/verify-before-stop.sh")
 OUT=$(inv_run 3 "$HOOK")
 [ "$(inv_events 3)" = "$INV" ] && ok || fail "a decided run still records verified (got: $(inv_events 3))"
 rm -f "$INV/other.ts"
+
+# --- (once) attribution reads the session's files from MYSPEC_SESSION_FILES --
+# A copy of the hook whose session_files returns nothing once the root loop
+# has exported the list: attribution must still know app.ts is this
+# session's, so the failure naming it blocks as the session's own.
+ONCE="$ROOT/once"
+mkdir -p "$ONCE/.claude"
+git init -q -b main "$ONCE"
+git -C "$ONCE" config user.email t@t
+git -C "$ONCE" config user.name t
+printf '.claude/state/\n' > "$ONCE/.gitignore"
+printf '{"checks":[{"name":"lint","command":"echo app.ts:1 BROKEN; exit 1","required":true}]}\n' > "$ONCE/.claude/verification.json"
+: > "$ONCE/app.ts"; : > "$ONCE/other.ts"
+git -C "$ONCE" add -A && git -C "$ONCE" commit -q -m init
+printf 'x\n' >> "$ONCE/app.ts"; printf 'x\n' >> "$ONCE/other.ts"
+ONCE_HOOK="$ROOT/once-hook/hooks/verify-before-stop.sh"
+mkdir -p "$ROOT/once-hook/hooks"
+cp -R "$(cd "$(dirname "$HOOK")/.." && pwd)/lib" "$ROOT/once-hook/lib"
+sed 's/^export MYSPEC_SESSION_FILES$/&; session_files() { :; }/' "$HOOK" > "$ONCE_HOOK"
+grep -q 'session_files() { :; }' "$ONCE_HOOK" && ok || fail "once: the stub found the export"
+bash "$SESSION_EVENT" --root "$ONCE" append "$SID-once" "$(jq -nc --arg r "$ONCE" '{t: "write", root: $r, rel: "app.ts", kind: "code"}')"
+OUT=$(printf '{"session_id":"%s-once","cwd":"%s"}' "$SID" "$ONCE" | bash "$ONCE_HOOK" 2>/dev/null)
+reason "$OUT" | grep -qF 'names files this session wrote: app.ts' && ok \
+  || fail "once: attribution takes the session's files from MYSPEC_SESSION_FILES (got: ${OUT:0:300})"
 
 # --- (pipefail) a long status still arms the conformance gates --------------
 # Each doctor stub always fails, so the gate must block whenever it is armed.

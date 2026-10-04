@@ -525,7 +525,7 @@ short_list() {
 }
 
 # attribute_failures: for the checks of the checkout at ROOT_KEY (from index
-# ROOT_FAILED_START on), sets ATTRIBUTION (a paragraph for the report, empty
+# ROOT_FAILED_START on, T from MYSPEC_SESSION_FILES), sets ATTRIBUTION (a paragraph for the report, empty
 # when every uncommitted change there is this session's) and ATTRIBUTION_WARN=1
 # when its failures should warn instead of block.
 attribute_failures() {
@@ -534,7 +534,10 @@ attribute_failures() {
   ATTRIBUTION_WARN=0
   tfile=$(mktemp "${TMPDIR:-/tmp}/.myspec-attr.XXXXXX")
   ffile=$(mktemp "${TMPDIR:-/tmp}/.myspec-attr.XXXXXX")
-  session_files > "$tfile"
+  # T is MYSPEC_SESSION_FILES, which the root loop read once for this
+  # checkout: reading the state file again here would parse it twice per
+  # failing root.
+  [ -z "${MYSPEC_SESSION_FILES:-}" ] || printf '%s\n' "$MYSPEC_SESSION_FILES" > "$tfile"
   # .claude/state/ is per-checkout hook state, not anyone's work. At most 1000
   # paths take part: past that, a failure matches nothing, which blocks.
   changed_files | grep -v '^\.claude/state/' | sort -u | grep -vxF -f "$tfile" | LC_ALL=C awk 'NR <= 1000' > "$ffile" || true
