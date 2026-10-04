@@ -833,6 +833,19 @@ OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" refs 2>&1); STATUS=
 expect_no_line 'dead-path-ref: CLAUDE.md: references .claude/worktrees' "a linked worktree does not report the main checkout's .claude/worktrees as dead"
 expect_line 'WARN +dead-path-ref: CLAUDE.md: references docs/gone.md' "a tracked file this branch removed is still a dead ref from the worktree"
 
+# --- pass 3f2: a Stop entry without the template's timeout (#257 review) -----
+# update never rewrites an existing entry's timeout, so a project wired
+# before the template had one keeps the harness's 600 s default.
+
+build_fixture
+run_doctor wiring
+expect_no_line 'hook-stop-no-timeout' "the template's Stop entry, with its timeout, is not reported"
+set_json .claude/settings.json 'd.hooks.Stop.forEach(g => g.hooks.forEach(h => { delete h.timeout; }));'
+run_doctor wiring
+expect_line '^WARN +hook-stop-no-timeout: \.claude/settings\.json: the Stop entry for \.claude/hooks/verify-before-stop\.sh has no timeout' "a Stop entry without a timeout is reported"
+expect_line 'add "timeout": 330 to that hook entry' "the fix names the template's timeout"
+expect_exit 0 "a missing Stop timeout is a warning"
+
 # --- pass 3g: links the provision record does not list (#239) ----------------
 #
 # The Stop hook compares only what worktree-provision.sh recorded in
