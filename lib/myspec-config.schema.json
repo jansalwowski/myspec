@@ -440,7 +440,7 @@
       "kind": "exported",
       "type": "flag",
       "issue": ["exists"],
-      "description": "Exported by the Stop gate to every check it runs, so a check can tell it runs under the gate. The gate itself does not read it: only the payload's stop_hook_active ends a re-entry."
+      "description": "Exported by the Stop gate to every check it runs, so a check can tell it runs under the gate. The Stop hook approves at once when it finds it in its own environment: a nested Claude Code session a check started is not verified again."
     },
     "MYSPEC_WORKTREE": {
       "kind": "exported",

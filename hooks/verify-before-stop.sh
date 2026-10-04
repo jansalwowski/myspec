@@ -18,6 +18,16 @@
 
 set -euo pipefail
 
+# A check the gate runs gets MYSPEC_STOP_HOOK_ACTIVE=1 (stop-gate/run.sh). A
+# check that starts a nested Claude Code session (claude -p, an eval runner,
+# an LLM judge) reaches this hook again from inside the gate. Approve at
+# once: otherwise the inner session runs the conformance gates and, when it
+# wrote code, its own checks, which can start claude again (R10).
+if [ -n "${MYSPEC_STOP_HOOK_ACTIVE:-}" ]; then
+  echo '{"decision": "approve", "reason": "nested session inside a stop-gate check (MYSPEC_STOP_HOOK_ACTIVE): the outer gate verifies"}'
+  exit 0
+fi
+
 # Every gate below reads JSON, so without jq there is nothing to verify with.
 approve() {
   echo '{"decision": "approve"}'

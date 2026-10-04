@@ -23,8 +23,11 @@
 #            loop already exported as MYSPEC_SESSION_FILES (#254 review).
 #   (lib)    A hook installed without the settings reader read the checks
 #            its own way and refused every runIn check; it now blocks once
-#            with the repair. The hook's own MYSPEC_STOP_HOOK_ACTIVE (which
-#            it exports to checks) no longer counts as a re-entry.
+#            with the repair.
+#   (#257)   The MYSPEC_STOP_HOOK_ACTIVE guard was dropped while the gate
+#            still exported the variable to its checks, so a check that
+#            started a nested claude session ran the whole gate inside it.
+#            The variable in the hook's own environment approves again.
 #   (utf8)   macOS awk exits 2 on invalid UTF-8 in a failing check's log
 #            ("towc: multibyte conversion failure"); under set -e the hook
 #            died before deciding, and the EXIT trap still recorded
@@ -88,12 +91,16 @@ OUT=$(run_hook ',"stop_hook_active":true')
 [ "$(decision "$OUT")" = approve ] && ok || fail "stop_hook_active:true approves (got: ${OUT:0:200})"
 [ ! -e "$RAN" ] && ok || fail "stop_hook_active:true runs no check"
 
-# --- MYSPEC_STOP_HOOK_ACTIVE in the hook's own environment is not a re-entry --
-# The gate exports it to its checks; only the payload's stop_hook_active ends
-# a re-entry, so a stop under a check that inherited it still verifies.
+# --- #257: MYSPEC_STOP_HOOK_ACTIVE in the hook's own environment approves ------
+# The gate exports it to its checks: a nested session a check started stops
+# without running the gate again.
 OUT=$(also_wrote "$REPO" src/edited.ts; rm -f "$RAN"; printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$REPO" \
-  | MYSPEC_STOP_HOOK_ACTIVE=1 CLAUDE_STOP_HOOK_ACTIVE=1 bash "$HOOK" 2>/dev/null)
-[ "$(decision "$OUT")" = block ] && ok || fail "MYSPEC_STOP_HOOK_ACTIVE in the environment does not approve (got: ${OUT:0:200})"
+  | MYSPEC_STOP_HOOK_ACTIVE=1 bash "$HOOK" 2>/dev/null)
+[ "$(decision "$OUT")" = approve ] && ok || fail "MYSPEC_STOP_HOOK_ACTIVE in the environment approves (got: ${OUT:0:200})"
+[ ! -e "$RAN" ] && ok || fail "MYSPEC_STOP_HOOK_ACTIVE in the environment runs no check"
+case "$OUT" in *MYSPEC_STOP_HOOK_ACTIVE*) ok ;; *) fail "the approve names why (got: ${OUT:0:200})" ;; esac
+OUT=$(also_wrote "$REPO" src/edited.ts; rm -f "$RAN"; printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$REPO" | CLAUDE_STOP_HOOK_ACTIVE=1 bash "$HOOK" 2>/dev/null)
+[ "$(decision "$OUT")" = block ] && ok || fail "CLAUDE_STOP_HOOK_ACTIVE, which the harness never sets, is not a re-entry (got: ${OUT:0:200})"
 
 # --- 4eb8ccb: the failure report is readable ----------------------------------
 OUT=$(run_hook '')
