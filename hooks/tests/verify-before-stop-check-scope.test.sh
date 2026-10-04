@@ -343,6 +343,20 @@ container_config "$WT_N" "$(cwd_check Rel '"api"')"
 out=$(stop "$WT_N" code:api/a.php)
 expect "$WT_N/api" "$(where Rel)" "cwd: in a worktree, the cwd is under the worktree"
 
+# A cwd missing in the verified checkout (a worktree made from a base that
+# did not have it yet) is a check not run, not a failed command (#255
+# review): the stop says so and blocks, and attribution never downgrades it.
+container_config "$WT_N" "$(cwd_check Missing '"nope"')"
+printf 'export {}\n' > "$WT_N/web/foreign.ts"
+out=$(stop "$WT_N" code:api/a.php)
+rm -f "$WT_N/web/foreign.ts"
+expect block "$(decision "$out")" "cwd missing: blocks"
+expect not-run "$(where Missing)" "cwd missing: the check never runs"
+has "[Missing not run: cwd missing] nope is not a directory in $WT_N" "$(text "$out")" "cwd missing: the headline says not run, and names the directory"
+has "This is not a test failure" "$(text "$out")" "cwd missing: and says it is not a failure"
+lacks "failed:" "$(text "$out")" "cwd missing: not reported as the command failing"
+lacks "No such file or directory" "$(text "$out")" "cwd missing: the shell's cd error is not the report"
+
 # The rejection runs again after each strip (#255 review): .//api would
 # otherwise become /api, and ./.. a parent.
 for bad in '"/tmp"' '"../app"' '"api/../.."' '"api/../x"' '".//api"' '"./.."' '3'; do

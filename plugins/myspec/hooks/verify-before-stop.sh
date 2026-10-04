@@ -962,6 +962,13 @@ for i in $(seq 0 $((CHECKS_COUNT - 1))); do
       SCOPE_NOTES+=("$NAME: its paths setting was ignored, so the check ran. paths must be a non-empty list of repo-relative globs, none absolute or with a .. segment${PATHS_GLOBS:+ (got $PATHS_GLOBS)}.") ;;
   esac
   [ -z "$CWD_IGNORED" ] || SCOPE_NOTES+=("$NAME: its cwd setting was ignored, so the check ran from the checkout root. cwd must be a repo-relative directory, not absolute and without a .. segment (got $CWD_IGNORED).")
+  # A cwd missing in this checkout (a worktree made from a base that did
+  # not have it yet) is a check that could not start, not one that failed.
+  if [ -n "$CHECK_CWD" ] && [ ! -d "$REPO_ROOT/$CHECK_CWD" ]; then
+    UNVERIFIABLE_CHECKS+=("$NAME")
+    FAILED_OUTPUT+=("[$NAME not run: cwd missing] $CHECK_CWD is not a directory in $REPO_ROOT, so the check could not start there. This is not a test failure. Create the directory on this branch, or correct the check's cwd in .claude/verification.json.")
+    continue
+  fi
 
   if [ -n "${DIFF_COMMAND// /}" ] && [ -n "$MYSPEC_BASE_REF" ]; then
     COMMAND="$DIFF_COMMAND"
