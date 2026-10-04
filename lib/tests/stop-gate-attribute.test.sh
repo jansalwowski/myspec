@@ -72,6 +72,7 @@ results() {
   run_init
   rm -f "$CAP_SENTINEL"
   attribute_begin
+  MYSPEC_SESSION_FILES=$(session_files)
   for a in "$@"; do
     printf '%s\n' "${a#*=}" > "$LOGS/$i"
     FAILED_CHECKS+=("${a%%=*}")
@@ -88,6 +89,8 @@ printf 'BROKEN\n' >> "$REPO/app.ts"
 results lint='app.ts:1 BROKEN'
 attribute_failures
 eq "$ATTRIBUTION|$ATTRIBUTION_WARN" "|0" "rule 1: every change is the session's, no paragraph, no warning"
+# T is the list arm_root exported, not a second read of the state file (#254 review).
+eq "$(session_files() { :; }; attribute_failures; printf '%s|%s' "$ATTRIBUTION" "$ATTRIBUTION_WARN")" "|0" "T comes from MYSPEC_SESSION_FILES, read once"
 
 printf 'BROKEN\n' >> "$REPO/other.ts"
 results lint='other.ts:2 BROKEN'
