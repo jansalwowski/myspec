@@ -106,11 +106,15 @@ symlink_entries() {
 # packages. Every such link is resolved physically, because its text says
 # little about where it lands (.., ./../x, a/../../x, or a hop into a deeper
 # link that leaves the tree). The cd calls run in one subshell, so a tree of
-# thousands of links costs no fork per link. A find that cannot run the
-# scan (one without -mindepth, say) counts as loading: an unscanned tree is
-# never accepted. The scan's own exit status is ignored: find also fails on
-# an unreadable directory inside the tree, after listing every link it
-# could read, and that failure says nothing about those links.
+# thousands of links costs no fork per link. A tree the scan cannot list
+# counts as loading: one whose root, or a NESTED_LINK_DIRS entry, cannot be
+# read (mode 0311 lets cd in but lists nothing), and any tree under a find
+# that cannot run the scan (one without -mindepth, say). An unscanned tree is
+# never accepted; TLC_UNLISTED names the directory that could not be listed,
+# for the caller's message. Past those probes the scan's own exit status is
+# ignored: find also fails on an unreadable directory deeper in the tree,
+# after listing every link it could read, and that failure says nothing
+# about those links.
 # NESTED_LINK_DIRS are tree-relative directories that hold links of their
 # own one or two levels down, such as the pnpm hidden hoist
 # (.pnpm/node_modules/@scope/<name>, four levels below the tree). Data, so
@@ -119,6 +123,7 @@ NESTED_LINK_DIRS=".pnpm/node_modules"
 tree_loads_checkout() {
   local tree="$1" checkout="$2" f url dir real links nested
   local -a nests
+  TLC_UNLISTED=""
   # shellcheck disable=SC2016 # the literal $baseDir text Composer writes, not a variable
   grep -qsF '$baseDir . ' "$tree"/composer/autoload_*.php && return 0
   for f in "$tree"/lib/python*/site-packages/*.dist-info/direct_url.json; do
@@ -129,11 +134,14 @@ tree_loads_checkout() {
     case "$dir/" in "$checkout"/*) return 0 ;; esac
   done
   real=$(cd "$tree" 2>/dev/null && pwd -P) || return 1
-  find "$real" -mindepth 1 -maxdepth 0 -type l >/dev/null 2>&1 || return 0
+  # Lists the root's own entries only, so an unreadable directory one level
+  # down does not trip it.
+  find "$real" -mindepth 1 -maxdepth 1 >/dev/null 2>&1 || { TLC_UNLISTED="$tree"; return 0; }
   links=$(find "$real" -mindepth 1 -maxdepth 2 -type l 2>/dev/null || true)
   read -ra nests <<< "$NESTED_LINK_DIRS"
   for nested in ${nests[@]+"${nests[@]}"}; do
     [ -d "$real/$nested" ] || continue
+    find "$real/$nested" -mindepth 1 -maxdepth 1 >/dev/null 2>&1 || { TLC_UNLISTED="$tree/$nested"; return 0; }
     links="$links"$'\n'$(find "$real/$nested" -mindepth 1 -maxdepth 2 -type l 2>/dev/null || true)
   done
   (

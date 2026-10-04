@@ -103,6 +103,24 @@ printf '{}\n' > "$ROOT/nogit/.myspec.json"
 eq "$(session_home "$ROOT/nogit/a/b")" "$ROOT/nogit" "home: without git, the nearest .myspec.json"
 session_home "$ROOT/legacy" >/dev/null && fail "home: no checkout and no .myspec.json has none" || ok
 session_tracked "$REPO" && ok || fail "tracked: a myspec project"
+# A repository with no main checkout git can name (a bare clone with
+# worktrees, a --separate-git-dir checkout) files every worktree's events in
+# one place, under its common dir.
+BARE="$ROOT/bare.git"
+new_repo "$ROOT/bare-src"
+git_ clone -q --bare "$ROOT/bare-src" "$BARE"
+git_ -C "$BARE" worktree add -q -b ba "$ROOT/bare-a" >/dev/null 2>&1
+git_ -C "$BARE" worktree add -q -b bb "$ROOT/bare-b" >/dev/null 2>&1
+BARE_P=$(cd "$BARE" && pwd -P)
+eq "$(session_home "$ROOT/bare-a")" "$BARE_P" "home: a bare repository's worktree files under its common dir"
+eq "$(session_home "$ROOT/bare-b")" "$(session_home "$ROOT/bare-a")" "home: every worktree of a bare repository shares it"
+eq "$(session_file "$(session_home "$ROOT/bare-a")" s1)" "$BARE_P/myspec-state/sessions/s1.jsonl" "file: under the common dir, not in a worktree"
+SEP="$ROOT/sep"
+git_ init -q -b main --separate-git-dir "$ROOT/sep.gitdir" "$SEP"
+git_ -C "$SEP" commit -q --allow-empty -m init
+git_ -C "$SEP" worktree add -q -b sw "$ROOT/sep-wt" >/dev/null 2>&1
+eq "$(session_file "$(session_home "$ROOT/sep-wt")" s1)" "$(session_file "$(session_home "$SEP")" s1)" "file: a --separate-git-dir checkout and its worktree share one"
+eq "$(session_file "$SEP" s1)" "$(session_file "$(session_home "$SEP")" s1)" "file: a reader given the checkout itself finds the same file"
 session_tracked "$MOD" && fail "tracked: a repository with neither .myspec.json nor a stop gate is not" || ok
 
 # --- arming and attribution queries ------------------------------------------------------
@@ -176,6 +194,47 @@ LEGACY2="$SESSION_LEGACY_LEDGER_DIR/.myspec-session-writes-old2"
 printf 'code\t%s\tw.ts\n' "$REPO" > "$LEGACY2"
 session_append "$REPO" old2 "$(jq -nc --arg r "$REPO" '{t:"verified",root:$r}')"
 eq "$(session_events "$REPO" old2 | jq -r .t | tr '\n' ' ')" "write verified " "legacy: an append imports first, so old writes come first"
+
+# --- legacy implement and isolation markers --------------------------------------------------
+# A session upgraded mid feature-implement keeps its run: a fresh
+# implement-in-progress.json becomes an implement start, and the session's
+# own isolation marker an isolation event, each imported once.
+MK="$ROOT/markers"
+new_repo "$MK"
+printf '{}\n' > "$MK/.myspec.json"
+mkdir -p "$MK/.claude/state/isolation"
+printf '{"started_at":%d,"feature":"f"}\n' "$((NOW - 120))" > "$MK/.claude/state/implement-in-progress.json"
+printf '{"mode":"worktree","worktree_path":"/w/x","decided_at":%d}\n' "$((NOW - 60))" > "$MK/.claude/state/isolation/mk1.json"
+printf '{"mode":"develop","worktree_path":"","decided_at":%d}\n' "$((NOW - 60))" > "$MK/.claude/state/isolation/mk-other.json"
+session_implement_active "$MK" mk1 && ok || fail "markers: a fresh implement marker is imported as a start"
+session_isolation "$MK" mk1
+eq "$ISO_MODE|$ISO_PATH" "worktree|/w/x" "markers: the session's isolation marker is imported"
+[ -f "$MK/.claude/state/implement-in-progress.json" ] && ok || fail "markers: the implement marker, the checkout's, stays for other sessions"
+[ -f "$MK/.claude/state/isolation/mk1.json.imported" ] && [ -f "$MK/.claude/state/isolation/mk-other.json" ] && ok || fail "markers: only the session's own isolation marker is taken"
+session_events "$MK" mk1 >/dev/null
+eq "$(session_events "$MK" mk1 | jq -r 'select(.t == "implement") | .state' | tr '\n' ' ')" "start " "markers: a session imports the implement marker once"
+eq "$(session_events "$MK" mk1 | jq -r 'select(.t == "notice") | .what')" "imported-implement" "markers: the import is recorded once as a notice"
+# A second session in the same checkout (the one actually running
+# feature-implement, or a parallel one) gets the run too: the first reader
+# does not consume the marker.
+session_implement_active "$MK" mk-second && ok || fail "markers: a second session also imports the implement marker"
+printf '{"started_at":%d,"feature":"f"}\n' "$((NOW - HOOK_DECISION_TTL - 10))" > "$MK/.claude/state/implement-in-progress.json"
+session_implement_active "$MK" mk2 && fail "markers: a stale implement marker is not imported" || ok
+
+# session_tracked_at: the home or the checkout written to carries the config.
+mkdir -p "$ROOT/trk/home" "$ROOT/trk/wt/.claude" "$ROOT/trk/none"
+printf '{}\n' > "$ROOT/trk/wt/.claude/verification.json"
+session_tracked_at "$ROOT/trk/home" "$ROOT/trk/wt" && ok || fail "session_tracked_at: a checkout with its own stop gate counts"
+session_tracked_at "$ROOT/trk/home" "$ROOT/trk/none" && fail "session_tracked_at: neither tracked" || ok
+session_tracked_at "$ROOT/trk/home" "" && fail "session_tracked_at: an empty checkout is not tracked" || ok
+
+# An import into a state file whose last line was cut short (a writer killed
+# mid-write) starts on a fresh line, as session_append does: glued to the
+# fragment, the imported event was skipped with it.
+printf '{"t":"write","root":"%s","rel":"a.ts","kind":"co' "$MK" > "$MK/.claude/state/sessions/mk3.jsonl"
+printf '{"mode":"develop","worktree_path":"","decided_at":%d}\n' "$((NOW - 60))" > "$MK/.claude/state/isolation/mk3.json"
+session_isolation "$MK" mk3
+eq "$ISO_MODE" "develop" "markers: an import after a truncated last line is read"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

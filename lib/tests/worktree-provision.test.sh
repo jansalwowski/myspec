@@ -233,6 +233,30 @@ if [ "$(id -u)" -ne 0 ]; then
   ln -s ../packages/ui "$C/node_modules/ui"
   tlc "$C/node_modules" "$C" && ok || fail "links: a workspace link beside an unreadable directory is still caught"
   chmod 755 "$C/node_modules/.cache"
+  # The tree root itself unlistable (0311: enterable, not readable): the scan
+  # sees nothing, so the tree counts as loading (#251 review). Same for an
+  # unlistable NESTED_LINK_DIRS entry.
+  C="$ROOT/lc-unlistable"
+  mkdir -p "$C/node_modules/pkg"
+  ln -s /etc "$C/node_modules/etc"
+  chmod 0311 "$C/node_modules"
+  tlc "$C/node_modules" "$C" && ok || fail "links: an unlistable tree root counts as loading"
+  chmod 755 "$C/node_modules"
+  C="$ROOT/lc-unlistable-nest"
+  mkdir -p "$C/node_modules/.pnpm/node_modules/@acme" "$C/packages/ui"
+  ln -s ../../../../packages/ui "$C/node_modules/.pnpm/node_modules/@acme/ui"
+  chmod 0311 "$C/node_modules/.pnpm/node_modules"
+  tlc "$C/node_modules" "$C" && ok || fail "links: an unlistable nested link directory counts as loading"
+  chmod 755 "$C/node_modules/.pnpm/node_modules"
+  # End to end: provision refuses the unlistable tree and says why.
+  M=$(new_main unlistable '{"isolation":{"provision":{"symlink":["node_modules"]}}}')
+  mkdir -p "$M/node_modules/dep"; commit_all "$M" init
+  git -C "$M" worktree add -q -b unlistable-wt "$ROOT/unlistable-wt" main
+  chmod 0311 "$M/node_modules"
+  out=$(bash "$SCRIPT" "$ROOT/unlistable-wt" --base main 2>&1)
+  chmod 755 "$M/node_modules"
+  [ ! -e "$ROOT/unlistable-wt/node_modules" ] && printf '%s' "$out" | grep -qF "cannot list node_modules" && ok \
+    || fail "unlistable: provision does not link a tree it cannot list, and says so (got: $out)"
 fi
 
 # --- install, copy, clean (#230, #222, #193) ---------------------------------
@@ -397,6 +421,18 @@ out=$(bash "$SCRIPT" "$W" --base main 2>&1)
   || fail "clean: a tracked match is kept and named (got: $out)"
 [ -L "$W/node_modules" ] && [ -e "$M/node_modules/pkg/linked.tsbuildinfo" ] && ok || fail "clean: never deletes through a link"
 [ -z "$(git -C "$W" status --porcelain)" ] && ok || fail "clean: the worktree stays clean"
+
+# Without lib/glob-regex.sh the script refuses to start, before any link,
+# rather than die at the first `clean` glob with the worktree half provisioned.
+NOGLOB="$ROOT/noglob-lib"
+mkdir -p "$NOGLOB"
+cp "$SCRIPT" "$(dirname "$SCRIPT")/myspec-config.sh" "$(dirname "$SCRIPT")/myspec-config.schema.json" \
+  "$(dirname "$SCRIPT")/hook-core.sh" "$(dirname "$SCRIPT")/dependency-map.sh" "$NOGLOB/"
+W=$(wt_for "$M" noglob-wt)
+rc=0
+out=$(bash "$NOGLOB/worktree-provision.sh" "$W" --base main 2>&1) || rc=$?
+[ "$rc" = 1 ] && printf '%s' "$out" | grep -qF "glob-regex.sh missing" && [ ! -e "$W/node_modules" ] && ok \
+  || fail "a missing glob-regex.sh stops provisioning before any link (rc=$rc, got: $out)"
 
 # Globs compile through lib/glob-regex.sh (its own fixture covers the rules).
 # The scripts that read a glob setting source it and keep no copy, so one

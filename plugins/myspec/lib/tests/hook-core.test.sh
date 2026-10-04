@@ -183,6 +183,44 @@ checkout_facts "$ROOT/plain/src"
 # shellcheck disable=SC2317 # the stub runs only if the cache misses
 eq "$(git() { return 1; }; checkout_facts "$ROOT/plain/src" && printf '%s' "${CF_ROOT#"$ROOT"/}")" "plain" "a repeated call is answered from the cache"
 
+# The superproject lookup runs `git ls-files` in the parent repository: asked
+# only where a submodule can be, not of a plain checkout or its worktrees.
+TRACE="$ROOT/git-trace.log"
+for d in "$ROOT/plain/src" "$ROOT/plain/.claude/worktrees/wt"; do
+  rm -f "$TRACE"
+  (CF_KEY=""; GIT_TRACE="$TRACE" checkout_facts "$d")
+  ! grep -q 'run_command:' "$TRACE" 2>/dev/null && ok || fail "checkout_facts runs no child git for ${d#"$ROOT"/} ($(grep -c 'run_command:' "$TRACE") run)"
+done
+eq "$(CF_KEY=""; facts "$ROOT/plain/mods/sub")" "plain/mods/sub|0|1|plain/mods/sub" "a submodule is still found with the lookup made lazy"
+
+# git < 2.31 does not know --path-format: rev-parse echoes the flag as its
+# first line, rc 0, and prints the git dirs relative to the directory asked.
+# Every hook then failed open. The wrapper strips the flag and echoes it.
+old_git() {
+  local a echo=""
+  local -a args=()
+  for a in "$@"; do
+    case "$a" in --path-format=*) echo="$a" ;; *) args+=("$a") ;; esac
+  done
+  [ -z "$echo" ] || printf '%s\n' "$echo"
+  command git "${args[@]}"
+}
+old_facts() {  # old_facts <path> [git-dirs] -> facts, or the dirs, under old_git
+  # shellcheck disable=SC2317 # called through checkout_facts
+  git() { old_git "$@"; }
+  CF_KEY=""
+  if [ -n "${2:-}" ]; then
+    checkout_facts "$1"
+    printf '%s' "$CF_GIT_DIR|$CF_COMMON_DIR"
+  else
+    facts "$1"
+  fi
+}
+eq "$(old_facts "$ROOT/plain/src/deep")" "plain|0|0|plain" "git < 2.31: plain repo from a subdirectory"
+eq "$(old_facts "$ROOT/plain/src/deep" dirs)" "$ROOT/plain/.git|$ROOT/plain/.git" "git < 2.31: the git dirs are absolute"
+eq "$(old_facts "$ROOT/plain/.claude/worktrees/wt")" "plain/.claude/worktrees/wt|1|0|plain" "git < 2.31: linked worktree, main checkout found"
+eq "$(old_facts "$ROOT/plain/mods/sub")" "plain/mods/sub|0|1|plain/mods/sub" "git < 2.31: submodule"
+
 # --- TTL ----------------------------------------------------------------------------
 
 eq "$HOOK_DECISION_TTL" "28800" "TTL constant (the isolation and implement lookups: session-event.test.sh)"
@@ -213,6 +251,18 @@ out=$(decision_block 'Fix %s:\n\n%s\n' "a.ts" 'line "1"'; echo unreachable)
 eq "$(printf '%s' "$out" | jq -r '.decision')" block "decision_block prints the block form and exits"
 eq "$(printf '%s' "$out" | jq -r '.reason')" $'Fix a.ts:\n\nline "1"' "decision_block formats the reason with printf"
 eq "$(printf '%s' "$out" | jq -j '.reason' | tail -c 1 | od -An -c | tr -d ' ')" '\n' "decision_block keeps a trailing newline"
+
+# --- path-normalize.sh sources hook-core.sh, and survives without it -----------
+# Project scripts source path-normalize.sh (rules/paths.md). A lazy source of
+# a missing hook-core.sh inside canonical_main_worktree aborted a set -e
+# caller; the path itself is the fallback.
+PN="$(dirname "$CORE")/path-normalize.sh"
+mkdir -p "$ROOT/pn-alone"
+cp "$PN" "$ROOT/pn-alone/path-normalize.sh"
+eq "$(bash -e -c '. "$1"; canonical_main_worktree "$2"; echo AFTER' _ "$ROOT/pn-alone/path-normalize.sh" "$ROOT/plain/.claude/worktrees/wt" 2>&1)" \
+  "$ROOT/plain/.claude/worktrees/wt"$'\n'"AFTER" "path-normalize without hook-core: the path itself, and the caller goes on"
+eq "$(bash -e -c '. "$1"; canonical_main_worktree "$2"' _ "$PN" "$ROOT/plain/.claude/worktrees/wt" 2>&1)" \
+  "$ROOT/plain" "path-normalize with hook-core: a linked worktree maps to its main checkout"
 
 # --- glob-regex comes along -------------------------------------------------------
 

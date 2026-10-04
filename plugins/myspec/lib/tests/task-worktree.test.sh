@@ -144,11 +144,17 @@ echo "partial" > "$REPO/.claude/worktrees/t8/partial.js"
 # --- a failed provision leaves nothing behind ---------------------------------
 STUB="$ROOT/stub"
 mkdir -p "$STUB"
+# The script sources hook-core.sh (which sources glob-regex.sh): copy them
+# too, or the stub exits before it creates anything and the case below
+# passes without running the cleanup (#253 review). The stub provision
+# leaves a marker, so the case proves it got that far.
 cp "$SCRIPT" "$STUB/task-worktree.sh"
-printf '#!/bin/sh\nexit 1\n' > "$STUB/worktree-provision.sh"
+cp "$(dirname "$SCRIPT")/hook-core.sh" "$(dirname "$SCRIPT")/glob-regex.sh" "$STUB/"
+printf '#!/bin/sh\n: > "%s/provision-ran"\nexit 1\n' "$STUB" > "$STUB/worktree-provision.sh"
 chmod +x "$STUB"/*.sh
 "$STUB/task-worktree.sh" create t9 >/dev/null 2>&1
 [ $? -ne 0 ]; ok "create fails when provisioning fails" $?
+[ -e "$STUB/provision-ran" ]; ok "the failing provision ran (the stub got that far)" $?
 [ ! -e "$REPO/.claude/worktrees/t9" ]; ok "failed create removes its worktree" $?
 ! git -C "$REPO" show-ref --verify --quiet refs/heads/feat/x--t9; ok "failed create deletes its branch" $?
 

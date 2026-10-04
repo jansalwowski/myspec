@@ -12,6 +12,15 @@
 # Any other absolute path under $HOME (or starting with /Users//home) cannot
 # be auto-converted and is treated as an error by callers.
 
+# checkout_facts (canonical_main_worktree) comes from hook-core.sh beside
+# this file, sourced here once and only when present: a project script that
+# sources this file must not abort when the install is partial.
+if ! declare -F checkout_facts >/dev/null 2>&1 \
+    && [ -f "$(dirname "${BASH_SOURCE[0]}")/hook-core.sh" ]; then
+  # shellcheck source=lib/hook-core.sh
+  . "$(dirname "${BASH_SOURCE[0]}")/hook-core.sh"
+fi
+
 # normalize_path <abs-path> [<repo-root>]
 # Print the portable form on stdout. Exit 0 on success, 1 if not convertible.
 normalize_path() {
@@ -71,16 +80,13 @@ resolve_repo_root() {
 # canonical_main_worktree [path]
 # When invoked inside an agent worktree, return the main worktree's toplevel
 # instead (checkout_facts in hook-core.sh, beside this file); the checkout's
-# own toplevel when git cannot name one, and the path itself outside git.
+# own toplevel when git cannot name one, and the path itself outside git or
+# without hook-core.sh.
 # Used for computing a stable encoded-cwd across worktrees so the user-level
 # auto-memory store does not splinter.
 canonical_main_worktree() {
   local cur="${1:-$PWD}"
-  if ! declare -F checkout_facts >/dev/null; then
-    # shellcheck source=lib/hook-core.sh
-    . "$(dirname "${BASH_SOURCE[0]}")/hook-core.sh"
-  fi
-  if checkout_facts "$cur"; then
+  if declare -F checkout_facts >/dev/null && checkout_facts "$cur"; then
     printf '%s\n' "${CF_MAIN:-$CF_ROOT}"
   else
     printf '%s\n' "$cur"

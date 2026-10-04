@@ -39,10 +39,11 @@ fi
 
 # The state file lives in the MAIN checkout (session_home): the hooks read it
 # there, and a linked worktree may be gone by the time the decision would
-# matter. A worktree whose main checkout git cannot name (a bare repository)
-# keeps its own.
+# matter. A repository whose main checkout git cannot name (a bare clone
+# with worktrees, --separate-git-dir) files under its common dir instead
+# (session_dir), shared by all its worktrees.
 REPO_ROOT=$(session_home "$REPO_ROOT")
-STATE_DIR="$REPO_ROOT/.claude/state/sessions"
+STATE_DIR=$(session_dir "$REPO_ROOT")
 
 if [ "${1:-}" = "--show" ]; then
   FOUND=0

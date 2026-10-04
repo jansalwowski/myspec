@@ -5,8 +5,10 @@
 # input — more machinery than a grep, and the failure that motivated it (a verb
 # inside a commit message blocking the commit) is invisible until something
 # exercises it. Gate B (tree-specific commands in worktree mode) reads the
-# isolation markers; its cases prove the mode lookup, the inheritance window,
-# the recorded-path naming, and the project-level blockInMain extension.
+# session's last isolation event from its state file (session_isolation in
+# lib/session-event.sh); its cases prove the mode lookup, the 8 h expiry, a
+# subagent following its parent's session id and no other session's, the
+# recorded-path naming, and the project-level blockInMain extension.
 #
 # Runs against a synthetic checkout with a real linked worktree, so the
 # worktree-targeting cases exercise the actual `git worktree list` lookup.
