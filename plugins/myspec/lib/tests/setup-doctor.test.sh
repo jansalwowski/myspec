@@ -1011,6 +1011,15 @@ expect_line '^WARN +setting-dir-missing: \.claude/verification\.json: checks\[2\
 run_doctor_env -- settings
 expect_line '^SET +checks\[0\]\.cwd = "api" \(\.claude/verification\.json\)$' "cwd: a check's cwd is listed"
 
+# An ignoreBlockInMain entry that is no blockInMain entry removes nothing:
+# warned, while a default's or a project entry's exact text is not (#255 review).
+build_fixture
+set_json .myspec.json 'd.isolation={blockInMain:["^make[[:space:]]+deploy"], ignoreBlockInMain:["^git[[:space:]]+push([[:space:]]|$)", "^make[[:space:]]+deploy", "^git[[:space:]]+push"]};'
+run_doctor_env -- schema
+expect_line '^WARN +setting-unmatched-item: \.myspec\.json: isolation\.ignoreBlockInMain\[2\] is "\^git\[\[:space:\]\]\+push", which is not an entry of isolation\.blockInMain' "ignoreBlockInMain: a near-miss of a default is reported"
+expect_no_line 'ignoreBlockInMain\[0\]|ignoreBlockInMain\[1\]' "ignoreBlockInMain: a default's or a project entry's exact text is not reported"
+expect_exit 0 "ignoreBlockInMain: the finding is a warning"
+
 # The worktree guard's list is a setting: a project's entries and its
 # ignoreBlockInMain are listed in force, the trim marked as loosening.
 build_fixture
