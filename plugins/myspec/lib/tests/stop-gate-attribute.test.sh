@@ -92,6 +92,7 @@ results lint='app.ts:1 BROKEN'
 attribute_failures
 eq "$ATTRIBUTION|$ATTRIBUTION_WARN" "|0" "rule 1: every change is the session's, no paragraph, no warning"
 # T is the list arm_root exported, not a second read of the state file (#254 review).
+# shellcheck disable=SC2317 # session_files is called by attribute_failures, if at all
 eq "$(session_files() { :; }; attribute_failures; printf '%s|%s' "$ATTRIBUTION" "$ATTRIBUTION_WARN")" "|0" "T comes from MYSPEC_SESSION_FILES, read once"
 
 printf 'BROKEN\n' >> "$REPO/other.ts"
@@ -164,12 +165,15 @@ decide() {  # decide <implement 0|1> <check=output>... -> block|warn|none and th
 }
 out=$(decide 0)
 eq "$out" "0||" "no failure: nothing to report"
+# shellcheck disable=SC2030,SC2031 # each case builds its results in its own subshell
 out=$(attribute_init; IMPLEMENT_ACTIVE=0; results; NOT_RUN_CHECKS+=(later); ROOT_LABEL=""; attribute_root; printf '%s' "$BLOCKING_FAILURE")
 eq "$out" 1 "R13: a checkout whose only problem is an unrun check blocks"
 # R13 under R6: a check the budget left unrun did not fail (#257 review).
+# shellcheck disable=SC2030,SC2031 # each case builds its results in its own subshell
 out=$(attribute_init; IMPLEMENT_ACTIVE=1; results; NOT_RUN_CHECKS+=(later); ROOT_LABEL=""; attribute_root; printf '%s|%s' "$BLOCKING_FAILURE" "${WARN_NOTES[*]}")
 has "$out" "0|Checks not run (gate budget) during feature-implement orchestration" "R6: only unrun checks warn as not run"
 lacks "$out" "Failing" "R6: only unrun checks are not called failing"
+# shellcheck disable=SC2030,SC2031 # each case builds its results in its own subshell
 out=$(attribute_init; IMPLEMENT_ACTIVE=1; results; NOT_RUN_CHECKS+=(later); RAN_CHECKS=(); SCOPE_NOTES=(); GATE_BUDGET_SECONDS=300; ROOT_LABEL=""; attribute_root; report_decision)
 has "$out" "Verification incomplete (not run, gate budget of 300s spent: later)" "report: only unrun checks headline as incomplete"
 lacks "$out" "failing" "report: only unrun checks are not called failing"
