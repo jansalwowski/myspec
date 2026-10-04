@@ -456,7 +456,11 @@ while IFS= read -r line; do
   fi
   # A link an earlier run made is decided again, so a rerun after a lockfile
   # change drops a link that no longer matches and records the one that does.
-  if [ -L "$WORKTREE/$entry" ] && [ "$(readlink "$WORKTREE/$entry")" = "$MAIN/$entry" ]; then
+  # Compared physically: an earlier run may have got --main through a symlink
+  # (a symlinked home, /tmp for /private/tmp) that this run's spelling of the
+  # main checkout does not share.
+  if [ -L "$WORKTREE/$entry" ] \
+      && [ "$(physical_path "$(readlink "$WORKTREE/$entry")" "$(dirname "$WORKTREE/$entry")")" = "$(physical_path "$MAIN_REAL/$entry")" ]; then
     rm -f "$WORKTREE/$entry"
   fi
   # ${arr[@]+"${arr[@]}"}: an empty array is "unbound" under set -u in bash < 4.4

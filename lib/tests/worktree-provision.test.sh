@@ -475,6 +475,29 @@ bash "$SCRIPT" "$W" --base main >/dev/null 2>&1
 [ "$(rec "$W" '.links[] | select(.path == "node_modules") | .lockfiles["package-lock.json"]')" = "$(sha "$M/package-lock.json")" ] && ok \
   || fail "record rerun: the new hash is recorded"
 
+# A rerun drops an earlier link whatever spelling of the main checkout the
+# first run got (#256 review): the first run reaches main through a symlinked
+# alias, the Stop hook's rerun passes no --main, and the link text differs
+# from the physical path. Compared as text, the link survived as "already
+# exists" and the record lost it.
+M=$(new_main alias '{"isolation":{"provision":{"symlink":["node_modules"]}}}')
+mkdir -p "$M/node_modules/dep"; printf 'v1\n' > "$M/package-lock.json"; commit_all "$M" init
+ln -s "$M" "$ROOT/alias-link"
+W=$(wt_for "$M" alias-wt)
+bash "$SCRIPT" "$W" --base main --main "$ROOT/alias-link" >/dev/null 2>&1
+[ "$(readlink "$W/node_modules")" = "$ROOT/alias-link/node_modules" ] && ok || fail "alias: the first run links through the alias (got: $(readlink "$W/node_modules"))"
+printf 'v2\n' > "$M/package-lock.json"
+out=$(bash "$SCRIPT" "$W" --base main 2>&1)
+[ ! -e "$W/node_modules" ] && [ ! -L "$W/node_modules" ] && ok || fail "alias rerun: the link through the alias is dropped (got: $out)"
+printf '%s' "$out" | grep -qF "package-lock.json differs from the main checkout — not linking node_modules" && ok \
+  || fail "alias rerun: the drop is named (got: $out)"
+[ "$(rec "$W" '.links | length')" = 0 ] && ok || fail "alias rerun: the dropped link leaves the record"
+printf 'v2\n' > "$W/package-lock.json"
+bash "$SCRIPT" "$W" --base main >/dev/null 2>&1
+[ "$(readlink "$W/node_modules")" = "$M/node_modules" ] && ok || fail "alias rerun: matching lockfiles link again, physically"
+[ "$(rec "$W" '.links[] | select(.path == "node_modules") | .lockfiles["package-lock.json"]')" = "$(sha "$M/package-lock.json")" ] && ok \
+  || fail "alias rerun: the record holds the link with the new hash"
+
 # Install steps that ran are recorded.
 M=$(new_main record-inst '{"isolation":{"provision":{"symlink":[],"install":[{"run":"true","cwd":"."},{"run":"true","when":["nope"]}]}}}')
 commit_all "$M" init
