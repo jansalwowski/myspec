@@ -504,7 +504,7 @@ run_checks() {
     # not have it yet) is a check that could not start, not one that failed.
     if [ -n "$CHECK_CWD" ] && [ ! -d "$REPO_ROOT/$CHECK_CWD" ]; then
       UNVERIFIABLE_CHECKS+=("$name")
-      FAILED_OUTPUT+=("[$name not run: cwd $CHECK_CWD] $CHECK_CWD is not a directory in $REPO_ROOT, so the check could not start there. This is not a test failure. Create the directory on this branch, or correct the check's cwd in .claude/verification.json.")
+      FAILED_OUTPUT+=("[$name not run: cwd missing] $CHECK_CWD is not a directory in $REPO_ROOT, so the check could not start there. This is not a test failure. Create the directory on this branch, or correct the check's cwd in .claude/verification.json.")
       continue
     fi
 

@@ -255,6 +255,11 @@ out=$(gate "$NESTED" "{\"checks\":[$(check C 'pwd -P > '"$RAN"'/C.pwd' '{"cwd":"
 eq "$(cat "$RAN/C.pwd")" "$NESTED/api" "cwd: under the verified checkout, not the main one"
 eq "$(cat "$RAN/D.pwd")" "$NESTED" "cwd unusable: the check runs from the root"
 has "$(f "$out" .scope)" ": its cwd setting was ignored, so the check ran from the checkout root" "cwd unusable: the message names it"
+out=$(gate "$NESTED" "{\"checks\":[$(check M true '{"cwd":"missing"}')]}" code:api/a.php)
+eq "$(ran M)$(f "$out" '.failed | length')" no0 "cwd missing: the check does not run and is not a failure (#255 review)"
+eq "$(f "$out" '.unver | join(",")')" "M [in $NESTED]" "cwd missing: the check is unverifiable"
+has "$(f "$out" .output)" "[M [in $NESTED] not run: cwd missing] missing is not a directory in $NESTED" "cwd missing: the message names the directory"
+has "$(f "$out" .output)" "This is not a test failure." "cwd missing: and says it is not a failure"
 
 # diffCommand (R5): used when a base ref resolved, the whole-repo command otherwise.
 DIFF=$(jq -nc --arg r "$RAN" '{name: "L", command: "echo whole > \($r)/L", diffCommand: "echo \"diff $MYSPEC_BASE_REF\" > \($r)/L", required: true}')
