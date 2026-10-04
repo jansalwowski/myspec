@@ -1919,28 +1919,31 @@ if (managedOverBudget.length > 0 && wants('budget')) {
 const CODE_SPAN = /`([^`\n]+)`/g;
 const PATH_SHAPE = /^[\w.@/-]+$/;
 
-// The main checkout when root is a linked worktree, else null.
-let mainCheckoutCache;
+// root's git dir and common dir, resolved, or null outside a git checkout:
+// one probe for mainCheckout and linkedWorktree.
+let gitDirsCache;
 
-function mainCheckout() {
-  if (mainCheckoutCache !== undefined) {
-    return mainCheckoutCache;
-  }
+function gitDirs() {
+  if (gitDirsCache === undefined) {
+    try {
+      const [gitDir, commonDir] = execFileSync('git', ['rev-parse', '--git-dir', '--git-common-dir'], { cwd: root, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] })
+        .trim().split('\n').map((dir) => resolve(root, dir));
 
-  mainCheckoutCache = null;
-
-  try {
-    const [gitDir, commonDir] = execFileSync('git', ['rev-parse', '--git-dir', '--git-common-dir'], { cwd: root, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] })
-      .trim().split('\n').map((dir) => resolve(root, dir));
-
-    if (gitDir !== commonDir && basename(commonDir) === '.git') {
-      mainCheckoutCache = dirname(commonDir);
+      gitDirsCache = { gitDir, commonDir };
+    } catch {
+      gitDirsCache = null;
     }
-  } catch {
-    // not a git checkout: nothing to fall back to
   }
 
-  return mainCheckoutCache;
+  return gitDirsCache;
+}
+
+// The main checkout when root is a linked worktree whose common dir is a
+// main checkout's .git, else null.
+function mainCheckout() {
+  const dirs = gitDirs();
+
+  return dirs && dirs.gitDir !== dirs.commonDir && basename(dirs.commonDir) === '.git' ? dirname(dirs.commonDir) : null;
 }
 
 // Run from a linked worktree, a reference to per-checkout state the main
@@ -2062,14 +2065,9 @@ if (typeof settings.topologyFile === 'string' && settings.topologyFile !== '') {
 //                    on it, and this says so before a stop does.
 // The main checkout is never checked: a link there is the project's choice.
 function linkedWorktree() {
-  try {
-    const [gitDir, commonDir] = execFileSync('git', ['rev-parse', '--git-dir', '--git-common-dir'], { cwd: root, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] })
-      .trim().split('\n').map((dir) => resolve(root, dir));
+  const dirs = gitDirs();
 
-    return gitDir !== commonDir;
-  } catch {
-    return false;
-  }
+  return dirs !== null && dirs.gitDir !== dirs.commonDir;
 }
 
 function sha256Of(path) {
@@ -2192,16 +2190,9 @@ function checkWorktreeLinks() {
       .forEach((entry) => consider(dir === '.' ? entry.name : `${dir}/${entry.name}`));
   });
 
-  let tracked = new Set();
-
-  if (candidates.length > 0) {
-    try {
-      tracked = new Set(execFileSync('git', ['ls-files', '-z', '--', ...candidates.map(({ relPath }) => `:(literal)${relPath}`)], { cwd: root, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] })
-        .split('\0').filter(Boolean));
-    } catch {
-      // not listable: report every candidate
-    }
-  }
+  // The listing above holds tracked symlinks too; when it failed, every
+  // candidate is reported.
+  const tracked = new Set(trackedFiles);
 
   candidates.filter(({ relPath }) => !tracked.has(relPath)).forEach(({ relPath, target }) => {
     warn('link-unrecorded', 'worktree', relPath, `${relPath} links out of this worktree (to ${target}) and was not recorded by provision; checks here may describe the main checkout`, {

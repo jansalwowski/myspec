@@ -866,6 +866,23 @@ expect_no_line "link-unrecorded: shared" "worktree: a link git tracks is not rep
 expect_no_line "provision-stale" "worktree: a recorded lockfile that still matches is not reported"
 expect_exit 0 "worktree: the findings are warnings"
 
+# One git-dir probe serves the refs and worktree groups, and the tracked-link
+# test reuses the first ls-files listing (#256 review).
+GITLOG="$ROOT/git.log"
+mkdir -p "$ROOT/gitshim"
+# shellcheck disable=SC2016 # expanded by the shim when it runs
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s"\nexec %s "$@"\n' "$GITLOG" "$(command -v git)" > "$ROOT/gitshim/git"
+chmod +x "$ROOT/gitshim/git"
+cp "$WT/CLAUDE.md" "$ROOT/claude.md.bak"
+printf 'See `.claude/rules/gone-rule.md`.\n' >> "$WT/CLAUDE.md"
+: > "$GITLOG"
+OUTPUT=$(PATH="$ROOT/gitshim:$PATH" node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" refs worktree 2>&1); STATUS=$?
+expect_line 'dead-path-ref: CLAUDE.md: references .claude/rules/gone-rule.md' "probe: the dead ref that needs the main checkout is found"
+eq_count() { local n; n=$(grep -cxF -- "$1" "$GITLOG"); [ "$n" -eq "$2" ] && ok || fail "$3 (ran $n times)"; }
+eq_count "rev-parse --git-dir --git-common-dir" 1 "probe: git rev-parse --git-dir --git-common-dir runs once"
+[ "$(grep -c '^ls-files -z --' "$GITLOG")" -eq 0 ] && ok || fail "probe: no second ls-files for the link candidates"
+cp "$ROOT/claude.md.bak" "$WT/CLAUDE.md"
+
 printf 'v2\n' > "$WT/composer.lock"
 OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
 expect_line "WARN +provision-stale: vendor was provisioned from composer.lock, which has changed since \(in this worktree\)" "worktree: a recorded lockfile changed in the worktree is reported"
