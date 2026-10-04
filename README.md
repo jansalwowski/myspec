@@ -4,6 +4,8 @@ Specification-Driven Development framework for Claude Code and Codex. Provides s
 
 ## Installation
 
+Requirements: git 2.31 or later (the hooks and libs call `git rev-parse --path-format=absolute`) and jq 1.6 or later (the settings reader uses `jq --rawfile`).
+
 ### Codex
 
 This repository now includes a native Codex manifest at `.codex-plugin/plugin.json`.

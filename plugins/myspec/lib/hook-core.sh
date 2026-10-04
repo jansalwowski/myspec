@@ -8,7 +8,10 @@
 # Found the way the hooks find every other lib: next to the hook's own
 # directory (hooks/../lib in the plugin, .claude/hooks/../lib in a project),
 # else under CLAUDE_PLUGIN_ROOT. A hook that cannot find it fails open, as it
-# does without jq. bash 3.2 compatible (macOS /bin/bash).
+# does without jq. bash 3.2 compatible (macOS /bin/bash). Needs git 2.31 or
+# later: checkout_facts calls `git rev-parse --path-format=absolute`, and on
+# older git it fails, so every hook that asks it falls open (README
+# "Installation" states the floor).
 #
 # Every function reports through globals (CF_*, SETTING*) that only
 # the sourcing scripts read.
