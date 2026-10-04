@@ -4,7 +4,7 @@ Specification-Driven Development framework for Claude Code and Codex. Provides s
 
 ## Installation
 
-Requirements: git 2.31 or later (the hooks and libs call `git rev-parse --path-format=absolute`) and jq 1.6 or later (the settings reader uses `jq --rawfile`).
+Requirements: git 2.31 or later recommended (older git falls back: the hooks resolve what `git rev-parse --path-format=absolute` would print themselves, but `memory-claim-id.sh` and the memory and friction-scan scripts still need it) and jq 1.6 or later (the settings reader uses `jq --rawfile`).
 
 ### Codex
 

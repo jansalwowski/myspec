@@ -183,6 +183,24 @@ checkout_facts "$ROOT/plain/src"
 # shellcheck disable=SC2317 # the stub runs only if the cache misses
 eq "$(git() { return 1; }; checkout_facts "$ROOT/plain/src" && printf '%s' "${CF_ROOT#"$ROOT"/}")" "plain" "a repeated call is answered from the cache"
 
+# git < 2.31 does not know --path-format: rev-parse echoes the flag as its
+# first line, rc 0, and prints the git dirs relative to the directory asked.
+# Every hook then failed open. The wrapper strips the flag and echoes it.
+# shellcheck disable=SC2317 # called through checkout_facts
+old_git() {
+  local a out=() echo=""
+  for a in "$@"; do
+    case "$a" in --path-format=*) echo="$a" ;; *) out+=("$a") ;; esac
+  done
+  [ -z "$echo" ] || printf '%s\n' "$echo"
+  command git "${out[@]}"
+}
+CF_KEY=""
+eq "$(git() { old_git "$@"; }; facts "$ROOT/plain/src/deep")" "plain|0|0|plain" "git < 2.31: plain repo from a subdirectory"
+eq "$(git() { old_git "$@"; }; checkout_facts "$ROOT/plain/src/deep"; printf '%s' "$CF_GIT_DIR|$CF_COMMON_DIR")" "$ROOT/plain/.git|$ROOT/plain/.git" "git < 2.31: the git dirs are absolute"
+eq "$(git() { old_git "$@"; }; facts "$ROOT/plain/.claude/worktrees/wt")" "plain/.claude/worktrees/wt|1|0|plain" "git < 2.31: linked worktree, main checkout found"
+eq "$(git() { old_git "$@"; }; facts "$ROOT/plain/mods/sub")" "plain/mods/sub|0|1|plain/mods/sub" "git < 2.31: submodule"
+
 # --- TTL ----------------------------------------------------------------------------
 
 eq "$HOOK_DECISION_TTL" "28800" "TTL constant (the isolation and implement lookups: session-event.test.sh)"

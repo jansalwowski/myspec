@@ -8,10 +8,10 @@
 # Found the way the hooks find every other lib: next to the hook's own
 # directory (hooks/../lib in the plugin, .claude/hooks/../lib in a project),
 # else under CLAUDE_PLUGIN_ROOT. A hook that cannot find it fails open, as it
-# does without jq. bash 3.2 compatible (macOS /bin/bash). Needs git 2.31 or
-# later: checkout_facts calls `git rev-parse --path-format=absolute`, and on
-# older git it fails, so every hook that asks it falls open (README
-# "Installation" states the floor).
+# does without jq. bash 3.2 compatible (macOS /bin/bash). git 2.31 or later
+# is recommended: checkout_facts asks `git rev-parse --path-format=absolute`,
+# and older git, which echoes the flag back, costs it a second call that
+# resolves the relative git dirs itself (README "Installation").
 #
 # Every function reports through globals (CF_*, SETTING*) that only
 # the sourcing scripts read.
@@ -131,7 +131,7 @@ physical_dir() {
 CF_KEY="" CF_ROOT="" CF_GIT_DIR="" CF_COMMON_DIR="" CF_SUPER="" CF_MAIN=""
 CF_LINKED=0 CF_SUBMODULE=0
 checkout_facts() {
-  local dir out bare line
+  local dir out bare line i
   local -a f
   dir=$(existing_dir "$1") || dir=""
   [ "$dir" = "$CF_KEY" ] && [ -n "$CF_KEY" ] && [ -n "$CF_ROOT" ] && return 0
@@ -142,6 +142,20 @@ checkout_facts() {
     --git-common-dir --show-superproject-working-tree 2>/dev/null) || return 1
   f=()
   while IFS= read -r line; do f+=("$line"); done <<< "$out"
+  if [ "${f[0]:-}" = --path-format=absolute ]; then
+    # git < 2.31 echoes the flag it does not know and prints the git dirs
+    # relative to <dir>: ask again without it and resolve them here.
+    out=$(git -C "$dir" rev-parse --show-toplevel --git-dir --git-common-dir \
+      --show-superproject-working-tree 2>/dev/null) || return 1
+    f=()
+    while IFS= read -r line; do f+=("$line"); done <<< "$out"
+    for i in 0 1 2; do
+      case "${f[i]:-}" in
+        ''|/*) ;;
+        *) f[i]=$(cd "$dir" 2>/dev/null && cd "${f[i]}" 2>/dev/null && pwd -P) || return 1 ;;
+      esac
+    done
+  fi
   case "${f[0]:-}|${f[1]:-}|${f[2]:-}" in
     /*'|'/*'|'/*) ;;
     *) return 1 ;;
