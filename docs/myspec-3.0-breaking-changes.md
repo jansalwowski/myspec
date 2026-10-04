@@ -128,7 +128,9 @@ What `update` 3.0.0 meets in the wild, beyond what #259 assumes:
 
 ## 6. Suggested order
 
-1. Merge #252, #253, #254 (without the import shim), #255 → #256 → #257.
+Branching: every 3.0 PR targets the temporary integration branch `v3` (created from `main` after #252–#254 merged). `main` stays 2.x so patches remain releasable; after 2.12.0 is tagged, `main` is merged into `v3` once and `v2` is created at the tag as the safety net. Evals run report-only on `v3` (`scripts/evals/release-check.sh` without `--record`). The cut is a `v3 → main` merge-commit PR (not a squash: the `/release` breaking gate needs each PR's merge commit), then `/release` from `main`.
+
+1. #252, #253, #254 are merged on `main` (2.12.0). Into `v3`: #255 → #256 → #257 (the #254 import shim is removed by #266).
 2. Hook delivery (§2.1) as one PR on top of #257: `hooks.json` → `${CLAUDE_PLUGIN_ROOT}`, plugin.json declares it, manifest drops `hooks`/`lib` entries, `update` unwires and deletes copies. Rebase #259 and #260 onto it (#260 keeps `hooks.json`).
 3. Schema edit (§2.4) + `removed` entries (§2.5) + host floors (§2.6) + §2.8 fallbacks as one PR.
 4. Rescan gates (§2.2).
