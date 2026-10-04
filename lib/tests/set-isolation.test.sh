@@ -110,5 +110,19 @@ case "$SHOW" in
 esac
 expect 1 "a session id that is not a file name is refused" ../x develop
 
+# A bare repository's worktrees share one state file under the common dir
+# (session_dir): a decision written from one worktree is listed from another.
+git -c user.email=t@t -c user.name=t init -q -b main "$ROOT/bsrc"
+git -C "$ROOT/bsrc" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+git clone -q --bare "$ROOT/bsrc" "$ROOT/b.git"
+git -C "$ROOT/b.git" worktree add -q -b wa "$ROOT/b-wa" >/dev/null 2>&1
+git -C "$ROOT/b.git" worktree add -q -b wb "$ROOT/b-wb" >/dev/null 2>&1
+(cd "$ROOT/b-wa" && "$LIB" sess-bare worktree "bare layout") >/dev/null 2>&1
+SHOW=$(cd "$ROOT/b-wb" && "$LIB" --show 2>&1)
+case "$SHOW" in
+  *"sess-bar"*"mode=worktree"*) PASS=$((PASS + 1)) ;;
+  *) FAIL=$((FAIL + 1)); printf 'FAIL  --show in a bare repository lists a decision made in another worktree: %s\n' "$SHOW" >&2 ;;
+esac
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
