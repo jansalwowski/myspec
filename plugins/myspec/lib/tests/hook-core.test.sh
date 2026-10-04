@@ -252,6 +252,18 @@ eq "$(printf '%s' "$out" | jq -r '.decision')" block "decision_block prints the 
 eq "$(printf '%s' "$out" | jq -r '.reason')" $'Fix a.ts:\n\nline "1"' "decision_block formats the reason with printf"
 eq "$(printf '%s' "$out" | jq -j '.reason' | tail -c 1 | od -An -c | tr -d ' ')" '\n' "decision_block keeps a trailing newline"
 
+# --- path-normalize.sh sources hook-core.sh, and survives without it -----------
+# Project scripts source path-normalize.sh (rules/paths.md). A lazy source of
+# a missing hook-core.sh inside canonical_main_worktree aborted a set -e
+# caller; the path itself is the fallback.
+PN="$(dirname "$CORE")/path-normalize.sh"
+mkdir -p "$ROOT/pn-alone"
+cp "$PN" "$ROOT/pn-alone/path-normalize.sh"
+eq "$(bash -e -c '. "$1"; canonical_main_worktree "$2"; echo AFTER' _ "$ROOT/pn-alone/path-normalize.sh" "$ROOT/plain/.claude/worktrees/wt" 2>&1)" \
+  "$ROOT/plain/.claude/worktrees/wt"$'\n'"AFTER" "path-normalize without hook-core: the path itself, and the caller goes on"
+eq "$(bash -e -c '. "$1"; canonical_main_worktree "$2"' _ "$PN" "$ROOT/plain/.claude/worktrees/wt" 2>&1)" \
+  "$ROOT/plain" "path-normalize with hook-core: a linked worktree maps to its main checkout"
+
 # --- glob-regex comes along -------------------------------------------------------
 
 declare -F glob_regex >/dev/null && ok || fail "sourcing hook-core makes glob_regex available"
