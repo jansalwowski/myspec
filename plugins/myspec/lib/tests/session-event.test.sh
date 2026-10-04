@@ -195,5 +195,27 @@ printf 'code\t%s\tw.ts\n' "$REPO" > "$LEGACY2"
 session_append "$REPO" old2 "$(jq -nc --arg r "$REPO" '{t:"verified",root:$r}')"
 eq "$(session_events "$REPO" old2 | jq -r .t | tr '\n' ' ')" "write verified " "legacy: an append imports first, so old writes come first"
 
+# --- legacy implement and isolation markers --------------------------------------------------
+# A session upgraded mid feature-implement keeps its run: a fresh
+# implement-in-progress.json becomes an implement start, and the session's
+# own isolation marker an isolation event, each imported once.
+MK="$ROOT/markers"
+new_repo "$MK"
+printf '{}\n' > "$MK/.myspec.json"
+mkdir -p "$MK/.claude/state/isolation"
+printf '{"started_at":%d,"feature":"f"}\n' "$((NOW - 120))" > "$MK/.claude/state/implement-in-progress.json"
+printf '{"mode":"worktree","worktree_path":"/w/x","decided_at":%d}\n' "$((NOW - 60))" > "$MK/.claude/state/isolation/mk1.json"
+printf '{"mode":"develop","worktree_path":"","decided_at":%d}\n' "$((NOW - 60))" > "$MK/.claude/state/isolation/mk-other.json"
+session_implement_active "$MK" mk1 && ok || fail "markers: a fresh implement marker is imported as a start"
+session_isolation "$MK" mk1
+eq "$ISO_MODE|$ISO_PATH" "worktree|/w/x" "markers: the session's isolation marker is imported"
+[ ! -e "$MK/.claude/state/implement-in-progress.json" ] && [ -f "$MK/.claude/state/implement-in-progress.json.imported" ] && ok || fail "markers: the implement marker is renamed .imported"
+[ -f "$MK/.claude/state/isolation/mk1.json.imported" ] && [ -f "$MK/.claude/state/isolation/mk-other.json" ] && ok || fail "markers: only the session's own isolation marker is taken"
+printf '{"started_at":%d,"feature":"f"}\n' "$((NOW - 120))" > "$MK/.claude/state/implement-in-progress.json"
+session_events "$MK" mk1 >/dev/null
+eq "$(session_events "$MK" mk1 | jq -r 'select(.t == "implement") | .state' | tr '\n' ' ')" "start " "markers: a session imports the implement marker once"
+printf '{"started_at":%d,"feature":"f"}\n' "$((NOW - HOOK_DECISION_TTL - 10))" > "$MK/.claude/state/implement-in-progress.json"
+session_implement_active "$MK" mk2 && fail "markers: a stale implement marker is not imported" || ok
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

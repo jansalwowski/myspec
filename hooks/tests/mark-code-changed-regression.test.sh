@@ -21,6 +21,9 @@
 #   (review) in a bare repository with worktrees each worktree kept its own
 #            state file, so an edit in worktree B from a session whose cwd is
 #            worktree A was never verified (R3a).
+#   (review) a session upgraded mid feature-implement had the 2.x marker
+#            (.claude/state/implement-in-progress.json) and no implement
+#            event, so its failures blocked where they had warned.
 #
 # Usage: mark-code-changed-regression.test.sh [path-to-hook]
 
@@ -164,6 +167,20 @@ jq -n --arg s "$sid" --arg d "$ROOT/b-wa" --arg f "$ROOT/b-wb/b.ts" '{session_id
 [ -f "$ROOT/b.git/myspec-state/sessions/$sid.jsonl" ] && ok || fail "a bare repository's worktree write is filed under its common dir"
 got=$(jq -n --arg s "$sid" --arg d "$ROOT/b-wa" '{session_id: $s, cwd: $d}' | bash "$STOP" 2>/dev/null | jq -r '.decision // "none"' 2>/dev/null)
 [ "$got" = block ] && ok || fail "the Stop gate from worktree A verifies worktree B's edit (got: $got)"
+
+# --- (review) the legacy implement marker carries a run across the upgrade ---
+printf '{"started_at":%d,"feature":"f"}\n' "$(date +%s)" > "$PROJ/.claude/state/implement-in-progress.json"
+sid="$SID-upgrade"
+for n in 1 2; do
+  printf 'export const u = %d;\n' "$n" > "$PROJ/u.ts"
+  jq -n --arg s "$sid" --arg d "$PROJ" --arg f "$PROJ/u.ts" '{session_id: $s, tool_name: "Write", cwd: $d, tool_input: {file_path: $f}}' \
+    | bash "$HOOK" >/dev/null 2>&1
+  out=$(jq -n --arg s "$sid" --arg d "$PROJ" '{session_id: $s, cwd: $d}' | bash "$STOP" 2>/dev/null)
+  got=$(printf '%s' "$out" | jq -r '.decision // "none"' 2>/dev/null)
+  [ "$got" != block ] && printf '%s' "$out" | grep -q 'feature-implement' && ok || fail "stop $n during an upgraded feature-implement run warns (got: $got)"
+done
+n=$(jq -r 'select(.t == "implement") | .state' "$PROJ/.claude/state/sessions/$sid.jsonl" 2>/dev/null | wc -l | tr -d ' ')
+[ "$n" = 1 ] && [ -f "$PROJ/.claude/state/implement-in-progress.json.imported" ] && ok || fail "the marker is imported once (implement events: $n)"
 
 # --- control: a non-code file still does not count ----------------------------
 write "$SID-txt" "$REPO/src/notes.txt"

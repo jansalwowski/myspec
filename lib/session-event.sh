@@ -140,12 +140,47 @@ _session_import() {
   mv -f "$legacy" "$legacy.imported" 2>/dev/null || true
 }
 
+# _session_import_markers <file> <session id> <home>: the 2.x markers the
+# state file replaced, for the same one minor release as the ledger import.
+# A fresh <home>/.claude/state/implement-in-progress.json ({started_at}, at
+# most HOOK_DECISION_TTL old) becomes an implement start dated started_at,
+# and the session's own .claude/state/isolation/<id>.json ({mode,
+# worktree_path, decided_at}) an isolation event dated decided_at, so a
+# session upgraded mid feature-implement keeps its run and its decision.
+# Each marker is renamed .imported, fresh or not, so it is read once; a
+# session that already has an implement event takes no implement marker.
+_session_import_markers() {
+  local dir="$3/.claude/state" marker at ev now
+  marker="$dir/implement-in-progress.json"
+  if [ -f "$marker" ] && ! grep -q '"t":"implement"' "$1" 2>/dev/null; then
+    now=$(date +%s)
+    at=$(jq -r '.started_at // empty | numbers | floor' "$marker" 2>/dev/null || printf '')
+    if mv -f "$marker" "$marker.imported" 2>/dev/null && [ -n "$at" ] \
+        && [ $((now - at)) -ge 0 ] && [ $((now - at)) -le "$HOOK_DECISION_TTL" ] \
+        && mkdir -p "$(dirname "$1")" 2>/dev/null; then
+      printf '{"t":"implement","state":"start","at":%s}\n' "$at" >> "$1"
+    fi
+  fi
+  marker="$dir/isolation/$2.json"
+  if [ -f "$marker" ]; then
+    ev=$(jq -c 'select(type == "object" and (.decided_at | type) == "number")
+      | {t: "isolation", mode: (.mode // "" | tostring), path: (.worktree_path // "" | tostring),
+         note: "imported from the 2.x marker", at: (.decided_at | floor)}' "$marker" 2>/dev/null || printf '')
+    if mv -f "$marker" "$marker.imported" 2>/dev/null && [ -n "$ev" ] \
+        && mkdir -p "$(dirname "$1")" 2>/dev/null; then
+      printf '%s\n' "$ev" >> "$1"
+    fi
+  fi
+  return 0
+}
+
 # session_path <home> <session id> -> the file's path, after the one-time
-# legacy import. Every reader and writer goes through it.
+# legacy imports. Every reader and writer goes through it.
 session_path() {
   local f
   f=$(session_file "$1" "$2") || return 1
   _session_import "$f" "$2"
+  _session_import_markers "$f" "$2" "$1"
   printf '%s\n' "$f"
 }
 
