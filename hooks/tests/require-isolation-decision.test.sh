@@ -243,6 +243,14 @@ mark link-sess develop 60
 check_as allow "symlinked path, develop mode"                  "$LINKED" link-sess "$LINKED/components/Foo.vue"
 check_as allow "symlinked path outside the repo"               "$LINKED" link-sess "$ROOT/elsewhere/a.ts"
 
+# An ancestor directory that cannot be entered (mode 0644): physical_path
+# fails, and under set -e the hook exited 1, which lets the edit through.
+mkdir -p "$REPO/locked/sub"
+chmod 0644 "$REPO/locked"
+rm -f "$STATE/"*.jsonl
+check_as block "unenterable ancestor, no decision, source asks" "$REPO" lock-sess "$REPO/locked/sub/x.ts"
+chmod 0755 "$REPO/locked"
+
 # The real writer: set-isolation.sh records, --reset re-asks.
 SET_ISO="$(cd "$(dirname "$HOOK")" && pwd)/../lib/set-isolation.sh"
 rm -f "$STATE/"*.jsonl
