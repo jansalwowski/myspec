@@ -93,7 +93,7 @@
         "^(cargo|go)[[:space:]]+build([[:space:]]|$)",
         "^(\\./)?mvnw?([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+(clean|compile|package|install|verify|deploy)([[:space:]]|$)",
         "^(\\./)?gradlew?([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+([^[:space:]]*:)?(build|assemble|clean)([[:space:]]|$)",
-        "^make([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*([[:space:]]+(all|build|install))?[[:space:]]*$",
+        "^make([[:space:]]+(-[A-Za-z]*[CfIoWE][[:space:]]+[^[:space:]]+|-[A-Za-z]*[jl][[:space:]]+[0-9.]+|--(directory|file|makefile|include-dir|old-file|assume-old|what-if|new-file|assume-new|eval)[[:space:]]+[^[:space:]]+|--(jobs|load-average|max-load)[[:space:]]+[0-9.]+|-[^[:space:]]+))*([[:space:]]+(all|build|install))?[[:space:]]*$",
         "^dotnet[[:space:]]+(build|publish|restore|pack|clean)([[:space:]]|$)",
         "^git[[:space:]]+push([[:space:]]|$)",
         "^git[[:space:]]+worktree[[:space:]]+prune([[:space:]]|$)"

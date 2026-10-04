@@ -269,6 +269,16 @@ check_in "$REPO" block "make -C inside main"   wt-sess 'make -C .claude build'
 check_in "$REPO" block "mvn -f main pom"       wt-sess 'mvn -f pom.xml package'
 check_in "$REPO" block "gradlew -p main"       wt-sess './gradlew -p . build'
 check_in "$REPO" block "make -j value not -n"  wt-sess 'make -j4 build'
+# Only the options that take a value consume the next word; a target after
+# any other flag is a target, not a value (`make -s test` is a test run).
+check_in "$REPO" allow "make -s test"          wt-sess 'make -s test'
+check_in "$REPO" allow "make -j4 lint"         wt-sess 'make -j4 lint'
+check_in "$REPO" allow "make -k check"         wt-sess 'make -k check'
+check_in "$REPO" allow "make -f file test"     wt-sess 'make -f Makefile.ci test'
+check_in "$REPO" allow "make -j 4 lint"        wt-sess 'make -j 4 lint'
+check_in "$REPO" block "make -s, default goal" wt-sess 'make -s'
+check_in "$REPO" block "make -f file, default" wt-sess 'make -f Makefile.ci'
+check_in "$REPO" block "make --file f all"     wt-sess 'make --file Makefile.ci all'
 MYSPEC_JSON=$(cat "$REPO/.myspec.json")
 jq '.isolation.ignoreBlockInMain = ["^git[[:space:]]+push([[:space:]]|$)"]' <<< "$MYSPEC_JSON" > "$REPO/.myspec.json"
 check_in "$REPO" allow "ignoreBlockInMain drops a default entry" wt-sess 'git push origin HEAD'
