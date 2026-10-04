@@ -180,7 +180,7 @@ for n in 1 2; do
   [ "$got" != block ] && printf '%s' "$out" | grep -q 'feature-implement' && ok || fail "stop $n during an upgraded feature-implement run warns (got: $got)"
 done
 n=$(jq -r 'select(.t == "implement") | .state' "$PROJ/.claude/state/sessions/$sid.jsonl" 2>/dev/null | wc -l | tr -d ' ')
-[ "$n" = 1 ] && [ -f "$PROJ/.claude/state/implement-in-progress.json.imported" ] && ok || fail "the marker is imported once (implement events: $n)"
+[ "$n" = 1 ] && [ -f "$PROJ/.claude/state/implement-in-progress.json" ] && ok || fail "the marker is imported once per session and left for others (implement events: $n)"
 
 # --- control: a non-code file still does not count ----------------------------
 write "$SID-txt" "$REPO/src/notes.txt"

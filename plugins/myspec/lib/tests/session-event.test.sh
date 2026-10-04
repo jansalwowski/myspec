@@ -209,11 +209,15 @@ printf '{"mode":"develop","worktree_path":"","decided_at":%d}\n' "$((NOW - 60))"
 session_implement_active "$MK" mk1 && ok || fail "markers: a fresh implement marker is imported as a start"
 session_isolation "$MK" mk1
 eq "$ISO_MODE|$ISO_PATH" "worktree|/w/x" "markers: the session's isolation marker is imported"
-[ ! -e "$MK/.claude/state/implement-in-progress.json" ] && [ -f "$MK/.claude/state/implement-in-progress.json.imported" ] && ok || fail "markers: the implement marker is renamed .imported"
+[ -f "$MK/.claude/state/implement-in-progress.json" ] && ok || fail "markers: the implement marker, the checkout's, stays for other sessions"
 [ -f "$MK/.claude/state/isolation/mk1.json.imported" ] && [ -f "$MK/.claude/state/isolation/mk-other.json" ] && ok || fail "markers: only the session's own isolation marker is taken"
-printf '{"started_at":%d,"feature":"f"}\n' "$((NOW - 120))" > "$MK/.claude/state/implement-in-progress.json"
 session_events "$MK" mk1 >/dev/null
 eq "$(session_events "$MK" mk1 | jq -r 'select(.t == "implement") | .state' | tr '\n' ' ')" "start " "markers: a session imports the implement marker once"
+eq "$(session_events "$MK" mk1 | jq -r 'select(.t == "notice") | .what')" "imported-implement" "markers: the import is recorded once as a notice"
+# A second session in the same checkout (the one actually running
+# feature-implement, or a parallel one) gets the run too: the first reader
+# does not consume the marker.
+session_implement_active "$MK" mk-second && ok || fail "markers: a second session also imports the implement marker"
 printf '{"started_at":%d,"feature":"f"}\n' "$((NOW - HOOK_DECISION_TTL - 10))" > "$MK/.claude/state/implement-in-progress.json"
 session_implement_active "$MK" mk2 && fail "markers: a stale implement marker is not imported" || ok
 

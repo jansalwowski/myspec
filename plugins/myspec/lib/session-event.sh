@@ -18,6 +18,9 @@
 #       mark-code-changed.sh, when a Bash command runs `session-event.sh
 #       implement start|stop` (the model never sees its session id; the
 #       hook's payload carries it)
+#   {"t":"notice","what":<key>}
+#       a one-time step was taken: "imported-implement" (this session read
+#       the 2.x implement marker)
 #
 # Subagents share their parent's session_id (#225), so a subagent's events
 # land in, and its reads come from, the parent's file. There is no
@@ -159,18 +162,25 @@ _session_import() {
 # and the session's own .claude/state/isolation/<id>.json ({mode,
 # worktree_path, decided_at}) an isolation event dated decided_at, so a
 # session upgraded mid feature-implement keeps its run and its decision.
-# Each marker is renamed .imported, fresh or not, so it is read once; a
-# session that already has an implement event takes no implement marker.
+# The implement marker belongs to the checkout, not to a session (2.x never
+# recorded which session ran it), so it is left in place, to expire by its
+# own TTL (session-clean may sweep it): each session imports it once and
+# records a `notice` "imported-implement" in its own file, so the session
+# actually running feature-implement gets the run whichever session read it
+# first. A session that already has an implement event takes no start. The
+# isolation marker is the session's own and is renamed .imported, fresh or
+# not, so it is read once.
 _session_import_markers() {
   local dir="$3/.claude/state" marker at ev now
   marker="$dir/implement-in-progress.json"
-  if [ -f "$marker" ] && ! grep -q '"t":"implement"' "$1" 2>/dev/null; then
+  if [ -f "$marker" ] && ! grep -q '"what":"imported-implement"' "$1" 2>/dev/null; then
     now=$(date +%s)
     at=$(jq -r '.started_at // empty | numbers | floor' "$marker" 2>/dev/null || printf '')
-    if mv -f "$marker" "$marker.imported" 2>/dev/null && [ -n "$at" ] \
-        && [ $((now - at)) -ge 0 ] && [ $((now - at)) -le "$HOOK_DECISION_TTL" ]; then
+    if [ -n "$at" ] && [ $((now - at)) -ge 0 ] && [ $((now - at)) -le "$HOOK_DECISION_TTL" ] \
+        && ! grep -q '"t":"implement"' "$1" 2>/dev/null; then
       _session_write "$1" "{\"t\":\"implement\",\"state\":\"start\",\"at\":$at}" || true
     fi
+    _session_write "$1" "{\"t\":\"notice\",\"what\":\"imported-implement\",\"at\":$now}" || true
   fi
   marker="$dir/isolation/$2.json"
   if [ -f "$marker" ]; then
