@@ -25,12 +25,13 @@ ok()   { PASS=$((PASS + 1)); }
 fail() { FAIL=$((FAIL + 1)); printf 'FAIL  %s\n' "$1" >&2; }
 
 # relative(command): the hooks/ script tokens of a command that are named by
-# neither an absolute path nor a variable.
+# neither an absolute path nor one of the two variables the harness sets to a
+# fixed root. "$PWD" or $(pwd) is still the cwd, so it does not count.
 SCAN='
 const relative = (command) => command.trim().split(/\s+/)
   .map((token) => token.replace(/["\x27]/g, ""))
   .filter((token) => /(^|\/)hooks\/[^\s\/]+$/.test(token))
-  .filter((token) => !token.startsWith("$") && !token.startsWith("/"));
+  .filter((token) => !/^\$\{?CLAUDE_(PROJECT_DIR|PLUGIN_ROOT)\}?\//.test(token) && !token.startsWith("/"));
 '
 
 # Every command value in the JSON files, as "<file>\t<command>".
@@ -97,6 +98,8 @@ const cases = [
   ["./.claude/hooks/verify-before-stop.sh", 1],
   ["./hooks/verify-before-stop.sh", 1],
   ["bash .claude/hooks/x.sh --flag", 1],
+  ["\"$PWD\"/.claude/hooks/x.sh", 1],
+  ["$(pwd)/.claude/hooks/x.sh", 1],
   ["\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/verify-before-stop.sh", 0],
   ["\"${CLAUDE_PLUGIN_ROOT}\"/hooks/verify-before-stop.sh", 0],
   ["bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/x.sh\"", 0],
