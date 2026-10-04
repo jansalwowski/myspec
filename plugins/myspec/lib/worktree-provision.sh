@@ -68,6 +68,7 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # mark-code-changed's ignorePaths, so one glob means one thing.
 # shellcheck source=lib/hook-core.sh
 . "$HERE/hook-core.sh"
+declare -F glob_regex >/dev/null || { echo "worktree-provision: lib/glob-regex.sh missing" >&2; exit 1; }
 WORKTREE=""
 BASE=""
 MAIN=""

@@ -422,6 +422,18 @@ out=$(bash "$SCRIPT" "$W" --base main 2>&1)
 [ -L "$W/node_modules" ] && [ -e "$M/node_modules/pkg/linked.tsbuildinfo" ] && ok || fail "clean: never deletes through a link"
 [ -z "$(git -C "$W" status --porcelain)" ] && ok || fail "clean: the worktree stays clean"
 
+# Without lib/glob-regex.sh the script refuses to start, before any link,
+# rather than die at the first `clean` glob with the worktree half provisioned.
+NOGLOB="$ROOT/noglob-lib"
+mkdir -p "$NOGLOB"
+cp "$SCRIPT" "$(dirname "$SCRIPT")/myspec-config.sh" "$(dirname "$SCRIPT")/myspec-config.schema.json" \
+  "$(dirname "$SCRIPT")/hook-core.sh" "$(dirname "$SCRIPT")/dependency-map.sh" "$NOGLOB/"
+W=$(wt_for "$M" noglob-wt)
+rc=0
+out=$(bash "$NOGLOB/worktree-provision.sh" "$W" --base main 2>&1) || rc=$?
+[ "$rc" = 1 ] && printf '%s' "$out" | grep -qF "glob-regex.sh missing" && [ ! -e "$W/node_modules" ] && ok \
+  || fail "a missing glob-regex.sh stops provisioning before any link (rc=$rc, got: $out)"
+
 # Globs compile through lib/glob-regex.sh (its own fixture covers the rules).
 # The scripts that read a glob setting source it and keep no copy, so one
 # glob means one thing in clean, ignorePaths and checks[].paths.
