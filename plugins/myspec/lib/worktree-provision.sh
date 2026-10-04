@@ -218,6 +218,10 @@ while IFS= read -r line; do
     continue
   fi
   if tree_loads_checkout "$MAIN/$entry" "$MAIN_REAL"; then
+    if [ -n "$TLC_UNLISTED" ]; then
+      echo "worktree-provision: cannot list ${TLC_UNLISTED#"$MAIN"/} in the main checkout — not linking $entry; a tree that cannot be scanned for links into the main checkout is never linked (check its permissions), or run a real install in the worktree"
+      continue
+    fi
     echo "worktree-provision: $entry loads the main checkout's own source — not linking $entry; set isolation.provision.install or run a real install in the worktree"
     continue
   fi

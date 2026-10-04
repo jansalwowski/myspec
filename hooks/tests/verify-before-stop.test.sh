@@ -245,6 +245,14 @@ expect block "$(stop 100 "$WT_W")" "a linked tree whose workspace link resolves 
 rm "$MAIN_W/apps/web/node_modules/@acme/ui"
 ln -s ../.store/ui "$MAIN_W/apps/web/node_modules/@acme/ui"
 expect approve "$(stop 101 "$WT_W")" "a linked tree whose links stay inside it is accepted"
+# The same tree with its root unlistable (0311: enterable, not readable): the
+# scan sees no link, so it counts as loading and blocks (#251 review).
+if [ "$(id -u)" -ne 0 ]; then
+  chmod 0311 "$MAIN_W/apps/web/node_modules"
+  d=$(stop 104 "$WT_W")
+  chmod 755 "$MAIN_W/apps/web/node_modules"
+  expect block "$d" "a linked tree whose root cannot be listed blocks"
+fi
 
 # --- vendor-bin/*/vendor is guarded with no config (#222) --------------------
 MAIN_B2=$(new_dep_repo binplugin vendor-bin/tool/vendor vendor-bin/tool/composer.lock '')
