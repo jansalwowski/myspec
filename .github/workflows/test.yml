@@ -47,8 +47,8 @@ jobs:
         with:
           node-version: '20'
 
-      # Pinned versions live in the script; it covers lib/ and plugins/myspec/lib/.
-      - name: eslint:recommended on lib/ and its mirror
+      # Pinned versions live in the script; it covers lib/.
+      - name: eslint:recommended on lib/
         run: scripts/lint-js.sh
 
   shellcheck:
@@ -71,7 +71,7 @@ jobs:
           tar -xJf "$RUNNER_TEMP/$tarball" -C "$RUNNER_TEMP"
           echo "SHELLCHECK=$RUNNER_TEMP/shellcheck-$SHELLCHECK_VERSION/shellcheck" >> "$GITHUB_ENV"
 
-      # Covers hooks/ and lib/ (tests included) and their plugins/myspec/ mirrors.
+      # Covers hooks/ and lib/, tests included.
       - name: ShellCheck hooks/ and lib/
         run: scripts/lint-sh.sh
 
@@ -97,7 +97,6 @@ jobs:
       - name: Lint every SKILL.md
         run: |
           node scripts/lint-skills.mjs
-          node scripts/lint-skills.mjs --files plugins/myspec/skills/*/SKILL.md
 
       - name: Hook scripts parse (bash -n)
         run: |
