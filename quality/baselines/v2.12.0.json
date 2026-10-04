@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "version": "2.12.0",
+  "tag": "v2.12.0",
+  "commit": "ba52a580272503ad2e310f56023669452063e4d4",
+  "date": "2026-10-04",
+  "source": "release",
+  "claude_code": "2.1.289",
+  "runs": 3,
+  "judge_model": "sonnet",
+  "evals": {"fixtures":"c3c4768ea977251e","cases":{"code-review-planted-bug":"1f9a40bb8a544f92","feature-implement-dispatch":"a6ae8934aef917ff","feature-plan-coverage":"18d8e605175329aa","feature-plan-gate":"41d0bb9ac9b9ad24","feature-spec-contract":"b00771f7e2d4f5ab","nearmiss-personal-preference":"aece4abbf3290656","nearmiss-skill-verify":"12e37e4feaeb08a7","route-spec-review":"ed906262fc9372e8","spec-review-planted-flaws":"dab04baf0f7584c0","tech-spec-review-planted-flaws":"d09595f4399f2bc6","trigger-doctor":"e6cd2365022917cf","trigger-feature-status-audit":"c562f987e689071a","trigger-feature-verify":"24f2a952d46ee716","trigger-implement-review":"cb615a7b1dce5515","trigger-memorify":"0ecb4e8a921b91ba","trigger-memorize":"a3e46627f5e12988","trigger-memory-lookup":"542de48cad83f1aa","trigger-new-feature":"66349a254d4017a1","trigger-session-complete":"aec9a6bb6a7c5cda"}},
+  "models": {
+    "haiku": {
+      "model_id": "claude-haiku-4-5-20251001",
+      "cost_usd": 3.8588,
+      "duration_s": 661,
+      "cases": {
+        "code-review-planted-bug": {"scores":[0.5,0.25,0.5],"passed":[false,false,false],"cost_usd":0.3172,"duration_s":162},
+        "feature-implement-dispatch": {"scores":[0.25,0.5,0.5],"passed":[false,false,false],"cost_usd":0.3886,"duration_s":204},
+        "feature-plan-coverage": {"scores":[1,0.4444,1],"passed":[true,false,true],"cost_usd":0.3733,"duration_s":238},
+        "feature-plan-gate": {"scores":[0.75,0.5,0.5],"passed":[false,false,false],"cost_usd":0.3842,"duration_s":267},
+        "feature-spec-contract": {"scores":[0.4,1,0.5],"passed":[false,true,false],"cost_usd":0.2207,"duration_s":198},
+        "nearmiss-personal-preference": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.0994,"duration_s":68},
+        "nearmiss-skill-verify": {"scores":[0.6667,0.6667,0.6667],"passed":[false,false,false],"cost_usd":0.1099,"duration_s":91},
+        "route-spec-review": {"scores":[0.6667,0.6667,0.6667],"passed":[false,false,false],"cost_usd":0.1289,"duration_s":123},
+        "spec-review-planted-flaws": {"scores":[0.8,0.8,0.8],"passed":[false,false,false],"cost_usd":0.1827,"duration_s":112},
+        "tech-spec-review-planted-flaws": {"scores":[0.5714,1,0.5714],"passed":[false,true,false],"cost_usd":0.254,"duration_s":196},
+        "trigger-doctor": {"scores":[1,1,0.75],"passed":[true,true,false],"cost_usd":0.1534,"duration_s":102},
+        "trigger-feature-status-audit": {"scores":[1,0.6667,1],"passed":[true,false,true],"cost_usd":0.1292,"duration_s":78},
+        "trigger-feature-verify": {"scores":[0.3333,0.6667,0.3333],"passed":[false,false,false],"cost_usd":0.1749,"duration_s":105},
+        "trigger-implement-review": {"scores":[0.6667,0.3333,0.3333],"passed":[false,false,false],"cost_usd":0.1888,"duration_s":107},
+        "trigger-memorify": {"scores":[0.6667,0.6667,0.6667],"passed":[false,false,false],"cost_usd":0.1097,"duration_s":82},
+        "trigger-memorize": {"scores":[0.6667,0.6667,0.6667],"passed":[false,false,false],"cost_usd":0.1159,"duration_s":75},
+        "trigger-memory-lookup": {"scores":[1,1,0.6667],"passed":[true,true,false],"cost_usd":0.1461,"duration_s":103},
+        "trigger-new-feature": {"scores":[0.6667,0.6667,1],"passed":[false,false,true],"cost_usd":0.2009,"duration_s":139},
+        "trigger-session-complete": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.181,"duration_s":110}
+      }
+    },
+    "sonnet": {
+      "model_id": "claude-sonnet-5-5",
+      "cost_usd": 9.2434,
+      "duration_s": 842,
+      "cases": {
+        "code-review-planted-bug": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.4108,"duration_s":145},
+        "feature-implement-dispatch": {"scores":[0.5,1,1],"passed":[false,true,true],"cost_usd":0.8324,"duration_s":261},
+        "feature-plan-coverage": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.8863,"duration_s":349},
+        "feature-plan-gate": {"scores":[0.75,0.75,0.75],"passed":[false,false,false],"cost_usd":0.8569,"duration_s":413},
+        "feature-spec-contract": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.4344,"duration_s":267},
+        "nearmiss-personal-preference": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.2486,"duration_s":237},
+        "nearmiss-skill-verify": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.4517,"duration_s":214},
+        "route-spec-review": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.4148,"duration_s":233},
+        "spec-review-planted-flaws": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.4921,"duration_s":164},
+        "tech-spec-review-planted-flaws": {"scores":[0.8571,1,1],"passed":[false,true,true],"cost_usd":0.5603,"duration_s":159},
+        "trigger-doctor": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.5913,"duration_s":128},
+        "trigger-feature-status-audit": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.4012,"duration_s":100},
+        "trigger-feature-verify": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.4963,"duration_s":135},
+        "trigger-implement-review": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.3529,"duration_s":85},
+        "trigger-memorify": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.2705,"duration_s":53},
+        "trigger-memorize": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.3904,"duration_s":86},
+        "trigger-memory-lookup": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.312,"duration_s":68},
+        "trigger-new-feature": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.4241,"duration_s":124},
+        "trigger-session-complete": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.4164,"duration_s":95}
+      }
+    }
+  }
+}
