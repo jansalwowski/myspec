@@ -396,17 +396,24 @@ heavy_patterns() {
     return 0
   fi
   [ -z "$SETTING_NOTES" ] || printf 'guard-worktree-context: %s\n' "$SETTING_NOTES" >&2
-  # One line per entry: 1 or 0 (a schema default or not), a tab, the pattern.
+  # One line per entry: 1 or 0 (a schema default or not), a tab, the
+  # pattern; then x, a tab, and each ignoreBlockInMain entry that names no
+  # blockInMain entry (it drops nothing: a typo, or a changed default).
   while IFS= read -r p; do
     [ -n "${p#?$'\t'}" ] || continue
-    HEAVY+=("${p#?$'\t'}")
-    HEAVY_DEFAULT+=("${p%%$'\t'*}")
+    case "$p" in
+      x*) printf 'guard-worktree-context: isolation.ignoreBlockInMain entry matches no isolation.blockInMain entry, so it drops nothing: %s\n' "${p#?$'\t'}" >&2 ;;
+      *)
+        HEAVY+=("${p#?$'\t'}")
+        HEAVY_DEFAULT+=("${p%%$'\t'*}") ;;
+    esac
   done < <(jq -r --slurpfile schema "$schema" '
     ($schema[0].keys["isolation.blockInMain"].default // []) as $def
     | (.ignoreBlockInMain // [] | if type == "array" then . else [] end) as $skip
-    | .blockInMain // [] | if type == "array" then .[] else empty end
-    | select(type == "string") | select(. as $p | $skip | index([$p]) | not)
-    | (if . as $p | $def | index([$p]) then "1" else "0" end) + "\t" + .' <<< "$SETTING" 2>/dev/null)
+    | (.blockInMain // [] | if type == "array" then . else [] end) as $all
+    | ($all[] | select(type == "string") | select(. as $p | $skip | index([$p]) | not)
+       | (if . as $p | $def | index([$p]) then "1" else "0" end) + "\t" + .),
+      ($skip[] | strings | select(. as $p | $all | index([$p]) | not) | "x\t" + .)' <<< "$SETTING" 2>/dev/null)
 }
 
 # heavy_match <segment> -> 0 when an entry of HEAVY matches the segment, the

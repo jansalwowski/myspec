@@ -290,6 +290,18 @@ check_in "$REPO" allow "ignoreBlockInMain drops a default entry" wt-sess 'git pu
 check_in "$REPO" block "ignoreBlockInMain keeps the others"      wt-sess 'yarn build'
 check_in "$REPO" block "ignoreBlockInMain keeps project entries" wt-sess 'make deploy'
 printf '%s\n' "$MYSPEC_JSON" > "$REPO/.myspec.json"
+# An ignore entry that names no blockInMain entry drops nothing: say so on
+# stderr, once per entry, and still block.
+jq '.isolation.ignoreBlockInMain = ["^git[[:space:]]+push", "^git[[:space:]]+worktree[[:space:]]+prune([[:space:]]|$)"]' <<< "$MYSPEC_JSON" > "$REPO/.myspec.json"
+check_in "$REPO" block "a near-miss ignore entry drops nothing" wt-sess 'git push origin HEAD'
+err=$(run_hook "$REPO" wt-sess 'git push origin HEAD' 2>&1 >/dev/null)
+if [ "$(grep -c 'ignoreBlockInMain entry matches no isolation.blockInMain entry' <<< "$err")" = 1 ] \
+    && grep -qF 'drops nothing: ^git[[:space:]]+push' <<< "$err"; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); echo "FAIL  an unmatched ignoreBlockInMain entry is named on stderr, the matched one is not (got: $err)" >&2
+fi
+printf '%s\n' "$MYSPEC_JSON" > "$REPO/.myspec.json"
 
 # Issue #164: build targets and container execs run against the main tree too.
 check_in "$REPO" block "yarn build:<target>"          wt-sess 'yarn build:web'
