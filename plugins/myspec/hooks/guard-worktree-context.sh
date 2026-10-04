@@ -356,7 +356,10 @@ Full procedure: $(procedure_doc "$root")"
 
 # heavy_patterns <main root> -> sets HEAVY to that checkout's
 # isolation.blockInMain minus isolation.ignoreBlockInMain, read once per root.
-# Without the reader there is no list, and gate B blocks nothing.
+# The reader's notes go to stderr. When the reader fails (a partial install)
+# there is no list: the first such command of the session is denied with the
+# reader's error, recorded as a `notice` event, and later ones pass, as the
+# Stop gate blocks once on a missing lib rather than guess.
 HEAVY_ROOT=""
 HEAVY=()
 heavy_patterns() {
@@ -364,7 +367,17 @@ heavy_patterns() {
   [ "$1" != "$HEAVY_ROOT" ] || return 0
   HEAVY_ROOT="$1"
   HEAVY=()
-  read_setting isolation "$1" || return 0
+  if ! read_setting isolation "$1"; then
+    [ -z "$SETTING_NOTES" ] || printf 'guard-worktree-context: %s\n' "$SETTING_NOTES" >&2
+    # shellcheck disable=SC2016 # a jq program: $ev is a jq variable
+    if [ -n "$SESSION_ID" ] && [ "$(session_query "$1" "$SESSION_ID" \
+        '[$ev[] | select(.t == "notice" and .what == "guard-settings")] | length')" = 0 ] \
+        && session_append "$1" "$SESSION_ID" '{"t":"notice","what":"guard-settings"}'; then
+      pretool_deny "myspec lib missing, run /myspec:update. The settings reader (lib/myspec-config.sh) could not read isolation.blockInMain, so this session's worktree guard cannot tell which commands to keep out of the main checkout: ${SETTING_NOTES:-no reason given}. This command is denied once; later ones are not checked until the install is repaired."
+    fi
+    return 0
+  fi
+  [ -z "$SETTING_NOTES" ] || printf 'guard-worktree-context: %s\n' "$SETTING_NOTES" >&2
   while IFS= read -r p; do
     [ -n "$p" ] && HEAVY+=("$p")
   done < <(jq -r '(.ignoreBlockInMain // [] | if type == "array" then . else [] end) as $skip

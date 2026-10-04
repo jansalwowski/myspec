@@ -385,6 +385,37 @@ printf '{"aiDir":"docs/ai/","frameworkVersion":"2.0.0"}\n' > "$REPO/.myspec.json
 cites 'docs/ai/work-isolation.md' "gate A block under a custom aiDir" none-sess 'git checkout develop'
 mv "$REPO/.myspec.json.bak" "$REPO/.myspec.json"
 
+# --- a settings reader that fails is not silent ---------------------------------
+# A partial install (the schema missing) used to leave gate B with no list and
+# no word. The guard denies the first main-checkout command of a worktree-mode
+# session once, naming the reader's error, then fails open.
+BROKEN=$(dirname "$REPO")/broken-install
+mkdir -p "$BROKEN/hooks"
+cp "$HOOK" "$BROKEN/hooks/"
+cp -R "$(dirname "$HOOK")/../lib" "$BROKEN/lib"
+rm -f "$BROKEN/lib/myspec-config.schema.json"
+mark broken-sess worktree 60 "$WT"
+out=$(printf '{"tool_input":{"command":"npm run build"},"cwd":%s,"session_id":"broken-sess"}' "$(printf '%s' "$REPO" | jq -Rs .)" \
+  | "$BROKEN/hooks/guard-worktree-context.sh" 2>"$BROKEN/err")
+if printf '%s' "$out" | grep -q '"block"' && printf '%s' "$out" | grep -q 'run /myspec:update' \
+    && printf '%s' "$out" | grep -q 'schema not found'; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); printf 'FAIL  a failed settings reader denies once, naming its error (stdout: %s)\n' "$out" >&2
+fi
+if grep -q 'schema not found' "$BROKEN/err"; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); printf 'FAIL  the reader error goes to stderr (stderr: %s)\n' "$(cat "$BROKEN/err")" >&2
+fi
+out=$(printf '{"tool_input":{"command":"npm run build"},"cwd":%s,"session_id":"broken-sess"}' "$(printf '%s' "$REPO" | jq -Rs .)" \
+  | "$BROKEN/hooks/guard-worktree-context.sh" 2>/dev/null)
+if [ -z "$out" ]; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); printf 'FAIL  the deny is once per session (stdout: %s)\n' "$out" >&2
+fi
+
 # --- the branch-guard reason never advertises its bypass ----------------------
 if run_hook "$REPO" none-sess 'git checkout develop' | grep -q "MYSPEC_ALLOW_BRANCH_OPS"; then
   FAIL=$((FAIL + 1))
