@@ -1056,10 +1056,13 @@ if (!pluginRoot && wants('install')) {
   note('install checks skipped: plugin root not resolved (pass --plugin-root, or run from a skill where $CLAUDE_PLUGIN_ROOT is set)');
 }
 
-if (manifest.value && wants('install')) {
-  const pluginVersion = manifest.value.frameworkVersion || null;
-  const updatePending = Boolean(pluginVersion && projectVersion && pluginVersion !== projectVersion);
+// An update is pending while the plugin ships a newer version than the project
+// records. Whatever update repairs is then expected to be out of date, and the
+// fix is one command, so those findings are warnings until the versions match.
+const pluginVersion = manifest.value ? manifest.value.frameworkVersion || null : null;
+const updatePending = Boolean(pluginVersion && projectVersion && pluginVersion !== projectVersion);
 
+if (manifest.value && wants('install')) {
   // Drift while an update is pending is expected and the fix is one command;
   // drift at a matching version means the file was hand-edited or the update
   // half-applied, which nothing else will ever tell you.
@@ -1513,9 +1516,16 @@ registered.forEach((command) => {
 // directory`, and on Stop that is a non-blocking error, so the verification
 // gate is skipped with no warning (issue #217). The bare form still counts as
 // wired everywhere above — update must not wire the hook a second time — but it
-// is reported here so update can rewrite it in place. A warning, not an error:
-// the hook does run from the repo root, so blocking a stop over it would be
-// louder than the damage.
+// is reported here so update can rewrite it in place. An error for a script
+// under .claude/hooks/: those are the framework's gates, a Stop or PreToolUse
+// hook that exits 127 is non-blocking, and the gate then disappears with no
+// trace, so the doctor is the only place the failure can surface. The stop gate
+// runs this group only when .claude/ has uncommitted changes, and the fix is a
+// mechanical rewrite (update does it). While an update is pending it is a
+// warning, like framework drift: update copies the new doctor before it rewrites
+// the wiring, so a Stop hook in between would block on the fix still landing.
+// A project's own relative script is a warning: the doctor does not own what
+// that hook guards.
 [[projectSettings, '.claude/settings.json'], [localSettings, '.claude/settings.local.json']]
   .filter(([file]) => file.value)
   .forEach(([file, path]) => {
@@ -1536,9 +1546,18 @@ registered.forEach((command) => {
       const label = rel(script.path);
       const framework = label.startsWith('.claude/hooks/');
 
-      warn('hook-command-relative', 'wiring', path, `${path}: hook command "${command}" runs ${label} by a relative path — it resolves against the session's cwd, so the hook fails (and a Stop gate is skipped) once the session leaves the repo root`, framework && path === '.claude/settings.json'
+      // Only settings.json is a file update repairs. settings.local.json is the
+      // developer's own and update never touches it, so an error there would
+      // block every stop with no way for the framework to clear it.
+      const repairable = framework && path === '.claude/settings.json';
+      const report = repairable && !updatePending ? error : warn;
+      const consequence = framework
+        ? 'the hook exits 127 once the session leaves the repo root, and a failing hook is non-blocking, so this gate is skipped with no warning'
+        : 'the hook fails once the session leaves the repo root';
+
+      report('hook-command-relative', 'wiring', path, `${path}: hook command "${command}" runs ${label} by a relative path — it resolves against the session's cwd, so ${consequence}`, repairable
         ? { commands: ['/myspec:update'] }
-        : { text: `prefix the script with "$CLAUDE_PROJECT_DIR"/, e.g. "$CLAUDE_PROJECT_DIR"/${label}` });
+        : { text: `add the "$CLAUDE_PROJECT_DIR"/ prefix by hand, e.g. "$CLAUDE_PROJECT_DIR"/${label}` });
     });
   });
 
