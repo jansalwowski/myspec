@@ -93,6 +93,14 @@ session_tracked() {
   [ -f "$1/.myspec.json" ] || [ -f "$1/.claude/verification.json" ]
 }
 
+# session_tracked_at <home> <checkout> -> 0 when the session home or the
+# checkout written to is tracked: a linked worktree's branch can add the stop
+# gate, or .myspec.json, that its main checkout does not have yet. The
+# events still go to <home>.
+session_tracked_at() {
+  session_tracked "$1" || { [ -n "${2:-}" ] && session_tracked "$2"; }
+}
+
 # session_dir <home> -> the directory holding the session files of <home>:
 # .claude/state/sessions/ in a checkout, myspec-state/sessions/ in a git
 # common dir (session_home). A checkout passed directly whose repository

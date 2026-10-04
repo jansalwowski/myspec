@@ -384,7 +384,7 @@ bash_write_targets() {
 ledger_add() {
   local home
   home=$(session_home "$2") || return 0
-  if ! session_tracked "$home" && ! session_tracked "$2"; then
+  if ! session_tracked_at "$home" "$2"; then
     [ -n "$CWD_ROOT" ] && [ -n "$CWD_HOME" ] || return 0
     case "$2/" in
       "$CWD_ROOT"/?*) home="$CWD_HOME" ;;
@@ -620,8 +620,7 @@ elif [ -n "$COMMAND" ]; then
   # feature-implement's orchestration state, recorded with this payload's
   # session id in the cwd's checkout.
   if [[ "$COMMAND" == *session-event.sh*implement* ]] && IMPLEMENT_HOME=$(session_home "$BASE_DIR") \
-      && { session_tracked "$IMPLEMENT_HOME" \
-        || { IMPLEMENT_ROOT=$(checkout_root "$BASE_DIR") && session_tracked "$IMPLEMENT_ROOT"; }; }; then
+      && session_tracked_at "$IMPLEMENT_HOME" "$(checkout_root "$BASE_DIR" || true)"; then
     while IFS= read -r state; do
       session_append "$IMPLEMENT_HOME" "$SESSION_ID" "{\"t\":\"implement\",\"state\":\"$state\"}" || true
     done < <(implement_requests "$COMMAND")
@@ -656,7 +655,7 @@ fi
 # project.
 CWD_ROOT="" CWD_HOME=""
 if CWD_ROOT=$(checkout_root "$BASE_DIR") && CWD_HOME=$(session_home "$CWD_ROOT") \
-    && { session_tracked "$CWD_HOME" || session_tracked "$CWD_ROOT"; }; then
+    && session_tracked_at "$CWD_HOME" "$CWD_ROOT"; then
   :
 else
   CWD_ROOT="" CWD_HOME=""
