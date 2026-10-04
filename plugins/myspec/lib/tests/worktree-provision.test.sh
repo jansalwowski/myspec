@@ -550,6 +550,21 @@ printf '{"isolation":{"provision":{"symlink":[],"copy":["node_modules"]}}}\n' > 
 out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
 [ "$st" -eq 0 ] && [ -d "$W/node_modules/dep" ] && [ -e "$W/node_modules/.gitkeep" ] && ok \
   || fail "placeholder: copy fills a directory that holds only tracked files (got $st: $out)"
+# Clone mode fills by clone, and the record says what was done (#256 review).
+printf '{"isolation":{"provision":{"symlink":[],"copy":[{"path":"node_modules","mode":"clone"}]}}}\n' > "$W/.myspec.json"
+git -C "$W" clean -qfdx -e .myspec.json -- node_modules
+out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
+[ "$st" -eq 0 ] && [ -d "$W/node_modules/dep" ] && printf '%s' "$out" | grep -qE "filled node_modules by clone|no copy-on-write clone on this filesystem — copied node_modules" && ok \
+  || fail "placeholder: clone mode fills by clone, or says it copied (got $st: $out)"
+want=clone; printf '%s' "$out" | grep -qF "filled node_modules by clone" || want=copy
+[ "$(jq -r '.copies[] | select(.path == "node_modules") | .mode' "$W/.claude/state/provision.json")" = "$want" ] && ok \
+  || fail "placeholder: the record says what the fill did ($want)"
+git -C "$W" clean -qfdx -e .myspec.json -- node_modules
+out=$(bash "$SHIMDIR/lib/worktree-provision.sh" "$W" --base main 2>&1); st=$?
+[ "$st" -eq 0 ] && [ -d "$W/node_modules/dep" ] && printf '%s' "$out" | grep -qF "no copy-on-write clone on this filesystem — copied node_modules" && ok \
+  || fail "placeholder: without a clone flag the fill copies and says so (got $st: $out)"
+[ "$(jq -r '.copies[] | select(.path == "node_modules") | .mode' "$W/.claude/state/provision.json")" = copy ] && ok \
+  || fail "placeholder: a fill that copied is recorded as copy, not clone"
 # An untracked directory already there is skipped, and the skip is named.
 M=$(new_main exists '{"isolation":{"provision":{"symlink":["node_modules"]}}}')
 mkdir -p "$M/node_modules/dep"; commit_all "$M" init

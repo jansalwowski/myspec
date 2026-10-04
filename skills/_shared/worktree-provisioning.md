@@ -21,7 +21,7 @@ Read from `.myspec.json` `isolation.provision` in the worktree (the branch's own
 | Entry | Default | What happens |
 |---|---|---|
 | `symlink` | `["node_modules"]` | Linked from the main checkout when present there and absent in the worktree. Listed in the worktree's `info/exclude` so it is never staged, and recorded in `.claude/state/provision.json`. A rerun decides each of its own links again. |
-| `copy` | `[".eslintcache"]` | Copied, not linked, for anything a build or linter writes to. A file or a directory; a directory in the worktree that holds only tracked files (a `.gitkeep`) is filled. `{"path": "vendor", "mode": "clone"}` makes a copy-on-write clone (`--reflink=auto` on Btrfs/XFS, `cp -c` on APFS) and falls back to a plain copy where the filesystem has none. |
+| `copy` | `[".eslintcache"]` | Copied, not linked, for anything a build or linter writes to. A file or a directory; a directory in the worktree that holds only tracked files (a `.gitkeep`) is filled. `{"path": "vendor", "mode": "clone"}` makes a copy-on-write clone (`--reflink=auto` on Btrfs/XFS, `cp -c` on APFS) and falls back to a plain copy where the filesystem has none, a placeholder fill included; the record names what was done. |
 | `clean` | `[]` | Repo-relative globs deleted in the worktree, such as incremental build caches (`**/*.tsbuildinfo`, `.mypy_cache/**`), so the first check there is cold. Tracked files and links are never deleted. |
 | `install` | none | A command, or a list of `{run, cwd, when}` steps, run in the worktree last. `cwd` is repo-relative (default the root). A step runs only when every path in `when` exists. Each step sees `MYSPEC_WORKTREE` and `MYSPEC_MAIN_CHECKOUT`. A failing step stops provisioning (exit 1) and is reported, never retried. |
 

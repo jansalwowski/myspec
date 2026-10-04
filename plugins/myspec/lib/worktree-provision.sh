@@ -274,6 +274,16 @@ clone_tree() {
   return 1
 }
 
+# clone_into <src dir> <dst dir> -> clones the contents of <src dir> into the
+# existing <dst dir> (a placeholder directory being filled), the same two
+# clone flags as clone_tree. Returns 1 when neither works; what a failed
+# attempt left is overwritten by the plain copy that follows.
+clone_into() {
+  /bin/cp --reflink=auto -pR "$1/." "$2/" 2>/dev/null && return 0
+  /bin/cp -c -pR "$1/." "$2/" 2>/dev/null && return 0
+  return 1
+}
+
 # repo_relative <path> -> 0 when the path stays inside the checkout.
 repo_relative() {
   case "/$1/" in
@@ -574,13 +584,22 @@ while IFS=$'\t' read -r entry mode; do
     continue
   fi
   mkdir -p "$(dirname "$WORKTREE/$entry")"
+  # The record says what was done: clone only where a clone flag worked.
+  done_mode=copy
   if [ "$fill" -eq 1 ]; then
-    /bin/cp -pR "$MAIN/$entry/." "$WORKTREE/$entry/"
-    echo "worktree-provision: filled $entry, which held only tracked files"
+    if [ "$mode" = clone ] && clone_into "$MAIN/$entry" "$WORKTREE/$entry"; then
+      done_mode=clone
+      echo "worktree-provision: filled $entry by clone, which held only tracked files"
+    else
+      /bin/cp -pR "$MAIN/$entry/." "$WORKTREE/$entry/"
+      [ "$mode" != clone ] || echo "worktree-provision: no copy-on-write clone on this filesystem — copied $entry"
+      echo "worktree-provision: filled $entry, which held only tracked files"
+    fi
   else
     case "$mode" in
       clone)
         if clone_tree "$MAIN/$entry" "$WORKTREE/$entry"; then
+          done_mode=clone
           echo "worktree-provision: cloned $entry"
         else
           /bin/cp -pR "$MAIN/$entry" "$WORKTREE/$entry"
@@ -596,7 +615,7 @@ while IFS=$'\t' read -r entry mode; do
   exclude "$entry"
   COPIED=$(( COPIED + 1 ))
   if [ "$HAVE_JQ" -eq 1 ]; then
-    REC_COPIES="$REC_COPIES$(jq -nc --arg p "$entry" --arg m "${mode:-copy}" '{path: $p, mode: $m}')"$'\n'
+    REC_COPIES="$REC_COPIES$(jq -nc --arg p "$entry" --arg m "$done_mode" '{path: $p, mode: $m}')"$'\n'
   fi
 done <<< "$COPY_LINES"
 
