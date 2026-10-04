@@ -43,7 +43,7 @@ It applies per verified checkout, when its checks fail and the session is not in
 
 1. F is empty: every uncommitted change is this session's. Block.
 2. A failing check's output names a file in T: block. T is matched by basename, which errs toward blocking.
-3. Every failing check names a file in F and none in T, and no check timed out: approve, and put the failures in a `systemMessage` for the user. F is matched by its full repo-relative path, which errs toward blocking.
+3. Every failing check names a file in F and none in T, and no check timed out: approve, and put the failures in a `systemMessage` for the user. F is matched by its full repo-relative path, or, for a check with a `cwd`, by its path relative to that `cwd` (a tool run from `api` prints `api/src/Foo.php` as `src/Foo.php`), which errs toward blocking.
 4. Otherwise: block. The reason lists F and tells the agent not to edit those files to make a check pass.
 
 **Known limits.** A Bash side effect (an install, code generation, a formatter), or a Bash write to a variable path, is not in T. When it lands in F, a failure that names only that file warns instead of blocking (rule 3). The block message in rule 4 says so. A change by this session that breaks a file another session has open also warns (rule 3): the failure is real, but the other session's gate owns it. Several sessions in one checkout can't be separated exactly. A worktree per session is the fix, and the warning says so.

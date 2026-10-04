@@ -173,6 +173,30 @@ OUT=$(export MYSPEC_CHECK_CAP_SECONDS=1; stop 15)
 expect_decision block "$OUT" "a timeout blocks even when every failure is foreign"
 reset_tree
 
+# A check run from a cwd prints its paths relative to it (src/Foo.php for
+# api/src/Foo.php), and full-mode attribution must still find the foreign
+# file by that path (#255 review): a failure naming only another session's
+# file warns, as it does from the root.
+mkdir -p "$REPO/api/src"
+printf '<?php\n' > "$REPO/api/src/Foo.php"
+git -C "$REPO" add api && git -C "$REPO" commit -q -m api
+jq -n --arg c "touch $RAN; ! grep -H BROKEN src/Foo.php" '{checks: [{name: "phpcs", command: $c, required: true, cwd: "api"}]}' > "$REPO/.claude/verification.json"
+git -C "$REPO" add .claude/verification.json && git -C "$REPO" commit -q -m checks
+printf 'BROKEN\n' >> "$REPO/api/src/Foo.php"
+printf 'export const a = 4;\n' > "$REPO/app.ts"
+mark_write 16 "$REPO/app.ts"
+OUT=$(stop 16)
+expect_decision approve "$OUT" "cwd: a failure naming another session's file relative to the cwd warns"
+expect_text "$OUT" 'names only files changed outside this session: api/src/Foo.php' "cwd: the warning names the foreign file repo-relative"
+# A path that only resolves at the root still does, and the session's own
+# file, named relative to the cwd, still blocks.
+printf 'BROKEN\n' >> "$REPO/api/src/Foo.php"
+mark_write 17 "$REPO/api/src/Foo.php"
+OUT=$(stop 17)
+expect_decision block "$OUT" "cwd: a failure naming the session's own file relative to the cwd blocks"
+expect_text "$OUT" 'names files this session wrote: api/src/Foo.php' "cwd: the block says which failure is the session's"
+reset_tree
+
 # --- single session: nothing uncommitted is anyone else's --------------------------
 set_checks "$LINT"
 printf 'BROKEN\n' >> "$REPO/app.ts"

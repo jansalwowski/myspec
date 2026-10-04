@@ -493,17 +493,19 @@ changed_files() {
   done < <(git -C "$REPO_ROOT" status --porcelain=v1 -z --untracked-files=all 2>/dev/null)
 }
 
-# names_in <base|full> <paths file> <output file> -> the listed paths the output
-# names. The output is split into runs of path characters, and each run is
-# looked up: by basename in base mode; in full mode as a repo-relative path,
-# once a leading ./ or this checkout's root is dropped. A lookup, not a
-# substring scan per path, keeps a multi-megabyte test log under a second.
+# names_in <base|full> <paths file> <output file> [cwd] -> the listed paths the
+# output names. The output is split into runs of path characters, and each run
+# is looked up: by basename in base mode; in full mode as a repo-relative path,
+# once a leading ./ or this checkout's root is dropped, and, for a check run
+# from a cwd, also as <cwd>/<run>: a tool there prints paths relative to it
+# (src/Foo.php for api/src/Foo.php). A lookup, not a substring scan per path,
+# keeps a multi-megabyte test log under a second.
 # Every awk in attribution and the report runs under LC_ALL=C: a check's log
 # can hold bytes that are not valid in the locale's encoding, and macOS awk
 # then exits 2 ("towc: multibyte conversion failure"), which under set -e
 # ended the hook before it decided. Bytes are all the matching needs.
 names_in() {
-  LC_ALL=C MODE="$1" ROOT="$ROOT_KEY/" awk '
+  LC_ALL=C MODE="$1" ROOT="$ROOT_KEY/" CWD="${4:-}" awk '
     FILENAME == ARGV[1] {
       key = $0
       if (ENVIRON["MODE"] == "base") sub(/.*\//, "", key)
@@ -526,6 +528,7 @@ names_in() {
           r = ENVIRON["ROOT"]
           if (substr(t, 1, length(r)) == r) t = substr(t, length(r) + 1)
           while (substr(t, 1, 2) == "./") t = substr(t, 3)
+          if (!(t in want) && ENVIRON["CWD"] != "" && ((ENVIRON["CWD"] "/" t) in want)) t = ENVIRON["CWD"] "/" t
         }
         if ((t in want) && !(t in hit)) {
           hit[t] = 1
@@ -581,7 +584,7 @@ attribute_failures() {
       lines="$lines"$'\n'"- ${FAILED_CHECKS[$i]} names files this session wrote: $own"
       continue
     fi
-    foreign=$(names_in full "$ffile" "${FAILED_LOGS[$i]}" | join_lines 5)
+    foreign=$(names_in full "$ffile" "${FAILED_LOGS[$i]}" "${FAILED_CWDS[$i]:-}" | join_lines 5)
     if [ -n "$foreign" ]; then
       lines="$lines"$'\n'"- ${FAILED_CHECKS[$i]} names only files changed outside this session: $foreign"
     else
@@ -860,6 +863,9 @@ FAILED_CHECKS=()
 # The output file of each failed check, parallel to FAILED_CHECKS, for
 # attribution to read; removed on exit.
 FAILED_LOGS=()
+# Each failed check's cwd, beside its log: attribution reads the paths a
+# tool printed relative to it.
+FAILED_CWDS=()
 TIMED_OUT_CHECKS=()
 # Checks refused without running: their result would describe another tree.
 UNVERIFIABLE_CHECKS=()
@@ -1025,6 +1031,7 @@ for i in $(seq 0 $((CHECKS_COUNT - 1))); do
     else
       FAILED_CHECKS+=("$NAME")
       FAILED_LOGS+=("$CHECK_RUN_LOG")
+      FAILED_CWDS+=("$CHECK_CWD")
       CHECK_RUN_LOG=""
       FAILED_OUTPUT+=("[$NAME] $COMMAND failed:"$'\n'"$TRUNCATED")
     fi
