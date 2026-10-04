@@ -105,6 +105,23 @@ bash "$PROVISION" "$WT" --base main >/dev/null
 expect approve "$(stop 5 "$WT")" "after provision reruns, the record matches and the checks run"
 git -C "$MAIN" checkout -q -- package-lock.json
 
+# --- a nested lockfile the branch adds after provisioning blocks (#256 review) ---
+# apps/web/node_modules is pinned by apps/web/package-lock.json or the root
+# one; only the root one exists when provision links it.
+MAIN=$(new_repo nested 1)
+mkdir -p "$MAIN/apps/web/node_modules/dep"
+printf '{"isolation":{"provision":{"symlink":["apps/web/node_modules"]}}}\n' > "$MAIN/.myspec.json"
+printf 'apps/web/node_modules\n' >> "$MAIN/.gitignore"
+git -C "$MAIN" add -A && git -C "$MAIN" commit -q -m nested
+WT="$ROOT/nested-wt"
+git -C "$MAIN" worktree add -q -b feat-nested "$WT" main
+bash "$PROVISION" "$WT" --base main >/dev/null
+[ -L "$WT/apps/web/node_modules" ] && ok || fail "nested: provision links apps/web/node_modules"
+expect approve "$(stop 6 "$WT")" "nested: the record matches"
+printf '{"lockfileVersion":3}\n' > "$WT/apps/web/package-lock.json"
+r=$(stop_reason 7 "$WT")
+expect_in "apps/web/node_modules (apps/web/package-lock.json appeared)" "$r" "nested: a lockfile added in the worktree after provisioning blocks"
+
 # new_dep_repo <name> <dir> <lockfile> -> prints main checkout path
 new_dep_repo() {
   local main="$ROOT/$1"
