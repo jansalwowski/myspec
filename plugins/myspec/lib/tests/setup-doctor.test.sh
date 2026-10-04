@@ -137,7 +137,8 @@ expect_no_line '^ERROR' "the blocking groups report no errors on a clean install
 # It is still reported, as hook-command-relative, so update rewrites it: once a
 # session cd's into a subdirectory the bare command fails, and a failing Stop
 # hook is non-blocking, so the verification gate is skipped silently (#217).
-# That makes it an error: nothing else would ever report the missing gate (#216).
+# At a matching version that makes it an error: nothing else would ever report
+# the missing gate (#216).
 cp "$REPO/.claude/settings.json" "$ROOT/settings-projectdir.json"
 # shellcheck disable=SC2016 # literal text, not an expansion
 set_json .claude/settings.json '
@@ -183,6 +184,18 @@ while IFS= read -r cmd; do
     *) fail "the bare template command is reported: $cmd" ;;
   esac
 done <<< "$TEMPLATE_COMMANDS"
+
+# While an update is pending the same bare commands are warnings, like framework
+# drift: update copies the new doctor before it rewrites the wiring, and a Stop
+# hook run in between must not block on the fix that is still landing.
+cp "$REPO/.myspec.json" "$ROOT/myspec-matching.json"
+set_json .myspec.json 'd.frameworkVersion = "0.0.1"'
+run_doctor wiring
+expect_exit 0 "bare framework hook commands do not fail the wiring group while an update is pending"
+expect_line 'WARN +hook-command-relative: .claude/settings.json: hook command ".claude/hooks/verify-before-stop.sh"' "a bare framework hook command is a warning while an update is pending"
+expect_line 'run: /myspec:update' "the pending-update warning still names update as the fix"
+expect_no_line 'ERROR hook-command-relative' "no bare framework hook command is an error while an update is pending"
+cp "$ROOT/myspec-matching.json" "$REPO/.myspec.json"
 
 # A project's own relative hook is not the framework's gate: a warning.
 mkdir -p "$REPO/scripts"
