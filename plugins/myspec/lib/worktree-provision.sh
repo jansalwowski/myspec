@@ -317,18 +317,6 @@ repo_relative() {
   [ "${1#/}" = "$1" ]
 }
 
-# lock_paths <dir> <pattern>... -> the repo-relative paths under checkout
-# <dir> that the lockfile patterns match (a * stays within one directory).
-lock_paths() {
-  local dir="$1" pat f
-  shift
-  for pat in "$@"; do
-    for f in "$dir"/$pat; do
-      [ -f "$f" ] && printf '%s\n' "${f#"$dir"/}"
-    done
-  done
-}
-
 # lockfile_diff <pattern>... -> prints the first lockfile whose copies in the
 # worktree and the main checkout differ (one missing on either side counts),
 # and returns 0; returns 1 when every copy matches.
@@ -339,7 +327,7 @@ lockfile_diff() {
     cmp -s "$WORKTREE/$rel" "$MAIN/$rel" && continue
     printf '%s\n' "$rel"
     return 0
-  done < <({ lock_paths "$WORKTREE" "$@"; lock_paths "$MAIN" "$@"; } | sort -u)
+  done < <({ lock_paths_for "$WORKTREE" "$@"; lock_paths_for "$MAIN" "$@"; } | sort -u)
   return 1
 }
 
@@ -491,7 +479,7 @@ while IFS= read -r line; do
   SPECS=()
   if [ "$line" != "$entry" ]; then
     IFS=$'\t' read -ra LOCKS <<< "${line#*$'\t'}"
-    # :(glob) keeps a * inside one directory, as the shell glob in lock_paths does.
+    # :(glob) keeps a * inside one directory, as the shell glob in lock_paths_for does.
     for lock in "${LOCKS[@]}"; do SPECS+=(":(glob)$lock"); done
   fi
   # A glob comes back unexpanded only when nothing in the main checkout matched.
@@ -567,7 +555,7 @@ while IFS= read -r line; do
         break
       fi
       LOCK_JSON=$(jq -c --arg k "$rel" --arg v "$sum" '. + {($k): $v}' <<< "$LOCK_JSON")
-    done < <(lock_paths "$MAIN" "${LOCKS[@]}" | sort -u)
+    done < <(lock_paths_for "$MAIN" "${LOCKS[@]}" | sort -u)
     [ "$hashed" -eq 1 ] || continue
     # A pattern that matched nothing, and every glob, is recorded with a null
     # hash, so the gate sees a lockfile that appears later on either side.
@@ -575,7 +563,7 @@ while IFS= read -r line; do
     for lock in "${LOCKS[@]}"; do
       case "$lock" in
         *[*?[]*) ABSENT+=("$lock") ;;
-        *) [ -n "$(lock_paths "$MAIN" "$lock")" ] || ABSENT+=("$lock") ;;
+        *) [ -n "$(lock_paths_for "$MAIN" "$lock")" ] || ABSENT+=("$lock") ;;
       esac
     done
     if [ "${#ABSENT[@]}" -gt 0 ]; then

@@ -21,16 +21,6 @@
 # lib/tests/stop-gate-arm.test.sh (provision_stale) and
 # hooks/tests/verify-before-stop.test.sh.
 
-# pattern_matches <dir> <pattern> -> the <dir>-relative regular files the
-# lockfile pattern matches there (a * stays within one directory).
-pattern_matches() {
-  local IFS='' f
-  for f in "$1"/$2; do
-    [ -f "$f" ] && printf '%s\n' "${f#"$1"/}"
-  done
-  return 0
-}
-
 # provision_stale <root> -> one "path (reason)" per stale recorded link.
 # Fails, printing the reason, when the record cannot be read.
 provision_stale() {
@@ -71,7 +61,7 @@ provision_stale() {
             *$'\037'"$cur"$'\037'*) ;;
             *) m=$cur; break ;;
           esac
-        done < <(for side in "$src" "$root"; do pattern_matches "$side" "$a"; done | sort -u)
+        done < <(for side in "$src" "$root"; do lock_paths_for "$side" "$a"; done | sort -u)
         [ -z "$m" ] || printf '%s (%s appeared)\n' "$path" "$m"
         ;;
     esac

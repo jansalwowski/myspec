@@ -273,6 +273,16 @@ rc=0; file_sha256 "$ROOT/no-such-file" >/dev/null || rc=$?
 rc=0; file_sha256 "$ROOT" >/dev/null || rc=$?
 [ "$rc" -ne 0 ] && ok || fail "file_sha256 fails on a directory"
 
+# --- lock_paths_for --------------------------------------------------------------------
+
+mkdir -p "$ROOT/locks/a" "$ROOT/locks/b" "$ROOT/locks/c/d" "$ROOT/locks/sp ace"
+for f in a/x.lock b/x.lock c/d/x.lock "sp ace/x.lock" top.lock; do printf 'l' > "$ROOT/locks/$f"; done
+mkdir -p "$ROOT/locks/dir.lock"
+eq "$(lock_paths_for "$ROOT/locks" '*/x.lock' | paste -sd, -)" "a/x.lock,b/x.lock,sp ace/x.lock" "lock_paths_for: a * stays within one directory"
+eq "$(lock_paths_for "$ROOT/locks" '[ab]/x.lock' | paste -sd, -)" "a/x.lock,b/x.lock" "lock_paths_for: [...] is a class"
+eq "$(lock_paths_for "$ROOT/locks" 'sp ace/x.lock' top.lock nope.lock | paste -sd, -)" "sp ace/x.lock,top.lock" "lock_paths_for: a space is not a separator, a missing file prints nothing"
+eq "$(lock_paths_for "$ROOT/locks" '*.lock' | paste -sd, -)" "top.lock" "lock_paths_for: only regular files"
+
 # --- glob-regex comes along -------------------------------------------------------
 
 declare -F glob_regex >/dev/null && ok || fail "sourcing hook-core makes glob_regex available"
