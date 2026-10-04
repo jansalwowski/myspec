@@ -151,7 +151,11 @@ attribute_failures() {
 attribute_root() {
   [ "${#FAILED_OUTPUT[@]}" -gt "$ROOT_FAILURES" ] || [ "${#NOT_RUN_CHECKS[@]}" -gt "$ROOT_NOT_RUN_START" ] || return 0
   if [ "$IMPLEMENT_ACTIVE" -eq 1 ]; then
-    WARN_NOTES+=("Failing${ROOT_LABEL} during feature-implement orchestration; not blocking (session-event.sh implement start). The final verification step still gates.")
+    # Nothing failed when the budget only left checks unrun: say that, not
+    # "failing", or the controller reads its tree as red.
+    local what="Failing"
+    [ "${#FAILED_OUTPUT[@]}" -gt "$ROOT_FAILURES" ] || what="Checks not run (gate budget)"
+    WARN_NOTES+=("$what${ROOT_LABEL} during feature-implement orchestration; not blocking (session-event.sh implement start). The final verification step still gates.")
     return 0
   fi
   ATTRIBUTION=""

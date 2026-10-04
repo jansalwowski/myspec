@@ -21,6 +21,8 @@ command -v jq >/dev/null 2>&1 || { echo "FATAL: jq is required" >&2; exit 1; }
 . "$LIB/stop-gate/run.sh"
 # shellcheck source=lib/stop-gate/attribute.sh
 . "$LIB/stop-gate/attribute.sh"
+# shellcheck source=lib/stop-gate/report.sh
+. "$LIB/stop-gate/report.sh"
 
 ROOT=$(cd "$(mktemp -d)" && pwd -P)
 trap 'rm -rf "$ROOT"' EXIT
@@ -164,6 +166,15 @@ out=$(decide 0)
 eq "$out" "0||" "no failure: nothing to report"
 out=$(attribute_init; IMPLEMENT_ACTIVE=0; results; NOT_RUN_CHECKS+=(later); ROOT_LABEL=""; attribute_root; printf '%s' "$BLOCKING_FAILURE")
 eq "$out" 1 "R13: a checkout whose only problem is an unrun check blocks"
+# R13 under R6: a check the budget left unrun did not fail (#257 review).
+out=$(attribute_init; IMPLEMENT_ACTIVE=1; results; NOT_RUN_CHECKS+=(later); ROOT_LABEL=""; attribute_root; printf '%s|%s' "$BLOCKING_FAILURE" "${WARN_NOTES[*]}")
+has "$out" "0|Checks not run (gate budget) during feature-implement orchestration" "R6: only unrun checks warn as not run"
+lacks "$out" "Failing" "R6: only unrun checks are not called failing"
+out=$(attribute_init; IMPLEMENT_ACTIVE=1; results; NOT_RUN_CHECKS+=(later); RAN_CHECKS=(); SCOPE_NOTES=(); GATE_BUDGET_SECONDS=300; ROOT_LABEL=""; attribute_root; report_decision)
+has "$out" "Verification incomplete (not run, gate budget of 300s spent: later)" "report: only unrun checks headline as incomplete"
+lacks "$out" "failing" "report: only unrun checks are not called failing"
+out=$(attribute_init; IMPLEMENT_ACTIVE=1; results lint='app.ts:1 BROKEN'; RAN_CHECKS=(lint); SCOPE_NOTES=(); ROOT_LABEL=""; attribute_root; report_decision)
+has "$out" "Verification failing (failed: lint)" "report: a real failure still headlines as failing"
 out=$(decide 1 lint='app.ts:1 BROKEN')
 eq "${out%%|*}" 0 "R6: a live feature-implement run warns"
 has "$out" "during feature-implement orchestration" "R6: the warning says why"

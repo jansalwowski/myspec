@@ -108,8 +108,13 @@ report_decision() {
     done
     if [ "$BLOCKING_FAILURE" -eq 0 ]; then
       # Non-blocking: no decision block, so the stop proceeds; systemMessage
-      # surfaces the failure to the user.
-      message=$(printf "Verification failing (%s).\n\n%s%s" "$names" "$notes" "$details" | jq -Rs .)
+      # surfaces the failure to the user. When the budget only left checks
+      # unrun, nothing failed, and the headline says so.
+      headline="Verification failing"
+      if [ ${#FAILED_CHECKS[@]} -eq 0 ] && [ ${#TIMED_OUT_CHECKS[@]} -eq 0 ] && [ ${#UNVERIFIABLE_CHECKS[@]} -eq 0 ]; then
+        headline="Verification incomplete"
+      fi
+      message=$(printf "%s (%s).\n\n%s%s" "$headline" "$names" "$notes" "$details" | jq -Rs .)
       GATE_DECIDED=1
       echo "{\"decision\": \"approve\", \"systemMessage\": $message}"
       exit 0
