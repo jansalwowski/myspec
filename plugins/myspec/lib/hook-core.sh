@@ -139,14 +139,13 @@ checkout_facts() {
   CF_LINKED=0 CF_SUBMODULE=0
   [ -n "$dir" ] || return 1
   out=$(git -C "$dir" rev-parse --path-format=absolute --show-toplevel --git-dir \
-    --git-common-dir --show-superproject-working-tree 2>/dev/null) || return 1
+    --git-common-dir 2>/dev/null) || return 1
   f=()
   while IFS= read -r line; do f+=("$line"); done <<< "$out"
   if [ "${f[0]:-}" = --path-format=absolute ]; then
     # git < 2.31 echoes the flag it does not know and prints the git dirs
     # relative to <dir>: ask again without it and resolve them here.
-    out=$(git -C "$dir" rev-parse --show-toplevel --git-dir --git-common-dir \
-      --show-superproject-working-tree 2>/dev/null) || return 1
+    out=$(git -C "$dir" rev-parse --show-toplevel --git-dir --git-common-dir 2>/dev/null) || return 1
     f=()
     while IFS= read -r line; do f+=("$line"); done <<< "$out"
     for i in 0 1 2; do
@@ -160,7 +159,18 @@ checkout_facts() {
     /*'|'/*'|'/*) ;;
     *) return 1 ;;
   esac
-  CF_ROOT="${f[0]}" CF_GIT_DIR="${f[1]}" CF_COMMON_DIR="${f[2]}" CF_SUPER="${f[3]:-}"
+  CF_ROOT="${f[0]}" CF_GIT_DIR="${f[1]}" CF_COMMON_DIR="${f[2]}"
+  # --show-superproject-working-tree runs `git ls-files` in the parent
+  # directory's repository, an extra process that walks a whole outer index
+  # (a dotfiles home, a monorepo of repos). Asked only where a submodule can
+  # be: git keeps a submodule's git dir under the superproject's
+  # .git/modules/, so a repository whose common dir is named .git (a plain
+  # checkout, a linked worktree of one) is none. A submodule whose .git directory sits
+  # inside it (an existing clone added in place and never absorbed, see
+  # `git submodule absorbgitdirs`) therefore reads as a plain repository.
+  if [ "$(basename "$CF_COMMON_DIR")" != .git ]; then
+    CF_SUPER=$(git -C "$dir" rev-parse --show-superproject-working-tree 2>/dev/null) || CF_SUPER=""
+  fi
   [ -z "$CF_SUPER" ] || CF_SUBMODULE=1
   if [ "$CF_GIT_DIR" = "$CF_COMMON_DIR" ]; then
     CF_MAIN="$CF_ROOT"

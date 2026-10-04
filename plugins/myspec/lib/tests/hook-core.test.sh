@@ -183,23 +183,43 @@ checkout_facts "$ROOT/plain/src"
 # shellcheck disable=SC2317 # the stub runs only if the cache misses
 eq "$(git() { return 1; }; checkout_facts "$ROOT/plain/src" && printf '%s' "${CF_ROOT#"$ROOT"/}")" "plain" "a repeated call is answered from the cache"
 
+# The superproject lookup runs `git ls-files` in the parent repository: asked
+# only where a submodule can be, not of a plain checkout or its worktrees.
+TRACE="$ROOT/git-trace.log"
+for d in "$ROOT/plain/src" "$ROOT/plain/.claude/worktrees/wt"; do
+  rm -f "$TRACE"
+  (CF_KEY=""; GIT_TRACE="$TRACE" checkout_facts "$d")
+  ! grep -q 'run_command:' "$TRACE" 2>/dev/null && ok || fail "checkout_facts runs no child git for ${d#"$ROOT"/} ($(grep -c 'run_command:' "$TRACE") run)"
+done
+eq "$(CF_KEY=""; facts "$ROOT/plain/mods/sub")" "plain/mods/sub|0|1|plain/mods/sub" "a submodule is still found with the lookup made lazy"
+
 # git < 2.31 does not know --path-format: rev-parse echoes the flag as its
 # first line, rc 0, and prints the git dirs relative to the directory asked.
 # Every hook then failed open. The wrapper strips the flag and echoes it.
-# shellcheck disable=SC2317 # called through checkout_facts
 old_git() {
-  local a out=() echo=""
+  local a echo=""
+  local -a args=()
   for a in "$@"; do
-    case "$a" in --path-format=*) echo="$a" ;; *) out+=("$a") ;; esac
+    case "$a" in --path-format=*) echo="$a" ;; *) args+=("$a") ;; esac
   done
   [ -z "$echo" ] || printf '%s\n' "$echo"
-  command git "${out[@]}"
+  command git "${args[@]}"
 }
-CF_KEY=""
-eq "$(git() { old_git "$@"; }; facts "$ROOT/plain/src/deep")" "plain|0|0|plain" "git < 2.31: plain repo from a subdirectory"
-eq "$(git() { old_git "$@"; }; checkout_facts "$ROOT/plain/src/deep"; printf '%s' "$CF_GIT_DIR|$CF_COMMON_DIR")" "$ROOT/plain/.git|$ROOT/plain/.git" "git < 2.31: the git dirs are absolute"
-eq "$(git() { old_git "$@"; }; facts "$ROOT/plain/.claude/worktrees/wt")" "plain/.claude/worktrees/wt|1|0|plain" "git < 2.31: linked worktree, main checkout found"
-eq "$(git() { old_git "$@"; }; facts "$ROOT/plain/mods/sub")" "plain/mods/sub|0|1|plain/mods/sub" "git < 2.31: submodule"
+old_facts() {  # old_facts <path> [git-dirs] -> facts, or the dirs, under old_git
+  # shellcheck disable=SC2317 # called through checkout_facts
+  git() { old_git "$@"; }
+  CF_KEY=""
+  if [ -n "${2:-}" ]; then
+    checkout_facts "$1"
+    printf '%s' "$CF_GIT_DIR|$CF_COMMON_DIR"
+  else
+    facts "$1"
+  fi
+}
+eq "$(old_facts "$ROOT/plain/src/deep")" "plain|0|0|plain" "git < 2.31: plain repo from a subdirectory"
+eq "$(old_facts "$ROOT/plain/src/deep" dirs)" "$ROOT/plain/.git|$ROOT/plain/.git" "git < 2.31: the git dirs are absolute"
+eq "$(old_facts "$ROOT/plain/.claude/worktrees/wt")" "plain/.claude/worktrees/wt|1|0|plain" "git < 2.31: linked worktree, main checkout found"
+eq "$(old_facts "$ROOT/plain/mods/sub")" "plain/mods/sub|0|1|plain/mods/sub" "git < 2.31: submodule"
 
 # --- TTL ----------------------------------------------------------------------------
 
