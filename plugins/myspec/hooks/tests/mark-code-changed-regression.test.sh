@@ -21,6 +21,9 @@
 #   (review) in a bare repository with worktrees each worktree kept its own
 #            state file, so an edit in worktree B from a session whose cwd is
 #            worktree A was never verified (R3a).
+#   (review) a submodule with its own .myspec.json got its live log in the
+#            submodule and its write events in the superproject: two
+#            functions decided where per-session state lives.
 #   (review) a session upgraded mid feature-implement had the 2.x marker
 #            (.claude/state/implement-in-progress.json) and no implement
 #            event, so its failures blocked where they had warned.
@@ -167,6 +170,27 @@ jq -n --arg s "$sid" --arg d "$ROOT/b-wa" --arg f "$ROOT/b-wb/b.ts" '{session_id
 [ -f "$ROOT/b.git/myspec-state/sessions/$sid.jsonl" ] && ok || fail "a bare repository's worktree write is filed under its common dir"
 got=$(jq -n --arg s "$sid" --arg d "$ROOT/b-wa" '{session_id: $s, cwd: $d}' | bash "$STOP" 2>/dev/null | jq -r '.decision // "none"' 2>/dev/null)
 [ "$got" = block ] && ok || fail "the Stop gate from worktree A verifies worktree B's edit (got: $got)"
+
+# --- (review) a submodule write: live log and state file in one checkout ----
+git init -q -b main "$ROOT/subsrc2"
+git -C "$ROOT/subsrc2" config user.email t@t
+git -C "$ROOT/subsrc2" config user.name t
+printf '{"aiDir":".ai"}\n' > "$ROOT/subsrc2/.myspec.json"
+git -C "$ROOT/subsrc2" add -A
+git -C "$ROOT/subsrc2" commit -q -m init
+git init -q -b main "$ROOT/super2"
+git -C "$ROOT/super2" config user.email t@t
+git -C "$ROOT/super2" config user.name t
+git -C "$ROOT/super2" -c protocol.file.allow=always submodule add -q "$ROOT/subsrc2" mods/s >/dev/null 2>&1
+git -C "$ROOT/super2" commit -q -m sub
+printf 'export const s = 1;\n' > "$ROOT/super2/mods/s/s.ts"
+sid="$SID-submodule"
+jq -n --arg s "$sid" --arg d "$ROOT/super2/mods/s" --arg f "$ROOT/super2/mods/s/s.ts" '{session_id: $s, tool_name: "Write", cwd: $d, tool_input: {file_path: $f}}' \
+  | bash "$HOOK" >/dev/null 2>&1
+log=$(find "$ROOT/super2" -path "*/.claude/state/sessions/$sid.md" 2>/dev/null)
+state=$(find "$ROOT/super2" -path "*/.claude/state/sessions/$sid.jsonl" 2>/dev/null)
+[ -n "$state" ] && [ "$(dirname "$log")" = "$(dirname "$state")" ] && ok \
+  || fail "a submodule write puts the live log beside the state file (log: ${log:-none}, state: ${state:-none})"
 
 # --- (review) the legacy implement marker carries a run across the upgrade ---
 printf '{"started_at":%d,"feature":"f"}\n' "$(date +%s)" > "$PROJ/.claude/state/implement-in-progress.json"

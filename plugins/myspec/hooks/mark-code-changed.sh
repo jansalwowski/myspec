@@ -485,31 +485,32 @@ implement_requests() {
 }
 
 # write_session_log <checkout root> <path>...: creates or extends the live log
-# in the primary checkout of <checkout root>, a myspec project only.
+# beside the session's state file (session_home and session_dir in
+# lib/session-event.sh decide where both live), a myspec project only.
 write_session_log() {
   local raw_root="$1" repo_root state_dir active_file worktree topic_seed started short_id p rel entry
   shift
 
   # raw_root is the repository root as seen from the edit (a linked worktree
-  # resolves to itself); repo_root is pinned to the primary checkout, where the
-  # session store lives.
-  if ! repo_root="$(main_worktree_root "$raw_root")"; then
+  # resolves to itself); repo_root is the session home: the primary checkout,
+  # a submodule's superproject, or a bare repository's common dir.
+  if ! repo_root="$(session_home "$raw_root")"; then
     repo_root="$raw_root"
   fi
 
   # Logs only in a myspec-managed project: an edit in an unrelated repository
   # must not grow a stray state tree there.
-  [ -f "$repo_root/.myspec.json" ] || return 0
+  [ -f "$repo_root/.myspec.json" ] || [ -f "$raw_root/.myspec.json" ] || return 0
 
-  state_dir="$repo_root/.claude/state/sessions"
+  state_dir=$(session_dir "$repo_root")
   active_file="$state_dir/${SESSION_ID}.md"
 
-  # Worktree marker: the edit resolved to a linked worktree when the raw root
-  # differs from the pinned primary checkout. The basename is portable (no
-  # absolute path) and lets session-clean's liveness gate match the session
-  # against `git worktree list`. Main checkout: empty (gate uses mtime).
+  # Worktree marker: the edit resolved to a linked worktree. The basename is
+  # portable (no absolute path) and lets session-clean's liveness gate match
+  # the session against `git worktree list`. Main checkout, submodule:
+  # empty (gate uses mtime).
   worktree=""
-  if [ "$raw_root" != "$repo_root" ]; then
+  if checkout_facts "$raw_root" && [ "$CF_LINKED" = 1 ]; then
     worktree=$(basename "$raw_root")
   fi
 
