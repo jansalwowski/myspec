@@ -18,6 +18,9 @@
 #   (review) a linked worktree whose branch adds .claude/verification.json,
 #            while the main checkout has no myspec config, dropped every write:
 #            tracking was asked of the main checkout only.
+#   (review) in a bare repository with worktrees each worktree kept its own
+#            state file, so an edit in worktree B from a session whose cwd is
+#            worktree A was never verified (R3a).
 #
 # Usage: mark-code-changed-regression.test.sh [path-to-hook]
 
@@ -140,6 +143,27 @@ jq -n --arg s "$sid" --arg d "$WTB" --arg f "$WTB/w.ts" '{session_id: $s, tool_n
 grep -q "^code	$WTB	w.ts$" <(ledger "$sid") 2>/dev/null && ok || fail "a write in a worktree with its own stop gate is recorded (got: $(ledger "$sid"))"
 got=$(jq -n --arg s "$sid" --arg d "$WTB" '{session_id: $s, cwd: $d}' | bash "$STOP" 2>/dev/null | jq -r '.decision // "none"' 2>/dev/null)
 [ "$got" = block ] && ok || fail "the worktree's Stop gate blocks on its red check (got: $got)"
+
+# --- (review) bare repository: an edit in worktree B from cwd A is verified --
+git init -q -b main "$ROOT/bsrc"
+git -C "$ROOT/bsrc" config user.email t@t
+git -C "$ROOT/bsrc" config user.name t
+mkdir -p "$ROOT/bsrc/.claude"
+printf '{"aiDir":".ai"}\n' > "$ROOT/bsrc/.myspec.json"
+printf '.claude/state/\n' > "$ROOT/bsrc/.gitignore"
+printf '{"checks":[{"name":"red","command":"false","required":true}]}\n' > "$ROOT/bsrc/.claude/verification.json"
+git -C "$ROOT/bsrc" add -A
+git -C "$ROOT/bsrc" commit -q -m init
+git clone -q --bare "$ROOT/bsrc" "$ROOT/b.git"
+git -C "$ROOT/b.git" worktree add -q -b wa "$ROOT/b-wa" >/dev/null 2>&1
+git -C "$ROOT/b.git" worktree add -q -b wb "$ROOT/b-wb" >/dev/null 2>&1
+printf 'export const b = 1;\n' > "$ROOT/b-wb/b.ts"
+sid="$SID-bare"
+jq -n --arg s "$sid" --arg d "$ROOT/b-wa" --arg f "$ROOT/b-wb/b.ts" '{session_id: $s, tool_name: "Write", cwd: $d, tool_input: {file_path: $f}}' \
+  | bash "$HOOK" >/dev/null 2>&1
+[ -f "$ROOT/b.git/myspec-state/sessions/$sid.jsonl" ] && ok || fail "a bare repository's worktree write is filed under its common dir"
+got=$(jq -n --arg s "$sid" --arg d "$ROOT/b-wa" '{session_id: $s, cwd: $d}' | bash "$STOP" 2>/dev/null | jq -r '.decision // "none"' 2>/dev/null)
+[ "$got" = block ] && ok || fail "the Stop gate from worktree A verifies worktree B's edit (got: $got)"
 
 # --- control: a non-code file still does not count ----------------------------
 write "$SID-txt" "$REPO/src/notes.txt"

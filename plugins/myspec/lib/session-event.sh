@@ -2,7 +2,9 @@
 # session-event.sh
 # The session-state file: one append-only JSONL file per session,
 # .claude/state/sessions/<session_id>.jsonl in the main checkout, beside the
-# session's live log (<session_id>.md). The only writer and reader of it.
+# session's live log (<session_id>.md); myspec-state/sessions/ in the git
+# common dir for a repository with no main checkout (session_home,
+# session_dir). The only writer and reader of it.
 # Sourced by the hooks (after lib/hook-core.sh), run by skills and libs.
 #
 # One event per line, each with "at" (epoch seconds), added on append:
@@ -51,20 +53,22 @@ SESSION_LEGACY_LEDGER_DIR=/tmp
 # (a truncated last line, garbage) is skipped.
 SESSION_EVENTS_JQ='inputs | try fromjson catch empty | select(type == "object" and (.t | type) == "string")'
 
-# session_home <path> -> the checkout whose state directory holds the session
-# file for <path>: the main checkout of the checkout holding it (CF_MAIN, or
-# the checkout itself when git names none), after climbing out of any
+# session_home <path> -> where the session file for <path> lives: the main
+# checkout of the checkout holding it (CF_MAIN), after climbing out of any
 # submodule into its superproject, so a submodule write is filed with the
-# checkout that verifies it. Without git, the nearest directory holding a
-# .myspec.json.
+# checkout that verifies it. A repository with no main checkout git can name
+# from every worktree (a bare clone with worktrees, a --separate-git-dir
+# checkout) gets its common dir instead, so all its worktrees share one file
+# (session_dir). Without git, the nearest directory holding a .myspec.json.
 session_home() {
-  local dir root main
+  local dir
   if checkout_facts "$1"; then
-    root="$CF_ROOT" main="${CF_MAIN:-$CF_ROOT}"
-    while [ "$CF_SUBMODULE" = 1 ] && [ -n "$CF_SUPER" ] && checkout_facts "$CF_SUPER"; do
-      root="$CF_ROOT" main="${CF_MAIN:-$CF_ROOT}"
-    done
-    printf '%s\n' "${main:-$root}"
+    while [ "$CF_SUBMODULE" = 1 ] && [ -n "$CF_SUPER" ] && checkout_facts "$CF_SUPER"; do :; done
+    if [ -n "$CF_MAIN" ] && [ "$CF_COMMON_DIR" = "$CF_MAIN/.git" ]; then
+      printf '%s\n' "$CF_MAIN"
+    else
+      printf '%s\n' "$CF_COMMON_DIR"
+    fi
     return 0
   fi
   dir=$(existing_dir "$1") || return 1
@@ -86,13 +90,33 @@ session_tracked() {
   [ -f "$1/.myspec.json" ] || [ -f "$1/.claude/verification.json" ]
 }
 
+# session_dir <home> -> the directory holding the session files of <home>:
+# .claude/state/sessions/ in a checkout, myspec-state/sessions/ in a git
+# common dir (session_home). A checkout passed directly whose repository
+# files under its common dir (a --separate-git-dir main checkout) maps there
+# too, so a reader given the checkout finds the writers' file.
+session_dir() {
+  if [ -f "$1/HEAD" ] && [ -d "$1/objects" ] && [ ! -e "$1/.git" ]; then
+    printf '%s/myspec-state/sessions\n' "$1"
+    return 0
+  fi
+  if [ -e "$1/.git" ] && [ ! -d "$1/.git" ] && checkout_facts "$1" && [ "$CF_ROOT" = "$1" ] \
+      && [ "$CF_SUBMODULE" = 0 ] && [ "$CF_LINKED" = 0 ] && [ "$CF_COMMON_DIR" != "$1/.git" ]; then
+    printf '%s/myspec-state/sessions\n' "$CF_COMMON_DIR"
+    return 0
+  fi
+  printf '%s/.claude/state/sessions\n' "$1"
+}
+
 # session_file <home> <session id> -> the file's path. Fails on an id that
 # cannot be a file name.
 session_file() {
+  local dir
   case "$2" in
     ''|.*|*[!A-Za-z0-9._:-]*) return 1 ;;
   esac
-  printf '%s/.claude/state/sessions/%s.jsonl\n' "$1" "$2"
+  dir=$(session_dir "$1")
+  printf '%s/%s.jsonl\n' "$dir" "$2"
 }
 
 # _session_import <file> <session id>: when the legacy ledger

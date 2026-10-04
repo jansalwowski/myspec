@@ -103,6 +103,24 @@ printf '{}\n' > "$ROOT/nogit/.myspec.json"
 eq "$(session_home "$ROOT/nogit/a/b")" "$ROOT/nogit" "home: without git, the nearest .myspec.json"
 session_home "$ROOT/legacy" >/dev/null && fail "home: no checkout and no .myspec.json has none" || ok
 session_tracked "$REPO" && ok || fail "tracked: a myspec project"
+# A repository with no main checkout git can name (a bare clone with
+# worktrees, a --separate-git-dir checkout) files every worktree's events in
+# one place, under its common dir.
+BARE="$ROOT/bare.git"
+new_repo "$ROOT/bare-src"
+git_ clone -q --bare "$ROOT/bare-src" "$BARE"
+git_ -C "$BARE" worktree add -q -b ba "$ROOT/bare-a" >/dev/null 2>&1
+git_ -C "$BARE" worktree add -q -b bb "$ROOT/bare-b" >/dev/null 2>&1
+BARE_P=$(cd "$BARE" && pwd -P)
+eq "$(session_home "$ROOT/bare-a")" "$BARE_P" "home: a bare repository's worktree files under its common dir"
+eq "$(session_home "$ROOT/bare-b")" "$(session_home "$ROOT/bare-a")" "home: every worktree of a bare repository shares it"
+eq "$(session_file "$(session_home "$ROOT/bare-a")" s1)" "$BARE_P/myspec-state/sessions/s1.jsonl" "file: under the common dir, not in a worktree"
+SEP="$ROOT/sep"
+git_ init -q -b main --separate-git-dir "$ROOT/sep.gitdir" "$SEP"
+git_ -C "$SEP" commit -q --allow-empty -m init
+git_ -C "$SEP" worktree add -q -b sw "$ROOT/sep-wt" >/dev/null 2>&1
+eq "$(session_file "$(session_home "$ROOT/sep-wt")" s1)" "$(session_file "$(session_home "$SEP")" s1)" "file: a --separate-git-dir checkout and its worktree share one"
+eq "$(session_file "$SEP" s1)" "$(session_file "$(session_home "$SEP")" s1)" "file: a reader given the checkout itself finds the same file"
 session_tracked "$MOD" && fail "tracked: a repository with neither .myspec.json nor a stop gate is not" || ok
 
 # --- arming and attribution queries ------------------------------------------------------
