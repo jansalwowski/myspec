@@ -781,6 +781,31 @@ function globProblem(glob) {
   return null;
 }
 
+// relDir(value) -> the repo-relative directory a `format: "dir"` setting
+// names, '' for the root, or null when it is unusable: the normalisation of
+// rel_dir in lib/stop-gate/run.sh. A leading ./ and a trailing / are dropped,
+// . and '' are the root, and an absolute value or a .. segment is refused,
+// checked again after each strip (".//api" is "/api").
+function relDir(value) {
+  let v = value;
+
+  for (;;) {
+    if (v.startsWith('/') || v === '..' || v.startsWith('../') || v.endsWith('/..') || v.includes('/../')) {
+      return null;
+    }
+
+    if (v.startsWith('./')) {
+      v = v.slice(2);
+    } else if (v.endsWith('/')) {
+      v = v.slice(0, -1);
+    } else {
+      break;
+    }
+  }
+
+  return v === '.' ? '' : v;
+}
+
 function validateSettings(schema) {
   const keys = schema.keys;
   const files = projectFiles(schema);
@@ -941,12 +966,11 @@ function validateSettings(schema) {
         }
 
         if (entry.format === 'dir' && typeof v === 'string') {
-          const dir = v === '' ? '.' : v;
-          const inside = !isAbsolute(dir) && !`/${dir}/`.includes('/../');
+          const dir = relDir(v);
           let isDir;
 
           try {
-            isDir = inside && statSync(join(root, dir)).isDirectory();
+            isDir = dir !== null && statSync(join(root, dir || '.')).isDirectory();
           } catch {
             isDir = false;
           }

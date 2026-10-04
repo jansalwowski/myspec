@@ -637,10 +637,31 @@ is_linked_worktree() {
   [ "$CF_SUBMODULE" = 1 ] && is_linked_worktree "$CF_SUPER"
 }
 
+# rel_dir <value> -> sets REL_DIR to the value as a repo-relative directory
+# ("" for the root): a leading ./ and a trailing / are dropped, and . is the
+# root. Returns 1 when it is absolute or has a .. segment. The rejection runs
+# again after each strip, so ".//api" (which becomes "/api") and "./.." are
+# refused too. One helper for `cwd` and a container's mountSource, so the two
+# cannot drift on what is usable.
+rel_dir() {
+  local v="$1"
+  while :; do
+    case "$v" in
+      /*|..|../*|*/..|*/../*) return 1 ;;
+      ./*) v=${v#./} ;;
+      */) v=${v%/} ;;
+      *) break ;;
+    esac
+  done
+  [ "$v" != . ] || v=""
+  REL_DIR=$v
+}
+
 # check_cwd <check json> -> sets CHECK_CWD to the check's repo-relative cwd
-# ("" for the checkout root), and CWD_IGNORED to the raw value when it is
-# unusable (not a string, empty, absolute, or with a .. segment): the check
-# then runs from the root and the stop message names it, as for paths.
+# ("" for the checkout root, "" itself included), and CWD_IGNORED to the raw
+# value when it is unusable (not a string, absolute, or with a .. segment):
+# the check then runs from the root and the stop message names it, as for
+# paths.
 CHECK_CWD=""
 check_cwd() {
   local raw
@@ -651,13 +672,11 @@ check_cwd() {
     x*) CWD_IGNORED=${raw#x}; return 0 ;;
   esac
   raw=${raw#s}
-  case "$raw" in
-    ''|/*|..|../*|*/..|*/../*) CWD_IGNORED="\"$raw\""; return 0 ;;
-  esac
-  while [ "${raw#./}" != "$raw" ]; do raw="${raw#./}"; done
-  while [ "${raw%/}" != "$raw" ]; do raw="${raw%/}"; done
-  [ "$raw" != "." ] || raw=""
-  CHECK_CWD=$raw
+  if ! rel_dir "$raw"; then
+    CWD_IGNORED="\"$raw\""
+    return 0
+  fi
+  CHECK_CWD=$REL_DIR
 }
 
 # Settings, through the one reader (read_setting in lib/hook-core.sh, which
@@ -776,14 +795,11 @@ check_workdir() {
   # An empty value means missing or not a non-empty string.
   src=$(printf '%s' "$spec" | jq -r 'if type == "object" and (.mountSource | type) == "string" then .mountSource else "" end')
   tgt=$(printf '%s' "$spec" | jq -r 'if type == "object" and (.mountTarget | type) == "string" then .mountTarget else "" end')
-  case "$src" in
-    ''|/*|..|../*|*/..|*/../*)
-      REFUSE_REASON="container \"$2\" needs mountSource, the repo-relative directory it mounts (usually \".\"), without .. segments."
-      return 1 ;;
-  esac
-  while [ "${src#./}" != "$src" ]; do src="${src#./}"; done
-  while [ "${src%/}" != "$src" ]; do src="${src%/}"; done
-  [ "$src" != "." ] || src=""
+  if [ -z "$src" ] || ! rel_dir "$src"; then
+    REFUSE_REASON="container \"$2\" needs mountSource, the repo-relative directory it mounts (usually \".\"), without .. segments."
+    return 1
+  fi
+  src=$REL_DIR
   case "$tgt" in
     /*) ;;
     *)

@@ -1003,8 +1003,10 @@ expect_line '^ERROR setting-unknown-ref: .*checks\[0\]\.runIn names "nope"' "con
 # A check's cwd is a repo-relative directory that must exist.
 build_fixture
 mkdir -p "$REPO/api"
-set_json .claude/verification.json 'd.checks[0].cwd="api"; d.checks[1].cwd="nope"; d.checks[2].cwd="/abs";'
+set_json .claude/verification.json 'd.checks[0].cwd="api"; d.checks[1].cwd="nope"; d.checks[2].cwd="/abs"; d.checks.push({name:"root",command:"true",required:true,cwd:""}, {name:"slashes",command:"true",required:true,cwd:".//api"});'
 run_doctor_env -- schema
+expect_no_line 'checks\[3\]\.cwd' "cwd: an empty cwd is the root, as the hook reads it (#255 review)"
+expect_line '^WARN +setting-dir-missing: \.claude/verification\.json: checks\[4\]\.cwd is "\.//api"' "cwd: .//api, which the hook ignores, is reported"
 expect_no_line 'checks\[0\]\.cwd' "cwd: an existing directory raises nothing"
 expect_line '^WARN +setting-dir-missing: \.claude/verification\.json: checks\[1\]\.cwd is "nope"' "cwd: a missing directory is reported"
 expect_line '^WARN +setting-dir-missing: \.claude/verification\.json: checks\[2\]\.cwd is "/abs"' "cwd: an absolute cwd is reported"

@@ -270,7 +270,7 @@ expect block "$(decision "$out")" "containers not an object: a runIn check is re
 has "ignoring verification.containers" "$(text "$out")" "containers not an object: the reader's note is in the reason"
 
 # A container without a usable mountTarget or mountSource is refused.
-for spec in '{"mountSource":"."}' '{"mountSource":".","mountTarget":"srv"}' '{"mountSource":"../x","mountTarget":"/srv"}' '{"mountTarget":"/srv"}'; do
+for spec in '{"mountSource":"."}' '{"mountSource":".","mountTarget":"srv"}' '{"mountSource":"../x","mountTarget":"/srv"}' '{"mountSource":".//api","mountTarget":"/srv"}' '{"mountSource":"","mountTarget":"/srv"}' '{"mountTarget":"/srv"}'; do
   set_config "$MAIN" "{\"containers\":{\"app\":$spec},\"checks\":[$(workdir_check Lint app)]}"
   out=$(stop "$MAIN" code:api/a.php)
   expect block "$(decision "$out")" "container $spec: refused"
@@ -343,12 +343,20 @@ container_config "$WT_N" "$(cwd_check Rel '"api"')"
 out=$(stop "$WT_N" code:api/a.php)
 expect "$WT_N/api" "$(where Rel)" "cwd: in a worktree, the cwd is under the worktree"
 
-for bad in '"/tmp"' '"../app"' '"api/../.."' '""' '3'; do
+# The rejection runs again after each strip (#255 review): .//api would
+# otherwise become /api, and ./.. a parent.
+for bad in '"/tmp"' '"../app"' '"api/../.."' '"api/../x"' '".//api"' '"./.."' '3'; do
   container_config "$MAIN" "$(cwd_check Bad "$bad")"
   out=$(stop "$MAIN" code:api/a.php)
   expect "$MAIN" "$(where Bad)" "cwd $bad: ignored, the check runs from the root"
   has "Bad: its cwd setting was ignored" "$(text "$out")" "cwd $bad: the stop message names it"
 done
+# "" is the root, as doctor reads it, not an ignored setting named on every stop.
+container_config "$MAIN" "$(cwd_check Empty '""')" "$(cwd_check Slashes '"./api/"')"
+out=$(stop "$MAIN" code:api/a.php)
+expect "$MAIN" "$(where Empty)" "cwd \"\": the root (#255 review)"
+expect "$MAIN/api" "$(where Slashes)" "cwd ./api/: api"
+lacks "cwd setting was ignored" "$(text "$out")" "cwd \"\": not reported as ignored"
 
 # runIn and cwd: the workdir is the cwd inside the container.
 container_config "$WT_N" "$(cwd_check Wd '"api"' app)"
