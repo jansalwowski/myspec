@@ -51,6 +51,10 @@ eq "$(names full "$REPO/other.ts:2:1 error")" other.ts "full: an absolute path i
 eq "$(names full './other.ts')" other.ts "full: a leading ./"
 eq "$(names full 'pkg/other.ts:2:1 error')" "" "full: a clean file with the same basename is another file"
 eq "$(names full 'nothing here')" "" "full: no path, no match"
+names_cwd() { printf '%s\n' "$3" > "$ROOT/log"; names_in "$1" "$ROOT/paths" "$ROOT/log" "$2" | paste -sd' ' -; }
+eq "$(names_cwd full pkg 'app.ts:3 error')" pkg/app.ts "full: a path relative to the check's cwd (#255 review)"
+eq "$(names_cwd full pkg 'other.ts:3 error')" other.ts "full: a repo-relative path still matches with a cwd"
+eq "$(names_cwd full '' 'app.ts:3 error')" "" "full: without a cwd, no prefix is tried"
 eq "$(printf 'a\nb\nc\n' | join_lines 2)" "a, b" "join_lines: the first N, comma-joined"
 seq 1 2000 > "$ROOT/many"
 eq "$(short_list "$ROOT/many" 3)" "1, 2, 3 and 1997 more" "short_list: the rest counted"
@@ -72,6 +76,7 @@ results() {
     printf '%s\n' "${a#*=}" > "$LOGS/$i"
     FAILED_CHECKS+=("${a%%=*}")
     FAILED_LOGS+=("$LOGS/$i")
+    FAILED_CWDS+=("${RESULT_CWD:-}")
     FAILED_OUTPUT+=("[${a%%=*}] failed")
     i=$((i + 1))
   done
@@ -117,6 +122,16 @@ results lint='other.ts:2 BROKEN'
 NOT_RUN_CHECKS+=(later)
 attribute_failures
 eq "$ATTRIBUTION_WARN" 0 "R13: a check the budget left unrun is never downgraded"
+
+# A check run from cwd "api" prints api/src/Foo.php as src/Foo.php: a file
+# only another session changed there warns, not blocks (#255 review).
+mkdir -p "$REPO/api/src"
+printf 'BROKEN\n' > "$REPO/api/src/Foo.php"
+RESULT_CWD=api results phpcs='FILE: src/Foo.php ERROR'
+attribute_failures
+eq "$ATTRIBUTION_WARN" 1 "cwd: a failure naming another session's file relative to the cwd warns"
+has "$ATTRIBUTION" "phpcs names only files changed outside this session: api/src/Foo.php" "cwd: the paragraph names it repo-relative"
+rm -rf "$REPO/api"
 
 mkdir -p "$REPO/.claude/state"
 printf 'x\n' > "$REPO/.claude/state/x.ts"
