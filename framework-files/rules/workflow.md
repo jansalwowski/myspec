@@ -1,7 +1,7 @@
 ---
 title: "AI-First Development Workflow"
 purpose: "Feature development process and code generation policy"
-updated: 2026-09-03
+updated: 2026-10-04
 see_also:
   - ${aiDir}/features/index.yaml
 ---
@@ -18,7 +18,7 @@ Any source-code change — new files, modifications, components/functions/module
 
 - **New feature:** `feature-spec` → `feature-spec-review` → `feature-tech-spec` → `feature-tech-spec-review` → `feature-plan` → `feature-implement` → `feature-complete`
 - **Modification:** `feature-update` → `feature-plan` → `feature-implement` → `feature-complete`
-- **Optional:** `feature-decompose` (feature too large for one tech-spec), `cross-spec-validation` (after spec approval or updates), `feature-mockup` → `feature-mockup-review` (visual spec validation between spec approval and tech design; configure with `/myspec:setup mockup`), `feature-scenario`, `feature-seed-data`
+- **Optional:** `feature-decompose` (feature too large for one tech-spec), `cross-spec-validation` (after spec approval or updates), `feature-mockup` → `feature-mockup-review` (visual spec validation between spec approval and tech design; configure with `/myspec:setup mockup`), `feature-spec scenarios` / `feature-spec seed-data`
 
 All are `/myspec:*` skills; each skill's own description covers when to invoke it.
 

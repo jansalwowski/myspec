@@ -54,7 +54,7 @@ Apply these question categories:
 - What are the relationships to existing entities?
 - What validation rules apply?
 
-Present the questions, then wait for responses before proceeding — answers shape the spec sections in Steps 5–8.
+Present the questions, then wait for responses before proceeding — answers shape the spec sections in Steps 5–7.
 
 ### Step 4: Create Feature Directory
 
@@ -76,26 +76,15 @@ Read template from `references/templates.md` — Section "spec.md Template".
 
 Read template from `references/templates.md` — Section "dependencies.md Template".
 
-### Step 7: Write scenarios.md
+### Step 7: Write scenarios.md and seed.json
 
-Document user flows:
-- Happy path scenarios
-- Edge cases
-- Error states
-- Given/When/Then format
+Run feature-spec's optional step (Step 6 of `feature-spec`), both parts, with the clarified answers as input: scenarios per [feature-spec/references/scenarios.md](../feature-spec/references/scenarios.md), then seed data per [feature-spec/references/seed-data.md](../feature-spec/references/seed-data.md). Do not re-derive the procedure here.
 
-### Step 8: Write seed.json
-
-Create test data that:
-- Matches the data model
-- Covers happy path cases
-- Includes edge cases
-
-### Step 9: Update Feature Index
+### Step 8: Update Feature Index
 
 Add the new feature to `${aiDir}/features/index.yaml` with `status: draft` (docs now exist — `planned` is only for manifest entries without docs; see the Status State Machine in `.claude/rules/workflow.md`).
 
-### Step 10: Move to Processed
+### Step 9: Move to Processed
 
 1. Move the original idea file to `${aiDir}/ideas/processed/`
 2. Update `${aiDir}/ideas/PRIORITY-LISTING.md`:
@@ -110,15 +99,8 @@ Add the new feature to `${aiDir}/features/index.yaml` with `status: draft` (docs
 - [ ] Data model is complete with types
 - [ ] Business rules are explicit
 
-### Scenarios
-- [ ] Happy path is fully documented
-- [ ] At least 3 edge cases included
-- [ ] Error states are covered
-
-### Seed Data
-- [ ] Valid JSON syntax
-- [ ] Matches data model exactly
-- [ ] Includes realistic values
+### Scenarios and Seed Data
+- [ ] scenarios.md and seed.json pass the checklists in feature-spec's references
 
 ### Cross-References
 - [ ] Added to `${aiDir}/features/index.yaml` with `status: draft`

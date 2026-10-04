@@ -1,6 +1,6 @@
 ---
 name: "feature-spec"
-description: "Use when starting a new feature. Creates spec.md and dependencies.md in ${aiDir}/features/. Keywords: new feature, requirements, user stories, acceptance criteria. Do NOT use for tech design (feature-tech-spec)."
+description: "Use when starting a new feature. Creates spec.md and dependencies.md in ${aiDir}/features/; an optional step adds scenarios.md and seed.json (arguments `scenarios` / `seed-data` revisit an existing spec). Keywords: new feature, requirements, user stories, acceptance criteria, test scenarios, seed data. Do NOT use for tech design (feature-tech-spec)."
 tags: [feature, specification, planning, documentation]
 ---
 
@@ -57,7 +57,16 @@ Required sections:
 5. **Present for Review**
    Show the created documents and ask for approval.
 
-6. **Commit Decision**
+6. **Offer Scenarios and Seed Data** [OPTIONAL]
+   Once the spec is approved, offer both; the user may take either, both or
+   neither, and can come back later with the arguments below.
+   - `scenarios.md`: Gherkin scenarios, per [references/scenarios.md](references/scenarios.md)
+   - `seed.json`: test data matching the model and the scenarios, per [references/seed-data.md](references/seed-data.md) (needs `scenarios.md`)
+
+   `/myspec:feature-spec {feature} scenarios` or `… seed-data` on a feature whose
+   `spec.md` exists runs only this step, then Step 7 for the new file.
+
+7. **Commit Decision**
    Prompt the user about committing the spec. **Why:** uncommitted spec files
    dangle on the current branch by the time `/myspec:feature-implement` runs.
 
@@ -72,7 +81,8 @@ Required sections:
    question: "The spec is uncommitted. Where should it go?"
    header:   "Commit spec"
    options:
-     - "Commit to {HEAD}"           → stage spec.md, dependencies.md, index.yaml
+     - "Commit to {HEAD}"           → stage spec.md, dependencies.md, index.yaml,
+                                       plus scenarios.md / seed.json when written,
                                        on the current branch
      - "New branch feat/{name}"     → create feat/{name}, switch, then commit
      - "Leave uncommitted"          → skip; user will commit manually
@@ -101,7 +111,8 @@ Required sections:
 - [ ] Entry added to `${aiDir}/features/index.yaml`
 - [ ] No implementation details in spec (no file paths, class names, SQL, code)
 - [ ] Run project documentation audit command if configured
-- [ ] Commit decision presented to user (Step 6) and acted on
+- [ ] Scenarios and seed data offered (Step 6); any file written passes its reference checklist
+- [ ] Commit decision presented to user (Step 7) and acted on
 
 ## Integration
 

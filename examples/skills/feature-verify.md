@@ -124,7 +124,7 @@ Recommended sequence
 1. /myspec:feature-spec-sync team-invites
    — fixes both [HIGH] items (file inventory + implementation step
      reconciliation)
-2. /myspec:feature-scenario team-invites
+2. /myspec:feature-spec team-invites scenarios
    — regenerate scenarios for US7, US8, and the magic-link removal
 3. Update memory P022 manually (rename anchor pattern to
    `requireAdminRole`) or run /myspec:memory-create to replace
