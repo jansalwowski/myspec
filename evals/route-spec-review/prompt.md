@@ -1,6 +1,6 @@
 ---
-description: "Near-miss routing. \"Before the technical design\" plus \"requirements doc\" must pick feature-spec-review, not feature-tech-spec-review or code-review."
-tags: [skill:feature-spec-review, skill:feature-tech-spec-review, skill:code-review, trigger, near-miss, regression]
+description: "Near-miss routing. \"Before the technical design\" plus \"requirements doc\" must pick feature-spec-review, not feature-tech-spec-review."
+tags: [skill:feature-spec-review, skill:feature-tech-spec-review, trigger, near-miss, regression]
 max_turns: 8
 timeout_seconds: 300
 allowed_tools: [Read, Glob, Grep, Skill]

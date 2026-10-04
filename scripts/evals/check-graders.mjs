@@ -20,7 +20,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const E = path.resolve(process.argv[2] ?? path.join(path.dirname(new URL(import.meta.url).pathname), '../../evals'));
-const BUILTIN = new Set(['code-review', 'doctor', 'init']);
+const BUILTIN = new Set(['doctor', 'init']);
 const DETERMINISTIC = new Set(['regex', 'tool_used', 'tool_order', 'file_exists']);
 
 function frontmatter(file) {

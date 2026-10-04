@@ -27,7 +27,7 @@ for c in no-samples loose-regex loose-skill judge-only; do printf -- '---\ntags:
 printf -- "---\ntype: regex\npattern: 'REQ-004'\n---\n" > "$TMP/evals/no-samples/graders/flags.md"
 printf -- "---\ntype: regex\npattern: 'invoice-reminders'\n---\n" > "$TMP/evals/loose-regex/graders/entry.md"
 printf '{"entry": {"pass": ["- name: invoice-reminders"], "fail": ["- name: invoice-reminders-v2"]}}\n' > "$TMP/evals/loose-regex/grader-samples.json"
-printf -- "---\ntype: tool_used\ntool: Skill\ninput_match: '\"skill\"\\\\s*:\\\\s*\"(?:[\\\\w-]+:)?code-review'\n---\n" > "$TMP/evals/loose-skill/graders/fired.md"
+printf -- "---\ntype: tool_used\ntool: Skill\ninput_match: '\"skill\"\\\\s*:\\\\s*\"(?:[\\\\w-]+:)?doctor'\n---\n" > "$TMP/evals/loose-skill/graders/fired.md"
 printf -- "---\ntype: llm\n---\n\nPASS if good.\n" > "$TMP/evals/judge-only/graders/judge.md"
 
 out=$(node "$CHECK" "$TMP/evals" 2>&1); rc=$?
@@ -35,7 +35,7 @@ out=$(node "$CHECK" "$TMP/evals" 2>&1); rc=$?
 for want in "no-samples/flags: grader-samples.json needs" \
             "loose-regex/entry: accepts its fail sample" \
             "loose-skill/fired: accepts a skill that only shares the prefix" \
-            "loose-skill/fired: accepts the built-in code-review skill" \
+            "loose-skill/fired: accepts the built-in doctor skill" \
             "judge-only: no deterministic grader"; do
   if printf '%s' "$out" | grep -qF -- "$want"; then ok "catches: $want"; else nok "catches: $want" "$out"; fi
 done
