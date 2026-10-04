@@ -15,6 +15,9 @@
 #            submodule, no .myspec.json of its own) was dropped, so it no
 #            longer armed the project's stop gate. It is filed with the cwd's
 #            checkout, under its own root, and verified through it.
+#   (review) a linked worktree whose branch adds .claude/verification.json,
+#            while the main checkout has no myspec config, dropped every write:
+#            tracking was asked of the main checkout only.
 #
 # Usage: mark-code-changed-regression.test.sh [path-to-hook]
 
@@ -114,6 +117,29 @@ git init -q -b main "$ROOT/plain"
 jq -n --arg s "$SID-outside" --arg d "$PROJ" --arg f "$ROOT/plain/c.ts" '{session_id: $s, tool_name: "Write", cwd: $d, tool_input: {file_path: $f}}' \
   | bash "$HOOK" >/dev/null 2>&1
 [ ! -e "$PROJ/.claude/state/sessions/$SID-outside.jsonl" ] && ok || fail "a write in an untracked repository outside the cwd's checkout is not filed with it"
+
+# --- (review) a worktree-only stop gate still arms --------------------------
+WTMAIN="$ROOT/wt-only"
+mkdir -p "$WTMAIN"
+git init -q -b main "$WTMAIN"
+git -C "$WTMAIN" config user.email t@t
+git -C "$WTMAIN" config user.name t
+printf '.claude/state/\n' > "$WTMAIN/.gitignore"
+git -C "$WTMAIN" add -A
+git -C "$WTMAIN" commit -q -m init
+git -C "$WTMAIN" worktree add -q "$ROOT/wt-only-b" -b gate
+WTB="$ROOT/wt-only-b"
+mkdir -p "$WTB/.claude"
+printf '{"checks":[{"name":"red","command":"false","required":true}]}\n' > "$WTB/.claude/verification.json"
+git -C "$WTB" add -A
+git -C "$WTB" commit -q -m gate
+printf 'export const w = 1;\n' > "$WTB/w.ts"
+sid="$SID-wtonly"
+jq -n --arg s "$sid" --arg d "$WTB" --arg f "$WTB/w.ts" '{session_id: $s, tool_name: "Write", cwd: $d, tool_input: {file_path: $f}}' \
+  | bash "$HOOK" >/dev/null 2>&1
+grep -q "^code	$WTB	w.ts$" <(ledger "$sid") 2>/dev/null && ok || fail "a write in a worktree with its own stop gate is recorded (got: $(ledger "$sid"))"
+got=$(jq -n --arg s "$sid" --arg d "$WTB" '{session_id: $s, cwd: $d}' | bash "$STOP" 2>/dev/null | jq -r '.decision // "none"' 2>/dev/null)
+[ "$got" = block ] && ok || fail "the worktree's Stop gate blocks on its red check (got: $got)"
 
 # --- control: a non-code file still does not count ----------------------------
 write "$SID-txt" "$REPO/src/notes.txt"

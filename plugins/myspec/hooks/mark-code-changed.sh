@@ -378,11 +378,13 @@ bash_write_targets() {
 # A checkout nested in the cwd's (a plain clone, not a submodule) whose own
 # repository is untracked is filed with the cwd's checkout instead, under its
 # own root: the Stop gate verifies such a root through the cwd's checkout
-# (NESTED_ROOTS in lib/stop-gate/arm.sh).
+# (NESTED_ROOTS in lib/stop-gate/arm.sh). A checkout counts as tracked when
+# its home or the checkout itself has the config: a linked worktree's branch
+# can add a stop gate the main checkout does not have yet.
 ledger_add() {
   local home
   home=$(session_home "$2") || return 0
-  if ! session_tracked "$home"; then
+  if ! session_tracked "$home" && ! session_tracked "$2"; then
     [ -n "$CWD_ROOT" ] && [ -n "$CWD_HOME" ] || return 0
     case "$2/" in
       "$CWD_ROOT"/?*) home="$CWD_HOME" ;;
@@ -617,7 +619,8 @@ elif [ -n "$COMMAND" ]; then
   # feature-implement's orchestration state, recorded with this payload's
   # session id in the cwd's checkout.
   if [[ "$COMMAND" == *session-event.sh*implement* ]] && IMPLEMENT_HOME=$(session_home "$BASE_DIR") \
-      && session_tracked "$IMPLEMENT_HOME"; then
+      && { session_tracked "$IMPLEMENT_HOME" \
+        || { IMPLEMENT_ROOT=$(checkout_root "$BASE_DIR") && session_tracked "$IMPLEMENT_ROOT"; }; }; then
     while IFS= read -r state; do
       session_append "$IMPLEMENT_HOME" "$SESSION_ID" "{\"t\":\"implement\",\"state\":\"$state\"}" || true
     done < <(implement_requests "$COMMAND")
@@ -652,7 +655,7 @@ fi
 # project.
 CWD_ROOT="" CWD_HOME=""
 if CWD_ROOT=$(checkout_root "$BASE_DIR") && CWD_HOME=$(session_home "$CWD_ROOT") \
-    && session_tracked "$CWD_HOME"; then
+    && { session_tracked "$CWD_HOME" || session_tracked "$CWD_ROOT"; }; then
   :
 else
   CWD_ROOT="" CWD_HOME=""
