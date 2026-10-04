@@ -11,6 +11,10 @@
 #   (globs)  ignorePaths had its own glob compiler, where a trailing `/`
 #            matched nothing, unlike checks[].paths; all three glob settings
 #            now share lib/glob-regex.sh.
+#   #254     a write into a plain clone nested in the project (not a
+#            submodule, no .myspec.json of its own) was dropped, so it no
+#            longer armed the project's stop gate. It is filed with the cwd's
+#            checkout, under its own root, and verified through it.
 #
 # Usage: mark-code-changed-regression.test.sh [path-to-hook]
 
@@ -84,6 +88,32 @@ for f in gen/x/a.ts src/b.ts; do
 done
 grep -q "^file	$GLOBREPO	gen/x/a.ts$" <(ledger "$SID-glob-gen-x-a.ts") 2>/dev/null && ok || fail "ignorePaths gen/ records gen/x/a.ts as file"
 grep -q "^code	$GLOBREPO	src/b.ts$" <(ledger "$SID-glob-src-b.ts") 2>/dev/null && ok || fail "ignorePaths gen/ leaves src/b.ts code"
+
+# --- #254: a write into a nested non-submodule clone arms the project's gate -
+STOP="$(dirname "$HOOK")/verify-before-stop.sh"
+PROJ="$ROOT/nested-project"
+mkdir -p "$PROJ/.claude" "$PROJ/vendored"
+git init -q -b main "$PROJ"
+git -C "$PROJ" config user.email t@t
+git -C "$PROJ" config user.name t
+printf '{"aiDir":".ai"}\n' > "$PROJ/.myspec.json"
+printf '.claude/state/\nvendored/\n' > "$PROJ/.gitignore"
+printf '{"checks":[{"name":"red","command":"false","required":true}]}\n' > "$PROJ/.claude/verification.json"
+git -C "$PROJ" add -A
+git -C "$PROJ" commit -q -m init
+git init -q -b main "$PROJ/vendored"
+printf 'export const x = 1;\n' > "$PROJ/vendored/x.ts"
+sid="$SID-nested"
+jq -n --arg s "$sid" --arg d "$PROJ" --arg f "$PROJ/vendored/x.ts" '{session_id: $s, tool_name: "Write", cwd: $d, tool_input: {file_path: $f}}' \
+  | bash "$HOOK" >/dev/null 2>&1
+grep -q "^code	$PROJ/vendored	x.ts$" <(ledger "$sid") 2>/dev/null && ok || fail "a nested clone's write is filed with the cwd's project under its own root (got: $(ledger "$sid"))"
+[ ! -e "$PROJ/vendored/.claude" ] && ok || fail "no state tree in the nested clone"
+got=$(jq -n --arg s "$sid" --arg d "$PROJ" '{session_id: $s, cwd: $d}' | bash "$STOP" 2>/dev/null | jq -r '.decision // "none"' 2>/dev/null)
+[ "$got" = block ] && ok || fail "the Stop hook blocks on the project's red check after a nested-clone write (got: $got)"
+git init -q -b main "$ROOT/plain"
+jq -n --arg s "$SID-outside" --arg d "$PROJ" --arg f "$ROOT/plain/c.ts" '{session_id: $s, tool_name: "Write", cwd: $d, tool_input: {file_path: $f}}' \
+  | bash "$HOOK" >/dev/null 2>&1
+[ ! -e "$PROJ/.claude/state/sessions/$SID-outside.jsonl" ] && ok || fail "a write in an untracked repository outside the cwd's checkout is not filed with it"
 
 # --- control: a non-code file still does not count ----------------------------
 write "$SID-txt" "$REPO/src/notes.txt"

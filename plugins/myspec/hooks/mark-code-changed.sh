@@ -375,10 +375,20 @@ bash_write_targets() {
 # ledger_add <kind> <root> <rel>: records the write in the session-state
 # file of <root>'s repository, unless the same write is already there since
 # the root's last `verified` event. A subagent's event carries its agent_id.
+# A checkout nested in the cwd's (a plain clone, not a submodule) whose own
+# repository is untracked is filed with the cwd's checkout instead, under its
+# own root: the Stop gate verifies such a root through the cwd's checkout
+# (NESTED_ROOTS in lib/stop-gate/arm.sh).
 ledger_add() {
   local home
   home=$(session_home "$2") || return 0
-  session_tracked "$home" || return 0
+  if ! session_tracked "$home"; then
+    [ -n "$CWD_ROOT" ] && [ -n "$CWD_HOME" ] || return 0
+    case "$2/" in
+      "$CWD_ROOT"/?*) home="$CWD_HOME" ;;
+      *) return 0 ;;
+    esac
+  fi
   session_seen "$home" "$SESSION_ID" "$1" "$2" "$3" "$AGENT_ID" && return 0
   session_append "$home" "$SESSION_ID" "$(jq -nc --arg k "$1" --arg r "$2" --arg p "$3" --arg a "$AGENT_ID" \
     '{t: "write", root: $r, rel: $p, kind: $k} + (if $a != "" then {agent: $a} else {} end)')" || true
@@ -636,6 +646,17 @@ else
 fi
 
 [ "${#TARGETS[@]}" -gt 0 ] || exit 0
+
+# The cwd's checkout and its tracked session home, for a write into a
+# nested untracked clone (ledger_add). Empty when the cwd is in no tracked
+# project.
+CWD_ROOT="" CWD_HOME=""
+if CWD_ROOT=$(checkout_root "$BASE_DIR") && CWD_HOME=$(session_home "$CWD_ROOT") \
+    && session_tracked "$CWD_HOME"; then
+  :
+else
+  CWD_ROOT="" CWD_HOME=""
+fi
 
 CODE_ROOTS=()
 CODE_PATHS=()
