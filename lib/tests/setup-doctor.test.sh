@@ -874,6 +874,7 @@ mkdir -p "$ROOT/gitshim"
 printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s"\nexec %s "$@"\n' "$GITLOG" "$(command -v git)" > "$ROOT/gitshim/git"
 chmod +x "$ROOT/gitshim/git"
 cp "$WT/CLAUDE.md" "$ROOT/claude.md.bak"
+# shellcheck disable=SC2016 # literal backticks
 printf 'See `.claude/rules/gone-rule.md`.\n' >> "$WT/CLAUDE.md"
 : > "$GITLOG"
 OUTPUT=$(PATH="$ROOT/gitshim:$PATH" node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" refs worktree 2>&1); STATUS=$?
@@ -956,6 +957,7 @@ rm "$REPO/vendor/inner-link"
 mkdir -p "$REPO/vendor/composer"
 # shellcheck disable=SC2016 # the literal $baseDir text Composer writes
 printf '<?php\nreturn array(\x27App\\\\\x27 => array($baseDir . \x27/src\x27));\n' > "$REPO/vendor/composer/autoload_psr4.php"
+# shellcheck disable=SC2016 # a literal $baseDir in the expected line
 loads_main "a Composer autoload against \$baseDir" 'composer/autoload_psr4\.php loads the root package from \$baseDir'
 mkdir -p "$REPO/vendor/lib/python3.12/site-packages/app-1.0.dist-info" "$REPO/packages/app"
 printf '{"url":"file://%s/packages/app","dir_info":{"editable":true}}\n' "$REPO" > "$REPO/vendor/lib/python3.12/site-packages/app-1.0.dist-info/direct_url.json"
