@@ -16,7 +16,7 @@ sources:
     last_checked_date: "2026-08-21"
     mappings:
       - upstream: skills/brainstorming
-        local: plugins/myspec/skills/brainstorm
+        local: skills/brainstorm
         divergences:
           - "Output is optional (A/B/C wrap-up) — upstream mandates spec doc + writing-plans handoff."
           - "We keep SCAMPER / Six Hats / reverse-brainstorm / first-principles techniques table; upstream removed it."
