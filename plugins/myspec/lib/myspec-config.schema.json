@@ -428,7 +428,7 @@
       "kind": "exported",
       "type": "string",
       "issue": ["exists"],
-      "description": "Exported by the Stop gate to checks: the files this session wrote in this checkout."
+      "description": "Exported by the Stop gate to checks: the files this session wrote in this checkout, one per line, relative to the directory the check runs from (its cwd, else the checkout root); a file outside the cwd gets ../."
     },
     "MYSPEC_CHECK_RUN_ID": {
       "kind": "exported",
