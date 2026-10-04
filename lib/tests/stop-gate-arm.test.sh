@@ -66,6 +66,10 @@ eq "$(roots)" "$WT" "R3a: a worktree edited from the main checkout's cwd is the 
 write "$REPO" code src/b.ts
 eq "$(roots)" "$(printf '%s\n%s' "$WT" "$REPO")" "R3a: both checkouts, in first-written order"
 arm_init "$REPO"; armed_roots
+before=$(roots)
+(finish_run)
+eq "$(roots)" "$before" "finish_run without a decision printed (GATE_DECIDED) records nothing"
+GATE_DECIDED=1
 finish_run
 eq "$(roots)" "" "finish_run records verified for each root, which disarms it"
 write "$WT" code src/b.ts

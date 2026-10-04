@@ -288,7 +288,7 @@ lacks "$out" "lib missing" "failing reader: not reported as a missing lib"
 lacks "$out" "/myspec:update" "failing reader: update is not the fix"
 lacks "$out" "not reached" "failing reader: nothing runs after the block"
 SESSION_ID=unverified STATE_HOME="$REPO" VERIFY_ROOTS=("$REPO") NESTED_ROOTS=()
-(GATE_UNVERIFIED=1; finish_run)
+(GATE_DECIDED=1 GATE_UNVERIFIED=1; finish_run)
 eq "$(session_events "$REPO" unverified)" "" "no reader: no verified event, so the checkout stays armed"
 
 # runIn and the R8a refusal.
