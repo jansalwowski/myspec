@@ -6,6 +6,11 @@ tags: [feature, specification, planning, documentation]
 
 # Feature Spec
 
+## Arguments
+
+- `/myspec:feature-spec {feature}` — the full workflow below.
+- `/myspec:feature-spec {feature} scenarios` or `… seed-data` — a revisit of an existing feature. Parse this before anything else: when the second argument is one of these, `${aiDir}/features/{feature}/spec.md` must already exist (if it does not, stop and say so — the full workflow creates it); skip to Step 6, do only the named part, and never re-create or rewrite spec.md, dependencies.md or the manifest entry. Then Step 7 for the new file only.
+
 ## Workflow
 
 1. **Gather Information**
@@ -59,12 +64,10 @@ Required sections:
 
 6. **Offer Scenarios and Seed Data** [OPTIONAL]
    Once the spec is approved, offer both; the user may take either, both or
-   neither, and can come back later with the arguments below.
+   neither, and can come back later with the `scenarios` / `seed-data` argument
+   (see Arguments). On the argument route, do only the named part, no offer.
    - `scenarios.md`: Gherkin scenarios, per [references/scenarios.md](references/scenarios.md)
    - `seed.json`: test data matching the model and the scenarios, per [references/seed-data.md](references/seed-data.md) (needs `scenarios.md`)
-
-   `/myspec:feature-spec {feature} scenarios` or `… seed-data` on a feature whose
-   `spec.md` exists runs only this step, then Step 7 for the new file.
 
 7. **Commit Decision**
    Prompt the user about committing the spec. **Why:** uncommitted spec files
@@ -95,6 +98,10 @@ Required sections:
      files explicitly (no `git add -A`).
    - If user picks "New branch" and the branch already exists: offer checkout
      vs. a numeric suffix (`feat/{name}-2`).
+   - On the argument route (spec already committed), the question names the
+     file actually produced ("scenarios.md is uncommitted. Where should it
+     go?"), the stage list is that file only, and the default message is
+     `docs({name}): add scenarios` or `docs({name}): add seed data`.
 
 ## Rules
 - Use kebab-case for feature directory name
@@ -112,7 +119,7 @@ Required sections:
 - [ ] No implementation details in spec (no file paths, class names, SQL, code)
 - [ ] Run project documentation audit command if configured
 - [ ] Scenarios and seed data offered (Step 6); any file written passes its reference checklist
-- [ ] Commit decision presented to user (Step 7) and acted on
+- [ ] Commit decision presented to user (Step 7) and acted on; on the argument route it names and stages only the new file, and spec.md, dependencies.md and the manifest entry are untouched
 
 ## Integration
 

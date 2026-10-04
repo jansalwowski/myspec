@@ -78,7 +78,7 @@ Read template from `references/templates.md` — Section "dependencies.md Templa
 
 ### Step 7: Write scenarios.md and seed.json
 
-Run feature-spec's optional step (Step 6 of `feature-spec`), both parts, with the clarified answers as input: scenarios per [feature-spec/references/scenarios.md](../feature-spec/references/scenarios.md), then seed data per [feature-spec/references/seed-data.md](../feature-spec/references/seed-data.md). Do not re-derive the procedure here.
+Write both, without offering (Step 4 marks them required; only a standalone `feature-spec` makes them optional). Follow the two reference procedures feature-spec owns, with the clarified answers and the spec's Data Model as input: scenarios per [feature-spec/references/scenarios.md](../feature-spec/references/scenarios.md), then seed data per [feature-spec/references/seed-data.md](../feature-spec/references/seed-data.md). Do not re-derive the procedure here.
 
 ### Step 8: Update Feature Index
 

@@ -1,10 +1,10 @@
 # Test Seed Data (`seed.json`)
 
-Test data matching the feature's data model and scenarios. Needs `spec.md` (with the data model) and `scenarios.md`. Not for production data.
+Test data matching the feature's data model and scenarios. Needs `spec.md` and `scenarios.md`. Not for production data.
 
 ## Procedure
 
-1. Read `${aiDir}/features/{feature}/spec.md`: every entity, its field types, constraints and relationships.
+1. Read `${aiDir}/features/{feature}/spec.md` and `dependencies.md`. Entities are the nouns the user stories and requirements act on, with the fields and constraints the acceptance criteria name and the relationships `dependencies.md` implies; read a `## Data Model` section only when the spec has one (idea-process's template does, feature-spec's spec.md does not).
 2. Read `${aiDir}/features/{feature}/scenarios.md`: the data each scenario needs, including edge-case data.
 3. Create `${aiDir}/features/{feature}/seed.json`:
 
