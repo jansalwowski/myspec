@@ -200,6 +200,18 @@ expect "$MAIN/api" "$(where Rel)" "cwd: a relative cwd runs the check there"
 expect "$MAIN/web" "$(where Dot)" "cwd: ./ and a trailing / are dropped"
 lacks "cwd setting was ignored" "$(text "$out")" "cwd: a usable cwd is not reported"
 
+# With cwd, MYSPEC_SESSION_FILES is relative to it, so a per-file linter run
+# there finds the files (#255 review): under cwd the prefix goes, outside it
+# the path gets ../.
+printf 'export {}\n' > "$MAIN/web/b.ts"
+c=$(jq -nc --arg c 'printf "%s\n" "$MYSPEC_SESSION_FILES" > '"$RAN"'/Lint.files; for f in $MYSPEC_SESSION_FILES; do test -f "$f" || { echo "missing $f"; exit 1; }; done' \
+  '{name: "Lint", command: $c, required: true, cwd: "api"}')
+container_config "$MAIN" "$c"
+out=$(stop "$MAIN" code:api/a.php file:web/b.ts)
+expect approve "$(decision "$out")" "cwd: every MYSPEC_SESSION_FILES path resolves from the check's cwd"
+expect "$(printf 'a.php\n../web/b.ts')" "$(cat "$RAN/Lint.files" 2>/dev/null)" "cwd: MYSPEC_SESSION_FILES is relative to the cwd"
+rm -f "$MAIN/web/b.ts"
+
 # The documented example pins the compose project, and runs in a worktree.
 # The docs live at the repository root, above both copies of this suite.
 DOCS="$(git -C "$HERE" rev-parse --show-toplevel)/docs/stop-gate.md"

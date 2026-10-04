@@ -1,5 +1,5 @@
 {
-  "notes": "Each check has a name, a command and required; its optional settings (cwd, paths, diffCommand, cleanup, runIn, and the top-level containers map) are described under \"Per-check settings\" in docs/stop-gate.md of the myspec plugin.",
+  "notes": "Each check has a name, a command and required; its optional settings (cwd, paths, diffCommand, cleanup, runIn, and the top-level containers map) are described under \"Per-check settings\" in docs/stop-gate.md of the myspec plugin. With cwd, $MYSPEC_SESSION_FILES is relative to that directory, but git diff --name-only prints repo-root-relative paths wherever it runs: a cwd check's diffCommand adds --relative, or cds to the root first.",
   "checks": [
     {
       "name": "Lint",

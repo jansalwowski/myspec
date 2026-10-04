@@ -107,6 +107,16 @@ for bad in '"/tmp"' '"../app"' '"api/../.."' '""' '3'; do
   eq "$(cwd_of "{\"cwd\":$bad}")" "|$bad" "cwd $bad is ignored and named"
 done
 
+# MYSPEC_SESSION_FILES as a check with a cwd sees it (#255 review).
+eq "$(relative_to api api/a.php)" "a.php" "under the cwd the prefix goes"
+eq "$(relative_to api web/a.ts)" "../web/a.ts" "outside the cwd the path gets ../"
+eq "$(relative_to api/sub api/a.php)" "../a.php" "a shared parent costs no ../"
+eq "$(relative_to api/sub web/a.ts)" "../../web/a.ts" "one ../ per unshared segment"
+eq "$(relative_to api apiary/x.ts)" "../apiary/x.ts" "a name that only starts like the cwd is outside it"
+eq "$(relative_to "" web/a.ts)" "web/a.ts" "no cwd: repo-relative"
+eq "$(MYSPEC_SESSION_FILES=$'api/a.php\nweb/a.ts' session_files_from api)" "$(printf 'a.php\n../web/a.ts')" "session_files_from maps each file"
+eq "$(MYSPEC_SESSION_FILES=$'api/a.php\nweb/a.ts' session_files_from "")" "$(printf 'api/a.php\nweb/a.ts')" "session_files_from without a cwd keeps the list"
+
 # --- paths_verdict (R11) ----------------------------------------------------------------------
 REPO_ROOT="$REPO"
 MYSPEC_BASE_REF=""
