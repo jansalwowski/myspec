@@ -940,6 +940,30 @@ cp "$ROOT/prov.bak" "$WT/.claude/state/provision.json"
 OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
 expect_no_line "provision-link|provision-record" "worktree: a recorded link back on its target is not reported"
 
+# A recorded link whose tree starts loading the source checkout's own code
+# after provisioning: doctor runs provision's tree_loads_checkout checks
+# (#256 review, the plan's doctor backstop).
+loads_main() {  # loads_main <description> -> expects the finding, then cleans the tree
+  OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+  expect_line "WARN +provision-link-loads-main: vendor links to $REPO/vendor, which now loads the source checkout's own code \($2" "worktree: $1"
+  expect_line "move vendor to isolation\.provision\.copy" "worktree: $1, with the fix"
+  rm -rf "$REPO/vendor/composer" "$REPO/vendor/lib" "$REPO/vendor/@acme" "$REPO/packages"
+}
+ln -s "$REPO/vendor/dep" "$REPO/vendor/inner-link"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_no_line "provision-link-loads-main" "worktree: a link inside the tree loads nothing"
+rm "$REPO/vendor/inner-link"
+mkdir -p "$REPO/vendor/composer"
+# shellcheck disable=SC2016 # the literal $baseDir text Composer writes
+printf '<?php\nreturn array(\x27App\\\\\x27 => array($baseDir . \x27/src\x27));\n' > "$REPO/vendor/composer/autoload_psr4.php"
+loads_main "a Composer autoload against \$baseDir" 'composer/autoload_psr4\.php loads the root package from \$baseDir'
+mkdir -p "$REPO/vendor/lib/python3.12/site-packages/app-1.0.dist-info" "$REPO/packages/app"
+printf '{"url":"file://%s/packages/app","dir_info":{"editable":true}}\n' "$REPO" > "$REPO/vendor/lib/python3.12/site-packages/app-1.0.dist-info/direct_url.json"
+loads_main "an editable install of the source checkout" 'app-1\.0\.dist-info is an editable install of '"$REPO"'/packages/app'
+mkdir -p "$REPO/vendor/@acme" "$REPO/packages/ui"
+ln -s ../../packages/ui "$REPO/vendor/@acme/ui"
+loads_main "a workspace link two levels down" '@acme/ui links to '"$REPO"'/packages/ui'
+
 ln -s "$ROOT/outside" "$REPO/elsewhere"
 run_doctor worktree
 expect_no_line "link-unrecorded" "worktree: the main checkout is never checked"
