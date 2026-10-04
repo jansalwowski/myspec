@@ -47,6 +47,7 @@ The 1.x updates carried migrations (legacy memory-index headers, hand-written `f
 | `2.0.0-doctor-rule` | `.claude/rules/ai-setup-audit.md` → `.claude/rules/doctor.md` via `git mv` when only the old name exists (the `doctor` skill reads only the new one). Both present → leave both, report it, and tell the user to merge by hand. |
 | `2.0.0-sessions` | Live session logs move from `{aiDir}/memory/sessions/active/` to `.claude/state/sessions/` in the primary checkout (gitignored). Move every `*.md` there with plain `mv` (they were never tracked), delete `active/` and its `.gitkeep` (`git rm` if tracked), leave `archive/` where it is. A 1.x log lacks a `## Files touched` section; the hook adds it on the next edit. |
 | `2.0.0-base-agents` | The user-scope `worker-base` / `reviewer-base` subagents backed the orchestrator agent-chain mode, retired in 2.0. For each of `~/.claude/agents/`, `~/.cursor/agents/`, `~/.codex/agents/` that exists, list the `worker-base.{md\|toml}` and `reviewer-base.{md\|toml}` files present and ask once: "Delete these N files? They are inert since 2.0. (y/n, default: n)". On `n`, leave them and say so. Delete nothing else in those directories, and never touch project-scope agent dirs. |
+| `3.0.0-code-review` | The `code-review` skill and its `setup` blueprint are gone; Claude Code's built-in `/code-review` takes their place. Delete the `codeReview` key from `.myspec.json` when present (nothing reads it since 3.0). When `.claude/rules/code-review.md` exists, leave it — the blueprint wrote it, no manifest entry ever tracked it, and its bullets are the project's own — and print one line: "`.claude/rules/code-review.md` is yours to keep or delete; the built-in `/code-review` does not read its `## Standards` / `## Suppress` headings". |
 
 List every migration run under `Migrations` in the Step 6 summary.
 
@@ -251,7 +252,7 @@ Do NOT modify the file — this is advisory only.
 - Never overwrite a file whose `frameworkFiles[...].pinned` is set, and never add or clear a pin yourself
 - Never overwrite content after `<!-- myspec:framework-end -->` in a `marker-merge` file
 - Never modify files not listed in `manifest.json`, with two exceptions this skill owns: the `hooks` key of `.claude/settings.json`, and `.claude/rules/ai-setup-audit.md` for the `2.0.0-doctor-rule` migration
-- Never update `.myspec.json` project fields (`name`, `description`, `techStack`); `aiDir` is written only by the `2.0.0-schema` migration, and only when absent or carrying a trailing slash
+- Never update `.myspec.json` project fields (`name`, `description`, `techStack`); `aiDir` is written only by the `2.0.0-schema` migration, and only when absent or carrying a trailing slash; `codeReview` is deleted only by the `3.0.0-code-review` migration
 - Never run a migration whose id is already in `.myspec.json` `migrations`; record each one the moment it completes
 - If a source file is missing from the plugin, skip it and warn the user — do not delete the destination
 - The plugin ships no subagent definitions. Never write to `~/.{harness}/agents/` outside the `2.0.0-base-agents` migration, and never to project-scope `.claude/agents/`, `.cursor/agents/`, `.codex/agents/`.
