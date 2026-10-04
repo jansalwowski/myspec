@@ -10,8 +10,8 @@
 #
 # Scope: every `command` value in a JSON file under templates/ or
 # framework-files/, the plugin's hooks.json, and every `"command": "..."` line
-# in the Markdown of those trees and of the init, update and doctor skills,
-# which show settings snippets a model copies.
+# in the Markdown of those trees and of skills/, blueprints/ and scaffolding/,
+# which ship settings snippets a model copies.
 #
 # Usage: hook-commands-absolute.test.sh [plugin-root]
 
@@ -57,7 +57,7 @@ console.log(out.join("\n"));
 # "command": "..." lines in Markdown, JSON-unescaped, as "<file>:<line>\t<command>".
 # shellcheck disable=SC2016 # literal text, not an expansion
 MD_COMMANDS=$(cd "$PLUGIN" && grep -rnE '"command"[[:space:]]*:[[:space:]]*"' --include='*.md' \
-  templates framework-files skills/init skills/update skills/doctor 2>/dev/null | node -e '
+  templates framework-files skills blueprints scaffolding 2>/dev/null | node -e '
 const lines = require("fs").readFileSync(0, "utf8").split("\n").filter(Boolean);
 lines.forEach((line) => {
   const [, where, value] = line.match(/^([^:]+:\d+):.*"command"\s*:\s*("(?:[^"\\]|\\.)*")/) || [];
