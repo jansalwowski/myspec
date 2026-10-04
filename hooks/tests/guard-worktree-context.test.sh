@@ -269,6 +269,11 @@ check_in "$REPO" block "make -C inside main"   wt-sess 'make -C .claude build'
 check_in "$REPO" block "mvn -f main pom"       wt-sess 'mvn -f pom.xml package'
 check_in "$REPO" block "gradlew -p main"       wt-sess './gradlew -p . build'
 check_in "$REPO" block "make -j value not -n"  wt-sess 'make -j4 build'
+# -C inside a short-option cluster names the directory too.
+check_in "$REPO" allow "make -kC worktree"     wt-sess 'make -kC .claude/worktrees/wt-a build'
+check_in "$REPO" allow "make -sC attached"     wt-sess 'make -sC.claude/worktrees/wt-a build'
+check_in "$REPO" block "make -kC main dir"     wt-sess 'make -kC .claude build'
+check_in "$WT"   block "make -kC main from wt" wt-sess "make -kC $REPO build"
 # Only the options that take a value consume the next word; a target after
 # any other flag is a target, not a value (`make -s test` is a test run).
 check_in "$REPO" allow "make -s test"          wt-sess 'make -s test'

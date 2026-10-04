@@ -187,10 +187,21 @@ build_dir() {
         BUILD_DRY=1 ;;
       make:-[A-Za-z]*)
         # A short-option cluster: n or q before a letter that takes a value.
+        # A C there takes the rest of the cluster, else the next word, as
+        # the directory (`make -kC <dir>`).
         rest="${w#-}"
         while [ -n "$rest" ]; do
           case "${rest:0:1}" in
             n|q) BUILD_DRY=1 ;;
+            C)
+              flag=-C
+              if [ -n "${rest:1}" ]; then
+                v="${rw[i]:$(( ${#w} - ${#rest} + 1 ))}"
+              else
+                v="${rw[i+1]:-}"
+                i=$((i + 1))
+              fi
+              break ;;
             f|I|o|W|l|j|E) break ;;
           esac
           rest="${rest:1}"
