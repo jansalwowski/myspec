@@ -9,7 +9,7 @@
 # lib/session-event.sh); its cases prove the mode lookup, the 8 h expiry, a
 # subagent following its parent's session id and no other session's, the
 # recorded-path naming, the blockInMain setting (its default, a project
-# extension) and ignoreBlockInMain.
+# extension, the dry-run carve-out) and ignoreBlockInMain.
 #
 # Runs against a synthetic checkout with a real linked worktree, so the
 # worktree-targeting cases exercise the actual `git worktree list` lookup.
