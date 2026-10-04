@@ -134,7 +134,6 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref main
 | `/myspec:backbone-sync` | Audit the project topology file against the repo in both directions — stale entries, undocumented workspace members and commands, git-backed liveness signals (`lib/backbone-audit/audit.mjs`) — then fix it. Refuses to run rather than half-read unsupported YAML, and names every check that could not run instead of reporting clean |
 | `/myspec:worktree-clean` | Clean up git worktrees after feature branches |
 | `/myspec:doctor` | Health check of every agent-facing surface, in three tiers: `lib/setup-doctor.mjs` for the mechanical checks (~1s, no model), one surface on request, or the full six-surface audit (CLAUDE.md + rules, skills/agents, `${aiDir}` docs, memory tree, hooks + harness config, feature manifest) with approval-gated fixes as grouped PRs |
-| `/myspec:upstream-sync` | Check tracked upstream repos (e.g. obra/superpowers) for changes worth porting into local skills |
 
 ## Configuration
 

@@ -114,6 +114,6 @@ Skills not yet covered by per-skill examples:
 - **Batch audits** — `feature-status-audit`
 - **Project setup** — `init`, `update`, `setup`
 - **Memory + sessions** — `memory-preflight`, `memory-create`, `session-start`
-- **Utilities** — `skill-verify`, `worktree-clean`, `upstream-sync`
+- **Utilities** — `skill-verify`, `worktree-clean`
 
 If you'd find walk-throughs useful for any of these in isolation, open an issue or send a PR — examples are easy to add: each skill gets one file in `skills/{skill-name}.md` with H2 sections per scenario.

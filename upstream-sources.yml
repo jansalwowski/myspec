@@ -1,4 +1,4 @@
-# Upstream sources tracked by skills/upstream-sync.
+# Upstream sources tracked by the repo-local .claude/skills/upstream-sync skill.
 #
 # Each source is an external repo we draw inspiration from. For each source,
 # `last_checked_sha` is updated automatically after a successful sync run;
