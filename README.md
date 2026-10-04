@@ -225,6 +225,8 @@ After updating the plugin (`/plugin marketplace update`), run in each project:
 
 This updates framework-owned files while preserving your project customizations. Since 2.0 it also runs the one-shot migrations listed in the manifest (recorded in `.myspec.json` `migrations`), deletes files the framework retired, and wires its own hooks in `.claude/settings.json`.
 
+**Upgrading to 3.0 — code review:** the `code-review` skill and the `setup code-review` blueprint are gone; use Claude Code's built-in `/code-review` for bugs in a diff (`feature-implement` offers it after the holistic review). `/myspec:update` drops the `codeReview` block from `.myspec.json` and leaves `.claude/rules/code-review.md` in place as a project-owned file. What is lost: the project rules under its `## Standards` / `## Suppress` headings were read by the removed skill only; the built-in does not read them, so keep what still matters as ordinary always-loaded rules or delete the file.
+
 **Upgrading from 1.x:** see [docs/upgrading-to-2.0.md](docs/upgrading-to-2.0.md) — `/myspec:update` does the mechanical work, and that page covers what it cannot: references in your own files, and the behaviour changes with no file to grep. 2.0 migrates from 1.28.0 or later; a project on an older version runs the 1.28 update first (check out the plugin at tag `v1.28.0`, start Claude with `--plugin-dir` pointing at it, run `/myspec:update`, then return to the current plugin).
 
 ## Framework rules shipped to `.claude/rules/`
