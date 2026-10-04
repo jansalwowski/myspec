@@ -217,5 +217,13 @@ eq "$(session_events "$MK" mk1 | jq -r 'select(.t == "implement") | .state' | tr
 printf '{"started_at":%d,"feature":"f"}\n' "$((NOW - HOOK_DECISION_TTL - 10))" > "$MK/.claude/state/implement-in-progress.json"
 session_implement_active "$MK" mk2 && fail "markers: a stale implement marker is not imported" || ok
 
+# An import into a state file whose last line was cut short (a writer killed
+# mid-write) starts on a fresh line, as session_append does: glued to the
+# fragment, the imported event was skipped with it.
+printf '{"t":"write","root":"%s","rel":"a.ts","kind":"co' "$MK" > "$MK/.claude/state/sessions/mk3.jsonl"
+printf '{"mode":"develop","worktree_path":"","decided_at":%d}\n' "$((NOW - 60))" > "$MK/.claude/state/isolation/mk3.json"
+session_isolation "$MK" mk3
+eq "$ISO_MODE" "develop" "markers: an import after a truncated last line is read"
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

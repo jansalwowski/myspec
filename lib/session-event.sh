@@ -119,6 +119,18 @@ session_file() {
   printf '%s/%s.jsonl\n' "$dir" "$2"
 }
 
+# _session_write <file> <line>: appends one line, starting on a fresh line
+# when the file ends in a truncated one (a writer killed mid-write), which
+# would otherwise swallow this line too. Every append goes through it.
+_session_write() {
+  local line="$2"
+  mkdir -p "$(dirname "$1")" 2>/dev/null || return 1
+  if [ -s "$1" ] && [ -n "$(tail -c 1 "$1")" ]; then
+    line=$'\n'"$line"
+  fi
+  printf '%s\n' "$line" >> "$1"
+}
+
 # _session_import <file> <session id>: when the legacy ledger
 # (/tmp/.myspec-session-writes-<id>) exists and <file> does not, converts it
 # into <file> once and renames it to .imported. Lines: `<kind>\t<root>\t<rel>`
@@ -156,9 +168,8 @@ _session_import_markers() {
     now=$(date +%s)
     at=$(jq -r '.started_at // empty | numbers | floor' "$marker" 2>/dev/null || printf '')
     if mv -f "$marker" "$marker.imported" 2>/dev/null && [ -n "$at" ] \
-        && [ $((now - at)) -ge 0 ] && [ $((now - at)) -le "$HOOK_DECISION_TTL" ] \
-        && mkdir -p "$(dirname "$1")" 2>/dev/null; then
-      printf '{"t":"implement","state":"start","at":%s}\n' "$at" >> "$1"
+        && [ $((now - at)) -ge 0 ] && [ $((now - at)) -le "$HOOK_DECISION_TTL" ]; then
+      _session_write "$1" "{\"t\":\"implement\",\"state\":\"start\",\"at\":$at}" || true
     fi
   fi
   marker="$dir/isolation/$2.json"
@@ -166,9 +177,8 @@ _session_import_markers() {
     ev=$(jq -c 'select(type == "object" and (.decided_at | type) == "number")
       | {t: "isolation", mode: (.mode // "" | tostring), path: (.worktree_path // "" | tostring),
          note: "imported from the 2.x marker", at: (.decided_at | floor)}' "$marker" 2>/dev/null || printf '')
-    if mv -f "$marker" "$marker.imported" 2>/dev/null && [ -n "$ev" ] \
-        && mkdir -p "$(dirname "$1")" 2>/dev/null; then
-      printf '%s\n' "$ev" >> "$1"
+    if mv -f "$marker" "$marker.imported" 2>/dev/null && [ -n "$ev" ]; then
+      _session_write "$1" "$ev" || true
     fi
   fi
   return 0
@@ -193,13 +203,7 @@ session_append() {
   line=$(printf '%s' "$3" | jq -c --argjson at "$(date +%s)" \
     'if type == "object" and (.t | type) == "string" then . + {at: $at} else error("not an event") end' 2>/dev/null) || return 1
   case "$line" in *$'\n'*) return 1 ;; esac
-  mkdir -p "$(dirname "$f")" || return 1
-  # A truncated last line (a writer killed mid-write) would swallow this
-  # event too: start on a fresh line.
-  if [ -s "$f" ] && [ -n "$(tail -c 1 "$f")" ]; then
-    line=$'\n'"$line"
-  fi
-  printf '%s\n' "$line" >> "$f"
+  _session_write "$f" "$line"
 }
 
 # session_query <home> <session id> <jq program over $ev, the event array>
