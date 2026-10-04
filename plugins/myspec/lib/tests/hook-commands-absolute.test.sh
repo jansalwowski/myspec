@@ -71,8 +71,8 @@ HOOK_COMMANDS=$(printf '%s\n%s\n' "$COMMANDS" "$MD_COMMANDS" | grep -E 'hooks/[^
 # The scan must see the shipped wiring, or an empty result would pass vacuously.
 # The plugins/myspec mirror ships no templates/, so that check needs the file.
 [ ! -f "$PLUGIN/templates/settings-hooks.json" ] ||
-if printf '%s\n' "$HOOK_COMMANDS" | grep -q '^templates/settings-hooks.json	'; then ok; else fail "the scan reads templates/settings-hooks.json"; fi
-if printf '%s\n' "$HOOK_COMMANDS" | grep -q '^hooks.json	'; then ok; else fail "the scan reads the plugin hooks.json"; fi
+if printf '%s\n' "$HOOK_COMMANDS" | grep -q "^templates/settings-hooks.json"$'\t'; then ok; else fail "the scan reads templates/settings-hooks.json"; fi
+if printf '%s\n' "$HOOK_COMMANDS" | grep -q "^hooks.json"$'\t'; then ok; else fail "the scan reads the plugin hooks.json"; fi
 
 # shellcheck disable=SC2016 # literal text, not an expansion
 OFFENDERS=$(printf '%s\n' "$HOOK_COMMANDS" | node -e "$SCAN"'
