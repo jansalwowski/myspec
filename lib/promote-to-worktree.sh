@@ -91,12 +91,13 @@ if ! grep -qE '^[a-z][a-z0-9]*(/[a-z0-9][a-z0-9._-]*)+$' <<< "$BRANCH"; then
   exit 1
 fi
 
-REPO_ROOT=$(git rev-parse --show-toplevel)
-
-if [ ! -d "$REPO_ROOT/.git" ]; then
+# shellcheck source=lib/hook-core.sh
+. "$(dirname "${BASH_SOURCE[0]}")/hook-core.sh"
+if ! checkout_facts "$PWD" || [ "$CF_LINKED" = 1 ] || [ "$CF_SUBMODULE" = 1 ]; then
   echo "promote: must run from the MAIN checkout, not a worktree" >&2
   exit 1
 fi
+REPO_ROOT="$CF_ROOT"
 
 if [ -z "$BASE" ]; then
   BASE=$(git -C "$REPO_ROOT" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || printf '')

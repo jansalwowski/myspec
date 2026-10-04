@@ -17,7 +17,7 @@
 # "feedback": { "metrics": false }):
 #   MYSPEC_DISABLE_METRICS=1, DO_NOT_TRACK set to anything but empty, 0,
 #   false or FALSE (lib/myspec-config.schema.json matches the same values),
-#   node or jq missing, no transcript in the payload.
+#   node, jq or lib/hook-core.sh missing, no transcript in the payload.
 #
 # MYSPEC_METRICS_CAP_SECONDS may lower the cap (the tests use it); a value
 # above the default is ignored, so it can never raise it.
@@ -30,24 +30,25 @@ case "${DO_NOT_TRACK:-}" in ''|0|false|FALSE) ;; *) exit 0 ;; esac
 command -v node || exit 0
 command -v jq || exit 0
 
-SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
-TRANSCRIPT=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty' 2>/dev/null)
-SESSION_CWD=$(printf '%s' "$INPUT" | jq -r '.cwd // empty' 2>/dev/null)
-REASON=$(printf '%s' "$INPUT" | jq -r '.reason // empty' 2>/dev/null)
+# The scan and hook-core ship next to this hook: .claude/lib/ in a project
+# (manifest `lib`), lib/ at the plugin root.
+HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
+[ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
+[ -f "$HOOK_CORE" ] || exit 0
+# shellcheck source=lib/hook-core.sh
+. "$HOOK_CORE"
 
+payload_parse "$INPUT" SESSION_ID=.session_id TRANSCRIPT=.transcript_path \
+  SESSION_CWD=.cwd REASON=.reason
+
+# shellcheck disable=SC2153 # payload_parse assigned it
 [[ "$SESSION_ID" =~ ^[A-Za-z0-9._-]+$ ]] || exit 0
 [ -f "$TRANSCRIPT" ] || exit 0
 [ -d "$SESSION_CWD" ] || SESSION_CWD=$PWD
 [[ "$REASON" =~ ^[a-z_]{1,32}$ ]] || REASON=""
 
-# The scan ships next to this hook: .claude/lib/ in a project (manifest `lib`),
-# lib/ at the plugin root.
-HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-SCAN=""
-for CANDIDATE in "$HERE/../lib/friction-scan/scan.mjs" "${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/friction-scan/scan.mjs"; do
-  if [ -f "$CANDIDATE" ]; then SCAN=$CANDIDATE; break; fi
-done
-[ -n "$SCAN" ] || exit 0
+SCAN="$HOOK_LIB/friction-scan/scan.mjs"
+[ -f "$SCAN" ] || exit 0
 
 CAP_SECONDS=30
 if [[ "${MYSPEC_METRICS_CAP_SECONDS:-}" =~ ^[1-9][0-9]*$ ]] && [ "$MYSPEC_METRICS_CAP_SECONDS" -lt "$CAP_SECONDS" ]; then

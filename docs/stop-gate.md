@@ -63,7 +63,7 @@ The gate reads `checks` and `containers` through `lib/myspec-config.sh`, the one
 
 The set matched is every file the session wrote in the checkout, not only those since the last run. A check that failed before still runs after the session moves on to other directories.
 
-**Workdir (`runIn`).** Let M be the main checkout (for a submodule, its superproject's main checkout plus the submodule's path) and C this checkout. `MYSPEC_CHECK_WORKDIR` is `mountTarget` plus the path of `C/mountSource` under `M/mountSource`. With `mountSource` `.` that is `mountTarget` in the main checkout and `mountTarget/.claude/worktrees/<name>` in a worktree under the default `isolation.worktreeRoot`. With `mountSource` `api`, a worktree's `api/` is not under the main checkout's `api/`, so only the main checkout is visible. A polyglot pair:
+**Workdir (`runIn`).** Let M be the main checkout (`checkout_facts` in `lib/hook-core.sh`; for a submodule, its superproject's main checkout plus the submodule's path) and C this checkout. A checkout whose repository has no main checkout git can name (a bare repository's worktree) refuses a `runIn` check. `MYSPEC_CHECK_WORKDIR` is `mountTarget` plus the path of `C/mountSource` under `M/mountSource`. With `mountSource` `.` that is `mountTarget` in the main checkout and `mountTarget/.claude/worktrees/<name>` in a worktree under the default `isolation.worktreeRoot`. With `mountSource` `api`, a worktree's `api/` is not under the main checkout's `api/`, so only the main checkout is visible. A polyglot pair:
 
 ```json
 {
@@ -79,6 +79,7 @@ The PHP suite runs in the container and the TypeScript check on the host, each o
 
 ## Verification
 
+- `lib/tests/hook-core.test.sh`: the primitives every hook shares: payload parsing with missing fields, physical paths, and which checkout is the main one in a plain repo, a linked worktree, a bare repository with worktrees, `--separate-git-dir`, a submodule inside a worktree, a symlinked root and paths with spaces.
 - `hooks/tests/mark-code-changed.test.sh`: write targets, `/dev/null` and descriptor redirects, `cd` and subshell scope, foreign roots, non-code writes as `file`.
 - `hooks/tests/verify-before-stop-attribution.test.sh`: arming per root, a worktree edited from the main checkout, the ledger outliving a run, the legacy marker, and each attribution rule, including #198's repro.
 - `hooks/tests/verify-before-stop-regression.test.sh`: which checkouts the ledger verifies (#201).

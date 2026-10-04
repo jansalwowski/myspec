@@ -52,7 +52,8 @@
 # session-complete can tell the controller's own edits from delegated ones.
 #
 # Settings (#231, docs/project-settings-design.md), read through
-# lib/myspec-config.sh from the checkout that holds the written file:
+# lib/myspec-config.sh (read_setting in lib/hook-core.sh) from the checkout
+# that holds the written file:
 # hooks.markCodeChanged.extraCodeExtensions adds to CODE_EXT, and a write to a
 # path matching a hooks.markCodeChanged.ignorePaths glob (lib/glob-regex.sh,
 # the same semantics as checks[].paths) is recorded as
@@ -61,14 +62,14 @@
 
 set -euo pipefail
 
-if ! command -v jq &>/dev/null; then
-  exit 0
-fi
-
-INPUT=$(cat)
+command -v jq >/dev/null 2>&1 || exit 0
+HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
+[ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
+[ -f "$HOOK_CORE" ] || exit 0
+# shellcheck source=lib/hook-core.sh
+. "$HOOK_CORE"
 
 CODE_EXT='(ts|tsx|vue|js|jsx|mjs|cjs|mts|cts|py|rb|go|java|php|rs|cs|swift|kt|sh|bash|graphql|gql)'
-SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 # ere_literal <text> -> the text as an ERE matching only itself, so an
 # extension such as c++ is the literal suffix.
@@ -112,7 +113,7 @@ SET_IGNORE=()
 # .myspec.json (as worktree-provision.sh does). No .myspec.json, no reader or
 # an unreadable value: the defaults, and the reader names what it ignored.
 load_settings() {
-  local root="$1" src cfg json ext exts="" g i re
+  local root="$1" src json ext exts="" g i re
   for ((i = 0; i < ${#SET_ROOTS[@]}; i++)); do
     if [ "${SET_ROOTS[$i]}" = "$root" ]; then
       CODE_RE="${SET_CODE_RE[$i]}"
@@ -127,14 +128,10 @@ load_settings() {
     src=$(main_worktree_root "$root" 2>/dev/null) || src=""
   fi
   if [ -n "$src" ] && [ -f "$src/.myspec.json" ]; then
-    cfg=""
-    for cand in "$SCRIPT_DIR/../lib/myspec-config.sh" "$src/.claude/lib/myspec-config.sh"; do
-      if [ -f "$cand" ]; then
-        cfg="$cand"
-        break
-      fi
-    done
-    if [ -n "$cfg" ] && json=$(bash "$cfg" get hooks.markCodeChanged --root "$src"); then
+    json=""
+    read_setting hooks.markCodeChanged "$src" && json="$SETTING"
+    [ -z "$SETTING_NOTES" ] || printf '%s\n' "$SETTING_NOTES" | sed 's/^/myspec-config: /' >&2
+    if [ -n "$json" ]; then
       while IFS= read -r ext; do
         ext="${ext#.}"
         if [[ "$ext" =~ ^[A-Za-z0-9_+-]+(\.[A-Za-z0-9_+-]+)*$ ]]; then
@@ -146,16 +143,13 @@ load_settings() {
       if [ -n "$exts" ]; then
         CODE_RE=$(code_re_or_default "\\.(${CODE_EXT:1:${#CODE_EXT}-2}${exts})\$")
       fi
-      # The globs compile through lib/glob-regex.sh, the one compiler the
-      # Stop hook's `paths` and provisioning's `clean` use too.
-      if ! declare -F glob_regex >/dev/null && [ -f "$(dirname "$cfg")/glob-regex.sh" ]; then
-        # shellcheck source=/dev/null
-        . "$(dirname "$cfg")/glob-regex.sh"
-      fi
+      # The globs compile through lib/glob-regex.sh (sourced by hook-core),
+      # the one compiler the Stop hook's `paths` and provisioning's `clean`
+      # use too.
       while IFS= read -r g; do
         [ -n "$g" ] || continue
         if ! declare -F glob_regex >/dev/null; then
-          echo "mark-code-changed: ignoring hooks.markCodeChanged.ignorePaths: lib/glob-regex.sh was not found next to $cfg" >&2
+          echo "mark-code-changed: ignoring hooks.markCodeChanged.ignorePaths: lib/glob-regex.sh was not found in $HOOK_LIB" >&2
           break
         fi
         if ! re=$(glob_regex "$g"); then
@@ -181,56 +175,24 @@ ignored() {
   return 1
 }
 
-# Nearest existing directory at or above the edited file. PostToolUse runs after
-# the write, so the parent normally exists; walking up keeps resolution working
-# when it does not.
-anchor_dir_for_file() {
-  local dir
-  dir="$(dirname "$1")"
-
-  while [ -n "$dir" ] && [ "$dir" != "/" ] && [ "$dir" != "." ] && [ ! -d "$dir" ]; do
-    dir="$(dirname "$dir")"
-  done
-
-  if [ -d "$dir" ]; then
-    printf '%s\n' "$dir"
-    return 0
-  fi
-
-  return 1
-}
-
-# Pin a git toplevel to the primary worktree. A linked worktree is its own
-# toplevel, so `--show-toplevel` inside <worktreeRoot>/<slug> returns the
-# worktree; the parent of the common git dir is the main checkout. The two
-# already agree in the primary worktree, so this is a no-op there.
+# Pin a checkout to the primary worktree: a linked worktree's main checkout
+# (checkout_facts), else the checkout itself (the main checkout, a submodule,
+# a worktree of a bare repository).
 main_worktree_root() {
-  local path="$1"
-  local common_git_dir
-
-  common_git_dir=$(git -C "$path" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || return 1
-
-  # Submodules and bare repos have a common dir that is not named `.git`; for
-  # those the plain toplevel is already the correct root.
-  if [ "$(basename "$common_git_dir")" = ".git" ]; then
-    (cd "$(dirname "$common_git_dir")" && pwd -P)
-    return
-  fi
-
-  common_git_dir=$(git -C "$path" rev-parse --show-toplevel 2>/dev/null) || return 1
-  (cd "$common_git_dir" && pwd -P)
+  checkout_facts "$1" || return 1
+  printf '%s\n' "${CF_MAIN:-$CF_ROOT}"
 }
 
 # checkout_root <existing dir> -> the physical root of the checkout holding it:
 # its git toplevel, or, in a project without git, the nearest directory with a
 # .myspec.json. Fails when there is neither: nothing there to verify.
 checkout_root() {
-  local dir="$1" top
-  if top=$(git -C "$dir" rev-parse --show-toplevel 2>/dev/null); then
-    (cd "$top" && pwd -P)
+  local dir="$1"
+  if checkout_facts "$dir"; then
+    printf '%s\n' "$CF_ROOT"
     return
   fi
-  dir=$(cd "$dir" && pwd -P) || return 1
+  dir=$(physical_dir "$dir") || return 1
   while :; do
     if [ -f "$dir/.myspec.json" ]; then
       printf '%s\n' "$dir"
@@ -241,26 +203,10 @@ checkout_root() {
   done
 }
 
-# physical_path <path> -> absolute, with its directory resolved (symlinks,
-# `..`). A relative path is taken from BASE_DIR: the payload cwd, moved by any
-# literal `cd` earlier in a Bash command.
-physical_path() {
-  local p="$1" dir
-  case "$p" in
-    /*) ;;
-    *) p="$BASE_DIR/$p" ;;
-  esac
-  dir=$(dirname "$p")
-  if [ -d "$dir" ]; then
-    dir=$(cd "$dir" && pwd -P) || return 1
-    printf '%s/%s\n' "${dir%/}" "$(basename "$p")"
-  else
-    printf '%s\n' "$p"
-  fi
-}
-
 # emit_target <word> [must-exist] [no-glob] -> the physical path of a written
-# file named by <word>. Placeholders for quoted spans (Q), variables,
+# file named by <word>, taken from BASE_DIR when relative (the payload cwd,
+# moved by any literal `cd` earlier in a Bash command; physical_path in
+# lib/hook-core.sh). Placeholders for quoted spans (Q), variables,
 # substitutions, remote paths and devices name nothing this hook can resolve.
 # A glob expands against BASE_DIR. With must-exist, a word that is not a
 # file after the write is skipped: sed's and perl's script operand.
@@ -276,7 +222,7 @@ emit_target() {
     done < <(cd "$BASE_DIR" 2>/dev/null && { compgen -G "$w" || true; })
     return 0
   fi
-  p=$(physical_path "$w") || return 0
+  p=$(physical_path "$w" "$BASE_DIR") || return 0
   if [ -d "$p" ]; then
     return 0
   fi
@@ -398,7 +344,7 @@ bash_write_targets() {
         if [ "$verb" = mv ]; then
           for word in "${ops[@]}"; do emit_target "$word"; done
         fi
-        dest=$(physical_path "$last") || continue
+        dest=$(physical_path "$last" "$BASE_DIR") || continue
         if [ -d "$dest" ]; then
           for ((i = 0; i < ${#ops[@]} - 1; i++)); do
             emit_target "$last/$(basename "${ops[$i]}")"
@@ -534,64 +480,38 @@ SESSION
   done
 }
 
-FILE_PATH=$(printf '%s' "$INPUT" | jq -r '.tool_input.file_path // .tool_input.notebook_path // empty' 2>/dev/null)
-COMMAND=$(printf '%s' "$INPUT" | jq -r '.tool_input.command // empty' 2>/dev/null)
-SESSION_ID=$(printf '%s' "$INPUT" | jq -r '.session_id // empty' 2>/dev/null)
+payload_parse "$(cat)" FILE_PATH='.tool_input.file_path // .tool_input.notebook_path' \
+  COMMAND=.tool_input.command SESSION_ID=.session_id \
+  AGENT_ID='.agent_id | strings' AGENT_TYPE='.agent_type | strings' CWDS="$HOOK_CWDS"
 
 [ -n "$SESSION_ID" ] || exit 0
 
 # A subagent's events carry agent_id (and agent_type); the main session's do
 # not. Only id-safe characters are kept, so a value can't break a ledger line
 # or the log's markdown.
-AGENT_ID=$(printf '%s' "$INPUT" | jq -r '.agent_id // empty | strings' 2>/dev/null | tr -cd 'A-Za-z0-9._:-')
-AGENT_TYPE=$(printf '%s' "$INPUT" | jq -r '.agent_type // empty | strings' 2>/dev/null | tr -cd 'A-Za-z0-9._:-')
+AGENT_ID=${AGENT_ID//[!A-Za-z0-9._:-]/}
+AGENT_TYPE=${AGENT_TYPE//[!A-Za-z0-9._:-]/}
 AGENT_TAG=""
 if [ -n "$AGENT_ID" ]; then
   AGENT_TAG=" (subagent $AGENT_ID${AGENT_TYPE:+, $AGENT_TYPE})"
 fi
 
-# The directory relative paths are taken from: the first cwd the payload
-# carries that exists, else the hook's own.
-PAYLOAD_CWD=""
-while IFS= read -r candidate; do
-  if [ -n "$candidate" ] && [ -d "$candidate" ]; then
-    PAYLOAD_CWD="$candidate"
-    break
-  fi
-done <<JSON
-$(printf '%s' "$INPUT" | jq -r '
-    [
-      .cwd,
-      .workdir,
-      .workspace.cwd,
-      .session.cwd,
-      .tool_input.cwd,
-      .tool_input.workdir
-    ] | map(select(type == "string" and . != "")) | .[]
-  ' 2>/dev/null)
-JSON
-[ -n "$PAYLOAD_CWD" ] || PAYLOAD_CWD="$PWD"
-BASE_DIR=$(cd "$PAYLOAD_CWD" && pwd -P)
+# The directory relative paths are taken from: the payload's cwd, else the
+# hook's own.
+PAYLOAD_CWD=$(first_dir "$CWDS") || PAYLOAD_CWD="$PWD"
+BASE_DIR=$(physical_dir "$PAYLOAD_CWD")
 
 TARGETS=()
 CONTEXT=""
 
 if [ -n "$FILE_PATH" ]; then
-  TARGETS=("$(physical_path "$FILE_PATH")")
+  TARGETS=("$(physical_path "$FILE_PATH" "$BASE_DIR")")
   CONTEXT="Auto-created on first code edit at \`$FILE_PATH\`."
 elif [ -n "$COMMAND" ]; then
-  CWD_ROOT=$(git -C "$PAYLOAD_CWD" rev-parse --show-toplevel 2>/dev/null || printf '%s' "$PAYLOAD_CWD")
-  LIB=""
-  for cand in "$SCRIPT_DIR/../lib/command-scan.sh" "$CWD_ROOT/.claude/lib/command-scan.sh" "$CWD_ROOT/lib/command-scan.sh"; do
-    if [ -f "$cand" ]; then
-      LIB="$cand"
-      break
-    fi
-  done
-  [ -n "$LIB" ] || exit 0
-
-  # shellcheck source=/dev/null
-  . "$LIB"
+  # The scanner ships beside hook-core.
+  [ -f "$HOOK_LIB/command-scan.sh" ] || exit 0
+  # shellcheck source=lib/command-scan.sh
+  . "$HOOK_LIB/command-scan.sh"
 
   # Cheap gate before the full scan: a write verb or a redirect at some
   # segment. Most Bash calls stop here.
@@ -622,7 +542,9 @@ CODE_ROOTS=()
 CODE_PATHS=()
 
 for p in "${TARGETS[@]}"; do
-  anchor=$(anchor_dir_for_file "$p") || continue
+  # PostToolUse runs after the write, so the parent normally exists; the
+  # nearest existing directory keeps resolution working when it does not.
+  anchor=$(existing_dir "$(dirname "$p")") || continue
   root=$(checkout_root "$anchor") || continue
   case "$p" in
     "$root"/*) rel="${p#"$root"/}" ;;

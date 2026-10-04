@@ -32,6 +32,8 @@ echo '{ "aiDir": ".ai", "frameworkVersion": "9.9.9" }' > "$REPO/.myspec.json"
 cp "$HOOK_SRC" "$REPO/.claude/hooks/record-session-metrics.sh"
 chmod +x "$REPO/.claude/hooks/record-session-metrics.sh"
 cp "$LIB_SRC/scan.mjs" "$LIB_SRC/metrics.mjs" "$REPO/.claude/lib/friction-scan/"
+# The installed layout: the hook sources .claude/lib/hook-core.sh.
+cp "$LIB_SRC/../hook-core.sh" "$REPO/.claude/lib/"
 HOOK="$REPO/.claude/hooks/record-session-metrics.sh"
 RUNS="$REPO/.claude/state/metrics/runs.jsonl"
 

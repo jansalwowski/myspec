@@ -61,9 +61,13 @@ while [ $# -gt 0 ]; do
 done
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-CONTROLLER=$(git rev-parse --show-toplevel)
-COMMON=$(git rev-parse --path-format=absolute --git-common-dir)
-MAIN=$(dirname "$COMMON")
+# shellcheck source=lib/hook-core.sh
+. "$HERE/hook-core.sh"
+checkout_facts "$PWD" || { echo "task-worktree: run it from the controller's checkout (not a git work tree: $PWD)" >&2; exit 1; }
+CONTROLLER="$CF_ROOT"
+# Task worktrees live under the main checkout (checkout_facts). A repository
+# without one (a bare repository's worktree) keeps them under the controller.
+MAIN="${CF_MAIN:-$CF_ROOT}"
 WT_ROOT=".claude/worktrees"
 if [ -f "$MAIN/.myspec.json" ] && command -v jq >/dev/null 2>&1; then
   WT_ROOT=$(jq -r '.isolation.worktreeRoot // ".claude/worktrees"' "$MAIN/.myspec.json" 2>/dev/null || echo ".claude/worktrees")
