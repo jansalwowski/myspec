@@ -39,7 +39,8 @@
 #
 # WHERE a segment runs is decided per segment, not once per command: the
 # payload's cwd, then every `cd <dir>` before it (scoped to its subshell), then
-# `git -C <dir>` / `--git-dir`. Launchers are looked through — `env`, `command`,
+# `git -C <dir>` / `--git-dir`, and a build tool's own directory flag
+# (`make -C`, `mvn -f <pom>`, `gradle -p`). Launchers are looked through — `env`, `command`,
 # `sudo`, `exec`, `nohup`, `time`, `nice`, git's global options (`-c k=v`,
 # `--no-pager`, ...) — and `bash -c '...'` / `eval` payloads are scanned as
 # commands. So `cd <worktree> && git checkout x` (the sanctioned path both block
@@ -145,6 +146,63 @@ resolve_dir() {
   esac
   [ -n "$word" ] || return 1
   (cd "$word" 2>/dev/null && pwd -P)
+}
+
+# resolve_file_dir <base> <encoded word> -> the directory a build-file
+# argument names: the word itself when it is a directory, else its parent.
+resolve_file_dir() {
+  local word
+  resolve_dir "$1" "$2" && return 0
+  word=$(decode_word "$2")
+  case "$word" in */*) ;; *) word=. ;; esac
+  resolve_dir "$1" "${word%/*}"
+}
+
+# build_dir <dir> <tool> <sanitized word>... -- <encoded word>... -> sets
+# BUILD_DIR to where a make, maven or gradle run builds: <dir> moved by
+# `make -C`/`--directory`, `mvn -f`/`--file` (a pom's directory) or
+# `gradle -p`/`--project-dir`, wherever among the arguments it appears. Sets
+# BUILD_DRY=1 for a make run that only reports (-n, -q and their long forms).
+# An unresolvable value leaves the directory unchanged.
+build_dir() {
+  local dir="$1" tool="$2" i n w v flag rest
+  local -a sw=() rw=()
+  shift 2
+  while [ "$#" -gt 0 ] && [ "$1" != -- ]; do sw+=("$1"); shift; done
+  [ "$#" -gt 0 ] && shift
+  rw=("$@")
+  n=${#sw[@]}
+  BUILD_DIR="$dir" BUILD_DRY=0
+  for ((i = 0; i < n; i++)); do
+    w="${sw[i]}" v="" flag=""
+    case "$tool:$w" in
+      make:-C|make:--directory|mvn:-f|mvn:--file|gradle:-p|gradle:--project-dir)
+        flag="$w" v="${rw[i+1]:-}"
+        i=$((i + 1)) ;;
+      make:--directory=*|mvn:--file=*|gradle:--project-dir=*)
+        flag="${w%%=*}" v="${rw[i]#*=}" ;;
+      make:-C?*|mvn:-f?*|gradle:-p?*)
+        flag="${w:0:2}" v="${rw[i]:2}" ;;
+      make:--just-print|make:--dry-run|make:--recon|make:--question)
+        BUILD_DRY=1 ;;
+      make:-[A-Za-z]*)
+        # A short-option cluster: n or q before a letter that takes a value.
+        rest="${w#-}"
+        while [ -n "$rest" ]; do
+          case "${rest:0:1}" in
+            n|q) BUILD_DRY=1 ;;
+            f|I|o|W|l|j|E) break ;;
+          esac
+          rest="${rest:1}"
+        done ;;
+    esac
+    [ -n "$flag" ] || continue
+    case "$flag" in
+      -f|--file) v=$(resolve_file_dir "$BUILD_DIR" "$v") || continue ;;
+      *) v=$(resolve_dir "$BUILD_DIR" "$v") || continue ;;
+    esac
+    BUILD_DIR="$v"
+  done
 }
 
 # classify <dir> <git-dir or empty> -> sets CLS_ROOT to the main checkout the
@@ -511,6 +569,12 @@ walk() {
         norm="git $(join_words "$j" "${sw[@]}")"
         norm="${norm% }"
         check_segment "$norm" "$gdir" "$gitdir"
+        ;;
+      make|mvn|mvnw|gradle|gradlew)
+        case "$c" in mvnw) c=mvn ;; gradlew) c=gradle ;; esac
+        build_dir "$dir" "$c" "${sw[@]:j+1}" -- "${rw[@]:j+1}"
+        [ "$BUILD_DRY" = 0 ] || continue
+        check_segment "$(join_words "$j" "${sw[@]}")" "$BUILD_DIR" ""
         ;;
       *)
         check_segment "$(join_words "$j" "${sw[@]}")" "$dir" ""

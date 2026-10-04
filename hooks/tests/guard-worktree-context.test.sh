@@ -252,6 +252,23 @@ check_in "$REPO" block "make install"          wt-sess 'make -j 4 install'
 check_in "$REPO" allow "gradle test"           wt-sess './gradlew test'
 check_in "$REPO" allow "dotnet test"           wt-sess 'dotnet test'
 check_in "$REPO" allow "make lint"             wt-sess 'make lint'
+# The directory flags of make, maven and gradle say where the build runs, like
+# `cd` and `git -C`; a make dry run (-n, -q) only reports.
+check_in "$REPO" allow "make -C worktree"      wt-sess 'make -C .claude/worktrees/wt-a build'
+check_in "$REPO" allow "make --directory="     wt-sess 'make --directory=.claude/worktrees/wt-a install'
+check_in "$REPO" allow "make -C after target"  wt-sess 'make build -C .claude/worktrees/wt-a'
+check_in "$REPO" allow "mvn -f worktree pom"   wt-sess 'mvn -f .claude/worktrees/wt-a/pom.xml package'
+check_in "$REPO" allow "mvnw --file worktree"  wt-sess './mvnw --file .claude/worktrees/wt-a clean install'
+check_in "$REPO" allow "gradlew -p worktree"   wt-sess './gradlew -p .claude/worktrees/wt-a build'
+check_in "$REPO" allow "gradle --project-dir"  wt-sess 'gradle --project-dir=.claude/worktrees/wt-a assemble'
+check_in "$REPO" allow "make -n"               wt-sess 'make -n'
+check_in "$REPO" allow "make --dry-run build"  wt-sess 'make --dry-run build'
+check_in "$REPO" allow "make -q install"       wt-sess 'make -q install'
+check_in "$REPO" block "make build in main"    wt-sess 'make build'
+check_in "$REPO" block "make -C inside main"   wt-sess 'make -C .claude build'
+check_in "$REPO" block "mvn -f main pom"       wt-sess 'mvn -f pom.xml package'
+check_in "$REPO" block "gradlew -p main"       wt-sess './gradlew -p . build'
+check_in "$REPO" block "make -j value not -n"  wt-sess 'make -j4 build'
 MYSPEC_JSON=$(cat "$REPO/.myspec.json")
 jq '.isolation.ignoreBlockInMain = ["^git[[:space:]]+push([[:space:]]|$)"]' <<< "$MYSPEC_JSON" > "$REPO/.myspec.json"
 check_in "$REPO" allow "ignoreBlockInMain drops a default entry" wt-sess 'git push origin HEAD'
