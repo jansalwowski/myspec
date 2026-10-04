@@ -178,6 +178,16 @@ while [ -n "$FILE_DIR" ] && [ "$FILE_DIR" != "/" ] && [ ! -d "$FILE_DIR" ]; do
   FILE_DIR="$(dirname "$FILE_DIR")"
 done
 
+# Compare physical paths. The tool's file_path is the path as the session
+# spelled it, which can run through a symlink (a linked home directory,
+# macOS /tmp), while git reports the physical toplevel: the prefix strip
+# below then failed and the edit was approved as outside the repo.
+if [ "$FILE_DIR" != "/" ] && PHYS_DIR=$(cd "$FILE_DIR" 2>/dev/null && pwd -P); then
+  ABS_PATH="$PHYS_DIR/${ABS_PATH#"$FILE_DIR"/}"
+  FILE_DIR="$PHYS_DIR"
+fi
+REPO_ROOT=$(cd "$REPO_ROOT" && pwd -P)
+
 if FILE_ROOT="$(git -C "$FILE_DIR" rev-parse --show-toplevel 2>/dev/null)"; then
   if [ -f "$FILE_ROOT/.git" ]; then
     approve
@@ -258,7 +268,8 @@ fi
 #    A top-level session never inherits; it falls through to the ask.
 if [ -n "$SUBAGENT" ] && [ -d "$STATE_DIR" ]; then
   # shellcheck disable=SC2012 # ls -t is the portable mtime sort; the names are generated session ids
-  NEWEST=$(ls -t "$STATE_DIR"/*.json 2>/dev/null | head -1 || printf '')
+  # awk, not head: it reads all of ls, so no SIGPIPE under pipefail.
+  NEWEST=$(ls -t "$STATE_DIR"/*.json 2>/dev/null | awk 'NR == 1' || printf '')
 
   if [ -n "$NEWEST" ] && [ -f "$NEWEST" ]; then
     read_marker "$NEWEST"

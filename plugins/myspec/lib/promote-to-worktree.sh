@@ -86,7 +86,7 @@ if [ -z "$BRANCH" ] || [ -z "$TITLE" ]; then
   exit 1
 fi
 
-if ! printf '%s' "$BRANCH" | grep -qE '^[a-z][a-z0-9]*(/[a-z0-9][a-z0-9._-]*)+$'; then
+if ! grep -qE '^[a-z][a-z0-9]*(/[a-z0-9][a-z0-9._-]*)+$' <<< "$BRANCH"; then
   echo "promote: --branch must look like 'fix/some-slug' (got '$BRANCH')" >&2
   exit 1
 fi

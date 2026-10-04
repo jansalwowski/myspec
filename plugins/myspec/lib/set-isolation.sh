@@ -88,8 +88,9 @@ if [ "${1:-}" = "--show" ]; then
     AT=$(jq -r '.decided_at // 0' "$f")
     NOTE=$(jq -r '.note // ""' "$f")
     WT_PATH=$(jq -r '.worktree_path // ""' "$f")
+    ID=$(basename "$f" .json)
     printf '%s  mode=%-8s age=%dmin  %s%s\n' \
-      "$(basename "$f" .json | head -c 8)" "$MODE" "$(( (NOW - AT) / 60 ))" "$NOTE" \
+      "${ID:0:8}" "$MODE" "$(( (NOW - AT) / 60 ))" "$NOTE" \
       "$([ -n "$WT_PATH" ] && printf ' [%s]' "$WT_PATH")"
   done
 

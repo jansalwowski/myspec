@@ -354,6 +354,29 @@ d=$(printf '{"session_id":"%s-144","cwd":%s}' "$SID" "$(printf '%s' "$WT_W" | jq
   | PATH="$SHIM:$PATH" bash "$HOOK" 2>/dev/null | jq -r '.decision')
 expect block "$d" "a find without -lname still blocks a workspace link into main"
 
+# A find that cannot run the scan at all (no -mindepth) still blocks: an
+# unscanned tree is never accepted.
+# shellcheck disable=SC2016 # the shim's own "$@", expanded when it runs
+printf '#!/bin/sh\nfor a in "$@"; do [ "$a" = -mindepth ] && { echo "find: unrecognized: -mindepth" >&2; exit 1; }; done\nexec %s "$@"\n' "$REAL_FIND" > "$SHIM/find"
+touch "/tmp/.myspec-code-changed-$SID-145"
+d=$(printf '{"session_id":"%s-145","cwd":%s}' "$SID" "$(printf '%s' "$WT_W" | jq -Rs .)" \
+  | PATH="$SHIM:$PATH" bash "$HOOK" 2>/dev/null | jq -r '.decision')
+expect block "$d" "a find without -mindepth leaves the tree unscanned, which blocks"
+
+# An unreadable directory inside a linked tree makes find exit non-zero after
+# it listed everything it could read. That is not evidence the tree loads the
+# main checkout's source: a provisioned link with matching lockfiles passes.
+if [ "$(id -u)" -ne 0 ]; then
+  MAIN_U=$(new_repo unreadable 1)
+  WT_U="$ROOT/unreadable-wt"
+  git -C "$MAIN_U" worktree add -q -b feat "$WT_U" main
+  bash "$PROVISION" "$WT_U" --base main >/dev/null
+  mkdir -p "$MAIN_U/node_modules/.cache/locked"
+  chmod 000 "$MAIN_U/node_modules/.cache"
+  expect approve "$(stop 146 "$WT_U")" "an unreadable directory in a linked tree with matching lockfiles passes"
+  chmod 755 "$MAIN_U/node_modules/.cache"
+fi
+
 # --- memory gate: stale-ref ID collisions warn, they do not block (#124) -----
 # S001 is added on feat/a, merged, reverted on main and reused there; feat/c
 # and feat/d both take P001 and never merge. Touching the memory tree must not
