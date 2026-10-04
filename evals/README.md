@@ -70,21 +70,21 @@ Files changed between `--base` (default: `git merge-base origin/main HEAD`) and 
 
 Nothing else selects a case. Changes to `framework-files/`, `scaffolding/`, `hooks/` or `lib/` are left to the full suite, even though the scaffold copies `framework-files/` into every workspace. The exception is an always-loaded rule in `framework-files/rules/`: regenerating the [project instructions](#project-instructions) rewrites every `case.yaml`, which selects every case.
 
-Tag a case with **every** skill its graders name, siblings included. A description change in `feature-spec-review` can start stealing `skill-verify`'s prompts, so `nearmiss-skill-verify` carries `skill:feature-spec-review` too.
+Tag a case with **every** skill its graders name, siblings included. A description change in `feature-spec-review` can start stealing `skill-verify`'s prompts, so `nearmiss-skill-verify` carries `skill:feature-spec-review` too. The exception is a sibling that is only a Claude Code built-in (`code-review`): no file in this repo changes it, so a tag would select nothing.
 
 ## The cases
 
 | Case | Family | What it proves |
 |---|---|---|
 | `trigger-new-feature` | trigger | "start a new feature … write the requirements" → feature-spec, spec.md written |
-| `route-spec-review` | trigger, near-miss | "before the technical design, check the requirements doc" → feature-spec-review, not tech-spec-review |
+| `route-spec-review` | trigger, near-miss | "before the technical design, check the requirements doc" → feature-spec-review, not tech-spec-review or the built-in /code-review |
 | `trigger-memorize` | trigger | a named fact to keep → memorize, not memorify or session-complete |
 | `nearmiss-personal-preference` | near-miss | "remember that I prefer short answers" → auto-memory, not memorize or memorify |
 | `trigger-memorify` | trigger | "anything from this debugging worth keeping?" → memorify |
 | `trigger-memory-lookup` | trigger, near-miss | "have we run into this before?" → memory-lookup, not a capture skill |
 | `trigger-session-complete` | trigger | "that's it for today, wrap up the session" → session-complete, not memorify |
-| `trigger-implement-review` | trigger, near-miss | "does what we built match the spec and plan?" → feature-implement-review, not feature-verify |
-| `nearmiss-skill-verify` | trigger, near-miss | "check my SKILL.md for problems" → skill-verify, not feature-spec-review |
+| `trigger-implement-review` | trigger, near-miss | "does what we built match the spec and plan?" → feature-implement-review, not the built-in /code-review or feature-verify |
+| `nearmiss-skill-verify` | trigger, near-miss | "check my SKILL.md for problems" → skill-verify, not the built-in /code-review or feature-spec-review |
 | `trigger-doctor` | trigger | "health check of our myspec setup" → doctor, not the feature audits |
 | `trigger-feature-verify` | trigger | one feature's drift → feature-verify, not feature-status-audit or doctor |
 | `trigger-feature-status-audit` | trigger | "does index.yaml match the features folder?" → feature-status-audit |
@@ -204,7 +204,7 @@ arm: both
 ---
 ```
 
-For `doctor` and `init` write `"myspec:<name>"` without the optional group: Claude Code ships built-in skills with those names, and the bare call is not ours.
+For `doctor` and `init` write `"myspec:<name>"` without the optional group: Claude Code ships built-in skills with those names, and the bare call is not ours. `code-review` is the built-in alone since 3.0 (`feature-implement` hands off to it): a sibling grader guarding against it matches the bare `"code-review"`, and since it names nothing the repo ships, the case carries no `skill:code-review` tag.
 
 `evals/_fixtures/lib.sh` provides `myspec_init [name] [description] [stack]`, `add_feature <fixture-dir> <feature> <status> [phase] [priority]`, `register_feature <feature> <status>`, `copy_tree <fixture-dir>` and `git_commit_all <message>`. `project-instructions.sh` beside it generates each case's project instructions from the finished workspace. Shared fixture trees live beside it (`project-billing/`: a Python billing app with three features, a stale manifest and an orphan folder; `project-due-dates/`: a Python app with an approved invoice-due-dates spec and tech-spec). A fixture used by one case lives in that case's directory (`tech-spec-review-planted-flaws/workspace/`).
 

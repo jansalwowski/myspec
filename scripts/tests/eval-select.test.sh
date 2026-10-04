@@ -382,6 +382,9 @@ for (const name of fs.readdirSync(E)) {
   if (!graders.some((g) => /^type:\s*(regex|tool_used|tool_order|file_exists)\s*$/m.test(g))) problems.push(`${name}: no deterministic grader`);
   for (const g of graders) {
     const m = g.match(/^input_match:.*"skill".*?\)?\??([a-z0-9-]+)"'\s*$/m);
+    // A grader that matches only the bare call names a Claude Code built-in
+    // (code-review); no file here changes it, so it needs no tag.
+    if (m && !/myspec/.test(m[0])) continue;
     if (m && !skillTags.has(m[1])) problems.push(`${name}: grader names skill ${m[1]} but tags lack skill:${m[1]}`);
   }
   for (const s of skillTags) if (!fs.existsSync(path.join('skills', s, 'SKILL.md'))) problems.push(`${name}: skill:${s} is not a skill`);

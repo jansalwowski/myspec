@@ -11,7 +11,8 @@
 //   right-skill grader must reject no call and a prefix-sharing skill; a
 //   sibling (max: 0) grader must reject a call to its own skill. For the
 //   names Claude Code also ships as built-in skills, the grader must reject
-//   the bare built-in call.
+//   the bare built-in call; a name only the built-in has is called bare, and
+//   the grader is checked against that call.
 // - every case has at least one deterministic grader.
 //
 // Exit 0 when every check holds, 1 otherwise.
@@ -20,7 +21,12 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const E = path.resolve(process.argv[2] ?? path.join(path.dirname(new URL(import.meta.url).pathname), '../../evals'));
-const BUILTIN = new Set(['doctor', 'init']);
+// Names Claude Code ships as built-in skills. myspec ships `doctor` and `init`
+// too, so a grader on either names `myspec:<name>` and must reject the bare
+// call. `code-review` is the built-in alone since 3.0: a grader on it names
+// the bare call, and nothing else.
+const BUILTIN = new Set(['code-review', 'doctor', 'init']);
+const BARE = new Set(['code-review']);
 const DETERMINISTIC = new Set(['regex', 'tool_used', 'tool_order', 'file_exists']);
 
 function frontmatter(file) {
@@ -78,15 +84,16 @@ for (const name of fs.readdirSync(E).sort()) {
       const skill = (g.input_match.match(/([A-Za-z0-9_-]+)"?$/) ?? [])[1];
       if (!skill) { expect(false, `${id}: cannot read the skill name from input_match`); continue; }
       const call = (s) => ({ tool: 'Skill', input: { skill: s, args: '' } });
-      const own = [call(`myspec:${skill}`)];
+      const name = BARE.has(skill) ? skill : `myspec:${skill}`;
+      const own = [call(name)];
       if (g.max === '0') {
         expect(toolPasses(g, [call('myspec:memory-create')]), `${id}: sibling grader fails when its skill is not called`);
-        expect(!toolPasses(g, own), `${id}: sibling grader passes although myspec:${skill} was called`);
+        expect(!toolPasses(g, own), `${id}: sibling grader passes although ${name} was called`);
       } else {
-        expect(toolPasses(g, own), `${id}: does not accept a call to myspec:${skill}`);
+        expect(toolPasses(g, own), `${id}: does not accept a call to ${name}`);
         expect(!toolPasses(g, []), `${id}: passes with no Skill call`);
-        expect(!toolPasses(g, [call(`myspec:${skill}-other`)]), `${id}: accepts a skill that only shares the prefix`);
-        if (BUILTIN.has(skill)) expect(!toolPasses(g, [call(skill)]), `${id}: accepts the built-in ${skill} skill`);
+        expect(!toolPasses(g, [call(`${name}-other`)]), `${id}: accepts a skill that only shares the prefix`);
+        if (BUILTIN.has(skill) && !BARE.has(skill)) expect(!toolPasses(g, [call(skill)]), `${id}: accepts the built-in ${skill} skill`);
       }
     }
   }
