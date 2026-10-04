@@ -112,14 +112,14 @@ expect_empty "quoted hook text and a non-error result are not events"
 S=s5-hook-errors
 {
   prompt 'go'
-  hook_err PreToolUse:Bash '.claude/hooks/guard-git-branch.sh' 127 'Failed with non-blocking status code: /bin/sh: .claude/hooks/guard-git-branch.sh: No such file or directory'
+  hook_err PreToolUse:Bash '.claude/hooks/guard-worktree-context.sh' 127 'Failed with non-blocking status code: /bin/sh: .claude/hooks/guard-worktree-context.sh: No such file or directory'
   # shellcheck disable=SC2016 # literal text, not an expansion
   hook_err Stop '"${CLAUDE_PLUGIN_ROOT}/hooks/verify-before-stop.sh"' 1 'jq: error'
   hook_err PreToolUse:Bash '.claude/hooks/guard-bulk-read.sh' 127 'Failed with non-blocking status code: /bin/sh: .claude/hooks/guard-bulk-read.sh: No such file or directory'
   hook_err PostToolUse:Write '.claude/hooks/no-absolute-paths.sh' 127 '.claude/hooks/no-absolute-paths.sh: line 12: jq: command not found'
 } > "$(session $S)"
 run --session=$S
-expect_line '^\| hook not found: guard-git-branch.sh \| setup \| 1 \|' "retired myspec hook still registered: setup"
+expect_line '^\| hook not found: guard-worktree-context.sh \| setup \| 1 \|' "myspec hook registered but missing: setup"
 expect_line '^\| hook failed \(exit 1\): verify-before-stop.sh \| myspec \|' "myspec hook crashing: myspec"
 expect_line '^\| hook not found: guard-bulk-read.sh \| project \|' "project's missing hook: project"
 expect_line '^\| hook failed \(exit 127\): no-absolute-paths.sh \| setup \| 1 \| hooks/no-absolute-paths.sh \| a command the hook calls is missing' "exit 127 from a command inside the hook: not 'script missing'"
@@ -242,7 +242,6 @@ expect_exit 1 "no arguments: usage error"
 OUTPUT=$(node --input-type=module -e "
   import { HOOK_SIGNATURES, MYSPEC_HOOKS } from '$SCRIPT'
   import { readFileSync, existsSync, readdirSync } from 'node:fs'
-  const retired = ['guard-git-branch.sh']
   const modules = { 'verify-before-stop.sh': '$HERE/../stop-gate' }
   const text = (h) => [readFileSync('$HOOKS_DIR/' + h, 'utf8')]
     .concat(modules[h] ? readdirSync(modules[h]).map((f) => readFileSync(modules[h] + '/' + f, 'utf8')) : []).join('\\n')
@@ -252,7 +251,7 @@ OUTPUT=$(node --input-type=module -e "
     if (!text(s.hook).includes(s.match)) { console.log('stale signature ' + s.id) }
   }
   for (const h of MYSPEC_HOOKS) {
-    if (!retired.includes(h) && !existsSync('$HOOKS_DIR/' + h)) { console.log('unknown hook ' + h) }
+    if (!existsSync('$HOOKS_DIR/' + h)) { console.log('unknown hook ' + h) }
   }
 " 2>&1)
 expect_empty "every signature is a literal substring of its hook"
