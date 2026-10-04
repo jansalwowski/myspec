@@ -23,7 +23,7 @@ Roughly two milestones of work, touches the data layer, a background job system,
 | 9 | `/myspec:feature-plan` | `implementation-plan.md` with milestones + parallel groups | yes |
 | 10 | `/myspec:feature-implement` | Code + tests committed; phase reviews; `holistic-review.md` | per-milestone checkpoint |
 | 11 | `/myspec:feature-implement-review` | `conformance-report.md`; independent trace of code vs. spec/plan | route findings |
-| 12 | `/myspec:code-review` | Findings report on code quality & standards (universal + project rules) | resolve Critical/High |
+| 12 | `/code-review` (Claude Code built-in) | Bug findings on the branch diff | resolve before merge |
 | 13 | `/myspec:feature-verify` | Health report (drift check) | — |
 | 14 | `/myspec:feature-complete` | Status flipped, plan archived, branch merged | merge confirmation |
 
@@ -276,21 +276,21 @@ The skill never edits code. It routes: the test-export button is genuinely usefu
 
 ---
 
-## 12. Code review — quality and standards
+## 12. Code review — bugs in the diff
 
 ```
-/myspec:code-review
+/code-review
 ```
 
-Reviews the same diff against the universal dimensions (correctness, error handling, security, tests, readability) plus the project's configured rules in `.claude/` (e.g. "repositories never throw — return a Result"). Findings, severity-ranked:
+Claude Code's built-in `/code-review`, offered by `feature-implement`'s completion menu (myspec no longer ships its own). It reviews the same branch diff for correctness bugs. Findings:
 
 | Severity | Finding |
 |----------|---------|
-| High | `ScheduleRunner` swallows email-send errors with a bare `catch {}` — violates the retry-on-failure AC and the project's "no silent catch" rule. |
+| High | `ScheduleRunner` swallows email-send errors with a bare `catch {}`, so a failed send is never retried. |
 | Medium | `ExportRunRepository.list()` has no pagination; run history is unbounded. |
 | Low | Two test files duplicate a `makeSchedule()` factory — extract to a shared fixture. |
 
-The agent leads with what's solid (clean migration, good worktree isolation), then the user resolves the High before merge. This pass is **complementary** to step 11 — conformance asks *did we build the right thing*, code-review asks *did we build it well*.
+The user resolves the High before merge. This pass is **complementary** to step 11 — conformance asks *did we build the right thing*, `/code-review` asks *does the code have bugs*.
 
 ---
 
@@ -348,5 +348,5 @@ Phase 2 — branch integration:
 - **The spec / tech-spec / plan layering is load-bearing.** Spec answers *what*, tech-spec answers *how*, plan answers *who-does-what-in-what-order*. Skipping a layer breaks the next one.
 - **Parallel groups are real concurrency**, not just labels — `feature-implement` dispatches actual subagents with worktree isolation and merges at barriers.
 - **Milestone checkpoints exist for a reason** — long features can run across multiple sessions; the checkpoint is where you switch agents without losing state.
-- **Two complementary review passes before merge** — `feature-implement-review` asks *did we build the right thing* (conformance to spec), `code-review` asks *did we build it well* (quality + standards). Neither replaces the other.
+- **Two complementary review passes before merge** — `feature-implement-review` asks *did we build the right thing* (conformance to spec), the built-in `/code-review` asks *does the code have bugs*. Neither replaces the other.
 - **`feature-verify` before `feature-complete`** catches the drift you didn't notice.

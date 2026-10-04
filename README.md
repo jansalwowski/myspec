@@ -94,7 +94,7 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref main
 | **Project Setup** | |
 | `/myspec:init` | Initialize myspec in a new project |
 | `/myspec:update` | Update framework files to latest version |
-| `/myspec:setup <type>` | Generate project-specific files from guided wizards (backbone, claude-md, conventions, code-review, mockup, index-md, workflow, pre-flight, anti-patterns) |
+| `/myspec:setup <type>` | Generate project-specific files from guided wizards (backbone, claude-md, conventions, mockup, index-md, workflow, pre-flight, anti-patterns) |
 | `/myspec:bootstrap` | Load project context, memory indexes, and active session at session start |
 | **Feature Workflow** | |
 | `/myspec:feature-discover` | Reverse-engineer an undocumented feature from existing code into discovery.md (+ optional spec.md / tech-spec.md) ([examples](examples/skills/feature-discover.md)) |
@@ -109,7 +109,6 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref main
 | `/myspec:feature-plan` | Create execution-ready implementation plan from tech-spec: milestones, phases, parallel groups, per-task spec contracts and interfaces |
 | `/myspec:feature-implement` | Execute implementation plan by dispatching one implementer subagent per task, reviewing at every phase boundary, and closing with a holistic full-diff review |
 | `/myspec:feature-implement-review` | Independently audit that the built code fulfills the spec and plan (traceability + behavioral); writes conformance-report.md and routes findings — never edits code |
-| `/myspec:code-review` | Review changed code for quality, standards, and bugs — universal dimensions plus project rules. Configurable via `/myspec:setup code-review` |
 | `/myspec:feature-update` | Plan changes to an already-implemented feature |
 | `/myspec:feature-verify` | Verify feature implementation matches spec |
 | `/myspec:feature-status-audit` | Batch-audit the whole feature manifest against on-disk docs (`lib/feature-status-audit/audit.mjs`) |
