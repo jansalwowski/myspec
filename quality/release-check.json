@@ -1,5 +1,5 @@
 {
-  "gate": false,
+  "gate": true,
   "seed": 42,
   "resamples": 10000
 }

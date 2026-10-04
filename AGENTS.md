@@ -64,7 +64,7 @@ Each check sits in the cheapest layer that can catch its failure. The reasoning 
 | Shell lint | `scripts/lint-sh.sh`: ShellCheck at default severity on `hooks/` and `lib/` (tests included) and their mirrors. Suppress with an inline `# shellcheck disable=SCxxxx # reason`; the `tests/.shellcheckrc` files cover only the assertion idioms | pre-commit (staged scripts, skipped when shellcheck is absent), CI (pinned version) |
 | Deterministic tests | `lib/tests`, `hooks/tests`, `scripts/tests` | CI; run locally with `TZ=UTC` |
 | Behavioural evals | `evals/` via `scripts/evals/run.sh` (`claude plugin eval`) | pre-push (changed skills only, 1 run, Sonnet, report-only), `/release` (full suite) |
-| Release comparison | `scripts/evals/release-check.sh`: paired delta, bootstrap CI and pass^k against the previous release's baseline in `quality/baselines/` | `/release`, report-only until `quality/release-check.json` sets `"gate": true` |
+| Release comparison | `scripts/evals/release-check.sh`: paired delta, bootstrap CI and pass^k against the previous release's baseline in `quality/baselines/` | `/release`; a regressed verdict blocks the release (`quality/release-check.json` `"gate": true`) |
 
 Evals run only on the maintainer's Claude Code login. There is no API budget, so there is no CI eval job. Enable the git hooks once per clone with `scripts/install-git-hooks.sh`. Agents pushing from inside Claude Code skip the pre-push evals by default: run `scripts/evals/run.sh --mode changed` yourself with a long enough Bash timeout.
 

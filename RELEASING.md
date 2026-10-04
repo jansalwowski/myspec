@@ -33,7 +33,7 @@ It:
 ## Release workflow
 
 1. Land all changes for the release on `main`
-2. Run the eval comparison (next section): `scripts/evals/release-check.sh --version X.Y.Z`. Read the report; on a regressed verdict or a failed run, decide whether to go on. Only on a go, record it and commit it on its own, before the bump, so the bump diff stays version files only:
+2. Run the eval comparison (next section): `scripts/evals/release-check.sh --version X.Y.Z`. Read the report; a regressed verdict exits 1 and stops the release (the gate), and on a failed run decide whether to retry or skip. Only on a go, record it and commit it on its own, before the bump, so the bump diff stays version files only:
    `scripts/evals/release-check.sh --record <the out dir it printed>`, then `git add quality && git commit -m "chore(quality): record vX.Y.Z eval baseline"`
 3. From a clean working tree: `./scripts/bump-version.sh X.Y.Z`
 4. `git diff` — review the version bumps
@@ -124,13 +124,9 @@ The release verdict is the worst model's.
 - 1: regressed with the gate on.
 - 2: infrastructure error: usage limit, logged out, eval run failed, or interrupted. An exit 2 says nothing about the plugin.
 
-**The gate.** The check is report-only: a regressed verdict prints the report and exits 0, and the maintainer decides. Once the calibration above holds up against a few recorded releases, make it a hard gate by changing one line in `quality/release-check.json`:
+**The gate.** `quality/release-check.json` sets `"gate": true` (#267): a `regressed` release verdict exits 1 and `/release` aborts; the maintainer no longer decides. It was report-only until five recorded releases (2.8.0–2.11.0 in `quality/trend.jsonl`) showed no false regression against the calibration above. What it blocks on is exactly the verdict: the worst model's, so a Haiku-only `regressed` blocks too. That is rare by construction (Haiku A/A cries regression in about 2% of trials) and the per-case rule, not the CI, is what usually fires; but a Haiku verdict that passes still says little (it catches 2 broken cases 37% of the time), so keep reading its column as a signal, and read Sonnet's as the gate. A `--case` run, `insufficient-data`, and an exit 2 never block. The same file holds `seed` and `resamples`; `"gate": false` returns the check to report-only.
 
-```json
-  "gate": true,
-```
-
-The same file holds `seed` and `resamples`.
+**A release that renames or folds skills** compares only partially, by construction: the baseline keys cases by name and stores a content hash per case, and selection uses `skill:<name>` tags, so every case whose directory or tags changed with the rename re-runs on the previous tag against HEAD's `evals/` (an old plugin without the new skill), and cases present in only one set are listed and left out of the statistics. Read such a report for the unchanged cases only, and expect `insufficient-data` on a large rename. The release records itself as the new baseline (`--record` as usual), and its notes say so, so the next release compares against a complete one.
 
 ## Versioning rules (semver)
 
