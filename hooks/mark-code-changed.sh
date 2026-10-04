@@ -384,11 +384,74 @@ ledger_add() {
     '{t: "write", root: $r, rel: $p, kind: $k} + (if $a != "" then {agent: $a} else {} end)')" || true
 }
 
+# script_word <word...> -> the index of the word that names the program a
+# command runs, past `env` (its options and NAME=value assignments),
+# `command` and a `bash`/`sh` interpreter with its options. Fails when the
+# command runs no file: `bash -c`, `command -v`, `env -S`.
+script_word() {
+  local i=0 w n=$#
+  local -a words=("$@")
+  while [ "$i" -lt "$n" ]; do
+    w=${words[$i]##*/}
+    case "$w" in
+      env)
+        i=$((i + 1))
+        while [ "$i" -lt "$n" ]; do
+          case "${words[$i]}" in
+            --) i=$((i + 1)); break ;;
+            -u|-C|--unset|--chdir) i=$((i + 2)) ;;
+            -S*|--split-string*) return 1 ;;
+            -*) i=$((i + 1)) ;;
+            [A-Za-z_]*=*) i=$((i + 1)) ;;
+            *) break ;;
+          esac
+        done
+        while [ "$i" -lt "$n" ] && [[ "${words[$i]}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; do
+          i=$((i + 1))
+        done
+        ;;
+      command)
+        i=$((i + 1))
+        while [ "$i" -lt "$n" ]; do
+          case "${words[$i]}" in
+            --) i=$((i + 1)); break ;;
+            -p) i=$((i + 1)) ;;
+            -*) return 1 ;;
+            *) break ;;
+          esac
+        done
+        ;;
+      bash|sh)
+        i=$((i + 1))
+        while [ "$i" -lt "$n" ]; do
+          case "${words[$i]}" in
+            --) i=$((i + 1)); break ;;
+            -o|+o|-O|+O) i=$((i + 2)) ;;
+            --*) i=$((i + 1)) ;;
+            -*c*) return 1 ;;
+            -*o|+*o|-*O|+*O) i=$((i + 2)) ;;
+            -*|+*) i=$((i + 1)) ;;
+            *) break ;;
+          esac
+        done
+        printf '%s\n' "$i"
+        return 0
+        ;;
+      *)
+        printf '%s\n' "$i"
+        return 0
+        ;;
+    esac
+  done
+  return 1
+}
+
 # implement_requests <command> -> `start` or `stop` for each segment that
-# runs session-event.sh implement <state>, the script called by any path.
+# runs session-event.sh implement <state>, the script called by any path,
+# directly or through bash, sh, env or command.
 implement_requests() {
-  local line kline seg kseg
-  local -a words kwords
+  local line kline seg kseg i w
+  local -a words kwords decoded
   while IFS= read -r line && IFS= read -r kline <&3; do
     seg=$(strip_command_prefix "${line#*$'\t'}")
     kseg=$(strip_command_prefix "${kline#*$'\t'}")
@@ -397,9 +460,13 @@ implement_requests() {
     if [ "${#kwords[@]}" -lt 3 ] || [ "${#kwords[@]}" -ne "${#words[@]}" ]; then
       continue
     fi
-    [ "$(basename "$(decode_word "${kwords[0]}")")" = session-event.sh ] || continue
-    [ "${words[1]}" = implement ] || continue
-    case "${words[2]}" in start|stop) printf '%s\n' "${words[2]}" ;; esac
+    decoded=()
+    for w in "${kwords[@]}"; do decoded+=("$(decode_word "$w")"); done
+    i=$(script_word "${decoded[@]}") || continue
+    [ $((i + 2)) -lt "${#words[@]}" ] || continue
+    [ "${decoded[$i]##*/}" = session-event.sh ] || continue
+    [ "${words[$((i + 1))]}" = implement ] || continue
+    case "${words[$((i + 2))]}" in start|stop) printf '%s\n' "${words[$((i + 2))]}" ;; esac
   done < <(printf '%s' "$1" | sanitize_command | split_segments) \
        3< <(printf '%s' "$1" | sanitize_command keep | split_segments)
   return 0
