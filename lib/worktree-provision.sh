@@ -65,15 +65,20 @@
 #   {"provisionedAt": <epoch seconds>,
 #    "source": "<the main checkout, physical>",
 #    "links": [{"path": "node_modules", "target": "<physical link target>",
-#               "lockfiles": {"package-lock.json": "<sha256>"}}],
+#               "lockfiles": {"package-lock.json": "<sha256>",
+#                             "apps/web/package-lock.json": null}}],
 #    "copies": [{"path": ".eslintcache", "mode": "copy"}],
 #    "install": [{"run": "<command>", "cwd": "."}]}
 # `lockfiles` holds the SHA-256 of each lockfile that pins the link, as the
 # main checkout had it (the worktree's copy was identical: an entry whose
-# copy differs is not linked). The Stop hook reads this record and nothing else about
-# dependencies: it blocks when a recorded link no longer resolves to its
-# target, or a recorded lockfile's hash changed in the main checkout or in
-# the worktree, and tells the session to rerun this script. A worktree
+# copy differs is not linked), and each lockfile pattern that matched nothing,
+# and each glob pattern, with a null hash. The Stop hook reads this record and
+# nothing else about dependencies: it blocks when a recorded link no longer
+# resolves to its target, a recorded lockfile's hash changed or the file is
+# gone in the main checkout or in the worktree, or a null-hash pattern now
+# matches a file on either side that the record does not hash (a nested
+# lockfile the branch added later), and tells the session to rerun this
+# script. A worktree
 # without a record is not compared. isolation.allowLinkedModules: true (or
 # MYSPEC_ALLOW_LINKED_MODULES=1 while this script runs) records links
 # without lockfile hashes and skips the lockfile comparison above, for repos
@@ -521,6 +526,18 @@ while IFS= read -r line; do
       LOCK_JSON=$(jq -c --arg k "$rel" --arg v "$sum" '. + {($k): $v}' <<< "$LOCK_JSON")
     done < <(lock_paths "$MAIN" "${LOCKS[@]}" | sort -u)
     [ "$hashed" -eq 1 ] || continue
+    # A pattern that matched nothing, and every glob, is recorded with a null
+    # hash, so the gate sees a lockfile that appears later on either side.
+    ABSENT=()
+    for lock in "${LOCKS[@]}"; do
+      case "$lock" in
+        *[*?[]*) ABSENT+=("$lock") ;;
+        *) [ -n "$(lock_paths "$MAIN" "$lock")" ] || ABSENT+=("$lock") ;;
+      esac
+    done
+    if [ "${#ABSENT[@]}" -gt 0 ]; then
+      LOCK_JSON=$(jq -c --args 'reduce $ARGS.positional[] as $k (.; if has($k) then . else . + {($k): null} end)' "${ABSENT[@]}" <<< "$LOCK_JSON")
+    fi
   fi
   mkdir -p "$(dirname "$WORKTREE/$entry")"
   ln -s "$MAIN/$entry" "$WORKTREE/$entry"

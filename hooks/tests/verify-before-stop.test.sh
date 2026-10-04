@@ -149,6 +149,42 @@ printf '{"source":' > "$WT/.claude/state/provision.json"
 r=$(stop_reason 11 "$WT")
 expect_in "cannot be read" "$r" "a provision record that is not JSON blocks and says so"
 
+# --- a nested lockfile the branch adds after provisioning blocks (#256 review) ---
+# apps/web/node_modules is pinned by apps/web/package-lock.json or the root
+# one; only the root one exists when provision links it.
+MAIN_N=$(new_repo nested 1)
+mkdir -p "$MAIN_N/apps/web/node_modules/dep"
+printf '{"isolation":{"provision":{"symlink":["apps/web/node_modules"]}}}\n' > "$MAIN_N/.myspec.json"
+printf 'apps/web/node_modules\n' >> "$MAIN_N/.gitignore"
+git -C "$MAIN_N" add -A && git -C "$MAIN_N" commit -q -m nested
+WT_N="$ROOT/nested-wt"
+git -C "$MAIN_N" worktree add -q -b feat-nested "$WT_N" main
+bash "$PROVISION" "$WT_N" --base main >/dev/null
+[ -L "$WT_N/apps/web/node_modules" ] && ok || fail "nested: provision links apps/web/node_modules"
+expect approve "$(stop 14 "$WT_N")" "nested: the record matches"
+printf '{"lockfileVersion":3}\n' > "$WT_N/apps/web/package-lock.json"
+r=$(stop_reason 15 "$WT_N")
+expect_in "apps/web/node_modules (apps/web/package-lock.json appeared)" "$r" "nested: a lockfile added in the worktree after provisioning blocks"
+rm "$WT_N/apps/web/package-lock.json"
+printf '{"lockfileVersion":3}\n' > "$MAIN_N/apps/web/package-lock.json"
+r=$(stop_reason 16 "$WT_N")
+expect_in "apps/web/node_modules (apps/web/package-lock.json appeared)" "$r" "nested: a lockfile added in the main checkout after provisioning blocks"
+rm "$MAIN_N/apps/web/package-lock.json"
+expect approve "$(stop 17 "$WT_N")" "nested: the record matches again once the lockfile is gone on both sides"
+# A recorded glob pattern: a new match blocks, a match the record hashes does not.
+jq '.links[0].lockfiles += {"req*.txt": null, "pack*.json": null}' "$WT_N/.claude/state/provision.json" > "$ROOT/prov.json" \
+  && mv "$ROOT/prov.json" "$WT_N/.claude/state/provision.json"
+expect approve "$(stop 18 "$WT_N")" "nested: a glob whose only match the record hashes is not new"
+printf 'x\n' > "$WT_N/req-dev.txt"
+r=$(stop_reason 19 "$WT_N")
+expect_in "apps/web/node_modules (req-dev.txt appeared)" "$r" "nested: a new match of a recorded glob pattern blocks"
+rm "$WT_N/req-dev.txt"
+# A recorded lockfile that is gone on either side blocks as removed.
+mv "$WT_N/package-lock.json" "$ROOT/pl.bak"
+r=$(stop_reason 20 "$WT_N")
+expect_in "apps/web/node_modules (package-lock.json removed)" "$r" "nested: a recorded lockfile that disappears blocks"
+mv "$ROOT/pl.bak" "$WT_N/package-lock.json"
+
 # --- the comparison is the same for any stack: a vendor pinned by composer.lock ----
 # new_dep_repo <name> <dir> <lockfile> <myspec-json> -> prints main checkout path
 new_dep_repo() {

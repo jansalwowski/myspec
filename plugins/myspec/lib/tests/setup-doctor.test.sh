@@ -873,6 +873,17 @@ git -C "$WT" checkout -q -- composer.lock
 printf 'v3\n' > "$REPO/composer.lock"
 OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
 expect_line "WARN +provision-stale: vendor was provisioned from composer.lock, which has changed since \(in $REPO\)" "worktree: a recorded lockfile changed in the source checkout is reported"
+# A lockfile pattern recorded absent (null) that now matches a file is
+# reported, as the Stop hook blocks on it (#256 review).
+printf 'v1\n' > "$REPO/composer.lock"
+jq '.links[0].lockfiles += {"sub/composer.lock": null, "compo*.lock": null}' "$WT/.claude/state/provision.json" > "$ROOT/prov.json" \
+  && mv "$ROOT/prov.json" "$WT/.claude/state/provision.json"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_no_line "provision-stale" "worktree: recorded-absent lockfiles still absent, and a glob matching only hashed files, are not reported"
+mkdir -p "$WT/sub" && printf 'x\n' > "$WT/sub/composer.lock"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +provision-stale: vendor was provisioned while sub/composer.lock did not exist, and it has appeared since \(in this worktree\)" "worktree: a recorded-absent lockfile that appears is reported"
+rm -rf "$WT/sub"
 
 ln -s "$ROOT/outside" "$REPO/elsewhere"
 run_doctor worktree

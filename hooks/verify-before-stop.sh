@@ -14,8 +14,8 @@
 # warning instead.
 # Before any check runs in a linked worktree, compares the record
 # worktree-provision.sh left (.claude/state/provision.json): blocks when a
-# recorded link no longer resolves to its recorded target, or a recorded
-# lockfile changed since. In a linked worktree (or a submodule inside one), a
+# recorded link no longer resolves to its recorded target, a recorded
+# lockfile changed or is gone since, or a lockfile recorded absent appeared. In a linked worktree (or a submodule inside one), a
 # check without runIn whose command contains a container exec
 # (CONTAINER_EXEC_FORMS) is refused as unverifiable, not run. A check with
 # `cwd` runs from that repo-relative directory of the checkout.
@@ -182,12 +182,27 @@ fi
 # doctor's finding (link-unrecorded), not this gate's. A recorded path that
 # is no longer a link (a real install replaced it) is not compared. No
 # `verified` event is recorded on a block (the EXIT trap is registered
-# below), so the block persists until provision runs again.
+# below), so the block persists until provision runs again. A lockfile key
+# recorded with a null hash is a pattern that matched nothing provision did
+# not hash (an absent lockfile, or a glob): a file it matches on either side
+# that the record does not list with a hash blocks, so a nested lockfile the
+# branch adds later is compared too. A recorded lockfile that is gone on
+# either side blocks as removed.
+
+# pattern_matches <dir> <pattern> -> the <dir>-relative regular files the
+# lockfile pattern matches there (a * stays within one directory).
+pattern_matches() {
+  local IFS='' f
+  for f in "$1"/$2; do
+    [ -f "$f" ] && printf '%s\n' "${f#"$1"/}"
+  done
+  return 0
+}
 
 # provision_stale <root> -> one "path (reason)" per stale recorded link.
 # Fails, printing the reason, when the record cannot be read.
 provision_stale() {
-  local root="$1" record="$1/.claude/state/provision.json" src kind path a b cur sum
+  local root="$1" record="$1/.claude/state/provision.json" src kind path a b cur sum m side
   src=$(jq -er '.source | strings' "$record" 2>/dev/null) || { printf 'the record has no source\n'; return 1; }
   while IFS=$'\t' read -r kind path a b; do
     [ -L "$root/$path" ] || continue
@@ -204,6 +219,10 @@ provision_stale() {
         ;;
       lock)
         for cur in "$src/$a" "$root/$a"; do
+          if [ ! -e "$cur" ]; then
+            printf '%s (%s removed)\n' "$path" "$a"
+            break
+          fi
           sum=$(file_sha256 "$cur") || sum=""
           if [ "$sum" != "$b" ]; then
             printf '%s (%s changed)\n' "$path" "$a"
@@ -211,10 +230,25 @@ provision_stale() {
           fi
         done
         ;;
+      absent)
+        # b: the keys this link recorded with a hash, \037-separated.
+        m=""
+        while IFS= read -r cur; do
+          [ -n "$cur" ] || continue
+          case $'\037'"$b"$'\037' in
+            *$'\037'"$cur"$'\037'*) ;;
+            *) m=$cur; break ;;
+          esac
+        done < <(for side in "$src" "$root"; do pattern_matches "$side" "$a"; done | sort -u)
+        [ -z "$m" ] || printf '%s (%s appeared)\n' "$path" "$m"
+        ;;
     esac
   done < <(jq -r '.links[]? | select(type == "object" and (.path | type) == "string" and .path != "")
       | ["link", .path, (.target // "" | tostring), ""],
-        (.path as $p | .lockfiles // {} | objects | to_entries[] | ["lock", $p, .key, (.value | tostring)])
+        (.path as $p | (.lockfiles // {} | objects) as $l
+          | ([$l | to_entries[] | select(.value != null) | .key] | join("\u001f")) as $have
+          | $l | to_entries[]
+          | if .value == null then ["absent", $p, .key, $have] else ["lock", $p, .key, (.value | tostring)] end)
       | @tsv' "$record" 2>/dev/null) || { printf 'the record is not valid JSON\n'; return 1; }
 }
 

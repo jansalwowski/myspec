@@ -451,7 +451,7 @@ bash "$SCRIPT" "$W" --base main >/dev/null 2>&1
   || fail "record: a link records its physical target"
 [ "$(rec "$W" '.links[] | select(.path == "node_modules") | .lockfiles["package-lock.json"]')" = "$(sha "$M/package-lock.json")" ] && ok \
   || fail "record: a link records the SHA-256 of the main checkout's lockfile"
-[ "$(rec "$W" '.links[] | select(.path == "apps/web/node_modules") | .lockfiles | keys | join(",")')" = "apps/web/package-lock.json,package-lock.json" ] && ok \
+[ "$(rec "$W" '.links[] | select(.path == "apps/web/node_modules") | .lockfiles | with_entries(select(.value != null)) | keys | join(",")')" = "apps/web/package-lock.json,package-lock.json" ] && ok \
   || fail "record: a nested link records the lockfile beside it and the root one"
 [ "$(rec "$W" '.links[] | select(.path == ".env") | .lockfiles | length')" = 0 ] && ok \
   || fail "record: an unguarded link records no lockfiles"
@@ -497,6 +497,21 @@ bash "$SCRIPT" "$W" --base main >/dev/null 2>&1
 [ "$(readlink "$W/node_modules")" = "$M/node_modules" ] && ok || fail "alias rerun: matching lockfiles link again, physically"
 [ "$(rec "$W" '.links[] | select(.path == "node_modules") | .lockfiles["package-lock.json"]')" = "$(sha "$M/package-lock.json")" ] && ok \
   || fail "alias rerun: the record holds the link with the new hash"
+
+# A lockfile pattern that matches nothing in the main checkout is recorded
+# with a null hash, so the gate can see one appear later (#256 review): only
+# the root lockfile exists for apps/web/node_modules here.
+M=$(new_main absent '{"isolation":{"provision":{"symlink":["apps/web/node_modules",".venv"]}}}')
+mkdir -p "$M/apps/web/node_modules/dep" "$M/.venv/lib"; printf 'v1\n' > "$M/package-lock.json"
+printf 'apps/web/node_modules\n' >> "$M/.gitignore"; commit_all "$M" init
+W=$(wt_for "$M" absent-wt)
+bash "$SCRIPT" "$W" --base main >/dev/null 2>&1
+[ "$(rec "$W" '.links[] | select(.path == "apps/web/node_modules") | .lockfiles | has("apps/web/package-lock.json") and .["apps/web/package-lock.json"] == null')" = true ] && ok \
+  || fail "absent: an unmatched lockfile pattern is recorded with a null hash (got: $(rec "$W" '.links[0].lockfiles'))"
+[ "$(rec "$W" '.links[] | select(.path == "apps/web/node_modules") | .lockfiles["package-lock.json"]')" = "$(sha "$M/package-lock.json")" ] && ok \
+  || fail "absent: the matched lockfile keeps its hash"
+[ "$(rec "$W" '.links[] | select(.path == ".venv") | .lockfiles | has("requirements*.txt") and .["requirements*.txt"] == null')" = true ] && ok \
+  || fail "absent: a glob pattern is recorded with a null hash"
 
 # Install steps that ran are recorded.
 M=$(new_main record-inst '{"isolation":{"provision":{"symlink":[],"install":[{"run":"true","cwd":"."},{"run":"true","when":["nope"]}]}}}')
