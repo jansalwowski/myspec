@@ -282,15 +282,13 @@ The skill never edits code. It routes: the test-export button is genuinely usefu
 /code-review
 ```
 
-Claude Code's built-in `/code-review`, offered by `feature-implement`'s completion menu (myspec no longer ships its own). It reviews the same branch diff for correctness bugs. Findings:
+Claude Code's built-in `/code-review`, offered by `feature-implement`'s completion menu (myspec no longer ships its own). It reviews the same branch diff for correctness bugs — not quality, style or cleanup, and not against `.claude/rules/code-review.md` — and reports each one with the file and line it points at:
 
-| Severity | Finding |
-|----------|---------|
-| High | `ScheduleRunner` swallows email-send errors with a bare `catch {}`, so a failed send is never retried. |
-| Medium | `ExportRunRepository.list()` has no pagination; run history is unbounded. |
-| Low | Two test files duplicate a `makeSchedule()` factory — extract to a shared fixture. |
+> `src/schedules/runner.ts:48` — email-send errors are swallowed by a bare `catch {}`, so a failed send is never retried or surfaced; the schedule is marked `sent`.
+>
+> `src/schedules/run-repository.ts:21` — `latest()` reads `rows[0].finished_at` before checking the result is non-empty; a schedule with no runs yet throws on the settings page.
 
-The user resolves the High before merge. This pass is **complementary** to step 11 — conformance asks *did we build the right thing*, `/code-review` asks *does the code have bugs*.
+The user fixes both before merge. This pass is **complementary** to step 11 — conformance asks *did we build the right thing*, `/code-review` asks *does the code have bugs*.
 
 ---
 
