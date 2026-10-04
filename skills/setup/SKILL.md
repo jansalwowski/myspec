@@ -1,6 +1,6 @@
 ---
 name: "setup"
-description: "Use when a project-specific file should be generated from a guided wizard. Blueprints: backbone, claude-md, conventions, code-review, mockup, index-md, workflow, pre-flight, anti-patterns. Do NOT use for first-time init (init)."
+description: "Use when a project-specific file should be generated from a guided wizard. Blueprints: backbone, claude-md, conventions, mockup, index-md, workflow, pre-flight, anti-patterns. Do NOT use for first-time init (init)."
 ---
 
 # Setup
@@ -16,7 +16,6 @@ Dispatches guided blueprint wizards to generate project-specific files. Each blu
 | `backbone` | Project topology file for agent orientation | `backbone.yml` (project root) |
 | `claude-md` | CLAUDE.md project context file | `CLAUDE.md` (project root) |
 | `conventions` | Coding standards and testing patterns | `${aiDir}/conventions/` |
-| `code-review` | Reviewer goals, standards, and run behavior | `.claude/rules/code-review.md` + `.myspec.json` |
 | `mockup` | Mockup stack, tooling commands, and hard guards for the feature-mockup skills | `${aiDir}/conventions/mockup-design.md` + `.myspec.json` |
 | `index-md` | Documentation navigation index | `${aiDir}/INDEX.md` |
 | `workflow` | Development workflow definition | `${aiDir}/workflow.md` |
@@ -56,7 +55,7 @@ Write to the **Output Location** specified by the blueprint.
 
 **For `backbone` blueprint only**: After writing the file, update `.myspec.json` by adding or updating the `topologyFile` key with the generated filename.
 
-**If the blueprint defines a Post-generation section** (e.g. `code-review` updates the `.myspec.json` `codeReview` block): follow those steps after writing the primary file.
+**If the blueprint defines a Post-generation section** (e.g. `mockup` updates the `.myspec.json` `mockups` block): follow those steps after writing the primary file.
 
 For all blueprints: print a brief confirmation:
 ```
@@ -81,5 +80,5 @@ Next: {relevant next step — e.g., "Run /myspec:bootstrap to load the topology"
 - [ ] Discovery questions asked one at a time, each answer awaited
 - [ ] Output generated using the blueprint's Output Format and written to its Output Location
 - [ ] `${aiDir}` placeholders replaced with the configured value
-- [ ] Post-generation steps applied (`backbone` → `topologyFile`; blueprint-defined sections like `code-review` → `.myspec.json` block)
+- [ ] Post-generation steps applied (`backbone` → `topologyFile`; blueprint-defined sections like `mockup` → `.myspec.json` block)
 - [ ] Confirmation printed with the relevant next step
