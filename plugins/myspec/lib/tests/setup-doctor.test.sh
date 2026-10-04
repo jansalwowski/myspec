@@ -192,13 +192,34 @@ set_json .claude/settings.json 'd.hooks.Stop[0].hooks.push({type:"command",comma
 run_doctor hook-command-relative
 expect_line 'WARN +hook-command-relative: .claude/settings.json: hook command "scripts/own-hook.sh"' "a project-owned relative hook command is a warning"
 # shellcheck disable=SC2016 # literal text, not an expansion
-expect_line 'fix: prefix the script with "\$CLAUDE_PROJECT_DIR"/' "a project-owned relative hook command names the prefix fix"
+expect_line 'fix: add the "\$CLAUDE_PROJECT_DIR"/ prefix by hand' "a project-owned relative hook command names the prefix fix"
 set_json .claude/settings.json 'd.hooks.Stop[0].hooks.pop()'
 rm "$REPO/scripts/own-hook.sh"
 
 # The cases below change the Stop entry alone; with every other entry bare they
 # would also carry those entries' hook-command-relative errors.
 cp "$ROOT/settings-projectdir.json" "$REPO/.claude/settings.json"
+
+# settings.local.json is the developer's own file and update never rewrites it,
+# so a bare framework-path command there is a warning: an error would block
+# every stop with nothing the framework can do to clear it.
+printf '#!/bin/sh\nexit 0\n' > "$REPO/.claude/hooks/my-notify.sh"
+chmod 755 "$REPO/.claude/hooks/my-notify.sh"
+printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":".claude/hooks/my-notify.sh"}]}]}}' > "$REPO/.claude/settings.local.json"
+run_doctor --quiet wiring schema
+expect_exit 0 "a bare hook command in settings.local.json does not fail the wiring group"
+expect_no_line '^ERROR hook-command-relative' "settings.local.json adds no hook-command-relative error"
+run_doctor wiring schema
+expect_line 'WARN +hook-command-relative: .claude/settings.local.json: hook command ".claude/hooks/my-notify.sh"' "a bare framework-path command in settings.local.json is a warning"
+# shellcheck disable=SC2016 # literal text, not an expansion
+expect_line 'add the "\$CLAUDE_PROJECT_DIR"/ prefix by hand' "the settings.local.json warning says to add the prefix by hand"
+rm "$REPO/.claude/settings.local.json"
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks.push({type:"command",command:".claude/hooks/my-notify.sh"})'
+run_doctor --quiet wiring schema
+expect_exit 1 "the same bare command in settings.json fails the wiring group"
+expect_line 'ERROR hook-command-relative: .claude/settings.json: hook command ".claude/hooks/my-notify.sh"' "the same bare command in settings.json is an error"
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks.pop()'
+rm "$REPO/.claude/hooks/my-notify.sh"
 
 # An interpreter may lead the command; the script is then token 1. Such a
 # command does not exec the file, so a mode 644 script there is correct and
