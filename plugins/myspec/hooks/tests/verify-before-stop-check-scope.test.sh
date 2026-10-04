@@ -365,6 +365,33 @@ expect block "$(decision "$out")" "runIn + cwd outside mountSource: refused"
 has 'cwd "web" is not under mountSource' "$(text "$out")" "runIn + cwd outside mountSource: the reason says why"
 expect not-run "$(where Wd)" "runIn + cwd outside mountSource: the check never runs"
 
+# With cwd, MYSPEC_SESSION_FILES is relative to it, so a per-file linter run
+# there finds the files (#255 review): under cwd the prefix goes, outside it
+# the path gets ../.
+printf 'export {}\n' > "$MAIN/web/b.ts"
+c=$(jq -nc --arg c 'printf "%s\n" "$MYSPEC_SESSION_FILES" > '"$RAN"'/Lint.files; for f in $MYSPEC_SESSION_FILES; do test -f "$f" || { echo "missing $f"; exit 1; }; done' \
+  '{name: "Lint", command: $c, required: true, cwd: "api"}')
+container_config "$MAIN" "$c"
+out=$(stop "$MAIN" code:api/a.php file:web/b.ts)
+expect approve "$(decision "$out")" "cwd: every MYSPEC_SESSION_FILES path resolves from the check's cwd"
+expect "$(printf 'a.php\n../web/b.ts')" "$(cat "$RAN/Lint.files" 2>/dev/null)" "cwd: MYSPEC_SESSION_FILES is relative to the cwd"
+rm -f "$MAIN/web/b.ts"
+# One ../ per segment of the cwd the path does not share, and a name that
+# only starts like the cwd is outside it.
+files_check() {  # files_check <cwd> -> a check that records its MYSPEC_SESSION_FILES
+  jq -nc --arg d "$1" --arg c 'printf "%s\n" "$MYSPEC_SESSION_FILES" > '"$RAN"'/Files.files' \
+    '{name: "Files", command: $c, required: true, cwd: $d}'
+}
+container_config "$MAIN" "$(files_check api/sub)"
+out=$(stop "$MAIN" code:api/a.php file:web/a.ts file:api/sub/s.php)
+expect "$(printf '../a.php\ns.php\n../../web/a.ts')" "$(cat "$RAN/Files.files" 2>/dev/null)" "cwd api/sub: a shared parent costs no ../, an unshared one costs one each"
+container_config "$MAIN" "$(files_check api)"
+out=$(stop "$MAIN" code:api/a.php file:apiary/x.ts)
+expect "$(printf 'a.php\n../apiary/x.ts')" "$(cat "$RAN/Files.files" 2>/dev/null)" "cwd api: apiary/ only starts like the cwd, so it is outside it"
+container_config "$MAIN" "$(check Root 'printf "%s\n" "$MYSPEC_SESSION_FILES" > '"$RAN"'/Root.files')"
+out=$(stop "$MAIN" code:api/a.php file:web/a.ts)
+expect "$(printf 'api/a.php\nweb/a.ts')" "$(cat "$RAN/Root.files" 2>/dev/null)" "no cwd: MYSPEC_SESSION_FILES stays repo-relative"
+
 # The documented example pins the compose project, and runs in a worktree.
 # The docs live at the repository root, above both copies of this suite.
 DOCS="$(git -C "$HERE" rev-parse --show-toplevel)/docs/stop-gate.md"

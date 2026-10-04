@@ -405,8 +405,34 @@ capped() {
   [ -f "$CAP_SENTINEL" ] || { [ "$1" -eq 124 ] && [ "$2" -ge "$3" ]; }
 }
 
+# relative_to <dir> <repo-relative path> -> the path relative to <dir>, a
+# repo-relative directory ("" is the root): under it the prefix goes, outside
+# it each segment of <dir> the two do not share becomes a ../.
+relative_to() {
+  local dir="$1" up=""
+  while [ -n "$dir" ]; do
+    case "$2" in "$dir"/*) printf '%s%s\n' "$up" "${2#"$dir"/}"; return ;; esac
+    up="../$up"
+    case "$dir" in */*) dir=${dir%/*} ;; *) dir="" ;; esac
+  done
+  printf '%s%s\n' "$up" "$2"
+}
+
+# session_files_from <dir> -> MYSPEC_SESSION_FILES with each path relative to
+# <dir> (CHECK_CWD), where the check runs, so a per-file linter there can open
+# them. paths_verdict matches the repo-relative list before this.
+session_files_from() {
+  local f
+  [ -n "$1" ] || { printf '%s' "$MYSPEC_SESSION_FILES"; return; }
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    relative_to "$1" "$f"
+  done <<< "$MYSPEC_SESSION_FILES"
+}
+
 # run_capped <seconds> <command> <run id> [keep]: runs <command> from the repo
-# root, or the check's cwd under it (CHECK_CWD), under run_with_cap. Sets
+# root, or the check's cwd under it (CHECK_CWD), under run_with_cap, with
+# MYSPEC_SESSION_FILES relative to where it runs. Sets
 # RUN_EXIT, RUN_ELAPSED and RUN_OUTPUT. With keep, the output file stays and
 # RUN_LOG names it: the caller removes it, or keeps a failed check's log for
 # attribution to read.
@@ -421,7 +447,8 @@ run_capped() {
   rm -f "$CAP_SENTINEL"
   CHECK_LOG=$(mktemp "${TMPDIR:-/tmp}/.myspec-check.XXXXXX")
   start=$(date +%s)
-  (cd "$REPO_ROOT${CHECK_CWD:+/$CHECK_CWD}" && MYSPEC_STOP_HOOK_ACTIVE=1 MYSPEC_CHECK_RUN_ID="$3" run_with_cap "$1" "$2") \
+  (cd "$REPO_ROOT${CHECK_CWD:+/$CHECK_CWD}" && MYSPEC_SESSION_FILES=$(session_files_from "$CHECK_CWD") \
+    MYSPEC_STOP_HOOK_ACTIVE=1 MYSPEC_CHECK_RUN_ID="$3" run_with_cap "$1" "$2") \
     >"$CHECK_LOG" 2>&1 </dev/null && RUN_EXIT=0 || RUN_EXIT=$?
   RUN_ELAPSED=$(( $(date +%s) - start ))
   RUN_OUTPUT=$(cat "$CHECK_LOG")
