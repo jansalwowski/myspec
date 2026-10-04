@@ -103,7 +103,9 @@ eq "$(cwd_of '{}')" "|" "no cwd: the root"
 eq "$(cwd_of '{"cwd":"api"}')" "api|" "a relative cwd"
 eq "$(cwd_of '{"cwd":"./web/"}')" "web|" "./ and a trailing / are dropped"
 eq "$(cwd_of '{"cwd":"."}')" "|" ". is the root"
-for bad in '"/tmp"' '"../app"' '"api/../.."' '""' '3'; do
+eq "$(cwd_of '{"cwd":""}')" "|" "an empty cwd is the root, as doctor reads it (#255 review)"
+eq "$(cwd_of '{"cwd":"./api/"}')" "api|" "./api/ is api"
+for bad in '"/tmp"' '"../app"' '"api/../.."' '"api/../x"' '".//api"' '"./.."' '3'; do
   eq "$(cwd_of "{\"cwd\":$bad}")" "|$bad" "cwd $bad is ignored and named"
 done
 
@@ -197,7 +199,7 @@ has "$(workdir "$REPO" apionly web)" 'cwd "web" is not under mountSource' "cwd o
 CONTAINERS_JSON=null
 # shellcheck disable=SC2016 # backticks in the expected message
 has "$(workdir "$REPO" app)" 'which `containers` in .claude/verification.json does not define' "no containers setting: refused as undefined"
-for spec in '{"mountSource":"."}' '{"mountSource":".","mountTarget":"srv"}' '{"mountSource":"../x","mountTarget":"/srv"}' '{"mountTarget":"/srv"}' '"x"'; do
+for spec in '{"mountSource":".//api","mountTarget":"/srv"}' '{"mountSource":"","mountTarget":"/srv"}' '{"mountSource":"."}' '{"mountSource":".","mountTarget":"srv"}' '{"mountSource":"../x","mountTarget":"/srv"}' '{"mountTarget":"/srv"}' '"x"'; do
   CONTAINERS_JSON="{\"app\":$spec}"
   has "$(workdir "$REPO" app)" "refused: container \"app\" needs mount" "container $spec is refused"
 done
