@@ -901,6 +901,25 @@ mkdir -p "$WT/sub" && printf 'x\n' > "$WT/sub/composer.lock"
 OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
 expect_line "WARN +provision-stale: vendor was provisioned while sub/composer.lock did not exist, and it has appeared since \(in this worktree\)" "worktree: a recorded-absent lockfile that appears is reported"
 rm -rf "$WT/sub"
+# A [...] class is a shell class, as provision expands it (#257 review).
+jq '.links[0].lockfiles += {"packages/[ab]/package-lock.json": null, "packages/[!ab]x/package-lock.json": null}' "$WT/.claude/state/provision.json" > "$ROOT/prov.json" \
+  && mv "$ROOT/prov.json" "$WT/.claude/state/provision.json"
+mkdir -p "$WT/packages/c" "$WT/packages/ax" "$WT/packages/[ab]"
+printf 'x\n' > "$WT/packages/c/package-lock.json"
+printf 'x\n' > "$WT/packages/ax/package-lock.json"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_no_line "provision-stale" "worktree: a lockfile outside a [...] class is not a match"
+mkdir -p "$WT/packages/b" && printf 'x\n' > "$WT/packages/b/package-lock.json"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +provision-stale: vendor was provisioned while packages/b/package-lock.json did not exist" "worktree: packages/[ab]/package-lock.json matches packages/b as the shell does"
+rm -rf "$WT/packages/b"
+printf 'x\n' > "$WT/packages/[ab]/package-lock.json"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_no_line "provision-stale" "worktree: [ab] is a class, not the literal directory [ab]"
+mkdir -p "$WT/packages/cx" && printf 'x\n' > "$WT/packages/cx/package-lock.json"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +provision-stale: vendor was provisioned while packages/cx/package-lock.json did not exist" "worktree: [!ab] negates the class"
+rm -rf "$WT/packages"
 
 ln -s "$ROOT/outside" "$REPO/elsewhere"
 run_doctor worktree
