@@ -140,17 +140,20 @@ expect_no_line '^ERROR' "the blocking groups report no errors on a clean install
 # At a matching version that makes it an error: nothing else would ever report
 # the missing gate (#216).
 cp "$REPO/.claude/settings.json" "$ROOT/settings-projectdir.json"
+# The walk prints each command it strips, so the expected list checked below is
+# the one this mutation produced, not a second traversal of the template.
 # shellcheck disable=SC2016 # literal text, not an expansion
-set_json .claude/settings.json '
+TEMPLATE_COMMANDS=$(set_json .claude/settings.json '
 const walk = (n) => {
   if (Array.isArray(n)) { n.forEach(walk); return; }
   if (!n || typeof n !== "object") { return; }
   if (typeof n.command === "string") {
     n.command = n.command.replace(/^"\$CLAUDE_PROJECT_DIR"\//, "");
+    console.log(n.command);
   }
   Object.values(n).forEach(walk);
 };
-walk(d.hooks)'
+walk(d.hooks)')
 
 run_doctor wiring
 expect_exit 1 "hooks registered in the legacy relative form fail the wiring group"
@@ -163,18 +166,7 @@ expect_no_line 'WARN +hook-command-relative' "no relative framework hook command
 
 # Every template entry is reported, whatever its event and matcher: update
 # rewrites what the doctor lists, so an entry the scan skipped stays bare. The
-# expected list is read from the template, not written out here.
-# shellcheck disable=SC2016 # literal text, not an expansion
-TEMPLATE_COMMANDS=$(node -e '
-const walk = (n, out) => {
-  if (Array.isArray(n)) { n.forEach((x) => walk(x, out)); return out; }
-  if (!n || typeof n !== "object") { return out; }
-  if (typeof n.command === "string") { out.push(n.command.replace(/^"\$CLAUDE_PROJECT_DIR"\//, "")); }
-  Object.values(n).forEach((x) => walk(x, out));
-  return out;
-};
-console.log(walk(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).hooks, []).join("\n"));
-' "$PLUGIN/templates/settings-hooks.json")
+# expected list is the one the set_json walk above printed, not written out here.
 TEMPLATE_COUNT=$(printf '%s\n' "$TEMPLATE_COMMANDS" | grep -c .)
 REPORTED_COUNT=$(printf '%s\n' "$OUTPUT" | grep -cE '^ERROR hook-command-relative: .claude/settings.json:')
 if [ "$TEMPLATE_COUNT" -gt 0 ] && [ "$REPORTED_COUNT" -eq "$TEMPLATE_COUNT" ]; then ok; else fail "every bare template entry is reported once (template $TEMPLATE_COUNT, reported $REPORTED_COUNT)"; fi
