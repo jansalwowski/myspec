@@ -220,6 +220,7 @@ hook_repo_root() {
       return 0
     fi
   done <<< "$1"
+  # #262: $HOOK_LIB/../.. is the repo root only for a project-local .claude/lib; a plugin-run hook needs another root.
   for c in "$PWD" "$HOOK_LIB/../.."; do
     if top=$(git -C "$c" rev-parse --show-toplevel 2>/dev/null); then
       printf '%s\n' "$top"

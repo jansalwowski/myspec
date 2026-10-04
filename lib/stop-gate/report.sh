@@ -31,6 +31,7 @@
 # status longer than a pipe buffer then kills git with SIGPIPE, and under
 # pipefail the `if` read false and skipped the gate.
 conformance_gates() {
+  # #262: project-local .claude/lib paths; the plugin-run hook (${CLAUDE_PLUGIN_ROOT}) resolves these differently.
   local root="$1" doctor="$1/.claude/lib/memory-doctor.mjs" setup="$1/.claude/lib/setup-doctor.mjs" ai out
   [ -f "$root/.myspec.json" ] && command -v node >/dev/null 2>&1 || return 0
   if [ -f "$doctor" ]; then
