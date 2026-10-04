@@ -299,9 +299,14 @@ done
 # Once the checks run (success or failure), the state file gets a `verified`
 # event for each verified checkout, so only a later code write re-arms it.
 # The writes stay: they are the list of what this session wrote, which
-# attribution below needs on every later run.
+# attribution below needs on every later run. Only a run that printed its
+# decision (GATE_DECIDED, set just before each one goes out) records
+# anything: one that died before deciding (an abort under set -e) leaves
+# the checkouts armed, so the next stop runs them again.
+GATE_DECIDED=0
 finish_run() {
   local r
+  [ "$GATE_DECIDED" -eq 1 ] || return 0
   for r in "${VERIFY_ROOTS[@]}" ${NESTED_ROOTS[@]+"${NESTED_ROOTS[@]}"}; do
     session_append "$STATE_HOME" "$SESSION_ID" "$(jq -nc --arg r "$r" '{t: "verified", root: $r}')" || true
   done
@@ -464,8 +469,12 @@ changed_files() {
 # looked up: by basename in base mode; in full mode as a repo-relative path,
 # once a leading ./ or this checkout's root is dropped. A lookup, not a
 # substring scan per path, keeps a multi-megabyte test log under a second.
+# Every awk in attribution and the report runs under LC_ALL=C: a check's log
+# can hold bytes that are not valid in the locale's encoding, and macOS awk
+# then exits 2 ("towc: multibyte conversion failure"), which under set -e
+# ended the hook before it decided. Bytes are all the matching needs.
 names_in() {
-  MODE="$1" ROOT="$ROOT_KEY/" awk '
+  LC_ALL=C MODE="$1" ROOT="$ROOT_KEY/" awk '
     FILENAME == ARGV[1] {
       key = $0
       if (ENVIRON["MODE"] == "base") sub(/.*\//, "", key)
@@ -501,7 +510,7 @@ names_in() {
 # reads all of stdin: `head` would exit early, and under pipefail the
 # writer's SIGPIPE would become the hook's own exit, with no decision printed.
 join_lines() {
-  awk -v max="$1" 'NR <= max { printf "%s%s", (NR > 1 ? ", " : ""), $0 }'
+  LC_ALL=C awk -v max="$1" 'NR <= max { printf "%s%s", (NR > 1 ? ", " : ""), $0 }'
 }
 
 # short_list <file> <max> -> "a, b, c and N more"
@@ -528,7 +537,7 @@ attribute_failures() {
   session_files > "$tfile"
   # .claude/state/ is per-checkout hook state, not anyone's work. At most 1000
   # paths take part: past that, a failure matches nothing, which blocks.
-  changed_files | grep -v '^\.claude/state/' | sort -u | grep -vxF -f "$tfile" | awk 'NR <= 1000' > "$ffile" || true
+  changed_files | grep -v '^\.claude/state/' | sort -u | grep -vxF -f "$tfile" | LC_ALL=C awk 'NR <= 1000' > "$ffile" || true
   if [ ! -s "$ffile" ]; then
     rm -f "$tfile" "$ffile"
     return 0
@@ -1036,7 +1045,7 @@ rm -f "$CAP_SENTINEL"
 # One line per note, deduplicated (a note from the reader repeats per root).
 SCOPE=""
 if [ "${#SCOPE_NOTES[@]}" -gt 0 ]; then
-  SCOPE="Scope: $(printf '%s\n' "${SCOPE_NOTES[@]}" | awk '!seen[$0]++ { printf "%s%s", (n++ ? " " : ""), $0 }')"
+  SCOPE="Scope: $(printf '%s\n' "${SCOPE_NOTES[@]}" | LC_ALL=C awk '!seen[$0]++ { printf "%s%s", (n++ ? " " : ""), $0 }')"
 fi
 
 if [ ${#FAILED_CHECKS[@]} -gt 0 ] || [ ${#TIMED_OUT_CHECKS[@]} -gt 0 ] || [ ${#UNVERIFIABLE_CHECKS[@]} -gt 0 ]; then
@@ -1073,6 +1082,7 @@ if [ ${#FAILED_CHECKS[@]} -gt 0 ] || [ ${#TIMED_OUT_CHECKS[@]} -gt 0 ] || [ ${#U
     # Non-blocking: no decision block, so the stop proceeds; systemMessage
     # surfaces the failure to the user.
     MESSAGE=$(printf "Verification failing (%s).\n\n%s%s" "$NAMES" "$NOTES" "$DETAILS" | jq -Rs .)
+    GATE_DECIDED=1
     echo "{\"decision\": \"approve\", \"systemMessage\": $MESSAGE}"
     exit 0
   fi
@@ -1082,6 +1092,7 @@ if [ ${#FAILED_CHECKS[@]} -gt 0 ] || [ ${#TIMED_OUT_CHECKS[@]} -gt 0 ] || [ ${#U
     done
     NOTES+="Fix what your changes broke. Do not edit files changed outside this session to make a check pass: another session sharing this checkout may be working on them. If a failure comes from those changes, say so and stop. A Bash side effect (an install, code generation) is not recorded as this session's write, so if you made one of those changes, it is yours."$'\n\n'
   fi
+  GATE_DECIDED=1
   decision_block "Verification did not pass (%s). Fix the failures your changes caused before completing; for a timeout, get the real result first.\n\n%s%s" "$NAMES" "$NOTES" "$DETAILS"
 fi
 
@@ -1089,7 +1100,9 @@ if [ -n "$SCOPE" ]; then
   HEADLINE="Verification passed."
   [ "$CHECKS_RAN" -gt 0 ] || HEADLINE="Verification ran no check."
   MESSAGE=$(printf '%s %s' "$HEADLINE" "$SCOPE" | jq -Rs .)
+  GATE_DECIDED=1
   echo "{\"decision\": \"approve\", \"systemMessage\": $MESSAGE}"
   exit 0
 fi
+GATE_DECIDED=1
 echo '{"decision": "approve"}'

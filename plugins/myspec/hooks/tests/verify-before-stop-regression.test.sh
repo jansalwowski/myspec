@@ -12,6 +12,12 @@
 #            the clean main checkout but whose edits were in a linked worktree
 #            verified the untouched tree and passed. The checkouts to verify
 #            now come from the session log's `## Files touched`.
+#   (utf8)   macOS awk exits 2 on invalid UTF-8 in a failing check's log
+#            ("towc: multibyte conversion failure"); under set -e the hook
+#            died before deciding, and the EXIT trap still recorded
+#            `verified`, so the next stop approved. Attribution's awk runs
+#            under LC_ALL=C, and `verified` is recorded only after a
+#            decision was printed.
 #   (pipefail) The memory and setup conformance gates were armed by
 #            `git status --porcelain | grep -q .`. grep exits on the first
 #            line, so a status longer than a pipe buffer killed git with
@@ -120,6 +126,44 @@ OUT=$(run_ledger)
 OUT=$(run_ledger)
 [ "$(decision "$OUT")" = approve ] && ok || fail "a verified checkout is not re-run without a new write (got: ${OUT:0:200})"
 rm -f "$REPO/BROKEN"
+
+# --- (utf8) invalid UTF-8 in a failing check's output still decides ----------
+# An unrelated uncommitted file sends the failure through attribution, whose
+# awk reads the check's log.
+INV="$ROOT/invalid-utf8"
+mkdir -p "$INV/.claude" "$INV/src"
+git init -q -b main "$INV"
+git -C "$INV" config user.email t@t
+git -C "$INV" config user.name t
+printf '.claude/state/\n' > "$INV/.gitignore"
+# shellcheck disable=SC2016 # the check's own printf, run by the gate
+jq -n '{checks: [{name: "bytes", command: "printf \u0027\\377\\376 src/x.ts broken\\n\u0027; exit 1", required: true}]}' > "$INV/.claude/verification.json"
+: > "$INV/src/a.ts"
+git -C "$INV" add -A && git -C "$INV" commit -q -m init
+printf 'x\n' > "$INV/other.ts"
+inv_events() { bash "$SESSION_EVENT" --root "$INV" events "$SID-inv$1" | jq -r 'select(.t == "verified") | .root'; }
+inv_run() {  # inv_run <sid suffix> <hook> -> stdout; stderr to $ROOT/inv.err, exit to $ROOT/inv.rc
+  bash "$SESSION_EVENT" --root "$INV" append "$SID-inv$1" "$(jq -nc --arg r "$INV" '{t: "write", root: $r, rel: "src/a.ts", kind: "code"}')"
+  printf '{"session_id":"%s-inv%s","cwd":"%s"}' "$SID" "$1" "$INV" | bash "$2" 2>"$ROOT/inv.err"
+  printf '%s' "$?" > "$ROOT/inv.rc"
+}
+OUT=$(inv_run 1 "$HOOK")
+[ "$(cat "$ROOT/inv.rc")" = 0 ] && ok || fail "utf8: the hook exits 0 (got $(cat "$ROOT/inv.rc"): $(cat "$ROOT/inv.err"))"
+case "$(decision "$OUT")" in block|approve) ok ;; *) fail "utf8: the hook decides (got: ${OUT:0:200})" ;; esac
+grep -qi 'awk' "$ROOT/inv.err" && fail "utf8: no awk error (got: $(cat "$ROOT/inv.err"))" || ok
+# An abort before the decision (a copy of the hook that exits 3 where the
+# report starts) records no verified event, so the checkout stays armed.
+ABORT="$ROOT/abort"
+mkdir -p "$ABORT/hooks"
+cp -R "$(cd "$(dirname "$HOOK")/.." && pwd)/lib" "$ABORT/lib"
+sed 's/^# One line per note, deduplicated.*/exit 3/' "$HOOK" > "$ABORT/hooks/verify-before-stop.sh"
+grep -qx 'exit 3' "$ABORT/hooks/verify-before-stop.sh" && ok || fail "abort: the stub found the report's start"
+OUT=$(inv_run 2 "$ABORT/hooks/verify-before-stop.sh")
+[ "$(cat "$ROOT/inv.rc")" = 3 ] && ok || fail "abort: the stubbed hook exits 3 (got $(cat "$ROOT/inv.rc"))"
+[ -z "$(inv_events 2)" ] && ok || fail "abort: no verified event without a decision (got: $(inv_events 2))"
+OUT=$(inv_run 3 "$HOOK")
+[ "$(inv_events 3)" = "$INV" ] && ok || fail "a decided run still records verified (got: $(inv_events 3))"
+rm -f "$INV/other.ts"
 
 # --- (pipefail) a long status still arms the conformance gates --------------
 # Each doctor stub always fails, so the gate must block whenever it is armed.
