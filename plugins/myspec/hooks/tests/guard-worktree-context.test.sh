@@ -314,6 +314,14 @@ check_in "$REPO" allow "worktree prune -v --dry-run"  wt-sess 'git worktree prun
 check_in "$REPO" block "worktree prune -v"            wt-sess 'git worktree prune -v'
 check_in "$REPO" block "worktree prune --expire"      wt-sess 'git worktree prune --expire now'
 check_in "$REPO" block "dry run, then a real prune"   wt-sess 'git worktree prune -n && git worktree prune'
+# The carve-out loosens the default entries only: a project entry that
+# matches the dry run blocks it.
+MYSPEC_JSON=$(cat "$REPO/.myspec.json")
+jq '.isolation.blockInMain += ["^git[[:space:]]+worktree[[:space:]]+prune"]' <<< "$MYSPEC_JSON" > "$REPO/.myspec.json"
+check_in "$REPO" block "project prune entry blocks --dry-run" wt-sess 'git worktree prune --dry-run'
+check_in "$REPO" block "project prune entry blocks -n"        wt-sess 'git worktree prune -n'
+printf '%s\n' "$MYSPEC_JSON" > "$REPO/.myspec.json"
+check_in "$REPO" allow "default entry keeps the carve-out"     wt-sess 'git worktree prune --dry-run'
 
 # --- gate B, worktree mode: these stay allowed on purpose --------------------
 check_in "$REPO" allow "read-only lint"       wt-sess 'yarn lint'

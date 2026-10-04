@@ -125,7 +125,9 @@ BRANCH_CARVE_OUT='^git[[:space:]]+(rebase|merge)[[:space:]]+--(continue|abort|sk
 # entries, by their exact text, with `isolation.ignoreBlockInMain`.
 
 # A read-only form the default patterns would otherwise trip.
-# `git worktree prune -n` / `--dry-run` only reports (issue #223).
+# `git worktree prune -n` / `--dry-run` only reports (issue #223). Applied to
+# the schema's default entries only: a project entry that matches the dry run
+# blocks it, as the project wrote it to.
 HEAVY_CARVE_OUT='^git[[:space:]]+worktree[[:space:]]+prune([[:space:]]+[^[:space:]]+)*[[:space:]]+(-v*nv*|--dry-run)([[:space:]]|$)'
 
 # --- where does a segment run? -------------------------------------------------
@@ -366,18 +368,23 @@ Full procedure: $(procedure_doc "$root")"
 }
 
 # heavy_patterns <main root> -> sets HEAVY to that checkout's
-# isolation.blockInMain minus isolation.ignoreBlockInMain, read once per root.
+# isolation.blockInMain minus isolation.ignoreBlockInMain, read once per root,
+# and HEAVY_DEFAULT[i] to 1 when HEAVY[i] is one of the schema's defaults
+# (myspec-config.schema.json, beside the reader).
 # The reader's notes go to stderr. When the reader fails (a partial install)
 # there is no list: the first such command of the session is denied with the
 # reader's error, recorded as a `notice` event, and later ones pass, as the
 # Stop gate blocks once on a missing lib rather than guess.
 HEAVY_ROOT=""
 HEAVY=()
+HEAVY_DEFAULT=()
 heavy_patterns() {
-  local p
+  local p schema="$HOOK_LIB/myspec-config.schema.json"
   [ "$1" != "$HEAVY_ROOT" ] || return 0
   HEAVY_ROOT="$1"
   HEAVY=()
+  HEAVY_DEFAULT=()
+  [ -f "$schema" ] || schema=/dev/null
   if ! read_setting isolation "$1"; then
     [ -z "$SETTING_NOTES" ] || printf 'guard-worktree-context: %s\n' "$SETTING_NOTES" >&2
     # shellcheck disable=SC2016 # a jq program: $ev is a jq variable
@@ -389,11 +396,31 @@ heavy_patterns() {
     return 0
   fi
   [ -z "$SETTING_NOTES" ] || printf 'guard-worktree-context: %s\n' "$SETTING_NOTES" >&2
+  # One line per entry: 1 or 0 (a schema default or not), a tab, the pattern.
   while IFS= read -r p; do
-    [ -n "$p" ] && HEAVY+=("$p")
-  done < <(jq -r '(.ignoreBlockInMain // [] | if type == "array" then . else [] end) as $skip
+    [ -n "${p#?$'\t'}" ] || continue
+    HEAVY+=("${p#?$'\t'}")
+    HEAVY_DEFAULT+=("${p%%$'\t'*}")
+  done < <(jq -r --slurpfile schema "$schema" '
+    ($schema[0].keys["isolation.blockInMain"].default // []) as $def
+    | (.ignoreBlockInMain // [] | if type == "array" then . else [] end) as $skip
     | .blockInMain // [] | if type == "array" then .[] else empty end
-    | select(type == "string") | select(. as $p | $skip | index([$p]) | not)' <<< "$SETTING" 2>/dev/null)
+    | select(type == "string") | select(. as $p | $skip | index([$p]) | not)
+    | (if . as $p | $def | index([$p]) then "1" else "0" end) + "\t" + .' <<< "$SETTING" 2>/dev/null)
+}
+
+# heavy_match <segment> -> 0 when an entry of HEAVY matches the segment, the
+# dry-run carve-out excepted for the default entries.
+heavy_match() {
+  local i
+  for ((i = 0; i < ${#HEAVY[@]}; i++)); do
+    grep -qE -- "${HEAVY[i]}" <<< "$1" || continue
+    if [ "${HEAVY_DEFAULT[i]}" = 1 ] && grep -qE -- "$HEAVY_CARVE_OUT" <<< "$1"; then
+      continue
+    fi
+    return 0
+  done
+  return 1
 }
 
 matches_any() {  # matches_any <segment> <pattern>...
@@ -438,8 +465,7 @@ check_segment() {
   [ "$ISO_MODE" = "worktree" ] || return 0
 
   heavy_patterns "$CLS_ROOT"
-  if [ "${#HEAVY[@]}" -gt 0 ] && matches_any "$segment" "${HEAVY[@]}" \
-      && ! grep -qE -- "$HEAVY_CARVE_OUT" <<< "$segment"; then
+  if heavy_match "$segment"; then
     block_heavy "$CLS_ROOT" "$segment"
   fi
 }
