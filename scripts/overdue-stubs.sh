@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # overdue-stubs.sh: list the retirement stubs that have outlived their one
-# minor cycle. Maintainer tooling, not shipped: run by the /release skill in
-# its Breaking gate (RELEASING.md "Breaking changes", "Retirement stubs").
+# minor cycle. Maintainer tooling, not shipped: run by the /release skill as
+# its stub gate, Step 2 (RELEASING.md "Breaking changes", "Retirement stubs").
 #
 # A stub is a skills/<name>/SKILL.md whose frontmatter has
-# `disable-model-invocation: true` and whose body carries a "Remove this stub"
-# note. Its retirement version is the X.Y in "Retired in myspec X.Y" (the
-# description), or in "Remove this stub one minor cycle after X.Y".
+# `disable-model-invocation: true` and which says "Retired in myspec X.Y" (its
+# description) or carries a "Remove this stub" note (the 2.0 stubs). Either
+# alone makes it a stub; a manual-only skill with neither is not one. Its
+# retirement version is that X.Y, or the one in "Remove this stub one minor
+# cycle after X.Y".
 #
 # Rule: a stub retired in X.Y ships for one minor cycle after that release and
 # is deleted in the next. Cutting X.(Y+1).0 it is "due" (delete it next);
@@ -27,7 +29,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --version) VERSION="${2:-}"; shift 2 ;;
     --root) ROOT="${2:-}"; shift 2 ;;
-    -h|--help) sed -n '2,21p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,23p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "overdue-stubs: unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -51,11 +53,11 @@ overdue=0 unreadable=0
 for f in "$ROOT"/skills/*/SKILL.md; do
   [ -f "$f" ] || continue
   frontmatter "$f" | grep -q '^disable-model-invocation: *true *$' || continue
-  grep -q 'Remove this stub' "$f" || continue
+  grep -q 'Retired in myspec\|Remove this stub' "$f" || continue
   name=$(basename "$(dirname "$f")")
   v=$(retired_version "$f")
   if [ -z "$v" ]; then
-    echo "overdue-stubs: $name: no \"Retired in myspec X.Y\" in its description" >&2
+    echo "overdue-stubs: $name: no \"Retired in myspec X.Y\" in its description (the retirement version)" >&2
     unreadable=1
     continue
   fi

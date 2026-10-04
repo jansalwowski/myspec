@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Regression fixture for scripts/overdue-stubs.sh, the stub-lifetime check the
-# /release skill runs in its Breaking gate. The 2.0 retirement stubs shipped
+# /release skill runs as its stub gate (Step 2). The 2.0 retirement stubs shipped
 # for eleven minors because nothing checked (#267); this keeps the check
 # wired and its arithmetic honest: due at X.(Y+1).0, overdue from X.(Y+2).0
 # and at any higher major, and never a false stub from a manual-only skill
@@ -60,6 +60,20 @@ disable-model-invocation: true
 - Remove this stub one minor cycle after 2.3.
 MD
 
+# A stub written after the lifetime rule moved to RELEASING.md: no removal
+# note at all. "Retired in myspec" alone makes it a stub.
+skill no-note <<'MD'
+---
+name: no-note
+description: "Retired in myspec 2.5 — folded into other-skill."
+disable-model-invocation: true
+---
+
+# no-note (retired)
+
+Tell the user the replacement and stop.
+MD
+
 # Manual-only, not a stub: no removal note.
 skill manual-only <<'MD'
 ---
@@ -90,7 +104,7 @@ mkdir -p "$FIX/skills/stale"
 
 run --version 2.0.3
 expect_eq "$STATUS" 0 "patch of the retiring minor: nothing overdue"
-expect_eq "$(printf '%s' "$OUTPUT" | flat)" "shipping note-only retired 2.3 shipping old-name retired 2.0" "both stubs still shipping, in directory order"
+expect_eq "$(printf '%s' "$OUTPUT" | flat)" "shipping no-note retired 2.5 shipping note-only retired 2.3 shipping old-name retired 2.0" "every stub still shipping, in directory order"
 
 run --version 2.1.0
 expect_eq "$STATUS" 0 "one minor behind: due, not overdue"
@@ -98,13 +112,16 @@ expect_eq "$(printf '%s' "$OUTPUT" | grep old-name | flat)" "due old-name retire
 
 run --version 2.2.0
 expect_eq "$STATUS" 1 "two minors behind: overdue"
-expect_eq "$(printf '%s' "$OUTPUT" | flat)" "shipping note-only retired 2.3 overdue old-name retired 2.0" "only the 2.0 stub is overdue at 2.2.0"
+expect_eq "$(printf '%s' "$OUTPUT" | flat)" "shipping no-note retired 2.5 shipping note-only retired 2.3 overdue old-name retired 2.0" "only the 2.0 stub is overdue at 2.2.0"
 
 run --version 2.4.1
 expect_eq "$(printf '%s' "$OUTPUT" | grep note-only | flat)" "due note-only retired 2.3" "the removal note alone gives the version"
 
+run --version 2.6.0
+expect_eq "$(printf '%s' "$OUTPUT" | grep no-note | flat)" "due no-note retired 2.5" "a stub without a removal note is listed, not skipped"
+
 run --version 2.11.0
-expect_eq "$(printf '%s' "$OUTPUT" | flat)" "overdue note-only retired 2.3 overdue old-name retired 2.0" "both overdue at 2.11.0"
+expect_eq "$(printf '%s' "$OUTPUT" | flat)" "overdue no-note retired 2.5 overdue note-only retired 2.3 overdue old-name retired 2.0" "all overdue at 2.11.0"
 
 run --version 3.0.0
 expect_eq "$STATUS" 1 "a higher major: every older stub is overdue"
@@ -139,10 +156,11 @@ bash "$SCRIPT" --version 2.12.0 >/dev/null 2>&1
 rc=$?
 if [ "$rc" = 0 ] || [ "$rc" = 1 ]; then ok; else fail "real repo: exit $rc (a shipped stub has no readable retirement version)"; fi
 
-# The /release skill runs the check in its Breaking gate; without that line
+# The /release skill runs the check as its stub gate; without that line
 # the script catches nothing.
-expect_eq "$(grep -c 'scripts/overdue-stubs.sh --version' "$REPO_ROOT/.claude/skills/release/SKILL.md")" 1 "release skill runs the check"
-expect_eq "$(grep -c 'scripts/overdue-stubs.sh' "$REPO_ROOT/RELEASING.md")" 1 "RELEASING.md names the check"
+expect_ge() { if [ "$1" -ge "$2" ]; then ok; else fail "$3 (got: $1, want >= $2)"; fi; }
+expect_ge "$(grep -c 'scripts/overdue-stubs.sh --version' "$REPO_ROOT/.claude/skills/release/SKILL.md")" 1 "release skill runs the check"
+expect_ge "$(grep -c 'scripts/overdue-stubs.sh' "$REPO_ROOT/RELEASING.md")" 1 "RELEASING.md names the check"
 
 echo "overdue-stubs: $PASS passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]
