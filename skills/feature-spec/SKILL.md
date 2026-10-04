@@ -1,6 +1,6 @@
 ---
 name: "feature-spec"
-description: "Use when starting a new feature. Creates spec.md and dependencies.md in ${aiDir}/features/; an optional step adds scenarios.md and seed.json (arguments `scenarios` / `seed-data` revisit an existing spec). Keywords: new feature, requirements, user stories, acceptance criteria, test scenarios, seed data. Do NOT use for tech design (feature-tech-spec)."
+description: "Use when starting a new feature. Creates spec.md and dependencies.md in ${aiDir}/features/, optionally scenarios.md and seed.json (`scenarios` / `seed-data` arguments revisit an existing spec). Keywords: new feature, requirements, user stories, acceptance criteria, test scenarios, seed data. Do NOT use for tech design (feature-tech-spec)."
 tags: [feature, specification, planning, documentation]
 ---
 

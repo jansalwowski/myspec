@@ -84,8 +84,13 @@ const PLUGIN_INTERNAL_DIRS = [
   'lib', 'hooks', 'examples', '.codex-plugin', '.claude-plugin',
 ];
 
-// Caps from skills/skill-verify/references/detection-patterns.md.
-const DESCRIPTION_MAX = 1024;
+// Caps. The spec allows 1,024 description chars; this repo caps each at 350
+// so no single skill crowds a consumer's own skills out of the listing
+// (docs/myspec-2.0-breaking-changes.md, the 2.0 description diet: every
+// description was rewritten to fit, and code-review, memorize and doctor had
+// drifted back over it by 2.11, issue #264). LISTING_MAX is Claude Code's own
+// truncation point (skills/skill-verify/references/detection-patterns.md).
+const DESCRIPTION_MAX = 350;
 const LISTING_MAX = 1536; // description + when_to_use, Claude Code listing truncation
 const BODY_TOKEN_BUDGET = 5000; // truncated past this on re-injection after /compact
 const BODY_LINE_BUDGET = 500;
@@ -94,7 +99,10 @@ const WORKFLOW_RE = /\b(analyzes?|generates?|creates?|validates?|checks?)\b.*\b(
 
 // Narrow per-skill exemptions: { skill: { RULE: 'reason' } }. Keep each one
 // tied to an owner and remove it when the finding is fixed.
-const EXEMPT = {};
+const EXEMPT = {
+  // code-review is removed by #258; drop this entry with the skill.
+  'code-review': { 'DESC-LENGTH': 'removed by #258' },
+};
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -326,7 +334,7 @@ function lintFile(absPath, ctx) {
   if (!d.trim()) {
     add(desc?.line ?? 1, 'DESC-MISSING', '`description` is required and non-empty');
   } else {
-    if (d.length > DESCRIPTION_MAX) add(desc.line, 'DESC-LENGTH', `description is ${d.length} chars; the spec cap is ${DESCRIPTION_MAX}`);
+    if (d.length > DESCRIPTION_MAX) add(desc.line, 'DESC-LENGTH', `description is ${d.length} chars; the cap is ${DESCRIPTION_MAX} (the 2.0 description diet; rewrite, do not truncate)`);
     const wtu = fields.when_to_use && typeof fields.when_to_use.value === 'string' ? fields.when_to_use.value : '';
     if (d.length + wtu.length > LISTING_MAX) add(desc.line, 'DESC-LENGTH', `description + when_to_use is ${d.length + wtu.length} chars; Claude Code truncates the listing at ${LISTING_MAX}`);
     if (!manualOnly) {

@@ -139,20 +139,48 @@ fresh
 run
 expect_line "DESC-MISSING" "empty description is reported"
 
+# The repo cap is 350 (the 2.0 description diet, #264), not the spec's 1,024:
+# 351 chars must fail, 350 must pass, and a 400-char description that the
+# spec would allow must fail too.
 LONG="Use when $(printf 'x%.0s' $(seq 1 1020)). Do NOT use for y."
 fresh
 { printf -- '---\nname: demo\ndescription: "%s"\n---\n' "$LONG"; body; } | skill demo
 run
 expect_exit 1 "an over-cap description exits 1"
-expect_line "DESC-LENGTH .*1024" "an over-cap description is reported"
+expect_line "DESC-LENGTH .*is 1048 chars; the cap is 350" "an over-cap description is reported with the 350 cap"
 
-AT="Use when $(printf 'x%.0s' $(seq 1 996)). Do NOT use for y."
+SPEC_OK="Use when $(printf 'x%.0s' $(seq 1 372)). Do NOT use for y."
+fresh
+{ printf -- '---\nname: demo\ndescription: "%s"\n---\n' "$SPEC_OK"; body; } | skill demo
+run
+expect_exit 1 "a description under the spec's 1024 but over 350 exits 1 (len ${#SPEC_OK})"
+expect_line "DESC-LENGTH .*is 400 chars; the cap is 350" "the 400-char description is reported against the 350 cap"
+
+OVER="Use when $(printf 'x%.0s' $(seq 1 323)). Do NOT use for y."
+fresh
+{ printf -- '---\nname: demo\ndescription: "%s"\n---\n' "$OVER"; body; } | skill demo
+run
+expect_exit 1 "a description of 351 chars exits 1 (len ${#OVER})"
+expect_line "DESC-LENGTH .*is 351 chars; the cap is 350" "a 351-char description is reported"
+
+AT="Use when $(printf 'x%.0s' $(seq 1 322)). Do NOT use for y."
 fresh
 { printf -- '---\nname: demo\ndescription: "%s"\n---\n' "$AT"; body; } | skill demo
 run
-expect_no_line "DESC-LENGTH" "a description of exactly 1024 chars passes (len ${#AT})"
+expect_exit 0 "a description of exactly 350 chars passes (len ${#AT})"
+expect_no_line "DESC-LENGTH" "a description of exactly 350 chars raises no DESC-LENGTH"
 
-WTU="$(printf 'w%.0s' $(seq 1 700))"
+# code-review is exempt from DESC-LENGTH until #258 removes it; no other skill is.
+fresh
+{ printf -- '---\nname: code-review\ndescription: "%s spec.md (feature-spec-review), tech-spec.md (feature-tech-spec-review), SKILL.md (skill-verify)."\n---\n' "$SPEC_OK"; body; } | skill code-review
+run
+expect_no_line "DESC-LENGTH" "code-review is exempt from DESC-LENGTH (EXEMPT, #258)"
+fresh
+{ printf -- '---\nname: doctor\ndescription: "%s (code-review), (feature-verify), (skill-verify)."\n---\n' "$SPEC_OK"; body; } | skill doctor
+run
+expect_line "DESC-LENGTH .*the cap is 350" "the exemption is per skill: doctor over the cap is reported"
+
+WTU="$(printf 'w%.0s' $(seq 1 1200))"
 fresh
 { printf -- '---\nname: demo\ndescription: "%s"\nwhen_to_use: "%s"\n---\n' "$AT" "$WTU"; body; } | skill demo
 run

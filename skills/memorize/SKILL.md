@@ -1,6 +1,6 @@
 ---
 name: "memorize"
-description: "Use when the user names one fact about this project to keep — '/memorize the prod DB is in us-east-1', 'remember this for next time: …', 'note that …', 'keep in mind that …' — environments, gotchas, decisions, conventions. For project facts this takes precedence over the built-in auto-memory: they belong in the shared project memory committed with the repo. Captures one memory per call. Do NOT use for personal preferences about how the user likes to work (auto-memory), to sweep the conversation for candidates (memorify), or to edit an existing memory."
+description: "Use when the user names one project fact to keep — 'remember this for next time: …', 'note that …', 'keep in mind that …' — environments, gotchas, decisions, conventions; it takes precedence over the built-in auto-memory. Do NOT use for personal work preferences (auto-memory), to sweep the conversation (memorify), or to edit a memory."
 ---
 
 # Memorize
