@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Lint the JS this plugin ships with eslint:recommended (#208). /myspec:update
-# copies lib/ into downstream projects, whose own `eslint .` then lints it, so
-# a finding here is a finding in every consumer's lint gate.
+# Lint the JS this plugin ships with eslint:recommended (#208). The hooks and
+# skills run lib/ from the plugin in every consumer's sessions (since 3.0 it is
+# no longer copied into projects, #272), so a defect here ships everywhere.
 #
 # The repo has no package.json, so eslint runs through npx at pinned versions.
 # CI (.github/workflows/test.yml) and .githooks/pre-commit both call this
