@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # mark-code-changed.sh
 # PostToolUse hook (Write|Edit and Bash matchers) — records every file this
-# session writes, and keeps the session's live log. Also a PreToolUse hook
-# (Bash matcher), where it only snapshots what a Bash write is about to
-# change (below).
+# session writes, and keeps the session's live log. Also a PostToolUseFailure
+# hook (Bash matcher): a Bash call that exits non-zero fires that event
+# instead, with the same tool_input, and its writes landed all the same. And
+# a PreToolUse hook (Bash matcher), where it only snapshots what a Bash write
+# is about to change (below).
 #
 # Ledger: `write` events in the session-state file,
 # .claude/state/sessions/<session_id>.jsonl in the main checkout of the

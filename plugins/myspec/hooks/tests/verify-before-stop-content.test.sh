@@ -319,6 +319,20 @@ OUT=$(stop 50)
 [ "$(decision "$OUT")" = block ] && ok || fail "a leak in a text file above the cap still blocks (got: ${OUT:0:200})"
 rm -f "$REPO/docs/big.md"
 
+# --- a write in a command that exits non-zero (PR #274 review) ---------------------
+# The harness sends a Bash call that exits non-zero to PostToolUseFailure, not
+# PostToolUse, with the same tool_input; the hook must be registered there too.
+HOOKS_JSON="$CLAUDE_PLUGIN_ROOT/hooks.json"
+jq -e '.hooks.PostToolUseFailure[]? | select(.matcher == "Bash") | .hooks[] | select(.command | endswith("/hooks/mark-code-changed.sh"))' "$HOOKS_JSON" >/dev/null \
+  && ok || fail "hooks.json registers mark-code-changed.sh for Bash at PostToolUseFailure"
+FAILCMD="printf 'see $LEAK\n' > docs/failed.md && false"
+mark 51 PreToolUse "$FAILCMD"
+(cd "$REPO" && eval "$FAILCMD") >/dev/null 2>&1
+mark 51 PostToolUseFailure "$FAILCMD"
+OUT=$(stop 51)
+[ "$(decision "$OUT")" = block ] && ok || fail "a leak written by a command that then fails blocks (got: ${OUT:0:200})"
+rm -f "$REPO/docs/failed.md"
+
 # --- the continuation after a block is approved (R10) -----------------------------
 bashcmd 15 "printf 'see $LEAK\n' > docs/again.md"
 OUT=$(jq -nc --arg s "$SID-15" --arg c "$REPO" '{session_id: $s, cwd: $c, stop_hook_active: true}' | bash "$HOOK" 2>/dev/null)
