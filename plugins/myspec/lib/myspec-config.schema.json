@@ -442,6 +442,12 @@
       "issue": ["exists"],
       "description": "Exported by the Stop gate to every check it runs, so a check can tell it runs under the gate. The Stop hook approves at once when it finds it in its own environment: a nested Claude Code session a check started is not verified again."
     },
+    "MYSPEC_HOOK_EVENT": {
+      "kind": "exported",
+      "type": "string",
+      "issue": ["#262"],
+      "description": "Exported by the Stop gate to the setup doctor it runs: the hook event name. With it set and CLAUDE_PLUGIN_ROOT unset, the doctor reports plugin-hooks-unavailable: the hook did not run from the plugin's hooks.json, so the plugin is not loaded."
+    },
     "MYSPEC_WORKTREE": {
       "kind": "exported",
       "type": "string",
