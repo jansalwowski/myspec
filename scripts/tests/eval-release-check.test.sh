@@ -89,7 +89,8 @@ git config user.name t
 git config commit.gpgsign false
 mkdir -p scripts/evals quality evals/_fixtures
 cp "$SRC_ROOT"/scripts/evals/{run.sh,summary.mjs,compare.mjs,baseline.mjs,results.mjs,release-check.sh} scripts/evals/
-cp "$SRC_ROOT/quality/release-check.json" quality/
+# The fixture starts report-only whatever the repo sets (gate on since #267); "gate on" below flips it.
+sed 's/"gate": true/"gate": false/' "$SRC_ROOT/quality/release-check.json" > quality/release-check.json
 echo "lib" > evals/_fixtures/lib.sh
 for c in a b c d e; do mkdir -p "evals/case-$c" && echo "prompt $c" > "evals/case-$c/prompt.md"; done
 echo 1 > STUB_SCORE

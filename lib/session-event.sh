@@ -8,8 +8,12 @@
 # Sourced by the hooks (after lib/hook-core.sh), run by skills and libs.
 #
 # One event per line, each with "at" (epoch seconds), added on append:
-#   {"t":"write","root":<checkout>,"rel":<repo-relative path>,"kind":"code|file","agent":<agent_id>}
-#       mark-code-changed.sh, per written file; "agent" only from a subagent
+#   {"t":"write","root":<checkout>,"rel":<repo-relative path>,"kind":"code|file","via":"bash|tool","blob":<id>,"agent":<agent_id>}
+#       mark-code-changed.sh, per written file; "agent" only from a subagent;
+#       "blob" (the file after the write) only for a Bash write to a file the
+#       content checks cover
+#   {"t":"pre","root":<checkout>,"rel":<repo-relative path>,"blob":<id or "">}
+#       mark-code-changed.sh at PreToolUse, the file before a Bash write
 #   {"t":"verified","root":<checkout>}
 #       verify-before-stop.sh, per checkout it ran the checks in
 #   {"t":"isolation","mode":"develop|worktree|","path":<worktree>,"note":<text>}
@@ -131,6 +135,38 @@ session_file() {
   printf '%s/%s.jsonl\n' "$dir" "$2"
 }
 
+# session_keep <home> <session id> <root> <rel> -> "kept:<id>": copies the
+# file as it is now to <session file without .jsonl>.blobs/<id>, <id> being
+# the blob id of its bytes (computed, not written to the object store). The
+# Bash-write snapshot when the object store is read-only (mark-code-changed.sh
+# snapshot_blob); session-clean removes the directory with the file. Fails
+# when the copy cannot be written.
+session_keep() {
+  local f dir id
+  f=$(session_file "$1" "$2") || return 1
+  dir="${f%.jsonl}.blobs"
+  id=$(git -C "$3" hash-object --no-filters -- "$4" 2>/dev/null) || return 1
+  case "$id" in ''|*[!0-9a-f]*) return 1 ;; esac
+  if [ ! -f "$dir/$id" ]; then
+    mkdir -p "$dir" 2>/dev/null || return 1
+    if ! { cp -- "$3/$4" "$dir/$id.$$" 2>/dev/null && mv -f -- "$dir/$id.$$" "$dir/$id"; }; then
+      rm -f -- "$dir/$id.$$"
+      return 1
+    fi
+  fi
+  printf 'kept:%s\n' "$id"
+}
+
+# session_kept <home> <session id> <id> -> the path of the copy session_keep
+# made; fails when <id> is not one or the copy is gone.
+session_kept() {
+  local f
+  case "$3" in ''|*[!0-9a-f]*) return 1 ;; esac
+  f=$(session_file "$1" "$2") || return 1
+  [ -f "${f%.jsonl}.blobs/$3" ] || return 1
+  printf '%s\n' "${f%.jsonl}.blobs/$3"
+}
+
 # _session_write <file> <line>: appends one line, starting on a fresh line
 # when the file ends in a truncated one (a writer killed mid-write), which
 # would otherwise swallow this line too. Every append goes through it.
@@ -184,25 +220,54 @@ session_armed_roots() {
     | . as $s | $s.order[] | select($s.armed[.])'
 }
 
-# session_written <home> <session id> <root> -> the repo-relative paths the
-# session wrote in <root>, code or not, those in a checkout nested inside it
-# (a submodule) included, sorted and unique.
+# jq: the session's write events, from $ev: a `write` with a string root and
+# rel. Every query over the files a session wrote starts from it.
+SESSION_WRITES_JQ='$ev[] | select(.t == "write" and (.root | type) == "string" and (.rel | type) == "string")'
+
+# session_written <home> <session id> [root] -> the files the session wrote,
+# code or not, sorted and unique. With <root>: the repo-relative paths in
+# <root>, those in a checkout nested inside it (a submodule) included.
+# Without: every file, as `<root>\t<rel>` lines.
 session_written() {
-  session_query "$1" "$2" '
-    $ev[] | select(.t == "write" and (.root | type) == "string" and (.rel | type) == "string")
-    | if .root == $r then .rel
+  session_query "$1" "$2" "$SESSION_WRITES_JQ"'
+    | if $r == "" then .root + "\t" + .rel
+      elif .root == $r then .rel
       elif (.root | startswith($r + "/")) then .root[($r | length) + 1:] + "/" + .rel
-      else empty end' --arg r "$3" | LC_ALL=C sort -u
+      else empty end' --arg r "${3:-}" | LC_ALL=C sort -u
 }
 
-# session_seen <home> <session id> <kind> <root> <rel> <agent> -> 0 when the
-# same write is already recorded since <root>'s last verified event.
+# session_bash_writes <home> <session id> -> one `<root>\t<rel>\t<before>\t<after>`
+# line per Bash write that carries an after-blob (mark-code-changed.sh), in
+# order: the input of the Stop gate's content checks (lib/stop-gate/content.sh).
+# <before> is the blob of the `pre` event recorded for the file since its
+# last write event, "-" when that event found no file, else the after-blob
+# of the session's previous Bash write to it, else "?" (unknown: no snapshot
+# was taken). A write whose after-blob is "" (the file is gone) is left out;
+# one whose after-blob is "@" (judged but not hashed) is kept, and the Stop
+# gate reads the file itself.
+session_bash_writes() {
+  session_query "$1" "$2" '
+    reduce ($ev[] | select(.t == "pre" or .t == "write")
+      | select((.root | type) == "string" and (.rel | type) == "string")) as $e
+      ({pre: {}, last: {}, out: []};
+      ($e.root + "\t" + $e.rel) as $k
+      | if $e.t == "pre" then .pre[$k] = (if $e.blob == "" then "-" else ($e.blob | tostring) end)
+        elif $e.via == "bash" and ($e.blob | type) == "string" then
+          (if $e.blob == "" then . else .out += [$k + "\t" + (.pre[$k] // .last[$k] // "?") + "\t" + $e.blob] end)
+          | .last[$k] = (if $e.blob == "" then "-" else $e.blob end) | del(.pre[$k])
+        else del(.pre[$k]) | del(.last[$k]) end)
+    | .out[]'
+}
+
+# session_seen <home> <session id> <kind> <root> <rel> <agent> [via] -> 0 when
+# the same write is already recorded since <root>'s last verified event.
 session_seen() {
   [ "$(session_query "$1" "$2" '
     reduce ($ev[] | select(.root == $r)) as $e (false;
       if $e.t == "verified" then false
-      elif $e.t == "write" and $e.rel == $p and $e.kind == $k and ($e.agent // "") == $a then true
-      else . end)' --arg k "$3" --arg r "$4" --arg p "$5" --arg a "$6")" = true ]
+      elif $e.t == "write" and $e.rel == $p and $e.kind == $k and ($e.agent // "") == $a
+        and ($e.via // "") == $v then true
+      else . end)' --arg k "$3" --arg r "$4" --arg p "$5" --arg a "$6" --arg v "${7:-}")" = true ]
 }
 
 # session_isolation <home> <session id> -> sets ISO_MODE (develop, worktree,

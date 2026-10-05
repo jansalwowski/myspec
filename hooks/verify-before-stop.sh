@@ -14,6 +14,7 @@
 #   run.sh        loading checks, paths/cwd/runIn verdicts, the capped runner
 #   attribute.sh  whether a checkout's failures block or warn (R4, R6)
 #   report.sh     the conformance gates and the decision
+#   content.sh    the content checks over the session's Bash writes (R14)
 # This file parses the payload, guards re-entry and calls them in order.
 
 set -euo pipefail
@@ -45,7 +46,8 @@ HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
 LIB_DIR=$(dirname "$HOOK_CORE")
 MISSING=""
 for f in hook-core.sh session-event.sh glob-regex.sh myspec-config.sh myspec-config.schema.json \
-    stop-gate/arm.sh stop-gate/provision.sh stop-gate/run.sh stop-gate/attribute.sh stop-gate/report.sh; do
+    markdown-section-check.sh content-checks.sh stop-gate/arm.sh stop-gate/provision.sh stop-gate/run.sh \
+    stop-gate/attribute.sh stop-gate/report.sh stop-gate/content.sh; do
   [ -f "$LIB_DIR/$f" ] || MISSING="${MISSING:+$MISSING, }$f"
 done
 if [ -n "$MISSING" ]; then
@@ -67,6 +69,10 @@ fi
 . "$HOOK_LIB/stop-gate/attribute.sh"
 # shellcheck source=lib/stop-gate/report.sh
 . "$HOOK_LIB/stop-gate/report.sh"
+# shellcheck source=lib/content-checks.sh
+. "$HOOK_LIB/content-checks.sh"
+# shellcheck source=lib/stop-gate/content.sh
+. "$HOOK_LIB/stop-gate/content.sh"
 
 # The gate-wide budget (R13) starts here.
 gate_budget_init
@@ -79,10 +85,15 @@ payload_parse "$PAYLOAD" STOP_HOOK_ACTIVE=.stop_hook_active SESSION_ID=.session_
 REPO_ROOT=$(hook_repo_root "$CWDS" myspec) || approve
 conformance_gates "$REPO_ROOT"
 
+# The content gates (R14) run before the checks, in any tracked project: a
+# Bash write that leaked a path or skipped a tech-spec's reuse audit blocks
+# whether or not the project has verification.json checks.
+arm_init "$REPO_ROOT"
+content_gates
+
 CONFIG_FILE="$REPO_ROOT/.claude/verification.json"
 [ -f "$CONFIG_FILE" ] || approve
 
-arm_init "$REPO_ROOT"
 armed_roots
 # No code written in this repository since the last run: nothing to verify.
 [ "${#VERIFY_ROOTS[@]}" -gt 0 ] || approve

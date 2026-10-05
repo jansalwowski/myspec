@@ -22,8 +22,8 @@ Check if `.myspec.json` already exists in the project root.
 
 Ask these **one at a time** and wait for each answer:
 
-1. **Project name and description**
-   "What is the project name and a one-line description?"
+1. **Project name**
+   "What is the project name?"
 
 2. **Tech stack**
    "What is the tech stack? (e.g., 'Node.js + TypeScript, PostgreSQL, REST API' or 'Python + Django, MySQL, GraphQL')"
@@ -67,7 +67,6 @@ Write `.myspec.json` at project root:
   "frameworkVersion": "{VERSION}",
   "project": {
     "name": "{name from step 2}",
-    "description": "{description from step 2}",
     "techStack": "{techStack from step 2}"
   },
   "migrations": {the manifest's `migrations` array, copied verbatim}
@@ -213,7 +212,7 @@ Next steps:
 
 ## Verification Checklist
 
-- [ ] `.myspec.json` created with project name, description, techStack, aiDir
+- [ ] `.myspec.json` created with project name, techStack, aiDir (no `project.description`: schema v2 dropped it, nothing read it)
 - [ ] `.myspec.json` `frameworkVersion` matches `manifest.json`'s (no hardcoded literal), `migrations` copied from the manifest, no `frameworkFiles` block, `aiDir` without a trailing slash
 - [ ] `${aiDir}/features/index.yaml` created
 - [ ] `${aiDir}/memory/` directory structure created with all 3 type indexes

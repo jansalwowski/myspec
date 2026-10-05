@@ -73,11 +73,11 @@ See [evals/README.md](evals/README.md) and the Quality gates section of [AGENTS.
 | **Project Setup** | |
 | `/myspec:init` | Initialize myspec in a new project |
 | `/myspec:update` | Update framework files to latest version |
-| `/myspec:setup <type>` | Generate project-specific files from guided wizards (backbone, claude-md, conventions, code-review, mockup, index-md, workflow, pre-flight, anti-patterns) |
+| `/myspec:setup <type>` | Generate project-specific files from guided wizards (backbone, claude-md, conventions, mockup, index-md, workflow, pre-flight, anti-patterns) |
 | `/myspec:bootstrap` | Load project context, memory indexes, and active session at session start |
 | **Feature Workflow** | |
 | `/myspec:feature-discover` | Reverse-engineer an undocumented feature from existing code into discovery.md (+ optional spec.md / tech-spec.md) ([examples](examples/skills/feature-discover.md)) |
-| `/myspec:feature-spec` | Create feature specification (spec.md + dependencies.md) |
+| `/myspec:feature-spec` | Create feature specification (spec.md + dependencies.md); optional step adds scenarios.md + seed.json |
 | `/myspec:feature-decompose` | Split large feature into sub-features |
 | `/myspec:feature-spec-review` | Validate spec for completeness and consistency |
 | `/myspec:cross-spec-validation` | Check spec against related specs for contradictions and broken contracts |
@@ -88,15 +88,12 @@ See [evals/README.md](evals/README.md) and the Quality gates section of [AGENTS.
 | `/myspec:feature-plan` | Create execution-ready implementation plan from tech-spec: milestones, phases, parallel groups, per-task spec contracts and interfaces |
 | `/myspec:feature-implement` | Execute implementation plan by dispatching one implementer subagent per task, reviewing at every phase boundary, and closing with a holistic full-diff review |
 | `/myspec:feature-implement-review` | Independently audit that the built code fulfills the spec and plan (traceability + behavioral); writes conformance-report.md and routes findings — never edits code |
-| `/myspec:code-review` | Review changed code for quality, standards, and bugs — universal dimensions plus project rules. Configurable via `/myspec:setup code-review` |
 | `/myspec:feature-update` | Plan changes to an already-implemented feature |
 | `/myspec:feature-verify` | Verify feature implementation matches spec |
 | `/myspec:feature-status-audit` | Batch-audit the whole feature manifest against on-disk docs (`lib/feature-status-audit/audit.mjs`) |
 | `/myspec:feature-complete` | Mark feature done, update docs |
 | `/myspec:feature-spec-cleanup` | Move technical content from spec to tech-spec |
 | `/myspec:feature-spec-sync` | Detect and fix documentation drift |
-| `/myspec:feature-scenario` | Generate Gherkin test scenarios |
-| `/myspec:feature-seed-data` | Generate test seed data for a feature |
 | **Memory System** | |
 | `/myspec:memory-preflight` | Pre-work checks across all memory types |
 | `/myspec:memory-create` | Create typed memory (procedural/semantic/episodic) |
@@ -117,7 +114,6 @@ See [evals/README.md](evals/README.md) and the Quality gates section of [AGENTS.
 | `/myspec:backbone-sync` | Audit the project topology file against the repo in both directions — stale entries, undocumented workspace members and commands, git-backed liveness signals (`lib/backbone-audit/audit.mjs`) — then fix it. Refuses to run rather than half-read unsupported YAML, and names every check that could not run instead of reporting clean |
 | `/myspec:worktree-clean` | Clean up git worktrees after feature branches |
 | `/myspec:doctor` | Health check of every agent-facing surface, in three tiers: `lib/setup-doctor.mjs` for the mechanical checks (~1s, no model), one surface on request, or the full six-surface audit (CLAUDE.md + rules, skills/agents, `${aiDir}` docs, memory tree, hooks + harness config, feature manifest) with approval-gated fixes as grouped PRs |
-| `/myspec:upstream-sync` | Check tracked upstream repos (e.g. obra/superpowers) for changes worth porting into local skills |
 
 ## Configuration
 
@@ -129,14 +125,13 @@ See [evals/README.md](evals/README.md) and the Quality gates section of [AGENTS.
   "frameworkVersion": "<current plugin version>",
   "project": {
     "name": "Project Name",
-    "description": "One-line description",
     "techStack": "PHP 8.3, Laravel 11, PostgreSQL"
   },
   "migrations": []
 }
 ```
 
-`init` copies `frameworkVersion` and `migrations` from `framework-files/manifest.json` at run time. `aiDir` is required, stored without a trailing slash, and defaults to `.ai`.
+`init` copies `frameworkVersion` and `migrations` from `framework-files/manifest.json` at run time. `aiDir` is required, stored without a trailing slash, and defaults to `.ai`. Every key the file may hold, with its type, default and the issue behind it, is in `lib/myspec-config.schema.json` (schema version 2 since 3.0; a key rename or removal bumps it and ships a migration, an added key does not — [docs/project-settings-design.md](docs/project-settings-design.md), Schema version); `/myspec:doctor` reports a key the schema does not list.
 
 A project that deliberately customizes a framework-owned file pins it, so `update` skips it instead of reverting the local edits:
 
@@ -148,7 +143,7 @@ A project that deliberately customizes a framework-owned file pins it, so `updat
 }
 ```
 
-The key is the manifest key, not the destination path. Pinning is the project's decision — `update` reports pinned files and never adds or clears a pin itself.
+The key is the manifest key, not the destination path. Pinning is the project's decision — `update` reports pinned files and never adds or clears a pin itself. After adding a pin, run `node "<plugin dir>/lib/pin-reconcile.mjs" --record "rules/auto-memory-style.md"` from the project root: it records `hash` (the file) and `upstreamHash` (the plugin copy) on the pin, and `update` then tells a pin the project still edits from one whose edit upstream absorbed (`drop`) or that upstream moved under (`review`). `update` backfills the hashes of a pin that has none.
 
 An optional `isolation` block configures the work-isolation hooks; every key has a default:
 

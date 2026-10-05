@@ -67,6 +67,9 @@ feature() {         # feature <name>   — spec/tech-spec approved + dependencie
 build_fixture() {
   rm -rf "$REPO"
   mkdir -p "$F"
+  # The audit reads aiDir through the settings reader (schema default .ai);
+  # this project keeps its docs under ai/, as a configured project says so.
+  printf '{"aiDir":"ai"}\n' > "$REPO/.myspec.json"
 
   cat > "$F/index.yaml" <<'YAML'
 features:

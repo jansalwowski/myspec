@@ -31,7 +31,7 @@ It:
 ## Release workflow
 
 1. Land all changes for the release on `main`
-2. Run the eval comparison (next section): `scripts/evals/release-check.sh --version X.Y.Z`. Read the report; on a regressed verdict or a failed run, decide whether to go on. Only on a go, record it and commit it on its own, before the bump, so the bump diff stays version files only:
+2. Run the eval comparison (next section): `scripts/evals/release-check.sh --version X.Y.Z`. Read the report; a regressed verdict exits 1 and stops the release (the gate), and on a failed run decide whether to retry or skip. Only on a go, record it and commit it on its own, before the bump, so the bump diff stays version files only:
    `scripts/evals/release-check.sh --record <the out dir it printed>`, then `git add quality && git commit -m "chore(quality): record vX.Y.Z eval baseline"`
 3. From a clean working tree: `./scripts/bump-version.sh X.Y.Z`
 4. `git diff` — review the version bumps
@@ -103,7 +103,7 @@ The release verdict is the worst model's.
 | Haiku, 2 cases broken | 36.8% | ≥ 25% |
 | Haiku, 3 cases broken | 55.7% | ≥ 40% |
 
-"Broken" means the case fails one grader on every run, the way a skill that stopped triggering would. The previous rule (a CI below 0, or pass^3 dropping by more than 0.10) cried regression in 8–17% of A/A trials per model. Haiku's cases are too noisy to catch one or two broken cases reliably, so read the Haiku verdict as a signal, not a block. Before switching the gate on, compare these rates with what a few recorded releases actually show in `quality/trend.jsonl`.
+"Broken" means the case fails one grader on every run, the way a skill that stopped triggering would. The previous rule (a CI below 0, or pass^3 dropping by more than 0.10) cried regression in 8–17% of A/A trials per model. Haiku's cases are too noisy to catch one or two broken cases reliably: a Haiku `regressed` blocks like any other (the gate, below), but a Haiku pass is only a signal. These rates were checked against five recorded releases before the gate went on (2.8.0–2.11.0 in `quality/trend.jsonl`: one `improved`, four `no-change`, no false regression).
 
 **Cost.** HEAD's full run costs about $8 and takes about 7 minutes (Sonnet ≈ $5.8 and Haiku ≈ $2.0 at 3 runs; at 1 run the Sonnet suite measured $1.94 and 109 s). A whole-suite re-run of the previous tag doubles that. A changed case adds only that case's cost. The first release after this lands has no stored baseline, so it pays the double once. `--head-results <dir>` reuses a finished HEAD run on a retry.
 
@@ -122,13 +122,9 @@ The release verdict is the worst model's.
 - 1: regressed with the gate on.
 - 2: infrastructure error: usage limit, logged out, eval run failed, or interrupted. An exit 2 says nothing about the plugin.
 
-**The gate.** The check is report-only: a regressed verdict prints the report and exits 0, and the maintainer decides. Once the calibration above holds up against a few recorded releases, make it a hard gate by changing one line in `quality/release-check.json`:
+**The gate.** `quality/release-check.json` sets `"gate": true` (#267): a `regressed` release verdict exits 1 and `/release` aborts; the maintainer no longer decides. It was report-only until five recorded releases (2.8.0–2.11.0 in `quality/trend.jsonl`) showed no false regression against the calibration above. What it blocks on is exactly the verdict: the worst model's, so a Haiku-only `regressed` blocks too. That is rare by construction (Haiku A/A cries regression in about 2% of trials) and the per-case rule, not the CI, is what usually fires; but a Haiku verdict that passes still says little (it catches 2 broken cases 37% of the time), so keep reading its column as a signal, and read Sonnet's as the gate. A `--case` run, `insufficient-data`, and an exit 2 never block. The same file holds `seed` and `resamples`; `"gate": false` returns the check to report-only.
 
-```json
-  "gate": true,
-```
-
-The same file holds `seed` and `resamples`.
+**A release that renames or folds skills** compares only partially, by construction: the baseline keys cases by name and stores a content hash per case, and selection uses `skill:<name>` tags, so every case whose directory or tags changed with the rename re-runs on the previous tag against HEAD's `evals/` (an old plugin without the new skill), and cases present in only one set are listed and left out of the statistics. Read such a report for the unchanged cases only, and expect `insufficient-data` on a large rename. The release records itself as the new baseline (`--record` as usual), and its notes say so, so the next release compares against a complete one.
 
 ## Versioning rules (semver)
 
@@ -136,7 +132,7 @@ The same file holds `seed` and `resamples`.
 |-------|---------------------------------------------------------------------------------------------------|
 | Patch | Bug fixes in skill bodies. No new files, no manifest changes, no `.myspec.json` schema changes.   |
 | Minor | New skills, new framework files, new manifest entries. Backward-compatible.                       |
-| Major | Breaking changes to `.myspec.json` schema, removed/renamed skills, workflows requiring migration. |
+| Major | Anything under "Breaking changes" below: `.myspec.json` schema, removed/renamed skills, hook and state contracts, a raised host floor, workflows requiring migration. |
 
 ## Breaking changes
 
@@ -150,10 +146,19 @@ Breaking, unless a migration ships with it:
 - A changed or dropped manifest key without `renamedFrom` or a `removed` entry
 - A dropped harness (Codex in 3.0, #143) or a dropped supported stack
 - A workflow change that needs consumers to act, such as a new required plan field that old plans lack and a skill now rejects
+- A changed hook contract: the JSON a hook reads or returns, or a renamed, removed or repurposed exported variable (`MYSPEC_SESSION_FILES`, `MYSPEC_BASE_REF`, `MYSPEC_CHECK_RUN_ID`, `MYSPEC_CHECK_WORKDIR`; the `env` section of `lib/myspec-config.schema.json`). Consumers' checks, cleanups and install steps read them. A new variable is minor.
+- A changed session-state file format (`.claude/state/sessions/<sid>.jsonl`, the event types and fields `lib/session-event.sh` documents): a renamed, dropped or retyped event or field. A new event or field is minor, as is a one-minor import of the old store (`docs/stop-gate.md`).
+- A renamed, dropped or retyped `verification.json` key (`checks[].paths`, `checks[].runIn`, `checks[].cleanup`, `checks[].diffCommand`, `containers`; the `verification.*` entries of the schema). A new optional key is minor (`cleanup`, `docs/verify-check-escapes.md`).
+- A changed `.claude/state/` layout (AGENTS.md, "Config contracts"): a moved or renamed `sessions/<sid>.md`, `sessions/<sid>.jsonl` or `memory-ids.json`, which the hooks of a session open across the upgrade still write at the old path.
+- A changed framework-file marker (`<!-- myspec:framework-start -->`/`-end`, `<!-- BEGIN myspec:paths -->`/`END`) or a moved `${aiDir}` directory (`features/`, `memory/`, `ideas/`). The 2.0 move of live session logs out of `${aiDir}/memory/sessions/active/` was major for this reason (`docs/upgrading-to-2.0.md`).
+- A raised host floor: the minimum Claude Code or git version the plugin runs on, as README.md states it. Declaring a floor where none was stated is not breaking; raising one is.
+- A changed always-loaded rule file (`framework-files/rules/` without `paths:`) when a consumer's pin of it would then do the opposite of what it was set for: the 2.0 trim shrank four rules "for the always-loaded context budget", the reason consumers had pinned them, and `update` never writes over a pin, so the pinned copy was now the larger one (`docs/myspec-2.0-breaking-changes.md`, change 4). A new always-loaded rule file is minor; a rewording that leaves routing and size alone is a patch.
+
+**Retirement stubs.** A removed or renamed skill leaves a stub at the old name (`skills/<old>/SKILL.md` with `disable-model-invocation: true`, "Retired in myspec X.Y" in its description and a "Remove this stub" rule) that names the replacement and stops; plugins have no alias mechanism. A stub ships for one minor cycle after the release that retired it and is deleted in the next: retired in X.Y, it ships through X.(Y+1).*, and X.(Y+2).0 ships without it. `scripts/overdue-stubs.sh --version <X.Y.Z>` lists every stub as `shipping`, `due` or `overdue` against that version and exits 1 while one is overdue; `/release` runs it as its stub gate (Step 2, beside the breaking gate), against the last tag with the minor bumped, and refuses a minor while any is overdue. A patch is never refused for a stub, so a maintenance branch can ship fixes while a stub waits for the next major. The 2.0 stubs shipped for eleven minors because nothing checked (#267).
 
 **Tracking.** Every candidate gets an issue with the `breaking` label, in the next major's milestone (currently [v3.0.0](https://github.com/jansalwowski/myspec/milestone/1)). That milestone is the major's roadmap; do not keep one anywhere else. A PR that lands a breaking change carries the `breaking` label too, which is what the release gate reads.
 
-**Gate.** `/release` lists merged PRs carrying `breaking` since the last tag and refuses a minor or patch bump while any exist. Those PRs are either released in the major or have the label removed with a comment saying why they are not breaking.
+**Gate.** `/release` lists merged PRs carrying `breaking` since the last tag and refuses a minor or patch bump while any exist. Only PRs whose merge commit is an ancestor of HEAD count: once a major's integration branch exists, a breaking PR merged there is listed by `gh pr list` while a 2.x patch is cut from `main`, and is ignored as "merged elsewhere". Those PRs are either released in the major or have the label removed with a comment saying why they are not breaking.
 
 **Upgrade base.** A major upgrades only from the last minor of the previous major: 2.0 from 1.28, 3.0 from 2.12. `update` refuses an older `frameworkVersion` and tells the user to run that minor's `update` first (check out its tag, start Claude with `--plugin-dir` at the checkout, run `/myspec:update`, return). Every consumer therefore reaches the major with the previous line's migrations, renames and removals already applied, so the major deletes each one-shot migration, `renamedFrom` and `removed` entry the floor minor already carried. Keep only what the floor minor itself still needs on its first major `update`. The manifest's `upgradeFrom` holds the floor and is set by hand when the major is cut; `lib/tests/manifest-regression.test.sh` fails on a migration or `removed` entry dated at or below it.
 

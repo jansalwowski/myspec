@@ -42,10 +42,10 @@ problem. Each migration runs once and is recorded in `.myspec.json`
 
 | Migration | What it does |
 |---|---|
-| `3.0.0-plugin-hooks` | Removes the eight framework entries from `.claude/settings.json` `hooks` (by script name, whatever path prefix a 2.x install wrote) and leaves your own hooks in the same arrays alone. Moves the `.claude/hooks/` and `.claude/lib/` copies to `.claude/state/retired-3.0/` instead of deleting them, and names any copy whose hash differs from what v2.12.0 installed as "locally modified, compare before discarding". Drops `frameworkFiles` pins on `hooks/*` and `lib/*`. Files myspec never listed (`.claude/hooks/tests/`, your own helpers) are reported and left in place. `settings.local.json` is never edited: a framework entry there is reported for you to delete. |
-| `3.0.0-memory-registry` | Rewrites a pre-1.28, pretty-printed `.claude/state/memory-ids.json` as the one-line form `memory-claim-id.sh` now reads, every floor kept (`memory-claim-id.sh --normalize`). |
 | `3.0.0-code-review` | Deletes the `codeReview` key from `.myspec.json`. Leaves `.claude/rules/code-review.md` alone and says so. |
+| `3.0.0-plugin-hooks` | Removes the eight framework entries from `.claude/settings.json` `hooks` (by script name, whatever path prefix a 2.x install wrote) and leaves your own hooks in the same arrays alone. Moves the `.claude/hooks/` and `.claude/lib/` copies to `.claude/state/retired-3.0/` instead of deleting them, and names any copy whose hash differs from what v2.12.0 installed as "locally modified, compare before discarding". Drops `frameworkFiles` pins on `hooks/*` and `lib/*`. Files myspec never listed (`.claude/hooks/tests/`, your own helpers) are reported and left in place. `settings.local.json` is never edited: a framework entry there is reported for you to delete. |
 | `3.0.0-reuse-audit` | Deletes the `reuseAudit` key from `.myspec.json`. When it held `enabled: false`, says how a tech-spec opts out now. |
+| `3.0.0-memory-registry` | Rewrites a pre-1.28, pretty-printed `.claude/state/memory-ids.json` as the one-line form `memory-claim-id.sh` now reads, every floor kept (`memory-claim-id.sh --normalize`). |
 | `3.0.0-schema-v2` | Deletes `project.description` (nothing read it) and records `hash` and `upstreamHash` on every pin in `frameworkFiles` (`lib/pin-reconcile.mjs --backfill`). |
 
 Removals: the memory index headers `${aiDir}/.templates/index-{procedural,semantic,episodic}.md`
@@ -119,7 +119,14 @@ not re-checked, so nothing needs editing now.
 
 Every pin now carries `hash` and `upstreamHash`, so `update` can tell "upstream
 moved under your pin" from "the pin always differed". A pin backfilled by the
-migration cannot report the first case until the update after that. When you
+migration cannot report the first case until the update after that. A
+`marker-merge` file is hashed and compared on its framework-owned header only
+(line 1 through `<!-- myspec:framework-end -->`), so your own content below the
+marker never makes a pin look changed.
+
+`update` now asks per pin instead of comparing sizes. A pin whose file equals
+the plugin copy is offered for dropping; when you keep it, `update` records it
+(`--record "<key>"`) so the next upstream change under it is raised. When you
 pin a framework file by hand, run
 `node "<plugin>/lib/pin-reconcile.mjs" --record "<key>"` afterwards.
 
@@ -133,16 +140,19 @@ warning on it. `orchestration.featureImplement`, `probes.portSource` and
 
 ### 8. Old skill names
 
-The 2.0 redirect stubs are gone:
+The 2.0 redirect stubs are gone, and three skills left without one:
 
 | Old | Use |
 |---|---|
 | `/myspec:features-status-audit` | `/myspec:feature-status-audit` |
 | `/myspec:worktree-cleanup` | `/myspec:worktree-clean` |
 | `/myspec:docs-sanitize` | `/myspec:doctor` surface C and `/myspec:session-clean` |
+| `/myspec:feature-scenario` | `/myspec:feature-spec {feature} scenarios` (also offered after spec approval) |
+| `/myspec:feature-seed-data` | `/myspec:feature-spec {feature} seed-data` |
+| `/myspec:upstream-sync` | none: it was a maintainer workflow for the myspec repository and read nothing in a project |
 
 ```bash
-grep -rn "features-status-audit\|worktree-cleanup\|docs-sanitize" . --exclude-dir=.git
+grep -rn "features-status-audit\|worktree-cleanup\|docs-sanitize\|feature-scenario\|feature-seed-data\|upstream-sync" . --exclude-dir=.git
 ```
 
 ### 9. 1.x session leftovers
@@ -169,8 +179,25 @@ changes is judged: a leaked path or a broken frontmatter already in the file no
 longer blocks an edit elsewhere. A tech-spec is checked for its
 `## Reuse audit` section when it is created and when a write changes that
 section. A write the hooks cannot see (a Bash heredoc, `sed -i`, `tee`) is
-checked by the Stop gate on the lines it added, with the same message, before
-the session ends.
+checked by the Stop gate, with the same message, before the session ends.
+
+The Stop gate judges only lines this session's Bash writes added.
+`mark-code-changed.sh` now also runs at PreToolUse and PostToolUseFailure for
+Bash: it snapshots each file the checks cover before and after the write, and
+the gate judges the lines one of those before-to-after diffs added. A line the
+file held before the session (committed or not), another session's line, and a
+tech-spec that predates the session are never judged; a line this session
+added and then committed still is. A write the scanner cannot see (a variable
+path, a file `python3 -c` opens) gets no snapshot, as it gets no write event.
+When the git object store is read-only, the snapshots are copied to
+`.claude/state/sessions/<session_id>.blobs/`; `/myspec:session-clean` removes
+that directory with the session file. [stop-gate.md](stop-gate.md) R14 has the
+rules.
+
+The hook now parses a Bash command at PreToolUse and again after it, so a long
+command (hundreds of statements, many redirects into files) costs noticeably
+more per call than in 2.x
+([#277](https://github.com/jansalwowski/myspec/issues/277)).
 
 ### PreToolUse denials print `hookSpecificOutput` only
 
