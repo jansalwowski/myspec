@@ -329,13 +329,12 @@ header:   "Next step"
 options:
   - "feature-implement-review" → REQ/AC traceability, test trace, scope drift on top of
                                   holistic-review.md; persists conformance-report.md
-  - "code-review"               → quality, standards, and bug review of the changes
-                                  (universal dimensions + any project rules)
+  - "/code-review"              → Claude Code's built-in bug review of the branch diff
   - "feature-complete"          → skip the reviews; sync docs, archive plan, merge
   - "Stop here"                 → leave the branch as-is; continue later
 ```
 
-Recommend `feature-implement-review` when the holistic verdict is not READY TO MERGE, any criterion came back ⚠/❌, a probe was waived, or the plan has 10+ tasks; otherwise `feature-complete`, since the holistic pass already checked every criterion. Execute the choice: invoke `/myspec:feature-implement-review`, `/myspec:code-review`, `/myspec:feature-complete`, or stop and report the branch name. The two review passes are complementary, not exclusive (conformance vs. code quality) — after one finishes, offer this choice again so the user can run the other or proceed.
+Recommend `feature-implement-review` when the holistic verdict is not READY TO MERGE, any criterion came back ⚠/❌, a probe was waived, or the plan has 10+ tasks; otherwise `feature-complete`, since the holistic pass already checked every criterion. Execute the choice: invoke `/myspec:feature-implement-review`, the built-in `/code-review` (not a myspec skill; Claude Code only), `/myspec:feature-complete`, or stop and report the branch name. The two review passes are complementary, not exclusive (conformance vs. bugs) — after one finishes, offer this choice again so the user can run the other or proceed.
 
 ## Model Selection
 
@@ -398,4 +397,4 @@ After all phases complete:
 ## Integration
 
 **Called by** [REQUIRED — an approved plan must exist]: `/myspec:feature-plan` (after plan approval)
-**Next** [OPTIONAL reviews, then REQUIRED completion]: `/myspec:feature-implement-review` (conformance audit) and/or `/myspec:code-review` (quality review), then `/myspec:feature-complete` — chosen by the user in Step 5
+**Next** [OPTIONAL reviews, then REQUIRED completion]: `/myspec:feature-implement-review` (conformance audit) and/or the built-in `/code-review` (bug review), then `/myspec:feature-complete` — chosen by the user in Step 5

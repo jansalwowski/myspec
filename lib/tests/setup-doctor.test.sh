@@ -381,11 +381,16 @@ printf 'features:\n    - name: misindented\n      status: complete\n' > "$REPO/a
   echo '# Fixture'
   echo
   # shellcheck disable=SC2016 # literal text, not an expansion
-  echo 'Rules live in `.claude/rules/nope.md`. Route to `/myspec:not-a-skill`.'
+  echo 'Rules live in `.claude/rules/nope.md`. Route to `/myspec:not-a-skill` or `/myspec:code-review`.'
   # shellcheck disable=SC2016 # literal text, not an expansion
   echo 'Run `/bootstrap` first; `/deps-check` weekly; `/vue-component` for components.'
   head -c 4000 /dev/zero | tr '\0' 'x'
 } > "$REPO/CLAUDE.md"
+# The 2.x `setup code-review` blueprint wrote this file, addressed to a skill
+# 3.0 no longer ships. The 3.0.0-code-review migration leaves it, so the name
+# in its own header must not be reported on every run.
+# shellcheck disable=SC2016 # literal text, not an expansion
+printf '# Code Review Rules\n\nProject-specific rules for `/myspec:code-review`.\n\n## Standards\n- Handlers validate their input.\n' > "$REPO/.claude/rules/code-review.md"
 
 run_doctor
 
@@ -409,7 +414,9 @@ expect_line 'ERROR framework-drift: ai/anti-patterns.md: header above' "a change
 expect_line 'WARN +over-budget: CLAUDE.md' "an oversized project CLAUDE.md is a warning"
 expect_line 'WARN +dead-path-ref: CLAUDE.md' "a dead path reference in a project file is a warning"
 expect_no_line 'references /(bootstrap|deps-check|vue-component),' "a slash command is not a dead path reference"
-expect_line 'WARN +dead-skill-ref: CLAUDE.md' "a reference to a skill the plugin does not ship is a warning"
+expect_line 'WARN +dead-skill-ref: CLAUDE.md: routes to /myspec:not-a-skill' "a reference to a skill the plugin does not ship is a warning"
+expect_line 'WARN +dead-skill-ref: CLAUDE.md: routes to /myspec:code-review' "the retired code-review name in a project file is still a dead route"
+expect_no_line 'dead-skill-ref: .claude/rules/code-review.md' "the retired name in the blueprint-generated code-review.md header is not reported"
 expect_line 'WARN +topology-missing: .myspec.json' "a topologyFile pointing at nothing is a warning, not a blocker"
 expect_line 'bootstrap and the reuse audit fall back to guessing' "the topology finding says what it breaks"
 expect_line 'run: chmod \+x .claude/hooks/guard-worktree-context.sh' "findings carry a literal fix command"

@@ -366,7 +366,10 @@ git config --unset core.hooksPath
 echo "# lint of the real evals/ suite"
 cat > "$TMP/lint.cjs" <<'JS'
 const fs = require('fs'), path = require('path');
-const E = 'evals';
+const E = process.argv[2] || 'evals';
+// Names only a Claude Code built-in has (check-graders.mjs BARE): a grader on
+// one matches the bare call, and no file here changes it, so it needs no tag.
+const BARE = new Set(['code-review']);
 const problems = [];
 for (const name of fs.readdirSync(E)) {
   const dir = path.join(E, name);
@@ -382,7 +385,8 @@ for (const name of fs.readdirSync(E)) {
   if (!graders.some((g) => /^type:\s*(regex|tool_used|tool_order|file_exists)\s*$/m.test(g))) problems.push(`${name}: no deterministic grader`);
   for (const g of graders) {
     const m = g.match(/^input_match:.*"skill".*?\)?\??([a-z0-9-]+)"'\s*$/m);
-    if (m && !skillTags.has(m[1])) problems.push(`${name}: grader names skill ${m[1]} but tags lack skill:${m[1]}`);
+    const bare = m && BARE.has(m[1]) && /"skill"\\s\*:\\s\*"[a-z0-9-]+"'\s*$/.test(m[0]);
+    if (m && !bare && !skillTags.has(m[1])) problems.push(`${name}: grader names skill ${m[1]} but tags lack skill:${m[1]}`);
   }
   for (const s of skillTags) if (!fs.existsSync(path.join('skills', s, 'SKILL.md'))) problems.push(`${name}: skill:${s} is not a skill`);
   if (!/^\s*scaffold_script:/m.test(fs.readFileSync(path.join(dir, 'case.yaml'), 'utf8'))) problems.push(`${name}: case.yaml has no scaffold_script`);
@@ -391,6 +395,19 @@ console.log(problems.join('\n'));
 JS
 lint=$(cd "$SRC_ROOT" && node "$TMP/lint.cjs")
 expect_eq "every case: tier tag, skill tags matching its graders, a deterministic grader" "$lint" ""
+
+# The tag exemption is the bare built-in shape alone: a sibling grader in the
+# group form still needs its tag even though its pattern never says "myspec".
+# Tags name a real skill so only the grader line can fail.
+mkdir -p "$TMP/lint-evals/group-sibling/graders" "$TMP/lint-evals/bare-builtin/graders"
+for c in group-sibling bare-builtin; do
+  printf -- '---\ntags: [skill:feature-spec, regression]\n---\n\nprompt\n' > "$TMP/lint-evals/$c/prompt.md"
+  printf 'context:\n  scaffold_script: fixture.sh\n' > "$TMP/lint-evals/$c/case.yaml"
+done
+printf -- "---\ntype: tool_used\ntool: Skill\ninput_match: '\"skill\"\\\\s*:\\\\s*\"(?:[\\\\w-]+:)?feature-plan\"'\nmin: 0\nmax: 0\n---\n" > "$TMP/lint-evals/group-sibling/graders/not-feature-plan.md"
+printf -- "---\ntype: tool_used\ntool: Skill\ninput_match: '\"skill\"\\\\s*:\\\\s*\"code-review\"'\nmin: 0\nmax: 0\n---\n" > "$TMP/lint-evals/bare-builtin/graders/not-code-review.md"
+lint=$(cd "$SRC_ROOT" && node "$TMP/lint.cjs" "$TMP/lint-evals")
+expect_eq "a group-form sibling grader without its tag fails the lint; a bare built-in grader needs none" "$lint" "group-sibling: grader names skill feature-plan but tags lack skill:feature-plan"
 
 echo
 echo "$pass passed, $fail failed"
