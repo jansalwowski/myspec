@@ -140,3 +140,25 @@ Branching: every 3.0 PR targets the temporary integration branch `v3` (created f
 6. #259 (floor), then #260.
 7. RELEASING.md breaking-list extension, `gate: true`, fill `upgrading-to-3.0.md`, record baseline, `/release`.
 8. Walk the three 1.x consumers through 2.11 → 3.0 as the dogfood run before tagging.
+
+## 7. Status and hand-off (2026-10-05)
+
+Any session can continue from here; every artefact is on GitHub. Review loop per PR: read-only reviewer posts inline findings with evidence → implementer fixes and replies with shas → reviewer re-verifies and acknowledges on-thread → maintainer merges. Branch rules: §6 "Branching". v2.12.0 shipped 2026-10-04; `v2` and `v3` sit at it; the upgrade floor is 2.12.0.
+
+| PR | Base | State |
+|---|---|---|
+| #268 plan doc | main | ready to merge |
+| #255 container checks declared | v3 | approved — merge first |
+| #256 provision record | #255 | approved |
+| #257 stop-gate split | #256 | approved |
+| #272 hooks run from the plugin (#262) | #257 | approved — retarget to v3 after #257 merges |
+| #273 2.x shim sweep (#266) | #272 | fix round in progress (3 Medium: registry normalize, removed-entry classes, spec-sync `complete`); floor set to Claude Code ≥ 2.0.12 |
+| #274 diff-scoped gates (#263) | #272 | review in progress |
+| (#265 schema v2) | #274 | implementation in progress |
+| #258 drop code-review (#150) | v3 | approved |
+| #269 RELEASING surfaces, stub gate, eval gate on (#267) | v3 | approved |
+| #270 scenario/seed-data fold, upstream-sync move (#264) | v3 | approved |
+| #259 drop 1.x→2.0 shims, `upgradeFrom` | #257 (stale) | needs rebase onto #273; floor text → 2.12.0; `update` migration table gains `3.0.0-plugin-hooks`, `3.0.0-code-review`, `3.0.0-reuse-audit`, `3.0.0-schema-v2`; fills `docs/upgrading-to-3.0.md` from the upgrade text in the bodies of #272, #273, #274, #258 |
+| #260 drop Codex (#143) | #259 | needs rebase; must KEEP root `hooks.json` (now the plugin hook manifest) |
+
+Remaining after the PRs merge into v3: `scripts/evals/release-check.sh --version 3.0.0` on v3 (report-only, no `--record`); dogfood `/myspec:update` on the three 1.x consumers via v1.28 → v2.12 → v3 checkout (`--plugin-dir`); open the `v3 → main` merge-commit PR; `/release` 3.0.0 from main (first gated release; record the baseline). Open decision: Sonnet-only eval gate (a Haiku-only regression blocks today).
