@@ -24,9 +24,11 @@
 #   (review) a submodule with its own .myspec.json got its live log in the
 #            submodule and its write events in the superproject: two
 #            functions decided where per-session state lives.
-#   (review) a session upgraded mid feature-implement had the 2.x marker
+#   #266     3.0 ships without the 2.x import shim: a session upgraded mid
+#            feature-implement has the 2.x marker
 #            (.claude/state/implement-in-progress.json) and no implement
-#            event, so its failures blocked where they had warned.
+#            event, so its failures block. update says to finish open
+#            sessions first.
 #
 # Usage: mark-code-changed-regression.test.sh [path-to-hook]
 
@@ -194,19 +196,17 @@ state=$(find "$ROOT/super2" -path "*/.claude/state/sessions/$sid.jsonl" 2>/dev/n
 [ -n "$state" ] && [ "$(dirname "$log")" = "$(dirname "$state")" ] && ok \
   || fail "a submodule write puts the live log beside the state file (log: ${log:-none}, state: ${state:-none})"
 
-# --- (review) the legacy implement marker carries a run across the upgrade ---
+# --- #266: the 2.x implement marker carries no run across the upgrade ---------
 printf '{"started_at":%d,"feature":"f"}\n' "$(date +%s)" > "$PROJ/.claude/state/implement-in-progress.json"
 sid="$SID-upgrade"
-for n in 1 2; do
-  printf 'export const u = %d;\n' "$n" > "$PROJ/u.ts"
-  jq -n --arg s "$sid" --arg d "$PROJ" --arg f "$PROJ/u.ts" '{session_id: $s, tool_name: "Write", cwd: $d, tool_input: {file_path: $f}}' \
-    | bash "$HOOK" >/dev/null 2>&1
-  out=$(jq -n --arg s "$sid" --arg d "$PROJ" '{session_id: $s, cwd: $d}' | bash "$STOP" 2>/dev/null)
-  got=$(printf '%s' "$out" | jq -r '.decision // "none"' 2>/dev/null)
-  [ "$got" != block ] && printf '%s' "$out" | grep -q 'feature-implement' && ok || fail "stop $n during an upgraded feature-implement run warns (got: $got)"
-done
+printf 'export const u = 1;\n' > "$PROJ/u.ts"
+jq -n --arg s "$sid" --arg d "$PROJ" --arg f "$PROJ/u.ts" '{session_id: $s, tool_name: "Write", cwd: $d, tool_input: {file_path: $f}}' \
+  | bash "$HOOK" >/dev/null 2>&1
+out=$(jq -n --arg s "$sid" --arg d "$PROJ" '{session_id: $s, cwd: $d}' | bash "$STOP" 2>/dev/null)
+got=$(printf '%s' "$out" | jq -r '.decision // "none"' 2>/dev/null)
+[ "$got" = block ] && ok || fail "a stop with only the 2.x implement marker blocks: no run was imported (got: $got)"
 n=$(jq -r 'select(.t == "implement") | .state' "$PROJ/.claude/state/sessions/$sid.jsonl" 2>/dev/null | wc -l | tr -d ' ')
-[ "$n" = 1 ] && [ -f "$PROJ/.claude/state/implement-in-progress.json" ] && ok || fail "the marker is imported once per session and left for others (implement events: $n)"
+[ "$n" = 0 ] && [ -f "$PROJ/.claude/state/implement-in-progress.json" ] && ok || fail "the marker is neither imported nor touched (implement events: $n)"
 
 # --- control: a non-code file still does not count ----------------------------
 write "$SID-txt" "$REPO/src/notes.txt"

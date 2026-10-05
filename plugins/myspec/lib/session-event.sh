@@ -19,8 +19,7 @@
 #       implement start|stop` (the model never sees its session id; the
 #       hook's payload carries it)
 #   {"t":"notice","what":<key>}
-#       a one-time step was taken: "imported-implement" (this session read
-#       the 2.x implement marker), "guard-settings" (guard-worktree-context.sh
+#       a one-time step was taken: "guard-settings" (guard-worktree-context.sh
 #       denied once because the settings reader failed)
 #
 # Subagents share their parent's session_id (#225), so a subagent's events
@@ -49,9 +48,10 @@ if ! declare -F checkout_facts >/dev/null 2>&1; then
   . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/hook-core.sh"
 fi
 
-# The /tmp ledger mark-code-changed.sh kept until this file replaced it:
-# imported once per session, for one minor release (docs/stop-gate.md).
-SESSION_LEGACY_LEDGER_DIR=/tmp
+# The 2.x state this file replaced — the /tmp write ledger, the isolation
+# marker, the implement marker — is not read: 3.0 ships without the one-
+# release import shim (#266), and update tells the user to finish open
+# sessions first.
 
 # jq: the events of a file, read with -R. A line that is not a JSON object
 # (a truncated last line, garbage) is skipped.
@@ -143,82 +143,12 @@ _session_write() {
   printf '%s\n' "$line" >> "$1"
 }
 
-# _session_import <file> <session id>: when the legacy ledger
-# (/tmp/.myspec-session-writes-<id>) exists and <file> does not, converts it
-# into <file> once and renames it to .imported. Lines: `<kind>\t<root>\t<rel>`
-# with an optional agent_id field, and `verified\t<root>\t-`.
-_session_import() {
-  local legacy="$SESSION_LEGACY_LEDGER_DIR/.myspec-session-writes-$2" out
-  if [ ! -f "$legacy" ] || [ -e "$1" ]; then
-    return 0
-  fi
-  out=$(jq -c -R -n --argjson at "$(date +%s)" '
-    inputs | split("\t") | select(length >= 3)
-    | if .[0] == "verified" then {t: "verified", root: .[1], at: $at}
-      elif .[0] == "code" or .[0] == "file" then
-        {t: "write", root: .[1], rel: .[2], kind: .[0]}
-        + (if (.[3] // "") != "" then {agent: .[3]} else {} end) + {at: $at}
-      else empty end' "$legacy" 2>/dev/null) || return 0
-  mkdir -p "$(dirname "$1")" 2>/dev/null || return 0
-  [ -z "$out" ] || printf '%s\n' "$out" >> "$1"
-  mv -f "$legacy" "$legacy.imported" 2>/dev/null || true
-}
-
-# _session_import_markers <file> <session id> <home>: the 2.x markers the
-# state file replaced, for the same one minor release as the ledger import.
-# A fresh <home>/.claude/state/implement-in-progress.json ({started_at}, at
-# most HOOK_DECISION_TTL old) becomes an implement start dated started_at,
-# and the session's own .claude/state/isolation/<id>.json ({mode,
-# worktree_path, decided_at}) an isolation event dated decided_at, so a
-# session upgraded mid feature-implement keeps its run and its decision.
-# The implement marker belongs to the checkout, not to a session (2.x never
-# recorded which session ran it), so it is left in place, to expire by its
-# own TTL (session-clean may sweep it): each session imports it once and
-# records a `notice` "imported-implement" in its own file, so the session
-# actually running feature-implement gets the run whichever session read it
-# first. A session that already has an implement event takes no start. The
-# isolation marker is the session's own and is renamed .imported, fresh or
-# not, so it is read once.
-_session_import_markers() {
-  local dir="$3/.claude/state" marker at ev now
-  marker="$dir/implement-in-progress.json"
-  if [ -f "$marker" ] && ! grep -q '"what":"imported-implement"' "$1" 2>/dev/null; then
-    now=$(date +%s)
-    at=$(jq -r '.started_at // empty | numbers | floor' "$marker" 2>/dev/null || printf '')
-    if [ -n "$at" ] && [ $((now - at)) -ge 0 ] && [ $((now - at)) -le "$HOOK_DECISION_TTL" ] \
-        && ! grep -q '"t":"implement"' "$1" 2>/dev/null; then
-      _session_write "$1" "{\"t\":\"implement\",\"state\":\"start\",\"at\":$at}" || true
-    fi
-    _session_write "$1" "{\"t\":\"notice\",\"what\":\"imported-implement\",\"at\":$now}" || true
-  fi
-  marker="$dir/isolation/$2.json"
-  if [ -f "$marker" ]; then
-    ev=$(jq -c 'select(type == "object" and (.decided_at | type) == "number")
-      | {t: "isolation", mode: (.mode // "" | tostring), path: (.worktree_path // "" | tostring),
-         note: "imported from the 2.x marker", at: (.decided_at | floor)}' "$marker" 2>/dev/null || printf '')
-    if mv -f "$marker" "$marker.imported" 2>/dev/null && [ -n "$ev" ]; then
-      _session_write "$1" "$ev" || true
-    fi
-  fi
-  return 0
-}
-
-# session_path <home> <session id> -> the file's path, after the one-time
-# legacy imports. Every reader and writer goes through it.
-session_path() {
-  local f
-  f=$(session_file "$1" "$2") || return 1
-  _session_import "$f" "$2"
-  _session_import_markers "$f" "$2" "$1"
-  printf '%s\n' "$f"
-}
-
 # session_append <home> <session id> <json object>: appends the object with
 # "at" set to now, as one line. Fails on anything but an object with a
 # string "t".
 session_append() {
   local f line
-  f=$(session_path "$1" "$2") || return 1
+  f=$(session_file "$1" "$2") || return 1
   line=$(printf '%s' "$3" | jq -c --argjson at "$(date +%s)" \
     'if type == "object" and (.t | type) == "string" then . + {at: $at} else error("not an event") end' 2>/dev/null) || return 1
   case "$line" in *$'\n'*) return 1 ;; esac
@@ -229,7 +159,7 @@ session_append() {
 # [jq args...] -> the program's raw output; nothing when the file is absent.
 session_query() {
   local f prog="$3"
-  f=$(session_path "$1" "$2") || return 0
+  f=$(session_file "$1" "$2") || return 0
   [ -f "$f" ] || return 0
   shift 3
   jq -r -R -n "$@" "[$SESSION_EVENTS_JQ] as \$ev | $prog" "$f" 2>/dev/null || true
