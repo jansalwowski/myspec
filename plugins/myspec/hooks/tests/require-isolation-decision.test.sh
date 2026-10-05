@@ -54,7 +54,7 @@ check() {  # check <want> <desc> <session-id> <file-path>
   # An allow is exit 0 with EMPTY stdout. Anything printed on allow is a
   # defect: {"decision": "approve"} is the deprecated PreToolUse spelling of
   # "allow", which skips the user's permission prompt (issue #158).
-  if printf '%s' "$out" | grep -q '"block"'; then got=block
+  if printf '%s' "$out" | grep -q '"deny"'; then got=block
   elif [ "$rc" -eq 0 ] && [ -z "$out" ]; then got=allow
   else got="noisy"; fi
 
@@ -107,7 +107,7 @@ check block "no decision, config file"     new-sess "$REPO/vite.config.js"
 # (no remote here, so the documented fallback). The recorder is named by its
 # path under the plugin's lib/: the model runs the line through Bash, where
 # CLAUDE_PLUGIN_ROOT is not set, so a variable or a project path would fail.
-OUT=$(run_hook "$REPO" new-sess "$REPO/components/Foo.vue" | jq -r '.reason')
+OUT=$(run_hook "$REPO" new-sess "$REPO/components/Foo.vue" | jq -r '.hookSpecificOutput.permissionDecisionReason')
 for needle in "\"$CLAUDE_PLUGIN_ROOT/lib/set-isolation.sh\" new-sess develop" "\"$CLAUDE_PLUGIN_ROOT/lib/set-isolation.sh\" --show" "\"$CLAUDE_PLUGIN_ROOT/lib/set-isolation.sh\" --reset new-sess" "\"$CLAUDE_PLUGIN_ROOT/lib/promote-to-worktree.sh\" --branch" '.claude/worktrees/' '.ai/work-isolation.md'; do
   if printf '%s' "$OUT" | grep -qF -- "$needle"; then PASS=$((PASS + 1)); else FAIL=$((FAIL + 1)); echo "FAIL  ask does not mention: $needle" >&2; fi
 done
@@ -144,10 +144,13 @@ check block "no decision, the old .ai path is source now" new-sess "$REPO/.ai/th
 
 # --- output contract: silence on allow, deny on block -------------------------
 rm -f "$STATE/"*.jsonl
-if run_hook "$REPO" new-sess "$REPO/components/Foo.vue" | jq -e '.hookSpecificOutput.permissionDecision == "deny" and .decision == "block"' >/dev/null; then
+# Since 3.0 the deny is the hookSpecificOutput form alone: the top-level
+# decision/reason pair is the deprecated PreToolUse spelling, dropped with
+# the host floor (#266).
+if run_hook "$REPO" new-sess "$REPO/components/Foo.vue" | jq -e '.hookSpecificOutput.permissionDecision == "deny" and (.hookSpecificOutput.permissionDecisionReason | length > 0) and (has("decision") or has("reason") | not)' >/dev/null; then
   PASS=$((PASS + 1))
 else
-  FAIL=$((FAIL + 1)); echo "FAIL  a block must carry permissionDecision deny plus the legacy decision block" >&2
+  FAIL=$((FAIL + 1)); echo "FAIL  a block must carry permissionDecision deny with its reason, and no legacy decision/reason pair" >&2
 fi
 mark dev-sess develop 60
 if [ -z "$(run_hook "$REPO" dev-sess "$REPO/components/Foo.vue")" ]; then
@@ -176,7 +179,7 @@ check_as() {
   out=$(jq -cn --arg f "$file" --arg c "$cwd" --arg s "$sid" --argjson x "$extra" \
     '{tool_input: {file_path: $f}, cwd: $c, session_id: $s} + $x' | "$HOOK")
   rc=$?
-  if printf '%s' "$out" | grep -q '"block"'; then got=block
+  if printf '%s' "$out" | grep -q '"deny"'; then got=block
   elif [ "$rc" -eq 0 ] && [ -z "$out" ]; then got=allow
   else got="noisy"; fi
   if [ "$got" = "$want" ]; then

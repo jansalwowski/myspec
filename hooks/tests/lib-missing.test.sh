@@ -48,8 +48,8 @@ for hook in guard-worktree-context require-isolation-decision; do
   run_without "$hook"
   [ "$STATUS" -eq 0 ] && ok || fail "$hook: exits 0 without the variable (got $STATUS)"
   [ "$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = deny ] && ok || fail "$hook: denies without the variable (got: ${OUT:0:160})"
-  [ "$(printf '%s' "$OUT" | jq -r '.decision' 2>/dev/null)" = block ] && ok || fail "$hook: carries the legacy block field too"
-  R=$(printf '%s' "$OUT" | jq -r '.reason' 2>/dev/null)
+  [ "$(printf '%s' "$OUT" | jq -r 'has("decision") or has("reason")' 2>/dev/null)" = false ] && ok || fail "$hook: carries no legacy decision/reason pair (dropped with the 3.0 host floor)"
+  R=$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecisionReason' 2>/dev/null)
   printf '%s' "$R" | grep -qF 'CLAUDE_PLUGIN_ROOT' && ok || fail "$hook: the reason names the variable"
   printf '%s' "$R" | grep -qF 'unset' && ok || fail "$hook: the reason says the variable is unset"
   printf '%s' "$R" | grep -qF '/myspec:update' && ok || fail "$hook: the reason names the repair"
@@ -77,7 +77,7 @@ printf '%s' "$ERR" | grep -qF '/myspec:update' && ok || fail "record-session-met
 mkdir -p "$ROOT/empty-plugin/lib"
 OUT=$(payload require-isolation-decision | CLAUDE_PLUGIN_ROOT="$ROOT/empty-plugin" bash "$PLUGIN/hooks/require-isolation-decision.sh" 2>/dev/null)
 [ "$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = deny ] && ok || fail "a plugin root without lib/hook-core.sh denies"
-printf '%s' "$OUT" | jq -r '.reason' | grep -qF "$ROOT/empty-plugin" && ok || fail "the reason names the root it looked under"
+printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -qF "$ROOT/empty-plugin" && ok || fail "the reason names the root it looked under"
 
 # With the variable set to the plugin, the same payloads reach the hook's own
 # logic: the isolation gate asks, the Bash guard allows a push with no decision.

@@ -18,6 +18,13 @@ Updates framework-owned files in an existing project while preserving project cu
 
 ## Workflow
 
+### Step 0: Preflight
+
+Two checks before anything is read or written:
+
+1. **Host floor** (README "Installation"): Claude Code 2.1.269 or later (`claude --version`) and git 2.31 or later (`git --version`). Below the Claude Code floor the PreToolUse gates print a deny the host does not read, and the stop gate re-runs its checks on every continuation; below the git floor the hooks keep working but `memory-claim-id.sh` and the memory scripts do not. When either is older, stop with: "myspec 3.0 needs Claude Code ≥ 2.1.269 and git ≥ 2.31 (found {versions}). Update the host first."
+2. **No session in flight.** Print, once: "Finish open sessions before updating: in-flight 2.x session state is not imported." The 2.x write ledger (`/tmp/.myspec-session-writes-<id>`), the isolation marker (`.claude/state/isolation/<id>.json`) and the implement marker (`.claude/state/implement-in-progress.json`) are read by nothing in 3.0, so a session that spans the upgrade starts unarmed, is asked its isolation decision again, and loses its feature-implement run (the Stop gate blocks instead of warning). `/myspec:session-complete` closes a session cleanly; the leftover files are deleted by hand.
+
 ### Step 1: Read Current Version
 
 Read `.myspec.json` from project root. Extract `frameworkVersion` and `aiDir`.
