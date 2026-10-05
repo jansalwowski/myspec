@@ -78,6 +78,21 @@ OUT=$(payload require-isolation-decision | CLAUDE_PLUGIN_ROOT="$ROOT/empty-plugi
 [ "$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = deny ] && ok || fail "a plugin root without lib/hook-core.sh denies"
 printf '%s' "$OUT" | jq -r '.reason' | grep -qF "$ROOT/empty-plugin" && ok || fail "the reason names the root it looked under"
 
+# hook-core.sh present but the content checks' own libs missing (PR #274
+# review): the three content gates deny and name each missing file, rather
+# than approve in silence.
+mkdir -p "$ROOT/partial-plugin/lib"
+cp "$PLUGIN/lib/hook-core.sh" "$PLUGIN/lib/glob-regex.sh" "$ROOT/partial-plugin/lib/"
+for hook in validate-frontmatter no-absolute-paths require-reuse-audit; do
+  OUT=$(jq -cn --arg f "$REPO/.ai/features/x/tech-spec.md" --arg c "$REPO" '{tool_name: "Write", tool_input: {file_path: $f, content: "/Users/alice/x"}, cwd: $c}' \
+    | CLAUDE_PLUGIN_ROOT="$ROOT/partial-plugin" bash "$PLUGIN/hooks/$hook.sh" 2>"$ROOT/err")
+  [ "$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = deny ] && ok || fail "$hook: denies when content-checks.sh is missing (got: ${OUT:0:160})"
+  R=$(printf '%s' "$OUT" | jq -r '.reason' 2>/dev/null)
+  printf '%s' "$R" | grep -qF 'content-checks.sh, markdown-section-check.sh' && ok || fail "$hook: the reason names each missing file (got: ${R:0:160})"
+  printf '%s' "$R" | grep -qF '/myspec:update' && ok || fail "$hook: the reason names the repair"
+  grep -qF 'myspec lib missing' "$ROOT/err" && ok || fail "$hook: the line also goes to stderr"
+done
+
 # With the variable set to the plugin, the same payloads reach the hook's own
 # logic: the isolation gate asks, the Bash guard allows a push with no decision.
 OUT=$(payload require-isolation-decision | CLAUDE_PLUGIN_ROOT="$PLUGIN" bash "$PLUGIN/hooks/require-isolation-decision.sh" 2>/dev/null)

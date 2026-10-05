@@ -36,7 +36,19 @@ if [ ! -f "$HOOK_CORE" ]; then
   jq -nc --arg r "$LIB_MISSING" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}, decision: "block", reason: $r}'
   exit 0
 fi
-[ -f "$HOOK_CORE" ] && [ -f "$(dirname "$HOOK_CORE")/content-checks.sh" ] || exit 0
+# hook-core.sh alone is not enough: the checks live in content-checks.sh,
+# which sources markdown-section-check.sh. Name what is missing, as above,
+# rather than approve in silence.
+LIB_MISSING=""
+for f in content-checks.sh markdown-section-check.sh; do
+  [ -f "$(dirname "$HOOK_CORE")/$f" ] || LIB_MISSING="${LIB_MISSING:+$LIB_MISSING, }$f"
+done
+if [ -n "$LIB_MISSING" ]; then
+  LIB_MISSING="myspec lib missing: $LIB_MISSING not found under \${CLAUDE_PLUGIN_ROOT}/lib (${CLAUDE_PLUGIN_ROOT}), so validate-frontmatter.sh checked nothing. The hook runs from the plugin's hooks.json since 3.0; a copy wired in .claude/settings.json is retired by /myspec:update."
+  printf '%s\n' "$LIB_MISSING" >&2
+  jq -nc --arg r "$LIB_MISSING" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}, decision: "block", reason: $r}'
+  exit 0
+fi
 # shellcheck source=lib/hook-core.sh
 . "$HOOK_CORE"
 # shellcheck source=lib/content-checks.sh
