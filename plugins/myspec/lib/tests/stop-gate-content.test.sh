@@ -82,6 +82,9 @@ printf 'uncommitted\n' > "$REPO/docs/a.md"
 content_before "$REPO" docs/a.md "?" "$OUT"
 expect "0 one
 two" "$CONTENT_NEW $(cat "$OUT")" "no snapshot: HEAD's version"
+content_before "$REPO" docs/a.md @ "$OUT"
+expect "0 one
+two" "$CONTENT_NEW $(cat "$OUT")" "@ (the previous write was not hashed): HEAD's version"
 content_before "$REPO" docs/a.md - "$OUT"
 expect "1 " "$CONTENT_NEW $(cat "$OUT")" "- : there was no file"
 BLOB=$(git -C "$REPO" hash-object -w -- docs/a.md)

@@ -288,6 +288,37 @@ OUT=$(stop 47)
 [ "$(decision "$OUT")" = block ] && ok || fail "a CRLF leak blocks under 'text eol=crlf' (got: ${OUT:0:200})"
 rm -f "$REPO/docs/crlf.md" "$REPO/.gitattributes"
 
+# --- a write git cannot snapshot is still judged (PR #274 review) ------------------
+# A read-only object store: hash-object -w fails at PostToolUse. The write is
+# judged on the file as it is now, not dropped. Root writes through the mode
+# bits, so the case only means something as another user.
+if [ "$(id -u)" != 0 ]; then
+  chmod -R a-w "$REPO/.git/objects"
+  bashcmd 48 "printf 'read-only store $LEAK\n' >> docs/ro.md"
+  chmod -R u+w "$REPO/.git/objects"
+  OUT=$(stop 48)
+  [ "$(decision "$OUT")" = block ] && ok || fail "a write with no after-blob (read-only object store) still blocks (got: ${OUT:0:200})"
+  rm -f "$REPO/docs/ro.md"
+fi
+
+# A file the checks never judge is not hashed: a binary adds no loose object.
+objects() { git -C "$REPO" count-objects | cut -d' ' -f1; }
+before_objects=$(objects)
+bashcmd 49 "head -c 4096 /dev/zero > docs/blob.png && printf 'x\n' >> docs/blob.png"
+[ "$(objects)" = "$before_objects" ] && ok || fail "a binary Bash write adds no loose object ($before_objects -> $(objects))"
+OUT=$(stop 49)
+[ "$(decision "$OUT")" = approve ] && ok || fail "a binary Bash write approves (got: ${OUT:0:200})"
+rm -f "$REPO/docs/blob.png"
+
+# A text file above the snapshot cap is not hashed either, and is still judged.
+before_objects=$(objects)
+bashcmd 50 "awk 'BEGIN { for (i = 0; i < 15000; i++) print \"filler line \" i \" of a large generated doc, padded out to about ninety bytes\" }' > docs/big.md && printf 'see $LEAK\n' >> docs/big.md"
+[ "$(wc -c < "$REPO/docs/big.md")" -gt 1048576 ] && ok || fail "fixture: docs/big.md is above the 1 MiB cap"
+[ "$(objects)" = "$before_objects" ] && ok || fail "a text file above the cap adds no loose object ($before_objects -> $(objects))"
+OUT=$(stop 50)
+[ "$(decision "$OUT")" = block ] && ok || fail "a leak in a text file above the cap still blocks (got: ${OUT:0:200})"
+rm -f "$REPO/docs/big.md"
+
 # --- the continuation after a block is approved (R10) -----------------------------
 bashcmd 15 "printf 'see $LEAK\n' > docs/again.md"
 OUT=$(jq -nc --arg s "$SID-15" --arg c "$REPO" '{session_id: $s, cwd: $c, stop_hook_active: true}' | bash "$HOOK" 2>/dev/null)

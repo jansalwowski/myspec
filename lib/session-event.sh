@@ -280,7 +280,9 @@ session_written() {
 # <before> is the blob of the `pre` event recorded for the file since its
 # last write event, "-" when that event found no file, else the after-blob
 # of the session's previous Bash write to it, else "?" (unknown: no snapshot
-# was taken). A write whose after-blob is "" (the file is gone) is left out.
+# was taken). A write whose after-blob is "" (the file is gone) is left out;
+# one whose after-blob is "@" (judged but not hashed) is kept, and the Stop
+# gate reads the file itself.
 session_bash_writes() {
   session_query "$1" "$2" '
     reduce ($ev[] | select(.t == "pre" or .t == "write")

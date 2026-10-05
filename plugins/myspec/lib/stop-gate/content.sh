@@ -44,13 +44,14 @@ content_root_ok() {
 
 # content_before <root> <rel> <before> <out file> -> writes the file's content
 # before a Bash write: the blob <before>; nothing for "-" (there was no
-# file); for "?" (no snapshot) HEAD's version, or nothing when HEAD has none.
-# Sets CONTENT_NEW=1 when there was no file.
+# file); for "?" (no snapshot) or "@" (the previous write was not hashed)
+# HEAD's version, or nothing when HEAD has none. Sets CONTENT_NEW=1 when
+# there was no file.
 content_before() {
   CONTENT_NEW=0
   case "$3" in
     -) : > "$4"; CONTENT_NEW=1 ;;
-    \?)
+    \?|@)
       if ! git -C "$1" show "HEAD:$2" > "$4" 2>/dev/null; then
         : > "$4"
         CONTENT_NEW=1
@@ -111,7 +112,15 @@ content_gates() {
     : > "$tmp/added"
     while IFS=$'\t' read -r _ _ before after; do
       content_before "$root" "$rel" "$before" "$tmp/before" || continue
-      git -C "$root" cat-file blob "$after" > "$tmp/after" 2>/dev/null || continue
+      if [ "$after" = "@" ]; then
+        # Not hashed (too large, or a read-only object store): the file as
+        # it is now. Its CRs are dropped on both sides, as git's line-ending
+        # conversion may have dropped them from the blob.
+        LC_ALL=C awk '{ sub(/\r$/, "") } 1' "$abs" > "$tmp/after" 2>/dev/null || continue
+        LC_ALL=C awk '{ sub(/\r$/, "") } 1' "$tmp/before" > "$tmp/before.lf" && mv "$tmp/before.lf" "$tmp/before"
+      else
+        git -C "$root" cat-file blob "$after" > "$tmp/after" 2>/dev/null || continue
+      fi
       [ "$CONTENT_NEW" -eq 0 ] || created=1
       added_lines "$tmp/before" "$tmp/after" "$tmp/pair"
       cat "$tmp/pair" >> "$tmp/added"

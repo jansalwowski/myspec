@@ -429,12 +429,19 @@ bash_write_targets() {
 # can add a stop gate the main checkout does not have yet.
 #
 # A Bash write (VIA=bash) to a file the content checks cover also carries
-# the file's blob after the write (snapshot_blob), and is recorded every
-# time, since each one is a new before/after pair for the Stop gate.
+# the file's blob after the write (snapshot_blob), or "@" when the file is
+# judged but could not be hashed, and is recorded every time, since each one
+# is a new before/after pair for the Stop gate.
 ledger_add() {
-  local home blob=""
+  local home blob="" rc=1
   home=$(ledger_home "$2") || return 0
-  if [ "$VIA" = bash ] && blob=$(snapshot_blob "$2" "$3"); then
+  if [ "$VIA" = bash ]; then
+    if blob=$(snapshot_blob "$2" "$3"); then rc=0; else rc=$?; fi
+    # Judged but not hashed: "@" tells the Stop gate to read the file as it
+    # is then, rather than drop the write.
+    [ "$rc" -ne 2 ] || { blob="@"; rc=0; }
+  fi
+  if [ "$rc" -eq 0 ]; then
     session_append "$home" "$SESSION_ID" "$(jq -nc --arg k "$1" --arg r "$2" --arg p "$3" --arg a "$AGENT_ID" --arg b "$blob" \
       '{t: "write", root: $r, rel: $p, kind: $k, via: "bash", blob: $b} + (if $a != "" then {agent: $a} else {} end)')" || true
     return 0
@@ -460,22 +467,35 @@ ledger_home() {
 }
 
 # snapshot_blob <root> <rel> -> the blob id of the file as it is now, written
-# to <root>'s object store; "" when the file does not exist. Fails, printing
-# nothing, for a file the content checks do not cover (absolute_paths_scope:
-# the frontmatter and reuse-audit files are docs too) or when git cannot
-# hash it (a root without git).
+# to <root>'s object store; "" when the file does not exist. Prints nothing
+# and returns 1 for a file the content checks never judge: one they do not
+# cover (absolute_paths_scope: the frontmatter and reuse-audit files are docs
+# too), or a binary (a NUL in its first 8000 bytes, git's own test: its diff
+# has no `+` lines to judge). Returns 2 when the file is judged but not
+# hashed: above SNAPSHOT_MAX_BYTES (hashing a large file on every write
+# fills the object store with loose objects), or git cannot write the blob
+# (a read-only object store).
+SNAPSHOT_MAX_BYTES=1048576
 snapshot_blob() {
+  local size
   [ "$SNAPSHOTS" = 1 ] || return 1
   absolute_paths_scope "$1" "$2" || return 1
   if [ ! -f "$1/$2" ]; then
     printf '\n'
     return 0
   fi
-  git -C "$1" hash-object -w -- "$2" 2>/dev/null
+  if [ "$(head -c 8000 "$1/$2" 2>/dev/null | LC_ALL=C tr -dc '\000' | wc -c)" -gt 0 ]; then
+    return 1
+  fi
+  size=$(wc -c < "$1/$2" 2>/dev/null) || return 2
+  [ "$size" -le "$SNAPSHOT_MAX_BYTES" ] || return 2
+  git -C "$1" hash-object -w -- "$2" 2>/dev/null || return 2
 }
 
 # snapshot_pre <root> <rel>: records the file's content before a Bash write
-# (PreToolUse), as a `pre` event, for a file snapshot_blob covers.
+# (PreToolUse), as a `pre` event, for a file snapshot_blob hashes. A file it
+# cannot hash gets no `pre` event: the Stop gate then falls back to the
+# session's previous after-blob, then HEAD (session_bash_writes).
 snapshot_pre() {
   local home blob
   home=$(ledger_home "$1") || return 0
