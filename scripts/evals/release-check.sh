@@ -40,12 +40,16 @@
 # makes a regressed verdict exit 1, but only when a model "gateModels" lists
 # regressed (no key: every model that ran gates). Every model still runs and
 # is reported; a regression on any other model is a report-only warning. A
-# --case run never exits 1.
+# --case run never exits 1. With the gate on, a gateModels list must name
+# only models that run: an empty list, or an entry missing from --models
+# (checked before any eval) or from compare.json (checked after the
+# comparison), exits 2 instead of letting the gate block on nothing.
 #
 # Exit status: 0 done (report-only, not regressed, or partial) · 1 regressed
-# and the gate is on · 2 infrastructure error (bad arguments, eval run failed,
-# unreadable results, nothing staged). The temporary worktree is removed and
-# the running eval killed on every exit path, including an interrupt.
+# and the gate is on · 2 infrastructure error (bad arguments, a gateModels list
+# that gates nothing, eval run failed, unreadable results, nothing staged). The
+# temporary worktree is removed and the running eval killed on every exit path,
+# including an interrupt.
 
 set -uo pipefail
 
@@ -56,7 +60,7 @@ CONFIG="$QUALITY_DIR/release-check.json"
 CLAUDE_BIN="${MYSPEC_EVAL_CLAUDE:-claude}"
 
 die() { echo "release-check: $*" >&2; exit 2; }
-usage() { sed -n '2,48p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,52p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 VERSION="" PREV_TAG="" RUNS=3 MODELS="sonnet,haiku" CASE_GLOB="" OUT="" HEAD_RESULTS="" SKIP_REASON="" SKIP=0
 RECORD_FROM="" CC_MATCH="exact"
@@ -121,6 +125,20 @@ read -r GATE SEED RESAMPLES GATE_MODELS < <(node -e '
   console.log([c.gate === true, c.seed ?? 42, c.resamples ?? 10000, g === undefined ? "*" : g.join(",") || "-"].join(" "));
 ' "$CONFIG") || die "unreadable $CONFIG"
 [ -n "${GATE_MODELS:-}" ] || die "unreadable $CONFIG"
+
+# gate_models_check <models csv> <where they come from> <verb>: the one rule
+# that keeps the gate from switching off silently. With the gate on and a gateModels
+# list, the list must be non-empty and every entry must be one of <models>
+# (exact match: "Sonnet" is not "sonnet"). A partial (--case) run never gates.
+gate_models_check() {
+  [ "$GATE" = true ] && [ "$GATE_MODELS" != '*' ] && [ -z "$CASE_GLOB" ] || return 0
+  [ "$GATE_MODELS" != - ] || die "gateModels is empty in quality/release-check.json: the gate would block on nothing; list a model, drop the key (every model gates), or set \"gate\": false"
+  local m missing=()
+  for m in ${GATE_MODELS//,/ }; do
+    case ",$1," in *",$m,"*) ;; *) missing+=("$m") ;; esac
+  done
+  [ "${#missing[@]}" = 0 ] || die "gateModels lists ${missing[*]}, which $2 ($1) does not $3; the gate would not block on it (quality/release-check.json)"
+}
 
 if [ -z "$PREV_TAG" ]; then
   PREV_TAG=$(git describe --tags --abbrev=0 HEAD 2>/dev/null) || PREV_TAG=""
@@ -195,7 +213,8 @@ resolve_model_id() {
 
 json_field() { node -e 'try { console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))[process.argv[2]] ?? "") } catch { console.log("") }' "$1" "$2"; }
 
-echo "release-check: v$VERSION vs ${PREV_TAG:-<no previous tag>} · runs=$RUNS models=$MODELS${CASE_GLOB:+ case=$CASE_GLOB} · gate=$([ "$GATE" = true ] && echo "on ($([ "$GATE_MODELS" = '*' ] && echo 'every model' || echo "$GATE_MODELS"))" || echo 'off (report-only)')"
+gate_models_check "$MODELS" "--models" run
+echo "release-check: v$VERSION vs ${PREV_TAG:-<no previous tag>} · runs=$RUNS models=$MODELS${CASE_GLOB:+ case=$CASE_GLOB} · gate=$([ "$GATE" = true ] && echo "on ($([ "$GATE_MODELS" = '*' ] && echo "every model: $MODELS" || echo "$GATE_MODELS"))" || echo 'off (report-only)')"
 echo "release-check: output in $OUT"
 
 # ------------------------------------------------------------------ 1. HEAD
@@ -297,6 +316,8 @@ rc=$?
 echo
 node "$SCRIPT_DIR/compare.mjs" "$PREV_SET" "$OUT/head-baseline.json" "${cmp_args[@]}" | tee "$OUT/compare.txt"
 echo
+gate_models_check "$(node -e 'console.log(Object.keys(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")).models).join(","))' "$OUT/compare.json")" \
+  "the comparison" hold
 
 # --------------------------------------------------------------- 5. stage
 stage "$OUT/compare.json"

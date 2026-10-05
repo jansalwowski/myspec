@@ -253,6 +253,26 @@ expect_has "Haiku warned alongside the block" "$OUTPUT" "WARNING: REGRESSED on h
 set_config true '"sonnet"'
 rc_run gate-badkey --version 1.2.0 --models sonnet --runs 2
 expect_eq "gateModels not an array: exit 2 before any eval" "$RC $(grep -c '^EVAL' "$STUB_LOG")" "2 0"
+echo "# gateModels that would gate nothing: exit 2 before any eval"
+set_config true '["sonnet"]'
+rc_run gate-notrun --version 1.2.0 --models haiku --runs 2
+expect_eq "gateModels [sonnet] with --models haiku: exit 2, no eval" "$RC $(grep -c '^EVAL' "$STUB_LOG")" "2 0"
+expect_has "names the model that would not run" "$OUTPUT" "gateModels lists sonnet, which --models (haiku) does not run"
+set_config true '["Sonnet"]'
+rc_run gate-case --version 1.2.0 --models sonnet,haiku --runs 2
+expect_eq "gateModels [Sonnet] (case typo): exit 2, no eval" "$RC $(grep -c '^EVAL' "$STUB_LOG")" "2 0"
+expect_has "names the typo" "$OUTPUT" "gateModels lists Sonnet, which --models (sonnet,haiku) does not run"
+set_config true '[]'
+rc_run gate-empty --version 1.2.0 --models sonnet,haiku --runs 2
+expect_eq "gateModels []: exit 2, no eval" "$RC $(grep -c '^EVAL' "$STUB_LOG")" "2 0"
+expect_has "says the list is empty" "$OUTPUT" "gateModels is empty"
+set_config false
+rc_run haiku-only --version 1.2.0 --models haiku --runs 2
+set_config true '["sonnet"]'
+rc_run gate-notcompared --version 1.2.0 --models sonnet,haiku --runs 2 --head-results "$TMP/out-haiku-only/head"
+expect_eq "gateModels [sonnet] but the results hold no sonnet: exit 2 after the comparison" \
+  "$RC $(jf "$TMP/out-gate-notcompared/compare.json" 'Object.keys(d.models)')" '2 ["haiku"]'
+expect_has "names the model missing from the comparison" "$OUTPUT" "gateModels lists sonnet, which the comparison (haiku) does not hold"
 set_config true
 rc_run gate-partial --version 1.2.0 --models sonnet,haiku --runs 2 --case 'case-[a-e]'
 expect_eq "a --case run never exits 1, even regressed with the gate on" "$RC" 0
