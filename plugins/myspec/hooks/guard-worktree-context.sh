@@ -69,12 +69,11 @@ set -euo pipefail
 
 MAX_DEPTH=3        # nested `bash -c` / `eval` payloads scanned
 
-# The hook and its libs ship as a set: hooks/ + lib/ in the plugin,
-# .claude/hooks/ + .claude/lib/ in a project. A missing jq or lib fails open
-# rather than block on an infra error.
+# The hook runs from the plugin (hooks.json), which exports CLAUDE_PLUGIN_ROOT,
+# and its libs are the plugin's lib/. A missing jq or lib fails open rather
+# than block on an infra error.
 command -v jq >/dev/null 2>&1 || exit 0
-HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
-[ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
+HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
 if [ ! -f "$HOOK_CORE" ] || [ ! -f "$(dirname "$HOOK_CORE")/command-scan.sh" ] \
     || [ ! -f "$(dirname "$HOOK_CORE")/session-event.sh" ]; then
   exit 0
@@ -320,7 +319,7 @@ branch_verdict() {
     # WT-A to the ref file of wt-a, so a case-variant name deletes it too.
     if grep -qixF -- "$word" <<< "$checked_out"; then
       # shellcheck disable=SC2016 # literal backticks: the message quotes a command
-      printf 'BLOCKED: branch %s is checked out in a worktree (see `git worktree list`), and deleting it would leave that working tree on a missing branch. Remove the worktree first, or clean up with .claude/lib/branch-cleanup.sh. Blocked: %s' "$word" "${segment:0:200}"
+      printf 'BLOCKED: branch %s is checked out in a worktree (see `git worktree list`), and deleting it would leave that working tree on a missing branch. Remove the worktree first, or clean up with %s/branch-cleanup.sh. Blocked: %s' "$word" "$HOOK_LIB" "${segment:0:200}"
       return 0
     fi
   done

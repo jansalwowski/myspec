@@ -24,12 +24,11 @@
 
 set -euo pipefail
 
-# The hook and its libs ship as a set: hooks/ + lib/ in the plugin,
-# .claude/hooks/ + .claude/lib/ in a project. A missing jq or lib fails open
-# rather than block on an infra error.
+# The hook runs from the plugin (hooks.json), which exports CLAUDE_PLUGIN_ROOT,
+# and its libs are the plugin's lib/. A missing jq or lib fails open rather
+# than block on an infra error.
 command -v jq >/dev/null 2>&1 || exit 0
-HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
-[ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
+HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
 if [ ! -f "$HOOK_CORE" ] || [ ! -f "$(dirname "$HOOK_CORE")/markdown-section-check.sh" ]; then
   exit 0
 fi

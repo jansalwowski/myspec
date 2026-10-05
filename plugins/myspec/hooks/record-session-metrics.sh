@@ -30,10 +30,9 @@ case "${DO_NOT_TRACK:-}" in ''|0|false|FALSE) ;; *) exit 0 ;; esac
 command -v node || exit 0
 command -v jq || exit 0
 
-# The scan and hook-core ship next to this hook: .claude/lib/ in a project
-# (manifest `lib`), lib/ at the plugin root.
-HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
-[ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
+# The scan and hook-core are the plugin's lib/: the hook runs from the
+# plugin's hooks.json, which exports CLAUDE_PLUGIN_ROOT.
+HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
 [ -f "$HOOK_CORE" ] || exit 0
 # shellcheck source=lib/hook-core.sh
 . "$HOOK_CORE"

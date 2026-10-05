@@ -31,8 +31,10 @@
 # status longer than a pipe buffer then kills git with SIGPIPE, and under
 # pipefail the `if` read false and skipped the gate.
 conformance_gates() {
-  # #262: project-local .claude/lib paths; the plugin-run hook (${CLAUDE_PLUGIN_ROOT}) resolves these differently.
-  local root="$1" doctor="$1/.claude/lib/memory-doctor.mjs" setup="$1/.claude/lib/setup-doctor.mjs" ai out
+  # Both doctors are the plugin's (HOOK_LIB, the directory hook-core.sh was
+  # found in), run against the checkout. MYSPEC_HOOK_EVENT tells the setup
+  # doctor it runs from a hook, so it can report plugin-hooks-unavailable.
+  local root="$1" doctor="$HOOK_LIB/memory-doctor.mjs" setup="$HOOK_LIB/setup-doctor.mjs" ai out
   [ -f "$root/.myspec.json" ] && command -v node >/dev/null 2>&1 || return 0
   if [ -f "$doctor" ]; then
     # aiDir is required since 2.0; .ai is the documented default when absent,
@@ -40,12 +42,12 @@ conformance_gates() {
     ai=$(ai_dir "$root")
     if [ -n "$ai" ] && [ -n "$(git -C "$root" status --porcelain -- "$ai/memory" 2>/dev/null)" ]; then
       if ! out=$(cd "$root" && node "$doctor" --quiet 2>&1); then
-        decision_block 'Memory conformance check failed for changes under %s/memory. Fix these before stopping (node .claude/lib/memory-index.mjs regenerates the tables; the doctor names the rest):\n\n%s' "$ai" "$(printf '%s' "$out" | tail -30)"
+        decision_block 'Memory conformance check failed for changes under %s/memory. Fix these before stopping (node "%s/memory-index.mjs" regenerates the tables; the doctor names the rest):\n\n%s' "$ai" "$HOOK_LIB" "$(printf '%s' "$out" | tail -30)"
       fi
     fi
   fi
   if [ -f "$setup" ] && [ -n "$(git -C "$root" status --porcelain -- .claude .myspec.json 2>/dev/null)" ]; then
-    if ! out=$(cd "$root" && node "$setup" --quiet wiring schema 2>&1); then
+    if ! out=$(cd "$root" && MYSPEC_HOOK_EVENT=Stop node "$setup" --quiet wiring schema 2>&1); then
       decision_block 'Setup conformance check failed for changes under .claude/ or .myspec.json. Each of these makes a hook or a gate silently stop working, so fix them before stopping:\n\n%s' "$(printf '%s' "$out" | tail -30)"
     fi
   fi

@@ -5,9 +5,9 @@
 # guard-worktree-context.sh knows which tree the session works in.
 #
 # Usage:
-#   .claude/lib/set-isolation.sh <session_id> <develop|worktree> [note] [--worktree-path <abs>]
-#   .claude/lib/set-isolation.sh --reset <session_id>
-#   .claude/lib/set-isolation.sh --show
+#   "${CLAUDE_PLUGIN_ROOT}"/lib/set-isolation.sh <session_id> <develop|worktree> [note] [--worktree-path <abs>]
+#   "${CLAUDE_PLUGIN_ROOT}"/lib/set-isolation.sh --reset <session_id>
+#   "${CLAUDE_PLUGIN_ROOT}"/lib/set-isolation.sh --show
 #
 # --worktree-path lets guard-worktree-context.sh name the right tree in its
 # block message. It can be supplied later than the decision itself (the

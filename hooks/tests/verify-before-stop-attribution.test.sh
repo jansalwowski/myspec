@@ -17,6 +17,8 @@ set -uo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 HOOK="${1:-$HERE/../verify-before-stop.sh}"
+# The hooks find their lib through CLAUDE_PLUGIN_ROOT, as the harness exports it.
+export CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$HOOK")/.." && pwd)}"
 MARK="$HERE/../mark-code-changed.sh"
 
 ROOT=$(cd "$(mktemp -d)" && pwd -P)

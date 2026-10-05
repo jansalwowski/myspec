@@ -70,8 +70,7 @@
 set -euo pipefail
 
 command -v jq >/dev/null 2>&1 || exit 0
-HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
-[ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
+HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
 [ -f "$HOOK_CORE" ] && [ -f "$(dirname "$HOOK_CORE")/session-event.sh" ] || exit 0
 # shellcheck source=lib/hook-core.sh
 . "$HOOK_CORE"

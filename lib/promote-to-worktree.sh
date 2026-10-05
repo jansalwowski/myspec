@@ -9,7 +9,7 @@
 # every promotion armed a conflict that fired at the next `git pull`.
 #
 # Usage:
-#   .claude/lib/promote-to-worktree.sh \
+#   "${CLAUDE_PLUGIN_ROOT}"/lib/promote-to-worktree.sh \
 #     --branch fix/lang-switcher-visibility \
 #     --title  "fix(i18n): hide the switcher for unpublished locales" \
 #     [--base <branch>] [--only <path>]... \

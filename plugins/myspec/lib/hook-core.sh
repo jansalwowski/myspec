@@ -5,10 +5,12 @@
 # settings reader. One copy, one test file (lib/tests/hook-core.test.sh). The
 # session-state file has its own lib, lib/session-event.sh.
 #
-# Found the way the hooks find every other lib: next to the hook's own
-# directory (hooks/../lib in the plugin, .claude/hooks/../lib in a project),
-# else under CLAUDE_PLUGIN_ROOT. A hook that cannot find it fails open, as it
-# does without jq. bash 3.2 compatible (macOS /bin/bash). git 2.31 or later
+# Found the way the hooks find every other lib: under CLAUDE_PLUGIN_ROOT, the
+# plugin's installed directory, which the harness exports to every hook the
+# plugin's hooks.json declares (since 3.0 nothing is copied into a project's
+# .claude/). A hook that cannot find it fails open, as it does without jq.
+# A lib run by a skill or by hand sources hook-core.sh beside itself.
+# bash 3.2 compatible (macOS /bin/bash). git 2.31 or later
 # is recommended: checkout_facts asks `git rev-parse --path-format=absolute`,
 # and older git, which echoes the flag back, costs it a second call that
 # resolves the relative git dirs itself (README "Installation").
@@ -206,7 +208,8 @@ checkout_facts() {
 # hook_repo_root <cwd candidates> [myspec] -> the checkout the hook runs for:
 # the toplevel of the first candidate inside a work tree (with `myspec`, a
 # candidate holding .myspec.json counts too, for a project without git), else
-# that of $PWD, else that of the project the hook is installed in.
+# that of $PWD, else that of CLAUDE_PROJECT_DIR, the project the harness
+# started in (exported to hooks like CLAUDE_PLUGIN_ROOT).
 hook_repo_root() {
   local c top
   while IFS= read -r c; do
@@ -220,8 +223,8 @@ hook_repo_root() {
       return 0
     fi
   done <<< "$1"
-  # #262: $HOOK_LIB/../.. is the repo root only for a project-local .claude/lib; a plugin-run hook needs another root.
-  for c in "$PWD" "$HOOK_LIB/../.."; do
+  for c in "$PWD" "${CLAUDE_PROJECT_DIR:-}"; do
+    [ -n "$c" ] || continue
     if top=$(git -C "$c" rev-parse --show-toplevel 2>/dev/null); then
       printf '%s\n' "$top"
       return 0

@@ -37,15 +37,14 @@ build() {
   local name="$1"; shift
   REPO="$ROOT/$name"
   rm -rf "$REPO"
-  mkdir -p "$REPO/.claude/hooks" "$REPO/.claude/lib"
+  mkdir -p "$REPO/.claude"
   (cd "$REPO" && git init -q -b main .)
   printf '{"frameworkVersion":"0.0.0","project":{"name":"fx"}}\n' > "$REPO/.myspec.json"
   for d in "$@"; do mkdir -p "$REPO/$d"; done
-  cp "$PLUGIN/hooks/validate-frontmatter.sh" "$REPO/.claude/hooks/"
-  # The installed layout: the hook sources .claude/lib/hook-core.sh.
-  cp "$PLUGIN/lib/hook-core.sh" "$REPO/.claude/lib/"
-  chmod +x "$REPO/.claude/hooks/"*.sh
 }
+
+# The hook runs from the plugin, which the harness names in CLAUDE_PLUGIN_ROOT.
+export CLAUDE_PLUGIN_ROOT="$PLUGIN"
 
 # What memory-files.mjs resolves for this repo.
 lib_resolves() {
@@ -63,7 +62,7 @@ frontmatter_polices() {  # frontmatter_polices <dir>
   printf 'no frontmatter here\n' > "$REPO/$dir/notes.md"
   local out
   out=$(printf '{"cwd":"%s","tool_input":{"file_path":"%s/%s/notes.md"}}' "$REPO" "$REPO" "$dir" \
-    | bash "$REPO/.claude/hooks/validate-frontmatter.sh" 2>&1)
+    | bash "$PLUGIN/hooks/validate-frontmatter.sh" 2>&1)
   case "$out" in
     *block*|*BLOCKED*|*frontmatter*) printf 'yes' ;;
     *) printf 'no' ;;
