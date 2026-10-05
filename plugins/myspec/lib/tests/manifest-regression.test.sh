@@ -168,5 +168,13 @@ $(jq -r '(.migrations // [])[] | "migration \(.)\t\(split("-")[0])"' "$MANIFEST"
 $(jq -r '(.removed // {}) | to_entries[] | "removed \(.key)\t\(.value.since // "")"' "$MANIFEST")
 EOF
 
+# The floor is the release the 3.0.0-plugin-hooks migration hashed: it sorts
+# each retired copy by comparing it with retired-hashes.json, the files as the
+# floor release installed them. A floor older than that tag would let a
+# project arrive with copies of a release nothing hashed, and every one of
+# them would read as locally modified.
+HASHED=$(jq -r '.tag // empty' "$(dirname "$MANIFEST")/retired-hashes.json" 2>/dev/null)
+if [ -z "$HASHED" ] || [ "v$FLOOR" = "$HASHED" ]; then ok; else fail "upgradeFrom $FLOOR is not the release retired-hashes.json hashed ($HASHED)"; fi
+
 printf '%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
