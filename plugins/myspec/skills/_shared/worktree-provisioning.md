@@ -13,7 +13,7 @@ Base on `origin/<default-branch>`, not the local branch: a PR based on a local b
 ## Provision
 
 ```bash
-.claude/lib/worktree-provision.sh <worktree-path> --base origin/<default-branch>
+"${CLAUDE_PLUGIN_ROOT}/lib/worktree-provision.sh" <worktree-path> --base origin/<default-branch>
 ```
 
 Read from `.myspec.json` `isolation.provision` in the worktree (the branch's own settings), or in the main checkout when the worktree has none. The steps run in this order:
@@ -57,9 +57,9 @@ Rules the script enforces or the recipe relies on:
 Harness `isolation: "worktree"` forks from the default branch, so a parallel task after the first phase cannot see the feature commits it builds on. The controller creates each task's worktree itself, from its own checkout on the feature branch, with its work committed:
 
 ```bash
-.claude/lib/task-worktree.sh create <slug> [--no-symlink]   # prints the worktree path
-.claude/lib/task-worktree.sh merge <slug>                   # at the barrier, one task at a time
-.claude/lib/task-worktree.sh discard <slug>                 # stale worktree from an interrupted run
+"${CLAUDE_PLUGIN_ROOT}/lib/task-worktree.sh" create <slug> [--no-symlink]   # prints the worktree path
+"${CLAUDE_PLUGIN_ROOT}/lib/task-worktree.sh" merge <slug>                   # at the barrier, one task at a time
+"${CLAUDE_PLUGIN_ROOT}/lib/task-worktree.sh" discard <slug>                 # stale worktree from an interrupted run
 ```
 
 `create` branches `<feature-branch>--<slug>` at the controller's HEAD and provisions it with the controller's checkout as the link source, whose linked dependency directories already match the feature's lockfiles. `merge` merges into the controller's branch, then removes the worktree and branch; on a conflict it stops mid-merge — resolve, commit, and rerun it to clean up. Worktrees land under `isolation.worktreeRoot` (default `.claude/worktrees`), and a `create` that fails midway removes what it made, including a worktree whose install step failed.

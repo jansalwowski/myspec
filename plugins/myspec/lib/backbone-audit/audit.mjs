@@ -48,6 +48,7 @@ import { readFileSync, existsSync, statSync, readdirSync, writeSync } from 'node
 import { join, resolve, relative, isAbsolute } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { argv, cwd, exit } from 'node:process'
+import { getSetting } from '../myspec-config.mjs'
 
 // ───────────────────────── args ─────────────────────────
 
@@ -383,8 +384,9 @@ function unquote(v) {
 // ───────────────────── locate the topology file ─────────────────
 
 const CANDIDATES = ['backbone.yml', 'backbone.yaml', 'topology.yml', 'topology.yaml', 'project.yml']
-const myspec = readJson(join(root, '.myspec.json'))
-const declaredInConfig = typeof myspec?.topologyFile === 'string' ? myspec.topologyFile : null
+// topologyFile through the one settings reader (lib/myspec-config.mjs): a
+// missing or malformed .myspec.json, or a non-string value, reads as unset.
+const declaredInConfig = getSetting('topologyFile', { root }).value ?? null
 
 const fileArg = typeof args.file === 'string' ? args.file : null
 topologyRel = fileArg ?? declaredInConfig

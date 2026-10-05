@@ -17,10 +17,10 @@ Edits under `${aiDir}/`, `.claude/`, `docs/` and the root agent files never trig
 On the block, call `AskUserQuestion` with one question — `header: "Isolation"`, options `develop` and `Worktree` — then record it:
 
 ```
-.claude/lib/set-isolation.sh <session_id> develop|worktree
+set-isolation.sh <session_id> develop|worktree
 ```
 
-The session id is embedded in the block message, and that is its only source. Never take one from `.claude/state/sessions/` filenames: every session in the checkout has a file there, and nothing shows which is yours. `set-isolation.sh` refuses to change a live decision already recorded under an id; if the user really changed the answer, `--reset` it first. Mark one option `(Recommended)` from the heuristic below; presenting them as equals wastes the prompt.
+The block message prints the exact command with the path resolved: `set-isolation.sh`, like every helper named in this file, runs from the myspec plugin's `lib/` (`${CLAUDE_PLUGIN_ROOT}/lib/` inside a skill), never from `.claude/`, and the hook's messages are where the resolved path comes from. The session id is embedded in that message, and that is its only source. Never take one from `.claude/state/sessions/` filenames: every session in the checkout has a file there, and nothing shows which is yours. `set-isolation.sh` refuses to change a live decision already recorded under an id; if the user really changed the answer, `--reset` it first. Mark one option `(Recommended)` from the heuristic below; presenting them as equals wastes the prompt.
 
 | Recommend `develop` | Recommend `Worktree` |
 |---|---|
@@ -42,9 +42,11 @@ Edits land in the user's checkout so they can test immediately. **Do not commit*
 
 ```
 git worktree add -b <type>/<slug> "$(git rev-parse --show-toplevel)/.claude/worktrees/<slug>" origin/<default-branch>
-.claude/lib/worktree-provision.sh "$(git rev-parse --show-toplevel)/.claude/worktrees/<slug>" --base origin/<default-branch>
-.claude/lib/set-isolation.sh <session_id> worktree --worktree-path <abs worktree path>
+worktree-provision.sh "$(git rev-parse --show-toplevel)/.claude/worktrees/<slug>" --base origin/<default-branch>
+set-isolation.sh <session_id> worktree --worktree-path <abs worktree path>
 ```
+
+The worktree block message prints both commands with their paths resolved (a skill reads them from `_shared/worktree-provisioning.md`).
 
 Provisioning links each `isolation.provision.symlink` entry (default `node_modules`) except one pinned by a lockfile the branch changed or that differs from the main checkout's, which needs a real install instead; it copies the lint cache and keeps both out of git; `.myspec.json` `isolation.provision` extends the lists. Never symlink a build output directory. Recipe and rationale: `_shared/worktree-provisioning.md` in the plugin.
 
@@ -56,10 +58,10 @@ A PR is always opened when the work is done — the user cannot inspect a worktr
 
 ## At the end (develop mode only)
 
-Ask whether to open a PR. If yes:
+Ask whether to open a PR. If yes, run the plugin's `promote-to-worktree.sh` — `/myspec:feature-complete` does, and the isolation hook's block message prints its resolved path:
 
 ```
-.claude/lib/promote-to-worktree.sh --branch <type>/<slug> --title "<conventional commit subject>" \
+promote-to-worktree.sh --branch <type>/<slug> --title "<conventional commit subject>" \
   --only <path> [--only <path>]... [--body-file <path>] [--trailer "<Key: value>"]... [--session-url <url>]
 ```
 
@@ -68,8 +70,10 @@ It copies the diff into a fresh worktree, commits, provisions, pushes, and opens
 ## Resetting
 
 ```
-.claude/lib/set-isolation.sh --show                 # current decisions
-.claude/lib/set-isolation.sh --reset <session_id>   # force a re-ask
+set-isolation.sh --show                 # current decisions
+set-isolation.sh --reset <session_id>   # force a re-ask
 ```
+
+The isolation hook's ask message prints both with the path resolved.
 
 Decisions expire after 8h.

@@ -44,9 +44,18 @@
 # serialise against a session running elsewhere.
 #
 # Usage: memory-claim-id.sh <procedural|semantic|episodic>
+#        memory-claim-id.sh --normalize
 #
 # Prints exactly one line on success — the claimed ID (P053). Everything else
 # goes to stderr.
+#
+# --normalize rewrites .claude/state/memory-ids.json in the one-line form the
+# claim reads, from either form: versions before 1.28 wrote it jq
+# pretty-printed, one key per line, which the strict reader (section 3) sees
+# as zeros, and a claim would then rewrite the floors away. update's
+# 3.0.0-memory-registry migration runs it once; it takes the lock, keeps
+# every floor, is idempotent, prints one line, and does nothing without a
+# registry.
 #
 # Exit codes
 #   0  claimed
@@ -61,13 +70,15 @@
 set -euo pipefail
 
 TYPE="${1:-}"
+MODE=claim
 
 case "$TYPE" in
   procedural) PREFIX=P; PREFIX_RE='[Pp]' ;;
   semantic)   PREFIX=S; PREFIX_RE='[Ss]' ;;
   episodic)   PREFIX=E; PREFIX_RE='[Ee]' ;;
+  --normalize) MODE=normalize; PREFIX=""; PREFIX_RE="" ;;
   *)
-    echo "usage: memory-claim-id.sh <procedural|semantic|episodic>" >&2
+    echo "usage: memory-claim-id.sh <procedural|semantic|episodic> | --normalize" >&2
     exit 2
     ;;
 esac
@@ -80,19 +91,42 @@ COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) 
 }
 MAIN_ROOT=$(dirname "$COMMON_DIR")
 
-# aiDir comes from .myspec.json. Only the one string is needed, so a sed
-# extraction does it without a jq dependency; `.ai/` (trailing slash) occurs in
-# the wild and is normalised here.
-AI_DIR=""
-if [ -f "$MAIN_ROOT/.myspec.json" ]; then
-  AI_DIR=$(sed -n 's/.*"aiDir"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$MAIN_ROOT/.myspec.json" | tail -1)
-  AI_DIR=$(printf '%s' "$AI_DIR" | sed 's#^\./##; s#/*$##')
+# aiDir comes from .myspec.json through the one settings reader beside this
+# script: the Node one (lib/myspec-config.mjs) first, since the conformance
+# gate below needs node anyway and this script keeps jq optional; the shell
+# one (lib/myspec-config.sh, jq) when node is absent. The reader's schema
+# holds the default, so no value here is a guess from disk; `.ai/` (trailing
+# slash) occurs in the wild and is normalised here as memory-files.mjs does.
+LIB_DIR=$(dirname "$0")
+READER=()
+if command -v node >/dev/null 2>&1 && [ -f "$LIB_DIR/myspec-config.mjs" ]; then
+  READER=(node "$LIB_DIR/myspec-config.mjs")
+elif command -v jq >/dev/null 2>&1 && [ -f "$LIB_DIR/myspec-config.sh" ]; then
+  READER=(bash "$LIB_DIR/myspec-config.sh")
+else
+  echo "memory-claim-id: reading aiDir from .myspec.json needs node with $LIB_DIR/myspec-config.mjs, or jq with $LIB_DIR/myspec-config.sh" >&2
+  exit 2
 fi
-# No configured value: the documented default, never a guess from disk. aiDir
-# is required since 2.0; the setup doctor reports its absence and `update`
-# writes it. memory-files.mjs resolves the same way.
+READER_ERR=$(mktemp "${TMPDIR:-/tmp}/.myspec-claim.XXXXXX")
+AI_DIR=$("${READER[@]}" get aiDir --root "$MAIN_ROOT" 2>"$READER_ERR") || {
+  echo "memory-claim-id: cannot read aiDir: $(cat "$READER_ERR")" >&2
+  rm -f "$READER_ERR"
+  exit 2
+}
+[ ! -s "$READER_ERR" ] || sed 's/^/memory-claim-id: /' "$READER_ERR" >&2
+rm -f "$READER_ERR"
+AI_DIR=$(printf '%s' "$AI_DIR" | sed -n 's/^"\(.*\)"$/\1/p' | sed 's#^\./##; s#/*$##')
+# An empty string is unset, as hook-core's ai_dir and memory-files.mjs read
+# it: the schema default, which the reader returns for a root with no
+# .myspec.json.
 if [ -z "$AI_DIR" ]; then
-  AI_DIR=".ai"
+  EMPTY_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/.myspec-claim-root.XXXXXX")
+  AI_DIR=$("${READER[@]}" get aiDir --root "$EMPTY_ROOT" 2>/dev/null | sed -n 's/^"\(.*\)"$/\1/p') || AI_DIR=""
+  rmdir "$EMPTY_ROOT"
+fi
+if [ -z "$AI_DIR" ]; then
+  echo "memory-claim-id: aiDir is empty in .myspec.json and the reader gave no default" >&2
+  exit 2
 fi
 
 # Repo-relative path of this type's memory dir; doubles as the ls-tree pathspec.
@@ -108,7 +142,9 @@ LOCK="$STATE_DIR/memory-id.lock"
 # a sibling claim. Contract: the doctor prints `ERROR …` lines plus a summary
 # and exits 1 on errors, 0 otherwise.
 DOCTOR="$(dirname "$0")/memory-doctor.mjs"
-if [ "${MYSPEC_SKIP_MEMORY_DOCTOR:-}" = "1" ]; then
+if [ "${MYSPEC_SKIP_MEMORY_DOCTOR:-}" = "1" ] || [ "$MODE" = normalize ]; then
+  # --normalize is what update runs before the health checks; it allocates
+  # nothing, so the doctor has nothing to gate.
   :
 elif command -v node >/dev/null 2>&1 && [ -f "$DOCTOR" ]; then
   if ! DOCTOR_OUT=$(node "$DOCTOR" --quiet --root "$MAIN_ROOT" 2>&1); then
@@ -170,6 +206,40 @@ until mkdir "$LOCK" 2>/dev/null; do
 done
 LOCKED=1
 
+# --- 1b. --normalize ----------------------------------------------------------
+# Under the lock, so a concurrent claim never reads half a rewrite. Each
+# value is read with jq when it is on PATH, else with the tolerant pattern
+# (the integer after `"<key>":` anywhere in the file), so both the one-line
+# and the pre-1.28 pretty-printed form give their floors.
+if [ "$MODE" = normalize ]; then
+  if [ ! -f "$REGISTRY" ]; then
+    echo "memory-ids.json: no registry, nothing to normalize"
+    exit 0
+  fi
+  normalize_value() {
+    local v=""
+    if command -v jq >/dev/null 2>&1; then
+      v=$(jq -r --arg k "$1" '.[$k] // 0 | numbers | floor' "$REGISTRY" 2>/dev/null || printf '')
+    fi
+    if [ -z "$v" ]; then
+      v=$(sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p" "$REGISTRY" | tail -1)
+    fi
+    case "$v" in
+      ''|*[!0-9]*) v=0 ;;
+    esac
+    printf '%s' "$v"
+  }
+  NORMALIZED=$(printf '{"P": %d, "S": %d, "E": %d}' "$(normalize_value P)" "$(normalize_value S)" "$(normalize_value E)")
+  if [ "$(<"$REGISTRY")" = "$NORMALIZED" ]; then
+    echo "memory-ids.json: already one line: $NORMALIZED"
+    exit 0
+  fi
+  printf '%s\n' "$NORMALIZED" > "$REGISTRY.tmp.$$"
+  mv "$REGISTRY.tmp.$$" "$REGISTRY"
+  echo "memory-ids.json: normalized to one line: $NORMALIZED"
+  exit 0
+fi
+
 # --- 2. High-water ----------------------------------------------------------
 # Each collector emits candidate basenames, one per line; max_from_names keeps
 # the highest number among those that parse as <prefix><digits>[-slug].md,
@@ -221,12 +291,13 @@ case "$HIGH" in
 esac
 
 # --- 3. Registry ------------------------------------------------------------
-# One line per key, or jq-style pretty-printed from older versions; either way
-# the value for a key is the first integer after `"<key>":`.
+# One line, `{"P": n, "S": n, "E": n}`, as this script writes it (below): the
+# value for a key is the integer after `"<key>":` on that line. The jq
+# pretty-printed registry of versions before 1.28 is not read (#266).
 registry_value() {
   local v=""
   if [ -f "$REGISTRY" ]; then
-    v=$(sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p" "$REGISTRY" | tail -1)
+    v=$(sed -n "1s/^{.*\"$1\"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p" "$REGISTRY")
   fi
   case "$v" in
     ''|*[!0-9]*) v=0 ;;

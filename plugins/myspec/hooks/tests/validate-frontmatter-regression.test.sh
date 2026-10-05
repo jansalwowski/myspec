@@ -16,12 +16,20 @@
 #   (doctor) `grep "^---"` matched anywhere and awk took the first `---`
 #            block, so body text first and a later block holding title/updated
 #            passed. Frontmatter must open on line 1.
+#   #263     The hook rescanned the whole file after every edit, so a body
+#            edit to a doc with broken frontmatter was blocked for a defect
+#            it did not make. It now runs at PreToolUse on the proposed
+#            content: a Write that creates the doc by its content, any
+#            other Write or Edit only when it changes
+#            the frontmatter region.
 #
 # Usage: validate-frontmatter-regression.test.sh [path-to-hook]
 
 set -uo pipefail
 
 HOOK="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../validate-frontmatter.sh}"
+# The hooks find their lib through CLAUDE_PLUGIN_ROOT, as the harness exports it.
+export CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$HOOK")/.." && pwd)}"
 
 if [ ! -f "$HOOK" ]; then
   echo "FATAL: hook not found: $HOOK" >&2
@@ -45,18 +53,37 @@ printf '{"aiDir":".ai"}\n' > "$REPO/.myspec.json"
 git -C "$REPO" add -A
 git -C "$REPO" commit -q -m init
 
-# run <cwd> <file> -> hook stdout; exit status of the hook in $RC
+# run <cwd> <file> -> hook stdout for a Write that creates the file with its
+# content (the fixture on disk stands in for the proposed content, and is
+# moved aside while the hook runs); exit status in $RC
 run() {
-  OUT=$(printf '{"cwd":%s,"tool_name":"Write","tool_input":{"file_path":%s}}' \
-    "$(printf '%s' "$1" | jq -Rs .)" "$(printf '%s' "$2" | jq -Rs .)" | bash "$HOOK" 2>/dev/null)
+  local payload
+  payload=$(jq -nc --arg c "$1" --arg f "$2" --rawfile body "$2" '{cwd: $c, tool_name: "Write", tool_input: {file_path: $f, content: $body}}')
+  mv "$2" "$2.fixture"
+  OUT=$(printf '%s' "$payload" | bash "$HOOK" 2>/dev/null)
+  RC=$?
+  mv "$2.fixture" "$2"
+}
+
+# rewrite <cwd> <file> <content> -> hook stdout for a Write over the file on disk
+rewrite() {
+  OUT=$(jq -nc --arg c "$1" --arg f "$2" --arg b "$3" '{cwd: $c, tool_name: "Write", tool_input: {file_path: $f, content: $b}}' \
+    | bash "$HOOK" 2>/dev/null)
   RC=$?
 }
 
-decision() { printf '%s' "$OUT" | jq -r '.decision // "none"' 2>/dev/null || printf 'not-json'; }
-reason()   { printf '%s' "$OUT" | jq -r '.reason // ""' 2>/dev/null; }
+# edit <cwd> <file> <old> <new> -> hook stdout for an Edit of the file on disk
+edit() {
+  OUT=$(jq -nc --arg c "$1" --arg f "$2" --arg o "$3" --arg n "$4" '{cwd: $c, tool_name: "Edit", tool_input: {file_path: $f, old_string: $o, new_string: $n}}' \
+    | bash "$HOOK" 2>/dev/null)
+  RC=$?
+}
 
-expect_block() {  # expect_block <desc>
-  if [ "$RC" -eq 0 ] && [ "$(decision)" = block ]; then ok; else fail "$1 (exit $RC, output: ${OUT:0:200})"; fi
+reason()   { printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecisionReason // ""' 2>/dev/null; }
+
+expect_block() {  # expect_block <desc>: the PreToolUse deny alone, no legacy decision/reason pair (3.0 host floor)
+  if [ "$RC" -eq 0 ] && [ "$(printf '%s' "$OUT" | jq -r 'has("decision") or has("reason")' 2>/dev/null)" = false ] \
+      && [ "$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = deny ]; then ok; else fail "$1 (exit $RC, output: ${OUT:0:200})"; fi
 }
 expect_quiet() {  # expect_quiet <desc>: exit 0 and no output
   if [ "$RC" -eq 0 ] && [ -z "$OUT" ]; then ok; else fail "$1 (exit $RC, output: ${OUT:0:200})"; fi
@@ -155,6 +182,57 @@ F="$REPO/.ai/features/x/crlf.md"
 printf -- '---\r\ntitle: Win\r\nupdated: 2026-01-01\r\n---\r\nbody\r\n' > "$F"
 run "$REPO" "$F"
 expect_quiet "CRLF frontmatter on line 1 passes"
+
+# --- #263: the proposed content is judged, never the file on disk --------------
+F="$REPO/.ai/features/x/new-doc.md"
+rm -f "$F"
+OUT=$(jq -nc --arg c "$REPO" --arg f "$F" '{cwd: $c, tool_name: "Write", tool_input: {file_path: $f, content: "# No frontmatter\n\nbody\n"}}' | bash "$HOOK" 2>/dev/null); RC=$?
+expect_block "a Write is judged by its content before the file exists"
+[ ! -e "$F" ] && ok || fail "the hook creates nothing"
+
+F="$REPO/.ai/features/x/body-only.md"
+printf '# Title\n\nold body\n' > "$F"
+edit "$REPO" "$F" "old body" "new body"
+expect_quiet "a body edit to a doc without frontmatter is not blocked for the missing frontmatter (regression #263)"
+
+F="$REPO/.ai/features/x/good.md"
+printf -- '---\ntitle: Good\nupdated: 2026-01-01\n---\nbody\n' > "$F"
+edit "$REPO" "$F" "body" "more body"
+expect_quiet "a body edit to a valid doc passes"
+edit "$REPO" "$F" "title: Good" "titel: Good"
+expect_block "an edit that breaks the frontmatter is denied"
+reason | grep -q 'missing identity field' && ok || fail "the edit's deny names the field it removed"
+edit "$REPO" "$F" "updated: 2026-01-01" "updated: 2026-02-02"
+expect_quiet "an edit that keeps the frontmatter valid passes"
+edit "$REPO" "$F" "nowhere in the file" "x"
+expect_quiet "an edit whose old_string the file does not hold changes nothing and passes"
+
+F="$REPO/.ai/features/x/body-only.md"
+edit "$REPO" "$F" "# Title" "# Title 2"
+expect_quiet "retitling line 1 of a doc without a fence is not a frontmatter change (PR #274 review)"
+edit "$REPO" "$F" "# Title" $'---\ntitle: Added\nupdated: 2026-01-01\n---\n# Title'
+expect_quiet "an edit that adds valid frontmatter to a doc without one passes"
+edit "$REPO" "$F" "# Title" $'---\ntitle: Added\n---\n# Title'
+expect_block "an edit that adds incomplete frontmatter is denied"
+
+OUT=$(jq -nc --arg c "$REPO" --arg f "$F" '{cwd: $c, tool_name: "MultiEdit", tool_input: {file_path: $f, edits: [{old_string: "old body", new_string: "body 2"}, {old_string: "# Title", new_string: "---\ntitle: Multi\n---\n# Title"}]}}' | bash "$HOOK" 2>/dev/null); RC=$?
+expect_block "a MultiEdit is judged by the content all its edits leave"
+reason | grep -q 'missing temporal field' && ok || fail "the MultiEdit deny names the missing field"
+
+# A Write over an existing doc is compared like an edit (PR #274 review): a
+# body rewrite that keeps an already-broken header adds no defect.
+F="$REPO/.ai/features/x/broken.md"
+printf -- '---\ntitle: X\n---\nbody\n' > "$F"
+rewrite "$REPO" "$F" $'---\ntitle: X\n---\nbody 2\n'
+expect_quiet "a Write that keeps a broken header and rewrites the body passes"
+rewrite "$REPO" "$F" $'---\ntitel: X\n---\nbody 2\n'
+expect_block "a Write that changes the broken header and leaves it broken is denied"
+rewrite "$REPO" "$F" $'---\ntitle: X\nupdated: 2026-01-01\n---\nbody 2\n'
+expect_quiet "a Write that fixes the header passes"
+F="$REPO/.ai/features/x/fenced.md"
+printf -- '---\ntitle: F\nupdated: 2026-01-01\n---\nbody\n' > "$F"
+edit "$REPO" "$F" $'---\ntitle: F\nupdated: 2026-01-01\n---\n' ""
+expect_block "an edit that removes the fence is a frontmatter change"
 
 # --- 4eb8ccb: ideas/ seed docs are exempt --------------------------------------
 mkdir -p "$REPO/.ai/ideas"

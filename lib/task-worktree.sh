@@ -6,9 +6,9 @@
 # any phase after the first cannot see the feature commits it builds on.
 #
 # Usage (run from the controller's checkout, on the feature branch):
-#   .claude/lib/task-worktree.sh create <slug> [--no-symlink]
-#   .claude/lib/task-worktree.sh merge  <slug> [--keep]
-#   .claude/lib/task-worktree.sh discard <slug>
+#   "${CLAUDE_PLUGIN_ROOT}"/lib/task-worktree.sh create <slug> [--no-symlink]
+#   "${CLAUDE_PLUGIN_ROOT}"/lib/task-worktree.sh merge  <slug> [--keep]
+#   "${CLAUDE_PLUGIN_ROOT}"/lib/task-worktree.sh discard <slug>
 #
 # create   adds <main-checkout>/<worktreeRoot>/<slug> (`isolation.worktreeRoot`
 #          in .myspec.json, default .claude/worktrees) on a new branch
@@ -68,11 +68,17 @@ CONTROLLER="$CF_ROOT"
 # Task worktrees live under the main checkout (checkout_facts). A repository
 # without one (a bare repository's worktree) keeps them under the controller.
 MAIN="${CF_MAIN:-$CF_ROOT}"
-WT_ROOT=".claude/worktrees"
-if [ -f "$MAIN/.myspec.json" ] && command -v jq >/dev/null 2>&1; then
-  WT_ROOT=$(jq -r '.isolation.worktreeRoot // ".claude/worktrees"' "$MAIN/.myspec.json" 2>/dev/null || echo ".claude/worktrees")
-  WT_ROOT="${WT_ROOT%/}"
+# Through the one settings reader (read_setting), whose schema holds the
+# default; without jq it is the Node reader.
+if read_setting isolation.worktreeRoot "$MAIN"; then
+  WT_ROOT=$(json_string "$SETTING")
+  [ -z "$SETTING_NOTES" ] || printf '%s\n' "$SETTING_NOTES" | sed 's/^/myspec-config: /' >&2
+else
+  echo "task-worktree: cannot read isolation.worktreeRoot: ${SETTING_NOTES:-reader failed}" >&2
+  exit 1
 fi
+WT_ROOT="${WT_ROOT%/}"
+[ -n "$WT_ROOT" ] || { echo "task-worktree: isolation.worktreeRoot is empty" >&2; exit 1; }
 case "$WT_ROOT" in
   /*) WT="$WT_ROOT/$SLUG" ;;
   *) WT="$MAIN/$WT_ROOT/$SLUG" ;;

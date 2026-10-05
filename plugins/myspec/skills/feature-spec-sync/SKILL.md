@@ -58,11 +58,12 @@ Only when tech-spec.md still carries checkbox lists (the template's Implementati
 
 **D. Feature Status Validation**
 
-Completion % is computed from **implementation-plan.md checkboxes** when a plan exists (the canonical source per `.claude/rules/workflow.md`); fall back to tech-spec.md step checkboxes only when there is no plan:
-- Count total steps, count checked steps
+Completion % is computed from **implementation-plan.md checkboxes**, the canonical source per `.claude/rules/workflow.md` — never from tech-spec.md checkboxes or code inspection:
+- Count total tasks, count checked tasks
 - Calculate completion % = checked / total * 100
 - Compare to `status` field in index.yaml
 - Detect: MISMATCH if status doesn't match completion (e.g., status=complete but <100%, status=draft but >80%)
+- No `implementation-plan.md`: nothing to count. `in-progress` needs a live plan, so that pair is a MISMATCH; for any other status the missing plan is informational, as in `feature-status-audit`'s matrix (authoritative per `workflow.md`): `complete` requires only spec.md and tech-spec.md, and `plans/` or `CHANGELOG.md` are never required
 
 ### 3. Present Findings
 

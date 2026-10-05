@@ -12,9 +12,11 @@
 # Everything below writes relative to that directory.
 #
 # myspec_init mirrors what the `init` skill writes for a project that answered
-# "yes" to hooks, minus the hook scripts, .claude/lib/ and .claude/settings.json:
-# the eval sandbox never loads plugin hooks (see evals/README.md), and project
-# hooks would run outside the sandbox and make runs slower and less repeatable.
+# "yes" to the harness config (since 3.0 init copies no hook, lib or
+# settings.json: the plugin runs its hooks itself). It writes no
+# .claude/settings.json hooks either: the eval sandbox has not loaded plugin
+# hooks (see evals/README.md), and project hooks would run outside the sandbox
+# and make runs slower and less repeatable.
 # Framework files are copied from the plugin under test, so a change to
 # framework-files/ is exercised by every case.
 #
@@ -87,7 +89,14 @@ Global anchors loaded every session. Layer 2 indexes: procedural/, semantic/, ep
 |----|------|--------|
 MD
   for kind in procedural semantic episodic; do
-    _copy_doc "$t/index-$kind.md" "$ai/memory/$kind/index.md"
+    # Since 3.0 the index headers are scaffolding (init copies them once;
+    # lib/memory-index.mjs keeps the tables). release-check re-runs an older
+    # tag with HEAD's evals/ copied in, and 2.x kept them under templates/.
+    if [ -f "$PLUGIN_ROOT/scaffolding/memory/$kind/index.md" ]; then
+      _copy_doc "$PLUGIN_ROOT/scaffolding/memory/$kind/index.md" "$ai/memory/$kind/index.md"
+    else
+      _copy_doc "$t/index-$kind.md" "$ai/memory/$kind/index.md"
+    fi
     _copy_doc "$t/memory-$kind.md" "$ai/.templates/memory-$kind.md"
   done
   _copy_doc "$t/session-log.md" "$ai/.templates/session-log.md"

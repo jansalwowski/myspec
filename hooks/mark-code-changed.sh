@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 # mark-code-changed.sh
 # PostToolUse hook (Write|Edit and Bash matchers) — records every file this
-# session writes, and keeps the session's live log.
+# session writes, and keeps the session's live log. Also a PostToolUseFailure
+# hook (Bash matcher): a Bash call that exits non-zero fires that event
+# instead, with the same tool_input, and its writes landed all the same. And
+# a PreToolUse hook (Bash matcher), where it only snapshots what a Bash write
+# is about to change (below).
 #
 # Ledger: `write` events in the session-state file,
 # .claude/state/sessions/<session_id>.jsonl in the main checkout of the
 # repository holding the file (lib/session-event.sh, the only reader and
 # writer), one per written file: `{"t":"write","root":<checkout>,"rel":<path>,
-# "kind":"code|file"}`. The root is the physical toplevel of the checkout
+# "kind":"code|file","via":"bash|tool"}`. The root is the physical toplevel of the checkout
 # holding the file, so a write in another repository or in a linked worktree
 # never arms this checkout. A write in a submodule is filed with its
 # superproject, whose checks verify it. verify-before-stop.sh runs its checks
@@ -16,6 +20,17 @@
 # decides whose failure it is. That is why non-code writes are recorded too: a
 # config file this session edited is its own. Only a myspec project or one
 # with a stop gate (.myspec.json or .claude/verification.json) gets the file.
+#
+# Snapshots, for the Stop gate's content checks (lib/stop-gate/content.sh,
+# docs/stop-gate.md R14): a Bash write to a file those checks cover (a doc,
+# or a file under .claude/, docs/ or the aiDir, not gitignored) is recorded
+# with its content before and after, as git blobs written to the
+# repository's object store (`git hash-object -w`; unreferenced, so git's gc
+# prunes them). At PreToolUse each such target gets
+# `{"t":"pre","root","rel","blob"}` (blob "" when the file does not exist
+# yet), and at PostToolUse its `write` event carries the after-blob. The
+# Stop gate judges only the lines between the two: what this session's Bash
+# writes added, whatever the file held before or another session adds.
 #
 # Implement events: a Bash command that runs `session-event.sh implement
 # start|stop` (feature-implement's orchestration state) is recorded here as
@@ -70,13 +85,31 @@
 set -euo pipefail
 
 command -v jq >/dev/null 2>&1 || exit 0
-HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
-[ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
+# The lib is the plugin's lib/, under CLAUDE_PLUGIN_ROOT, which the harness
+# exports to a hook the plugin's hooks.json declares. Without it the hook
+# cannot load hook-core.sh, and approving in silence would hide a gate that
+# is not running (a stale copy wired in .claude/settings.json, a harness that
+# did not export the variable). Say so, naming the variable and the repair.
+# The same preamble sits in every non-Stop hook: hook-core is what is missing.
+HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
+if [ ! -f "$HOOK_CORE" ]; then
+  LIB_MISSING="myspec lib missing: hook-core.sh not found under \${CLAUDE_PLUGIN_ROOT}/lib (CLAUDE_PLUGIN_ROOT is ${CLAUDE_PLUGIN_ROOT:-unset}). The hook did not run from the plugin's hooks.json; a copy wired in .claude/settings.json is retired by /myspec:update."
+  printf '%s\n' "$LIB_MISSING" >&2
+  exit 0
+fi
 [ -f "$HOOK_CORE" ] && [ -f "$(dirname "$HOOK_CORE")/session-event.sh" ] || exit 0
 # shellcheck source=lib/hook-core.sh
 . "$HOOK_CORE"
 # shellcheck source=lib/session-event.sh
 . "$HOOK_LIB/session-event.sh"
+# The content checks' scope decides which Bash writes get snapshots. Without
+# the file the writes are still recorded; the Stop hook names the missing lib.
+SNAPSHOTS=0
+if [ -f "$HOOK_LIB/content-checks.sh" ] && [ -f "$HOOK_LIB/markdown-section-check.sh" ]; then
+  # shellcheck source=lib/content-checks.sh
+  . "$HOOK_LIB/content-checks.sh"
+  SNAPSHOTS=1
+fi
 
 CODE_EXT='(ts|tsx|vue|js|jsx|mjs|cjs|mts|cts|py|rb|go|java|php|rs|cs|swift|kt|sh|bash|graphql|gql)'
 
@@ -274,6 +307,21 @@ bash_write_targets() {
     if [ "${#kwords[@]}" -ne "${#words[@]}" ]; then
       kwords=("${words[@]}")
     fi
+    # A redirect before the command name, or after a brace group or subshell
+    # (`{ ...; } >> f` leaves `>> f` as a segment of its own): its target is
+    # written whatever runs, and the word after it is the command name.
+    while [ "${#words[@]}" -gt 0 ] && [[ "${words[0]}" =~ ^[0-9]*\>{1,2} ]]; do
+      if [[ "${words[0]}" =~ ^[0-9]*\>{1,2}$ ]]; then
+        [ "${#words[@]}" -lt 2 ] || emit_target "$(decode_word "${kwords[1]}")"
+        words=("${words[@]:2}")
+        kwords=("${kwords[@]:2}")
+      else
+        emit_target "$(decode_word "$(printf '%s' "${kwords[0]}" | sed -E 's/^[0-9]*>{1,2}//')")"
+        words=("${words[@]:1}")
+        kwords=("${kwords[@]:1}")
+      fi
+    done
+    [ "${#words[@]}" -gt 0 ] || continue
     if [ "${words[0]}" = cd ]; then
       if [ "${#words[@]}" -ge 2 ] && next=$(cd "$BASE_DIR" 2>/dev/null && cd "$(decode_word "${kwords[1]}")" 2>/dev/null && pwd -P); then
         BASE_DIR="$next"
@@ -381,19 +429,83 @@ bash_write_targets() {
 # (NESTED_ROOTS in lib/stop-gate/arm.sh). A checkout counts as tracked when
 # its home or the checkout itself has the config: a linked worktree's branch
 # can add a stop gate the main checkout does not have yet.
+#
+# A Bash write (VIA=bash) to a file the content checks cover also carries
+# the file's snapshot after the write (snapshot_blob), or "@" when the file
+# is judged but could be neither hashed nor kept, and is recorded every time,
+# since each one is a new before/after pair for the Stop gate.
 ledger_add() {
+  local home blob="" rc=1
+  home=$(ledger_home "$2") || return 0
+  if [ "$VIA" = bash ]; then
+    if blob=$(snapshot_blob "$2" "$3"); then rc=0; else rc=$?; fi
+    # Judged but not hashed: "@" tells the Stop gate to read the file as it
+    # is then, rather than drop the write.
+    [ "$rc" -ne 2 ] || { blob="@"; rc=0; }
+  fi
+  if [ "$rc" -eq 0 ]; then
+    session_append "$home" "$SESSION_ID" "$(jq -nc --arg k "$1" --arg r "$2" --arg p "$3" --arg a "$AGENT_ID" --arg b "$blob" \
+      '{t: "write", root: $r, rel: $p, kind: $k, via: "bash", blob: $b} + (if $a != "" then {agent: $a} else {} end)')" || true
+    return 0
+  fi
+  session_seen "$home" "$SESSION_ID" "$1" "$2" "$3" "$AGENT_ID" "$VIA" && return 0
+  session_append "$home" "$SESSION_ID" "$(jq -nc --arg k "$1" --arg r "$2" --arg p "$3" --arg a "$AGENT_ID" --arg v "$VIA" \
+    '{t: "write", root: $r, rel: $p, kind: $k, via: $v} + (if $a != "" then {agent: $a} else {} end)')" || true
+}
+
+# ledger_home <root> -> the session home a write in <root> is filed with
+# (ledger_add); fails when neither it nor the cwd's checkout is tracked.
+ledger_home() {
   local home
-  home=$(session_home "$2") || return 0
-  if ! session_tracked_at "$home" "$2"; then
-    [ -n "$CWD_ROOT" ] && [ -n "$CWD_HOME" ] || return 0
-    case "$2/" in
+  home=$(session_home "$1") || return 1
+  if ! session_tracked_at "$home" "$1"; then
+    [ -n "$CWD_ROOT" ] && [ -n "$CWD_HOME" ] || return 1
+    case "$1/" in
       "$CWD_ROOT"/?*) home="$CWD_HOME" ;;
-      *) return 0 ;;
+      *) return 1 ;;
     esac
   fi
-  session_seen "$home" "$SESSION_ID" "$1" "$2" "$3" "$AGENT_ID" && return 0
-  session_append "$home" "$SESSION_ID" "$(jq -nc --arg k "$1" --arg r "$2" --arg p "$3" --arg a "$AGENT_ID" \
-    '{t: "write", root: $r, rel: $p, kind: $k} + (if $a != "" then {agent: $a} else {} end)')" || true
+  printf '%s\n' "$home"
+}
+
+# snapshot_blob <root> <rel> -> the blob id of the file as it is now, written
+# to <root>'s object store; "" when the file does not exist. Prints nothing
+# and returns 1 for a file the content checks never judge: one they do not
+# cover (absolute_paths_scope: the frontmatter and reuse-audit files are docs
+# too), or a binary (a NUL in its first 8000 bytes, git's own test: its diff
+# has no `+` lines to judge). Only those two skip the object store: a file
+# the checks judge needs a before/after pair whatever its size, or its
+# baseline falls back to HEAD (which a commit moves) and its after side to
+# the file at Stop (which holds other sessions' lines). When git cannot write
+# the blob (a read-only object store), a copy beside the session file stands
+# in for it, as "kept:<id>" (session_keep). Returns 2 when neither could be
+# written.
+snapshot_blob() {
+  local home
+  [ "$SNAPSHOTS" = 1 ] || return 1
+  absolute_paths_scope "$1" "$2" || return 1
+  if [ ! -f "$1/$2" ]; then
+    printf '\n'
+    return 0
+  fi
+  if [ "$(head -c 8000 "$1/$2" 2>/dev/null | LC_ALL=C tr -dc '\000' | wc -c)" -gt 0 ]; then
+    return 1
+  fi
+  git -C "$1" hash-object -w -- "$2" 2>/dev/null && return 0
+  home=$(ledger_home "$1") || return 2
+  session_keep "$home" "$SESSION_ID" "$1" "$2" || return 2
+}
+
+# snapshot_pre <root> <rel>: records the file's content before a Bash write
+# (PreToolUse), as a `pre` event, for a file snapshot_blob hashes. A file it
+# cannot hash gets no `pre` event: the Stop gate then falls back to the
+# session's previous after-blob, then HEAD (session_bash_writes).
+snapshot_pre() {
+  local home blob
+  home=$(ledger_home "$1") || return 0
+  blob=$(snapshot_blob "$1" "$2") || return 0
+  session_append "$home" "$SESSION_ID" "$(jq -nc --arg r "$1" --arg p "$2" --arg b "$blob" \
+    '{t: "pre", root: $r, rel: $p, blob: $b}')" || true
 }
 
 # script_word <word...> -> the index of the word that names the program a
@@ -563,12 +675,10 @@ $CONTEXT Refine topic, feature, and mode as the work crystallizes.
 SESSION
   fi
 
-  # Append every code path once. Kept as the LAST section so appending is a
-  # plain `>>`; a log created by a 1.x hook gains the section on its first edit.
-  if ! grep -q '^## Files touched' "$active_file" 2>/dev/null; then
-    printf '\n## Files touched\n' >> "$active_file"
-  fi
-
+  # Append every code path once. `## Files touched` is the LAST section of
+  # every log this hook or the session-log template creates, so appending is
+  # a plain `>>`. A log without it is not backfilled (the 1.x shape is gone
+  # since 3.0): the paths still land at its end.
   for p in "$@"; do
     case "$p" in
       "$repo_root"/*) rel="${p#"$repo_root"/}" ;;
@@ -585,7 +695,7 @@ SESSION
 }
 
 payload_parse "$(cat)" FILE_PATH='.tool_input.file_path // .tool_input.notebook_path' \
-  COMMAND=.tool_input.command SESSION_ID=.session_id \
+  COMMAND=.tool_input.command SESSION_ID=.session_id HOOK_EVENT='.hook_event_name | strings' \
   AGENT_ID='.agent_id | strings' AGENT_TYPE='.agent_type | strings' CWDS="$HOOK_CWDS"
 
 [ -n "$SESSION_ID" ] || exit 0
@@ -607,8 +717,13 @@ BASE_DIR=$(physical_dir "$PAYLOAD_CWD")
 
 TARGETS=()
 CONTEXT=""
+# PreToolUse (Bash only): snapshot the targets, record nothing else.
+PRE=0
+[ "$HOOK_EVENT" != PreToolUse ] || PRE=1
+VIA=tool
 
 if [ -n "$FILE_PATH" ]; then
+  [ "$PRE" = 0 ] || exit 0
   TARGETS=("$(physical_path "$FILE_PATH" "$BASE_DIR")")
   CONTEXT="Auto-created on first code edit at \`$FILE_PATH\`."
 elif [ -n "$COMMAND" ]; then
@@ -617,9 +732,10 @@ elif [ -n "$COMMAND" ]; then
   # shellcheck source=lib/command-scan.sh
   . "$HOOK_LIB/command-scan.sh"
 
+  VIA=bash
   # feature-implement's orchestration state, recorded with this payload's
-  # session id in the cwd's checkout.
-  if [[ "$COMMAND" == *session-event.sh*implement* ]] && IMPLEMENT_HOME=$(session_home "$BASE_DIR") \
+  # session id in the cwd's checkout, once (at PostToolUse).
+  if [ "$PRE" = 0 ] && [[ "$COMMAND" == *session-event.sh*implement* ]] && IMPLEMENT_HOME=$(session_home "$BASE_DIR") \
       && session_tracked_at "$IMPLEMENT_HOME" "$(checkout_root "$BASE_DIR" || true)"; then
     while IFS= read -r state; do
       session_append "$IMPLEMENT_HOME" "$SESSION_ID" "{\"t\":\"implement\",\"state\":\"$state\"}" || true
@@ -673,6 +789,10 @@ for p in "${TARGETS[@]}"; do
     "$root"/*) rel="${p#"$root"/}" ;;
     *) continue ;;
   esac
+  if [ "$PRE" = 1 ]; then
+    snapshot_pre "$root" "$rel"
+    continue
+  fi
   load_settings "$root"
   kind='file'
   if [[ "$p" =~ $CODE_RE ]] && ! ignored "$rel"; then
@@ -682,6 +802,7 @@ for p in "${TARGETS[@]}"; do
   fi
   ledger_add "$kind" "$root" "$rel"
 done
+[ "$PRE" = 0 ] || exit 0
 
 # One log per checkout the code writes landed in, in first-seen order.
 DONE_ROOTS=$'\n'

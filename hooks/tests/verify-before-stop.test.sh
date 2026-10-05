@@ -18,6 +18,8 @@ set -uo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 HOOK="${1:-$HERE/../verify-before-stop.sh}"
+# The hooks find their lib through CLAUDE_PLUGIN_ROOT, as the harness exports it.
+export CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$HOOK")/.." && pwd)}"
 PROVISION="$HERE/../../lib/worktree-provision.sh"
 
 ROOT=$(cd "$(mktemp -d)" && pwd -P)
@@ -187,11 +189,9 @@ expect approve "${r%%$'\t'*}" "submodule of the main checkout: docker compose ex
 # and feat/d both take P001 and never merge. Touching the memory tree must not
 # block the stop on either; an error the session made still does.
 MAIN_M=$(new_repo memory 0)
-LIB="$HERE/../../lib"
-mkdir -p "$MAIN_M/.claude/lib" "$MAIN_M/.ai/memory/semantic"
-cp "$LIB/memory-doctor.mjs" "$LIB/memory-files.mjs" "$LIB/memory-index.mjs" "$LIB/memory-claim-id.sh" "$MAIN_M/.claude/lib/"
+mkdir -p "$MAIN_M/.ai/memory/semantic"
 printf '{"aiDir":".ai/"}\n' > "$MAIN_M/.myspec.json"
-printf 'node_modules\n.claude/state/\n.claude/lib/\n' > "$MAIN_M/.gitignore"
+printf 'node_modules\n.claude/state/\n' > "$MAIN_M/.gitignore"
 mem() {  # mem <file> <id> <hook>
   printf -- '---\nid: %s\nhook: "%s"\n---\n\n# %s\n' "$2" "$3" "$2" > "$MAIN_M/.ai/memory/$1"
 }

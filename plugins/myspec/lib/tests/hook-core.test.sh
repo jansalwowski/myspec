@@ -244,7 +244,8 @@ rc=0; read_setting '.bad' "$ROOT/plain" 2>/dev/null || rc=$?
 
 # shellcheck disable=SC2317 # reached only if pretool_deny fails to exit
 out=$(pretool_deny 'no "way"'; echo unreachable)
-eq "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision + "|" + .reason')" 'deny|no "way"' "pretool_deny prints the deny form and exits"
+eq "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision + "|" + .hookSpecificOutput.permissionDecisionReason')" 'deny|no "way"' "pretool_deny prints the deny form and exits"
+eq "$(printf '%s' "$out" | jq -r 'has("decision") or has("reason")')" false "pretool_deny prints no legacy decision/reason pair (the 3.0 host floor reads hookSpecificOutput)"
 
 # shellcheck disable=SC2317 # reached only if decision_block fails to exit
 out=$(decision_block 'Fix %s:\n\n%s\n' "a.ts" 'line "1"'; echo unreachable)

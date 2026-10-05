@@ -38,7 +38,7 @@ Plans use three checkbox states:
 4. **If agent stops/crashes mid-task:** `[~]` remains in the file — new agent detects it during resume
 5. **Never mark `[x]` before phase review confirms the task passes**
 
-**Scope:** Task-level checkboxes (`### Task N:` steps). Barrier sub-steps use `[ ]`/`[x]` only (no `[~]`). Flip a task with `.claude/lib/plan-checkbox.sh <plan> <N> doing|done`, never an ad-hoc edit script — it touches only that task's section.
+**Scope:** Task-level checkboxes (`### Task N:` steps). Barrier sub-steps use `[ ]`/`[x]` only (no `[~]`). Flip a task with `"${CLAUDE_PLUGIN_ROOT}/lib/plan-checkbox.sh" <plan> <N> doing|done`, never an ad-hoc edit script — it touches only that task's section.
 
 ## Execution Log (plan section)
 
@@ -119,7 +119,7 @@ options:
 - **Worktree:** if path exists → enter it; else create via the EnterWorktree
   tool (or `git worktree add .claude/worktrees/feat-{name} -b feat/{name}`
   if EnterWorktree isn't available in this session). Then provision it —
-  `.claude/lib/worktree-provision.sh <path> --base origin/<default-branch>` —
+  `"${CLAUDE_PLUGIN_ROOT}/lib/worktree-provision.sh" <path> --base origin/<default-branch>` —
   a bare worktree has no dependency directories (`node_modules`, `vendor`, `.venv`, …) or lint cache, and the recipe in
   `_shared/worktree-provisioning.md` says when a real install is required.
 - **New branch:** `git checkout -b feat/{name}`. If branch exists, offer
@@ -132,11 +132,11 @@ options:
 
 Read the implementation plan. **Check front-matter first.**
 
-**Legacy front-matter.** A plan carrying `orchestration: agent-chain` was authored for the orchestrator agent-chain mode, retired in 2.0. Run it as a normal plan and print one line: "Plan carries retired `orchestration: agent-chain` front-matter — running in normal mode." Ignore the `roles:` block and any `**Step N (Worker|Reviewer|Controller):**` role annotations — the step text itself still applies. No run-mode prompt exists.
+**Retired front-matter.** A plan carrying `orchestration: agent-chain` was authored for the orchestrator agent-chain mode, retired in 2.0 and no longer run. Stop with one line: "Plan carries retired `orchestration: agent-chain` front-matter — re-plan with /myspec:feature-plan." No run-mode prompt exists.
 
 Parse milestones first, then build a DAG within each:
 
-1. **Identify milestones:** Each `### Milestone N:` heading scopes a milestone. If no milestone headings exist, treat the entire plan as a single implicit milestone (backward compatibility).
+1. **Identify milestones:** Each `### Milestone N:` heading scopes a milestone. A plan with no milestone heading is a single-milestone plan (the `feature-plan` template omits the heading then): the whole plan is its one milestone.
 2. **For each milestone**, extract the Execution Order table and build a DAG:
    - Nodes = tasks + barriers. Edges = `Depends On` column.
    - Identify phases (task groups separated by barriers).
@@ -147,7 +147,7 @@ Parse milestones first, then build a DAG within each:
 **Resume detection (on startup):**
 - Scan all task checkboxes in the plan file
 - `[x]` = already done — skip entirely
-- `[~]` = was in progress when previous agent stopped — re-execute this task from scratch. For a parallel task, first clear its stale worktree with `.claude/lib/task-worktree.sh discard <feature>-t<N>` (a no-op when none exists) — `create` refuses an existing slug, and the partial work never passed review
+- `[~]` = was in progress when previous agent stopped — re-execute this task from scratch. For a parallel task, first clear its stale worktree with `"${CLAUDE_PLUGIN_ROOT}/lib/task-worktree.sh" discard <feature>-t<N>` (a no-op when none exists) — `create` refuses an existing slug, and the partial work never passed review
 - `[ ]` = todo — execute normally
 - Find the first milestone containing any non-`[x]` task. Resume from there — unless an earlier milestone, or any milestone when every task is `[x]`, carries `**Checkpoint probes:**` without a passing entry per probe; resume at the first such milestone's probe gate (Step 4b) instead. A passing entry is a `Probe` line with PASS (SERVED for a `D<n>` demo) or a `Waiver` line.
 
@@ -177,10 +177,10 @@ It warns rather than blocks: implementers already work from the current code and
 5. Set the orchestration marker. Mid-run the tree is red by design (an accepted barrier failure, a fix round in flight, a test the next phase owns), and the Stop hook would otherwise block every controller turn end on it. While the marker is set it reports failing checks as a warning instead; it ignores a marker older than 8h, so a crashed run cannot disable the gate for good.
 
    ```bash
-   .claude/lib/session-event.sh implement start
+   "${CLAUDE_PLUGIN_ROOT}/lib/session-event.sh" implement start
    ```
 
-   The PostToolUse hook records it for this session from the command itself (you never see the session id), so run it as written, as a Bash command. Re-run it before each phase's first dispatch so a long run stays inside the 8h window. Remove it (`.claude/lib/session-event.sh implement stop`) on **stop** or **fresh** at a milestone checkpoint and at the start of Step 5.
+   The PostToolUse hook records it for this session from the command itself (you never see the session id), so run it as written, as a Bash command. Re-run it before each phase's first dispatch so a long run stays inside the 8h window. Remove it (`"${CLAUDE_PLUGIN_ROOT}/lib/session-event.sh" implement stop`) on **stop** or **fresh** at a milestone checkpoint and at the start of Step 5.
 
 ### Step 3: Execute Milestones
 
@@ -209,7 +209,7 @@ Dispatch implementer (./implementer-prompt.md)
   → BLOCKED: assess (more context / better model / break down / escalate to user)
 ```
 
-**Parallel tasks** — dispatch ALL group tasks simultaneously in ONE message. Harness `isolation: "worktree"` forks from the default branch, not the feature HEAD, so create each task's worktree yourself (`.claude/lib/task-worktree.sh create <feature>-t<N>`; recipe in `_shared/worktree-provisioning.md`) and pass its path as the implementer's working directory. Create the worktrees before marking the tasks `[~]`, so the uncommitted plan edit does not trip `create`'s dirty-tree warning — a warning that fires every time trains you to ignore the one that matters. When a task regenerates output into a dependency directory (codegen into `node_modules`, `vendor`, `.venv`, …), pass `--no-symlink` and run the project's install in that worktree yourself before dispatch — implementers never install:
+**Parallel tasks** — dispatch ALL group tasks simultaneously in ONE message. Harness `isolation: "worktree"` forks from the default branch, not the feature HEAD, so create each task's worktree yourself (`"${CLAUDE_PLUGIN_ROOT}/lib/task-worktree.sh" create <feature>-t<N>`; recipe in `_shared/worktree-provisioning.md`) and pass its path as the implementer's working directory. Create the worktrees before marking the tasks `[~]`, so the uncommitted plan edit does not trip `create`'s dirty-tree warning — a warning that fires every time trains you to ignore the one that matters. When a task regenerates output into a dependency directory (codegen into `node_modules`, `vendor`, `.venv`, …), pass `--no-symlink` and run the project's install in that worktree yourself before dispatch — implementers never install:
 
 ```
 Validate file disjointness → task-worktree.sh create per task → mark [~] → dispatch Task N,

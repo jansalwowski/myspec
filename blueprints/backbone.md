@@ -128,7 +128,7 @@ ai_docs:
 agent:
   entry: CLAUDE.md
   rules: .claude/rules/
-  hooks: .claude/hooks/
+  hooks: .claude/settings.json  # TODO: remove if the project wires no hooks of its own; the myspec gates run from the plugin
   verification: .claude/verification.json
   worktrees: .claude/worktrees/  # TODO: remove if not using git worktrees
 

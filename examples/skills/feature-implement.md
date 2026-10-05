@@ -54,13 +54,13 @@ Parses the Execution Order table: 6 sequential tasks, no barriers between them �
 
 **Plan freshness:** the front-matter carries `planned_against: <sha>`, so the skill fetches the integration branch and diffs the tasks' `Modify:` paths from that SHA to `origin/<integration>` (three-dot, so the branch's own commits are not drift) — never the local branch, which can lag the remote and diff empty. Exit 0 with empty output: no drift. Had a file changed, it would warn, log a `Ruling:`, and tell the affected task's implementer. Had the SHA been squashed away (`git diff` exits 128), it would warn that freshness cannot be verified rather than read the empty output as unchanged — and the same if the fetch itself had failed.
 
-**Setup** also sets the orchestration marker with `.claude/lib/session-event.sh implement start`, which the PostToolUse hook records in the session's state file. Until Step 5 removes it (`implement stop`), the Stop hook reports failing verification checks at controller turn ends as a warning rather than a block — mid-run the tree is red by design, and the controller may not fix code itself.
+**Setup** also sets the orchestration marker with `"${CLAUDE_PLUGIN_ROOT}/lib/session-event.sh" implement start`, which the PostToolUse hook records in the session's state file. Until Step 5 removes it (`implement stop`), the Stop hook reports failing verification checks at controller turn ends as a warning rather than a block — mid-run the tree is red by design, and the controller may not fix code itself.
 
 #### Step 2–3 — Task dispatch loop
 
 For T1 (migration):
 
-1. Flips T1 `[ ]` → `[~]` before dispatching, with `.claude/lib/plan-checkbox.sh <plan> 1 doing` — it edits only the `### Task 1:` section, never the Execution Order row or a milestone heading.
+1. Flips T1 `[ ]` → `[~]` before dispatching, with `"${CLAUDE_PLUGIN_ROOT}/lib/plan-checkbox.sh" <plan> 1 doing` — it edits only the `### Task 1:` section, never the Execution Order row or a milestone heading.
 2. Dispatches one implementer subagent (`implementer-prompt.md`) with the task text inline — it never reads the plan file. The tier is named on the dispatch (`cheap` here: one file plus its test, fully specified in the task text). The dispatch carries the task block's `**Verify at phase review:**` command (`pnpm test migrations/report_favorites`) and the file-scoped static checks (`pnpm eslint <touched files>`). The implementer writes the migration and its test, runs those two, commits with the task block's `**Commit:**` message, self-reviews its own diff, and reports `DONE` with each command it ran and its result. It never runs the full suite, a build, or an install.
 3. The skill leaves T1 at `[~]` — the only route to `[x]` is the phase review.
 
@@ -155,14 +155,14 @@ Git state: on `main`, clean, no existing worktree, **plan has `[parallel:*]` gro
 > - **Current branch main** → continue on main
 > - **Main branch** → not recommended
 
-User picks **Worktree**. The skill creates `.claude/worktrees/feat-scheduled-reports` on branch `feat/scheduled-reports` (via the EnterWorktree tool, or `git worktree add .claude/worktrees/feat-scheduled-reports -b feat/scheduled-reports`), provisions it with `.claude/lib/worktree-provision.sh <path> --base origin/main`, and records `BASE_SHA`.
+User picks **Worktree**. The skill creates `.claude/worktrees/feat-scheduled-reports` on branch `feat/scheduled-reports` (via the EnterWorktree tool, or `git worktree add .claude/worktrees/feat-scheduled-reports -b feat/scheduled-reports`), provisions it with `"${CLAUDE_PLUGIN_ROOT}/lib/worktree-provision.sh" <path> --base origin/main`, and records `BASE_SHA`.
 
 #### Milestone 1 — parallel dispatch and barrier
 
 The skill walks the DAG. **Phase 2 (`parallel:repos`)** is the showcase: T2 ScheduleRepository, T3 ExportRunRepository, disjoint file lists.
 
 1. Records `PHASE_BASE` (`git rev-parse HEAD`).
-2. Creates one worktree per task from the feature HEAD — `.claude/lib/task-worktree.sh create scheduled-reports-t2` and `create scheduled-reports-t3` — because harness `isolation: "worktree"` would fork from `main` and miss the Phase 1 migration. Each is provisioned from the controller's checkout: the `isolation.provision.symlink` entries (here `node_modules`) linked when the lockfile is unchanged, lint cache copied. Had `.myspec.json` set `isolation.provision.install` (say `composer install` in `api/` and `pnpm install --frozen-lockfile` at the root), each task worktree would run those steps instead of linking the dependency trees, one worktree after another before dispatch. A task whose code generation writes into a linked directory (say, a generator writing into `node_modules`) gets `--no-symlink`, and the controller runs the install in that worktree itself before dispatch, so generated output cannot write through the link (`_shared/worktree-provisioning.md` is the recipe). Only then does it mark T2 and T3 `[~]` — after `create`, so the uncommitted plan edit doesn't trip the dirty-tree warning. Then it dispatches **two implementers in one message**, each told to work from its worktree path with absolute paths and `cd <worktree> && …` in every command (a subagent's shell returns to the controller's checkout between calls), with only its file list and task text inline:
+2. Creates one worktree per task from the feature HEAD — `"${CLAUDE_PLUGIN_ROOT}/lib/task-worktree.sh" create scheduled-reports-t2` and `create scheduled-reports-t3` — because harness `isolation: "worktree"` would fork from `main` and miss the Phase 1 migration. Each is provisioned from the controller's checkout: the `isolation.provision.symlink` entries (here `node_modules`) linked when the lockfile is unchanged, lint cache copied. Had `.myspec.json` set `isolation.provision.install` (say `composer install` in `api/` and `pnpm install --frozen-lockfile` at the root), each task worktree would run those steps instead of linking the dependency trees, one worktree after another before dispatch. A task whose code generation writes into a linked directory (say, a generator writing into `node_modules`) gets `--no-symlink`, and the controller runs the install in that worktree itself before dispatch, so generated output cannot write through the link (`_shared/worktree-provisioning.md` is the recipe). Only then does it mark T2 and T3 `[~]` — after `create`, so the uncommitted plan edit doesn't trip the dirty-tree warning. Then it dispatches **two implementers in one message**, each told to work from its worktree path with absolute paths and `cd <worktree> && …` in every command (a subagent's shell returns to the controller's checkout between calls), with only its file list and task text inline:
    - Implementer A → `src/features/schedules/repository.ts` (+ test)
    - Implementer B → `src/features/schedules/run-repository.ts` (+ test)
 3. Both write code and tests, run their own task's check plus file-scoped lint and typecheck, commit, and report `DONE`. Neither runs the full suite in its own worktree.
@@ -289,7 +289,7 @@ Worktrees still present (git worktree list):
 >
 > Reply `clean` to prune and re-execute, or `inspect` to pause.
 
-User: `clean`. The skill runs `.claude/lib/task-worktree.sh discard scheduled-reports-t5` and `discard scheduled-reports-t6`, which force-remove each worktree and delete its task branch, leaving T5/T6 at `[~]`. Without this, `create` would refuse both slugs as already existing.
+User: `clean`. The skill runs `"${CLAUDE_PLUGIN_ROOT}/lib/task-worktree.sh" discard scheduled-reports-t5` and `discard scheduled-reports-t6`, which force-remove each worktree and delete its task branch, leaving T5/T6 at `[~]`. Without this, `create` would refuse both slugs as already existing.
 
 #### Step 3 — Re-dispatch and continue
 
