@@ -573,12 +573,10 @@ $CONTEXT Refine topic, feature, and mode as the work crystallizes.
 SESSION
   fi
 
-  # Append every code path once. Kept as the LAST section so appending is a
-  # plain `>>`; a log created by a 1.x hook gains the section on its first edit.
-  if ! grep -q '^## Files touched' "$active_file" 2>/dev/null; then
-    printf '\n## Files touched\n' >> "$active_file"
-  fi
-
+  # Append every code path once. `## Files touched` is the LAST section of
+  # every log this hook or the session-log template creates, so appending is
+  # a plain `>>`. A log without it is not backfilled (the 1.x shape is gone
+  # since 3.0): the paths still land at its end.
   for p in "$@"; do
     case "$p" in
       "$repo_root"/*) rel="${p#"$repo_root"/}" ;;

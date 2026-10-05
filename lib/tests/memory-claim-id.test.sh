@@ -163,7 +163,7 @@ mem procedural P001-first.md "P001"
 mem semantic S001-fact.md "S001"
 mem semantic S003-fact.md "S003"
 mkdir -p .claude/state
-printf '{\n  "P": 20,\n  "S": 5,\n  "E": 7\n}\n' > .claude/state/memory-ids.json
+printf '{"P": 20, "S": 5, "E": 7}\n' > .claude/state/memory-ids.json
 got=$(claim)
 check "(e) registry P=20 ahead of disk -> P021" P021 "$got"
 check "(e) registry P becomes 21" 21 "$(reg P)"
@@ -179,6 +179,19 @@ if json_ok .claude/state/memory-ids.json; then
 else
   fail "(e) rewritten registry is not valid JSON: $(cat .claude/state/memory-ids.json)"
 fi
+
+# --- (e2) the pre-1.28 pretty-printed registry is not a floor (#266) ----------
+# Versions before 1.28 wrote the registry with jq, one key per line. Since
+# 3.0 only the one-line form this script writes is read: the old file is no
+# floor, and the claim rewrites it in the current form.
+
+new_repo e2
+mem procedural P001-first.md "P001"
+mkdir -p .claude/state
+printf '{\n  "P": 20,\n  "S": 5,\n  "E": 7\n}\n' > .claude/state/memory-ids.json
+got=$(claim)
+check "(e2) a pretty-printed registry is not read -> P002 from disk" P002 "$got"
+check "(e2) the registry is rewritten in the one-line form" '{"P": 2, "S": 0, "E": 0}' "$(cat .claude/state/memory-ids.json)"
 
 # --- (f) PATH without jq -----------------------------------------------------
 

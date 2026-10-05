@@ -221,12 +221,13 @@ case "$HIGH" in
 esac
 
 # --- 3. Registry ------------------------------------------------------------
-# One line per key, or jq-style pretty-printed from older versions; either way
-# the value for a key is the first integer after `"<key>":`.
+# One line, `{"P": n, "S": n, "E": n}`, as this script writes it (below): the
+# value for a key is the integer after `"<key>":` on that line. The jq
+# pretty-printed registry of versions before 1.28 is not read (#266).
 registry_value() {
   local v=""
   if [ -f "$REGISTRY" ]; then
-    v=$(sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p" "$REGISTRY" | tail -1)
+    v=$(sed -n "1s/^{.*\"$1\"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p" "$REGISTRY")
   fi
   case "$v" in
     ''|*[!0-9]*) v=0 ;;

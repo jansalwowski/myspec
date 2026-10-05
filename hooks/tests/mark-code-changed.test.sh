@@ -281,13 +281,13 @@ expect_in "$SID-47" '- `.claude/worktrees/wt-a/src/v.ts`' "a relative Bash write
 expect_in "$SID-47" 'worktree: "wt-a"' "and marks the worktree"
 ledger_has "$SID-47" code "$WT" src/v.ts && ok || fail "the ledger keys a worktree write by the worktree's root"
 
-# --- a 1.x log without the section gains it on the next edit ----------------
+# --- a log without the section is not backfilled (the 1.x shape, gone since 3.0) ----
 mkdir -p "$STATE"
 printf -- '---\nsession_id: %s-10\nstatus: active\n---\n\n# old\n\n## Outcome\n' "$SID" > "$STATE/$SID-10.md"
 write "$SID-10" "$REPO" "$REPO/src/f.ts"
-expect_in "$SID-10" '## Files touched' "an older log gains the section"
+grep -q '^## Files touched' "$STATE/$SID-10.md" && fail "a log without the section does not gain it (#266: no 1.x backfill)" || ok
 # shellcheck disable=SC2016 # literal text, not an expansion
-expect_in "$SID-10" '- `src/f.ts`' "and the path"
+expect_in "$SID-10" '- `src/f.ts`' "the path still lands at its end"
 
 # --- settings: extraCodeExtensions and ignorePaths (#231) ----------------------
 CFG="$ROOT/cfg"
