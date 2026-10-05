@@ -24,43 +24,43 @@ fi
 
 # --- proposed content ---------------------------------------------------------
 
+# jq, over a tool_input with $cur (the file's content): the content an Edit
+# or MultiEdit leaves. Splitting on old_string is linear in the file; bash's
+# ${content/old/new} on the whole file is quadratic under bash 3.2 (macOS
+# /bin/bash), a minute at 200 KB, past the hook timeout (PR #274 review).
+# The first occurrence: the text before the first split point, new_string,
+# and the rest joined back with old_string.
+# shellcheck disable=SC2016 # a jq program: $cur, $e, $o are jq variables
+PROPOSED_EDIT_JQ='
+  (if has("edits") then (.edits | if type == "array" then . else [] end) else [.] end)
+  | reduce .[] as $e ($cur;
+      (($e.old_string | strings) // "") as $o
+      | (($e.new_string | strings) // "") as $n
+      | if $o == "" then (if . == "" then $n else . end)
+        elif ($e.replace_all // false) == true then split($o) | join($n)
+        else split($o) as $p
+          | if ($p | length) < 2 then . else $p[0] + $n + ($p[1:] | join($o)) end
+        end)'
+
 # proposed_content <tool_input json> <current file> <out file> -> writes the
 # content the call would leave in the file: a Write's `content` as is; an
 # Edit or MultiEdit applied in memory to the current file (first occurrence,
 # every occurrence with replace_all; an old_string the file does not hold
 # leaves it unchanged, as the tool then fails; an empty old_string on an
-# empty or missing file is a create). Sets PROPOSED_KIND to write, edit or
-# multi. Fails, writing nothing, when the call carries no content.
+# empty or missing file is a create), in one jq run. Sets PROPOSED_KIND to
+# write, edit or multi. Fails, writing nothing, when the call carries no
+# content.
 proposed_content() {
-  local input="$1" cur="$2" out="$3" content n i old new all
+  local input="$1" cur="$2" out="$3"
+  local -a src=(--arg cur "")
   PROPOSED_KIND=$(printf '%s' "$input" | jq -r 'if type != "object" then "" elif has("content") then "write" elif has("edits") then "multi" elif has("new_string") then "edit" else "" end' 2>/dev/null || printf '')
   case "$PROPOSED_KIND" in
     write)
       printf '%s' "$input" | jq -j '.content | strings' > "$out" 2>/dev/null || return 1
       ;;
     edit|multi)
-      content=""
-      if [ -f "$cur" ]; then
-        # `$(cat)` drops trailing newlines; the sentinel keeps them.
-        content=$(cat "$cur"; printf x) || return 1
-        content=${content%x}
-      fi
-      n=$(printf '%s' "$input" | jq 'if has("edits") then (.edits | if type == "array" then length else 0 end) else 1 end' 2>/dev/null) || n=0
-      for ((i = 0; i < n; i++)); do
-        old=$(printf '%s' "$input" | jq -j --argjson i "$i" '(if has("edits") then .edits[$i] else . end) | .old_string | strings' 2>/dev/null; printf x)
-        old=${old%x}
-        new=$(printf '%s' "$input" | jq -j --argjson i "$i" '(if has("edits") then .edits[$i] else . end) | .new_string | strings' 2>/dev/null; printf x)
-        new=${new%x}
-        all=$(printf '%s' "$input" | jq -r --argjson i "$i" '(if has("edits") then .edits[$i] else . end) | .replace_all // false' 2>/dev/null || printf false)
-        if [ -z "$old" ]; then
-          [ -n "$content" ] || content="$new"
-        elif [ "$all" = true ]; then
-          content=${content//"$old"/"$new"}
-        else
-          content=${content/"$old"/"$new"}
-        fi
-      done
-      printf '%s' "$content" > "$out" || return 1
+      [ ! -f "$cur" ] || src=(--rawfile cur "$cur")
+      printf '%s' "$input" | jq -j "${src[@]}" "$PROPOSED_EDIT_JQ" > "$out" 2>/dev/null || return 1
       ;;
     *) return 1 ;;
   esac

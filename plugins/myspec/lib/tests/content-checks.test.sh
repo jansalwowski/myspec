@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Function tests for lib/content-checks.sh (#263): the proposed content of a
 # Write, Edit and MultiEdit (first occurrence, replace_all, an old_string the
-# file lacks, trailing newlines kept, a create), the frontmatter region and
+# file lacks, trailing newlines kept, a create; one jq run, linear in the
+# file under bash 3.2), the frontmatter region and
 # issues, the reuse-audit state and issues with the per-file marker, the
 # absolute-path findings and scope. The hooks and the Stop gate are tested
 # end to end in hooks/tests/.
@@ -78,6 +79,38 @@ expect "made" "$(cat "$OUT")" "an empty old_string on a missing file creates the
 proposed_content '{"old_string":"","new_string":"made\n"}' "$CUR" "$OUT"
 expect "a b a
 end" "$(cat "$OUT")" "an empty old_string on a non-empty file changes nothing"
+
+# One jq run per call, however many edits (it was 3 per edit plus 2).
+SHIM="$ROOT/shim"
+mkdir -p "$SHIM"
+REAL_JQ=$(command -v jq)
+printf '#!/bin/sh\necho x >> "%s/jq.count"\nexec "%s" "$@"\n' "$ROOT" "$REAL_JQ" > "$SHIM/jq"
+chmod +x "$SHIM/jq"
+: > "$ROOT/jq.count"
+PATH="$SHIM:$PATH" proposed_content '{"edits":[{"old_string":"a","new_string":"1"},{"old_string":"b","new_string":"2"},{"old_string":"end","new_string":"3"},{"old_string":"1","new_string":"4"},{"old_string":"2","new_string":"5"}]}' "$CUR" "$OUT"
+expect "4 5 a
+3" "$(cat "$OUT")" "a five-edit MultiEdit through the shim"
+expect 2 "$(wc -l < "$ROOT/jq.count" | tr -d ' ')" "a MultiEdit costs two jq runs (the kind, the content), not 3n+2"
+
+# Linear in the file under the bash the lib targets (macOS /bin/bash is 3.2,
+# where ${content/old/new} on a 200 KB file took a minute; PR #274 review).
+BIG="$ROOT/big.md"
+awk 'BEGIN { printf "---\ntitle: Big\ncreated: 2026-01-01\n---\n"; for (i = 0; i < 3500; i++) printf "Lorem ipsum dolor sit amet, tempor incididunt ut labore %d\n", i }' > "$BIG"
+SECS=0
+/bin/bash -c '. "$1/hook-core.sh"; . "$1/content-checks.sh"
+  proposed_content "{\"old_string\":\"tempor incididunt\",\"new_string\":\"TEMPOR\"}" "$2" "$3.first"
+  proposed_content "{\"old_string\":\" \",\"new_string\":\"_\",\"replace_all\":true}" "$2" "$3.all"' _ "$LIB" "$BIG" "$OUT" &
+PC=$!
+while kill -0 "$PC" 2>/dev/null && [ "$SECS" -lt 10 ]; do sleep 1; SECS=$((SECS + 1)); done
+if kill -0 "$PC" 2>/dev/null; then
+  kill "$PC" 2>/dev/null
+  fail "proposed_content on a $(wc -c < "$BIG" | tr -d ' ')-byte file takes under 10 s under /bin/bash"
+else
+  ok
+  expect 1 "$(grep -c TEMPOR "$OUT.first")" "the large file's first occurrence is replaced, once"
+  expect 0 "$(grep -c ' ' "$OUT.all")" "replace_all on the large file replaces every occurrence"
+fi
+wait "$PC" 2>/dev/null
 
 proposed_content '{"file_path":"x"}' "$CUR" "$OUT" && fail "a call without content fails" || ok
 proposed_content 'not json' "$CUR" "$OUT" && fail "unparseable input fails" || ok
