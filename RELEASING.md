@@ -162,6 +162,8 @@ Breaking, unless a migration ships with it:
 
 **Gate.** `/release` lists merged PRs carrying `breaking` since the last tag and refuses a minor or patch bump while any exist. Only PRs whose merge commit is an ancestor of HEAD count: once a major's integration branch exists, a breaking PR merged there is listed by `gh pr list` while a 2.x patch is cut from `main`, and is ignored as "merged elsewhere". Those PRs are either released in the major or have the label removed with a comment saying why they are not breaking.
 
+**Upgrade base.** A major upgrades only from the last minor of the previous major: 2.0 from 1.28, 3.0 from 2.12. `update` refuses an older `frameworkVersion` and tells the user to run that minor's `update` first (check out its tag, start Claude with `--plugin-dir` at the checkout, run `/myspec:update`, return). Every consumer therefore reaches the major with the previous line's migrations, renames and removals already applied, so the major deletes each one-shot migration, `renamedFrom` and `removed` entry the floor minor already carried. Keep only what the floor minor itself still needs on its first major `update`. The manifest's `upgradeFrom` holds the floor and is set by hand when the major is cut; `lib/tests/manifest-regression.test.sh` fails on a migration or `removed` entry dated at or below it.
+
 **Cutting the major.** Write `docs/myspec-<N>.0-breaking-changes.md` and `docs/upgrading-to-<N>.0.md` from the milestone, as `docs/myspec-2.0-breaking-changes.md` and `docs/upgrading-to-2.0.md` were for 2.0.
 
 ## When in doubt

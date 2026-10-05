@@ -12,7 +12,7 @@
 # no hook source at all). A memory whose hook lives only in its row is not
 # refused — the row is a legitimate source — and --backfill writes it into the
 # file where it can be reviewed. The pre-1.23 legacy-header migration was
-# removed in 2.0; the upgrade base is 1.28.
+# removed in 2.0; 3.0 upgrades from 2.12.
 #
 # Usage: memory-index.test.sh [path-to-script]
 

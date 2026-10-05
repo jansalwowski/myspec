@@ -1,10 +1,7 @@
 {
   "frameworkVersion": "2.12.0",
+  "upgradeFrom": "2.12.0",
   "migrations": [
-    "2.0.0-schema",
-    "2.0.0-doctor-rule",
-    "2.0.0-sessions",
-    "2.0.0-base-agents",
     "3.0.0-code-review",
     "3.0.0-plugin-hooks",
     "3.0.0-reuse-audit",
@@ -13,8 +10,7 @@
   ],
   "files": {
     "anti-patterns.md": {
-      "type": "marker-merge",
-      "renamedFrom": "memory-index.md"
+      "type": "marker-merge"
     },
     "pre-flight.md": {
       "type": "marker-merge"
@@ -225,26 +221,6 @@
     "templates/index-episodic.md": {
       "dest": "${aiDir}/.templates/index-episodic.md",
       "since": "3.0.0"
-    },
-    "hooks/guard-git-branch.sh": {
-      "dest": ".claude/hooks/guard-git-branch.sh",
-      "since": "2.0.0"
-    },
-    "memory-system.md": {
-      "dest": "${aiDir}/memory-system.md",
-      "since": "2.0.0"
-    },
-    "templates/README.md": {
-      "dest": "${aiDir}/.templates/README.md",
-      "since": "2.0.0"
-    },
-    "templates/feature-pre-flight.md": {
-      "dest": "${aiDir}/.templates/feature-pre-flight.md",
-      "since": "2.0.0"
-    },
-    "templates/example-usage.md": {
-      "dest": "${aiDir}/.templates/example-usage.md",
-      "since": "2.0.0"
     }
   }
 }

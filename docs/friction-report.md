@@ -12,7 +12,7 @@ friction-scan: session 9f3c2a71, 2h05m active, 11 subagents
 | Pattern | Owner | Count | Ref | Detail |
 |---|---|---|---|---|
 | hook block: memory-conformance | myspec | 4 | hooks/verify-before-stop.sh | Memory conformance check failed for changes under ai/memory. … |
-| hook not found: guard-git-branch.sh | setup | 22 | hooks/guard-git-branch.sh | registered in settings but the script is missing: run /myspec:update |
+| hook not found: mark-code-changed.sh | setup | 22 | hooks/mark-code-changed.sh | registered in settings but the script is missing: run /myspec:update |
 | subagent-needs-context | project | 1 | - | Implement Task 4 |
 
 Slowest subagents: Implement Task 3 (24m); Phase 2 review (11m); Implement Task 4 (9m)
@@ -114,7 +114,7 @@ The report shortens home-directory paths to `~` (only at a path boundary), but D
 
 `lib/tests/friction-scan.test.sh` pins the scanner to the hooks:
 
-- Every script in `hooks/` must be listed in `MYSPEC_HOOKS` in `scan.mjs`. When a hook is renamed, keep the old name there too, since installs that have not updated yet still register it (as with `guard-git-branch.sh`).
+- `MYSPEC_HOOKS` in `scan.mjs` lists exactly the scripts in `hooks/`. When a hook is renamed, keep the old name there too (with a test exception, since it has no script) until the upgrade floor passes the release whose `update` unwires it: installs below that release still register it. Past the floor, drop it. `guard-git-branch.sh`, unwired by the 2.0 `update`, was dropped in 3.0, whose floor is 2.12.
 - Every `HOOK_SIGNATURES` entry must be a literal substring of its hook's source. When you change a block message, update the signature in the same PR.
 
 A new blocking hook needs a signature row to be attributed. Without one, its repeated blocks are still reported, as `unknown`.

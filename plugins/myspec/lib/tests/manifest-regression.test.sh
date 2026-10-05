@@ -135,5 +135,46 @@ while IFS= read -r lib; do
 done <<< "$SOURCED"
 [ "$N" -gt 0 ] && ok || fail "the scan found at least one sourced lib"
 
+# The upgrade floor (RELEASING.md, "Upgrade base"). `update` refuses a project
+# below `upgradeFrom`, so every consumer arrives having run the floor minor's
+# update. A migration or removal dated at or below the floor already ran
+# everywhere and is dead weight; 3.0 cleared five removals and four migrations
+# that had outlived the whole 2.x line.
+version_le() {  # version_le <a> <b>: a <= b, numeric per dot-separated part
+  local IFS=. i
+  # shellcheck disable=SC2206 # splitting on dots is the point
+  local a=($1) b=($2)
+  for i in 0 1 2; do
+    [ "${a[i]:-0}" -lt "${b[i]:-0}" ] && return 0
+    [ "${a[i]:-0}" -gt "${b[i]:-0}" ] && return 1
+  done
+  return 0
+}
+
+FLOOR=$(jq -r '.upgradeFrom // empty' "$MANIFEST")
+if printf '%s' "$FLOOR" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then ok; else fail "the manifest names upgradeFrom as X.Y.Z (got '$FLOOR')"; fi
+FLOOR=${FLOOR:-0.0.0}
+version_le "$FLOOR" "$(jq -r .frameworkVersion "$MANIFEST")" && ok || fail "upgradeFrom $FLOOR is above frameworkVersion"
+
+while IFS=$'\t' read -r what version; do
+  [ -n "$what" ] || continue
+  if printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' && ! version_le "$version" "$FLOOR"; then
+    ok
+  else
+    fail "$what is dated $version, at or below the upgrade floor $FLOOR: every consumer already ran it, so drop it"
+  fi
+done <<EOF
+$(jq -r '(.migrations // [])[] | "migration \(.)\t\(split("-")[0])"' "$MANIFEST")
+$(jq -r '(.removed // {}) | to_entries[] | "removed \(.key)\t\(.value.since // "")"' "$MANIFEST")
+EOF
+
+# The floor is the release the 3.0.0-plugin-hooks migration hashed: it sorts
+# each retired copy by comparing it with retired-hashes.json, the files as the
+# floor release installed them. A floor older than that tag would let a
+# project arrive with copies of a release nothing hashed, and every one of
+# them would read as locally modified.
+HASHED=$(jq -r '.tag // empty' "$(dirname "$MANIFEST")/retired-hashes.json" 2>/dev/null)
+if [ -z "$HASHED" ] || [ "v$FLOOR" = "$HASHED" ]; then ok; else fail "upgradeFrom $FLOOR is not the release retired-hashes.json hashed ($HASHED)"; fi
+
 printf '%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

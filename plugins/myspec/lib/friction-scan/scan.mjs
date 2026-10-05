@@ -64,10 +64,10 @@ export const HARNESS_SIGNATURES = [
   { id: 'harness-worktree-guard', match: 'is isolated in the worktree' },
 ]
 
-// Current hook scripts plus retired names an older install may still
-// register (guard-git-branch.sh became guard-worktree-context.sh in 7bf8bf8).
+// The hook scripts myspec ships. A retired name is dropped once the upgrade
+// floor is past the release that unwired it (guard-git-branch.sh, unwired by
+// the 2.0 update, left in 3.0).
 export const MYSPEC_HOOKS = [
-  'guard-git-branch.sh',
   'guard-worktree-context.sh',
   'mark-code-changed.sh',
   'no-absolute-paths.sh',
