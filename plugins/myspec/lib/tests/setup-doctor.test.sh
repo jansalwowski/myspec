@@ -833,6 +833,143 @@ OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" refs 2>&1); STATUS=
 expect_no_line 'dead-path-ref: CLAUDE.md: references .claude/worktrees' "a linked worktree does not report the main checkout's .claude/worktrees as dead"
 expect_line 'WARN +dead-path-ref: CLAUDE.md: references docs/gone.md' "a tracked file this branch removed is still a dead ref from the worktree"
 
+# --- pass 3g: links the provision record does not list (#239) ----------------
+#
+# The Stop hook compares only what worktree-provision.sh recorded in
+# .claude/state/provision.json. A link out of the worktree it did not record,
+# and a recorded lockfile that changed, are the doctor's to report.
+
+build_fixture
+mkdir -p "$REPO/node_modules/dep" "$REPO/apps/web/node_modules/dep" "$REPO/vendor/dep" "$ROOT/outside"
+printf 'node_modules\napps/web/node_modules\nvendor\n' > "$REPO/.gitignore"
+printf 'v1\n' > "$REPO/composer.lock"
+printf '{}\n' > "$REPO/apps/web/package.json"
+ln -s "$ROOT/outside" "$REPO/shared"
+git -C "$REPO" add -A
+git -C "$REPO" -c user.name=t -c user.email=t@t commit -qm fixture
+git -C "$REPO" worktree add -q -b wt2 "$REPO/.claude/worktrees/wt2"
+WT="$REPO/.claude/worktrees/wt2"
+ln -s "$REPO/node_modules" "$WT/node_modules"
+ln -s "$REPO/apps/web/node_modules" "$WT/apps/web/node_modules"
+ln -s "$REPO/vendor" "$WT/vendor"
+mkdir -p "$WT/inner" "$WT/.claude/state"
+ln -s "$WT/inner" "$WT/inside"
+jq -n --arg s "$REPO" --arg t "$REPO/vendor" --arg h "$(shasum -a 256 < "$REPO/composer.lock" 2>/dev/null | cut -d' ' -f1 || sha256sum < "$REPO/composer.lock" | cut -d' ' -f1)" \
+  '{source: $s, links: [{path: "vendor", target: $t, lockfiles: {"composer.lock": $h}}]}' > "$WT/.claude/state/provision.json"
+
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +link-unrecorded: node_modules links out of this worktree \(to $REPO/node_modules\) and was not recorded by provision; checks here may describe the main checkout" "worktree: a hand-made top-level link out of the worktree is reported"
+expect_line "WARN +link-unrecorded: apps/web/node_modules links out of this worktree" "worktree: a hand-made link one level down (a workspace package) is reported"
+expect_no_line "link-unrecorded: vendor" "worktree: a link the record lists is not reported"
+expect_no_line "link-unrecorded: inside" "worktree: a link that stays inside the worktree is not reported"
+expect_no_line "link-unrecorded: shared" "worktree: a link git tracks is not reported"
+expect_no_line "provision-stale" "worktree: a recorded lockfile that still matches is not reported"
+expect_exit 0 "worktree: the findings are warnings"
+
+# One git-dir probe serves the refs and worktree groups, and the tracked-link
+# test reuses the first ls-files listing (#256 review).
+GITLOG="$ROOT/git.log"
+mkdir -p "$ROOT/gitshim"
+# shellcheck disable=SC2016 # expanded by the shim when it runs
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s"\nexec %s "$@"\n' "$GITLOG" "$(command -v git)" > "$ROOT/gitshim/git"
+chmod +x "$ROOT/gitshim/git"
+cp "$WT/CLAUDE.md" "$ROOT/claude.md.bak"
+# shellcheck disable=SC2016 # literal backticks
+printf 'See `.claude/rules/gone-rule.md`.\n' >> "$WT/CLAUDE.md"
+: > "$GITLOG"
+OUTPUT=$(PATH="$ROOT/gitshim:$PATH" node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" refs worktree 2>&1); STATUS=$?
+expect_line 'dead-path-ref: CLAUDE.md: references .claude/rules/gone-rule.md' "probe: the dead ref that needs the main checkout is found"
+eq_count() { local n; n=$(grep -cxF -- "$1" "$GITLOG"); [ "$n" -eq "$2" ] && ok || fail "$3 (ran $n times)"; }
+eq_count "rev-parse --git-dir --git-common-dir" 1 "probe: git rev-parse --git-dir --git-common-dir runs once"
+[ "$(grep -c '^ls-files -z --' "$GITLOG")" -eq 0 ] && ok || fail "probe: no second ls-files for the link candidates"
+cp "$ROOT/claude.md.bak" "$WT/CLAUDE.md"
+
+printf 'v2\n' > "$WT/composer.lock"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +provision-stale: vendor was provisioned from composer.lock, which has changed since \(in this worktree\)" "worktree: a recorded lockfile changed in the worktree is reported"
+git -C "$WT" checkout -q -- composer.lock
+printf 'v3\n' > "$REPO/composer.lock"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +provision-stale: vendor was provisioned from composer.lock, which has changed since \(in $REPO\)" "worktree: a recorded lockfile changed in the source checkout is reported"
+# A lockfile pattern recorded absent (null) that now matches a file is
+# reported, as the Stop hook blocks on it (#256 review).
+printf 'v1\n' > "$REPO/composer.lock"
+jq '.links[0].lockfiles += {"sub/composer.lock": null, "compo*.lock": null}' "$WT/.claude/state/provision.json" > "$ROOT/prov.json" \
+  && mv "$ROOT/prov.json" "$WT/.claude/state/provision.json"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_no_line "provision-stale" "worktree: recorded-absent lockfiles still absent, and a glob matching only hashed files, are not reported"
+mkdir -p "$WT/sub" && printf 'x\n' > "$WT/sub/composer.lock"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +provision-stale: vendor was provisioned while sub/composer.lock did not exist, and it has appeared since \(in this worktree\)" "worktree: a recorded-absent lockfile that appears is reported"
+rm -rf "$WT/sub"
+# A [...] class is a shell class, as provision expands it (#257 review).
+jq '.links[0].lockfiles += {"packages/[ab]/package-lock.json": null, "packages/[!ab]x/package-lock.json": null}' "$WT/.claude/state/provision.json" > "$ROOT/prov.json" \
+  && mv "$ROOT/prov.json" "$WT/.claude/state/provision.json"
+mkdir -p "$WT/packages/c" "$WT/packages/ax" "$WT/packages/[ab]"
+printf 'x\n' > "$WT/packages/c/package-lock.json"
+printf 'x\n' > "$WT/packages/ax/package-lock.json"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_no_line "provision-stale" "worktree: a lockfile outside a [...] class is not a match"
+mkdir -p "$WT/packages/b" && printf 'x\n' > "$WT/packages/b/package-lock.json"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +provision-stale: vendor was provisioned while packages/b/package-lock.json did not exist" "worktree: packages/[ab]/package-lock.json matches packages/b as the shell does"
+rm -rf "$WT/packages/b"
+printf 'x\n' > "$WT/packages/[ab]/package-lock.json"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_no_line "provision-stale" "worktree: [ab] is a class, not the literal directory [ab]"
+mkdir -p "$WT/packages/cx" && printf 'x\n' > "$WT/packages/cx/package-lock.json"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +provision-stale: vendor was provisioned while packages/cx/package-lock.json did not exist" "worktree: [!ab] negates the class"
+rm -rf "$WT/packages"
+
+# A recorded link that dangles or moved, and a record that cannot be read,
+# are named as the Stop hook blocks on them (#256 review).
+cp "$WT/.claude/state/provision.json" "$ROOT/prov.bak"
+rm "$WT/vendor" && ln -s "$ROOT/nowhere/vendor" "$WT/vendor"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +provision-link-dangling: vendor was linked by provision but its target no longer exists" "worktree: a dangling recorded link is reported"
+mkdir -p "$ROOT/elsewhere/vendor"
+rm "$WT/vendor" && ln -s "$ROOT/elsewhere/vendor" "$WT/vendor"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +provision-link-moved: vendor was linked by provision to $REPO/vendor and now resolves to $ROOT/elsewhere/vendor" "worktree: a recorded link that moved is reported"
+rm "$WT/vendor" && ln -s "$REPO/vendor" "$WT/vendor"
+printf '{"source":' > "$WT/.claude/state/provision.json"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +provision-record-unreadable: \.claude/state/provision\.json cannot be read" "worktree: a truncated record is reported as unreadable"
+expect_no_line "link-unrecorded" "worktree: a truncated record is not read as no record"
+cp "$ROOT/prov.bak" "$WT/.claude/state/provision.json"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_no_line "provision-link|provision-record" "worktree: a recorded link back on its target is not reported"
+
+# A recorded link whose tree starts loading the source checkout's own code
+# after provisioning: doctor runs provision's tree_loads_checkout checks
+# (#256 review, the plan's doctor backstop).
+loads_main() {  # loads_main <description> -> expects the finding, then cleans the tree
+  OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+  expect_line "WARN +provision-link-loads-main: vendor links to $REPO/vendor, which now loads the source checkout's own code \($2" "worktree: $1"
+  expect_line "move vendor to isolation\.provision\.copy" "worktree: $1, with the fix"
+  rm -rf "$REPO/vendor/composer" "$REPO/vendor/lib" "$REPO/vendor/@acme" "$REPO/packages"
+}
+ln -s "$REPO/vendor/dep" "$REPO/vendor/inner-link"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_no_line "provision-link-loads-main" "worktree: a link inside the tree loads nothing"
+rm "$REPO/vendor/inner-link"
+mkdir -p "$REPO/vendor/composer"
+# shellcheck disable=SC2016 # the literal $baseDir text Composer writes
+printf '<?php\nreturn array(\x27App\\\\\x27 => array($baseDir . \x27/src\x27));\n' > "$REPO/vendor/composer/autoload_psr4.php"
+# shellcheck disable=SC2016 # a literal $baseDir in the expected line
+loads_main "a Composer autoload against \$baseDir" 'composer/autoload_psr4\.php loads the root package from \$baseDir'
+mkdir -p "$REPO/vendor/lib/python3.12/site-packages/app-1.0.dist-info" "$REPO/packages/app"
+printf '{"url":"file://%s/packages/app","dir_info":{"editable":true}}\n' "$REPO" > "$REPO/vendor/lib/python3.12/site-packages/app-1.0.dist-info/direct_url.json"
+loads_main "an editable install of the source checkout" 'app-1\.0\.dist-info is an editable install of '"$REPO"'/packages/app'
+mkdir -p "$REPO/vendor/@acme" "$REPO/packages/ui"
+ln -s ../../packages/ui "$REPO/vendor/@acme/ui"
+loads_main "a workspace link two levels down" '@acme/ui links to '"$REPO"'/packages/ui'
+
+ln -s "$ROOT/outside" "$REPO/elsewhere"
+run_doctor worktree
+expect_no_line "link-unrecorded" "worktree: the main checkout is never checked"
+
 # --- pass 5: project settings against the schema (#233) ------------------------
 # The doctor names no setting itself: every key, type, format and reference
 # comes from lib/myspec-config.schema.json, so these fixtures exercise the

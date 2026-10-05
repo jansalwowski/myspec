@@ -12,14 +12,13 @@
 # During feature-implement (an `implement start` event in the session's state
 # file, at most 8h old) check failures become a non-blocking systemMessage
 # warning instead.
-# Before any check runs, blocks when a dependency directory (each guarded
-# isolation.provision.symlink entry, plus node_modules, vendor,
-# vendor-bin/*/vendor, .venv, venv) is a symlink into a checkout whose
-# lockfiles for it differ from this tree, or whose tree loads that checkout's
-# own source. In a linked worktree (or a submodule inside one), a check
-# without runIn whose command contains a container exec (CONTAINER_EXEC_FORMS)
-# is refused as unverifiable, not run. A check with `cwd` runs from that
-# repo-relative directory of the checkout.
+# Before any check runs in a linked worktree, compares the record
+# worktree-provision.sh left (.claude/state/provision.json): blocks when a
+# recorded link no longer resolves to its recorded target, a recorded
+# lockfile changed or is gone since, or a lockfile recorded absent appeared. In a linked worktree (or a submodule inside one), a
+# check without runIn whose command contains a container exec
+# (CONTAINER_EXEC_FORMS) is refused as unverifiable, not run. A check with
+# `cwd` runs from that repo-relative directory of the checkout.
 # A check with `paths` runs only when a file the session wrote in that
 # checkout matches one of its globs (#232); a skipped one is named in the
 # stop message. A check with `runIn` gets MYSPEC_CHECK_WORKDIR, this
@@ -37,16 +36,13 @@ approve() {
 command -v jq >/dev/null 2>&1 || approve
 HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
 [ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
-if [ ! -f "$HOOK_CORE" ] || [ ! -f "$(dirname "$HOOK_CORE")/dependency-map.sh" ] \
-    || [ ! -f "$(dirname "$HOOK_CORE")/session-event.sh" ]; then
+if [ ! -f "$HOOK_CORE" ] || [ ! -f "$(dirname "$HOOK_CORE")/session-event.sh" ]; then
   approve
 fi
 # shellcheck source=lib/hook-core.sh
 . "$HOOK_CORE"
 # shellcheck source=lib/session-event.sh
 . "$HOOK_LIB/session-event.sh"
-# shellcheck source=lib/dependency-map.sh
-. "$HOOK_LIB/dependency-map.sh"
 
 payload_parse "$(cat)" STOP_HOOK_ACTIVE=.stop_hook_active SESSION_ID=.session_id CWDS="$HOOK_CWDS"
 
@@ -175,126 +171,99 @@ fi
 # No code written in this repository since the last run — skip verification
 [ "${#VERIFY_ROOTS[@]}" -gt 0 ] || approve
 
-# A symlinked dependency directory (node_modules, vendor, .venv, ...) makes
-# every check below run against ANOTHER checkout dependency tree, so the gate
-# reports a green that describes the wrong tree. That silent false pass is
-# worse than no gate at all, so block. No `verified` event is recorded (the
-# EXIT trap is registered below), so the block persists until a real install
-# exists.
-# Checked: every isolation.provision.symlink entry, plus each built-in
-# dependency directory at the root (DEP_DIRS) the config does not list, so a
-# hand-made link into another checkout of this repo is caught too (one into a
-# central virtualenv store is left alone). An entry is guarded by the
-# lockfiles the map below gives it; an entry with none (an .env file) is not
-# checked. A tree that loads the project's own source from the other checkout
-# (tree_loads_checkout) blocks whatever its lockfiles say.
-# Accepted without config when the link points into a checkout whose copies of
-# those lockfiles are byte-identical to this tree (committed and uncommitted
-# state alike): both trees then resolve the same dependencies, which is
-# exactly the case worktree-provision.sh links (it skips the link when the
-# branch changes a lockfile against --base). Comparing contents rather than
-# re-running the ref diff also holds when the main checkout is not at the base
-# ref. At least one lockfile must exist; without one there is no evidence the
-# trees match.
-# Deliberate link otherwise: isolation.allowLinkedModules: true in .myspec.json
-# (project-wide, for repos whose worktrees share the main checkout
-# dependencies by construction) or MYSPEC_ALLOW_LINKED_MODULES=1. Both cover
-# every dependency directory, not only node_modules.
-# DEP_DIRS, symlink_entries and tree_loads_checkout come from
-# lib/dependency-map.sh, shared with lib/worktree-provision.sh.
+# Linked dependencies (R8). worktree-provision.sh records each link it made,
+# with the hash of every lockfile that pinned it, in the worktree's
+# .claude/state/provision.json. A recorded link that no longer resolves to
+# its recorded target, or a recorded lockfile whose hash changed in the
+# source checkout or in this one, means the checks below would run against a
+# dependency tree that no longer matches this tree: block, and name the
+# script that refreshes the record. Only links the record lists are
+# compared, and only in a linked worktree; a link provision did not make is
+# doctor's finding (link-unrecorded), not this gate's. A recorded path that
+# is no longer a link (a real install replaced it) is not compared. No
+# `verified` event is recorded on a block (the EXIT trap is registered
+# below), so the block persists until provision runs again. A lockfile key
+# recorded with a null hash is a pattern that matched nothing provision did
+# not hash (an absent lockfile, or a glob): a file it matches on either side
+# that the record does not list with a hash blocks, so a nested lockfile the
+# branch adds later is compared too. A recorded lockfile that is gone on
+# either side blocks as removed.
 
-# link_source <entry> -> the checkout <entry> links into: the link target
-# with <entry> removed. Fails when the target is not <checkout>/<entry>, or is
-# this tree.
-link_source() {
-  local target src
-  target=$(cd "$REPO_ROOT/$1" 2>/dev/null && pwd -P) || return 1
-  case "$target" in
-    */"$1") src="${target%/"$1"}" ;;
-    *) return 1 ;;
-  esac
-  [ "$src" != "$REPO_ROOT" ] || return 1
-  printf '%s\n' "$src"
-}
-
-# lockfiles_match <src> <lockfile-pattern>... -> 0 when checkout <src> holds
-# byte-identical copies of every matching lockfile, and at least one exists.
-lockfiles_match() {
-  local src="$1" pat f rel seen=0
-  shift
-  for pat in "$@"; do
-    for f in "$REPO_ROOT"/$pat "$src"/$pat; do
-      [ -e "$f" ] || continue
-      case "$f" in
-        "$REPO_ROOT"/*) rel="${f#"$REPO_ROOT"/}" ;;
-        *) rel="${f#"$src"/}" ;;
-      esac
-      cmp -s "$REPO_ROOT/$rel" "$src/$rel" || return 1
-      seen=1
-    done
+# pattern_matches <dir> <pattern> -> the <dir>-relative regular files the
+# lockfile pattern matches there (a * stays within one directory).
+pattern_matches() {
+  local IFS='' f
+  for f in "$1"/$2; do
+    [ -f "$f" ] && printf '%s\n' "${f#"$1"/}"
   done
-  [ "$seen" -eq 1 ]
+  return 0
 }
 
-# guarded_entries -> "configured|inferred<TAB>path<TAB>lockfile..." for the
-# configured entries, then the built-in directories the config does not name.
-guarded_entries() {
-  local configured paths dir l pat
-  local -a pats dirs=()
-  configured=$(symlink_entries "$REPO_ROOT/.myspec.json")
-  paths=$'\n'$(printf '%s\n' "$configured" | cut -f1)$'\n'
-  while IFS= read -r l; do
-    [ -n "$l" ] && printf 'configured\t%s\n' "$l"
-  done <<< "$configured"
-  # read -a splits without globbing; a * entry expands against this checkout,
-  # not the hook's cwd.
-  read -ra pats <<< "$DEP_DIRS"
-  for pat in "${pats[@]}"; do
-    case "$pat" in
-      *'*'*)
-        for dir in "$REPO_ROOT"/$pat; do
-          [ -e "$dir" ] || [ -L "$dir" ] || continue
-          dirs+=("${dir#"$REPO_ROOT"/}")
-        done ;;
-      *) dirs+=("$pat") ;;
+# provision_stale <root> -> one "path (reason)" per stale recorded link.
+# Fails, printing the reason, when the record cannot be read.
+provision_stale() {
+  local root="$1" record="$1/.claude/state/provision.json" src kind path a b cur sum m side
+  src=$(jq -er '.source | strings' "$record" 2>/dev/null) || { printf 'the record has no source\n'; return 1; }
+  while IFS=$'\t' read -r kind path a b; do
+    [ -L "$root/$path" ] || continue
+    case "$kind" in
+      link)
+        if [ -d "$root/$path" ]; then
+          cur=$(physical_dir "$root/$path") || cur=""
+        elif [ -e "$root/$path" ]; then
+          cur=$(physical_path "$(readlink "$root/$path")" "$(dirname "$root/$path")") || cur=""
+        else
+          cur=""
+        fi
+        [ "$cur" = "$a" ] || printf '%s (the link no longer points into %s)\n' "$path" "$src"
+        ;;
+      lock)
+        for cur in "$src/$a" "$root/$a"; do
+          if [ ! -e "$cur" ]; then
+            printf '%s (%s removed)\n' "$path" "$a"
+            break
+          fi
+          sum=$(file_sha256 "$cur") || sum=""
+          if [ "$sum" != "$b" ]; then
+            printf '%s (%s changed)\n' "$path" "$a"
+            break
+          fi
+        done
+        ;;
+      absent)
+        # b: the keys this link recorded with a hash, \037-separated.
+        m=""
+        while IFS= read -r cur; do
+          [ -n "$cur" ] || continue
+          case $'\037'"$b"$'\037' in
+            *$'\037'"$cur"$'\037'*) ;;
+            *) m=$cur; break ;;
+          esac
+        done < <(for side in "$src" "$root"; do pattern_matches "$side" "$a"; done | sort -u)
+        [ -z "$m" ] || printf '%s (%s appeared)\n' "$path" "$m"
+        ;;
     esac
-  done
-  for dir in "${dirs[@]}"; do
-    case "$paths" in
-      *$'\n'"$dir"$'\n'*) ;;
-      *) printf 'inferred\t%s\n' "$(infer_entry "$dir")" ;;
-    esac
-  done
+  done < <(jq -r '.links[]? | select(type == "object" and (.path | type) == "string" and .path != "")
+      | ["link", .path, (.target // "" | tostring), ""],
+        (.path as $p | (.lockfiles // {} | objects) as $l
+          | ([$l | to_entries[] | select(.value != null) | .key] | join("\u001f")) as $have
+          | $l | to_entries[]
+          | if .value == null then ["absent", $p, .key, $have] else ["lock", $p, .key, (.value | tostring)] end)
+      | @tsv' "$record" 2>/dev/null) || { printf 'the record is not valid JSON\n'; return 1; }
 }
 
+PROVISION_SCRIPT="$HOOK_LIB/worktree-provision.sh"
 for REPO_ROOT in "${VERIFY_ROOTS[@]}"; do
-ALLOW_LINKED=$(jq -r '.isolation.allowLinkedModules // false' "$REPO_ROOT/.myspec.json" 2>/dev/null || printf 'false')
-if [ "$ALLOW_LINKED" != "true" ] && [ "${MYSPEC_ALLOW_LINKED_MODULES:-}" != "1" ]; then
-  STALE_LINKS=""
-  while IFS= read -r line; do
-    kind="${line%%$'\t'*}"
-    line="${line#*$'\t'}"
-    entry="${line%%$'\t'*}"
-    # shellcheck disable=SC2015 # B is a test too: either one failing means skip
-    [ -n "$entry" ] && [ "$line" != "$entry" ] || continue
-    [ -L "$REPO_ROOT/$entry" ] || continue
-    src=$(link_source "$entry") || src=""
-    # An unlisted directory is only this gate's business when it links into
-    # another checkout of this repo. node_modules keeps its stricter rule.
-    if [ "$kind" = inferred ] && [ "$entry" != node_modules ] \
-        && { [ -z "$src" ] || [ "$(common_dir "$src")" != "$(common_dir "$REPO_ROOT")" ]; }; then
-      continue
-    fi
-    IFS=$'\t' read -ra LOCKS <<< "${line#*$'\t'}"
-    if [ -z "$src" ] || ! lockfiles_match "$src" "${LOCKS[@]}" \
-        || tree_loads_checkout "$REPO_ROOT/$entry" "$src"; then
-      STALE_LINKS="${STALE_LINKS:+$STALE_LINKS, }$entry"
-    fi
-  done < <(guarded_entries)
-  if [ -n "$STALE_LINKS" ]; then
-    decision_block 'Symlinked dependency directory in %s: %s. The lockfiles that pin it differ from the checkout it points into (or none exists), or the tree loads the project source from that checkout, so lint, type-check and test results here describe a different dependency tree. Run a real install in this worktree before reporting any result as verified (or, if this repo shares one tree by design, set isolation.allowLinkedModules: true in .myspec.json).' "$REPO_ROOT" "$STALE_LINKS"
+  [ -f "$REPO_ROOT/.claude/state/provision.json" ] || continue
+  if ! checkout_facts "$REPO_ROOT" || [ "$CF_LINKED" -ne 1 ]; then continue; fi
+  if ! STALE=$(provision_stale "$REPO_ROOT"); then
+    decision_block 'Symlinked dependency directory in %s: the provision record %s cannot be read (%s). Re-run provision: %s "%s"' \
+      "$REPO_ROOT" "$REPO_ROOT/.claude/state/provision.json" "$STALE" "$PROVISION_SCRIPT" "$REPO_ROOT"
   fi
-fi
+  if [ -n "$STALE" ]; then
+    decision_block 'Symlinked dependency directory in %s: dependencies in %s were provisioned from lockfiles that changed, or their link moved, so lint, type-check and test results here would describe a different dependency tree:\n\n%s\n\nRe-run provision, which links again where the lockfiles match and says what to install where they do not: %s "%s"' \
+      "$REPO_ROOT" "$(printf '%s\n' "$STALE" | sed 's/ (.*//' | sort -u | paste -sd, - | sed 's/,/, /g')" "$STALE" "$PROVISION_SCRIPT" "$REPO_ROOT"
+  fi
 done
 
 # Once the checks run (success or failure), the state file gets a `verified`

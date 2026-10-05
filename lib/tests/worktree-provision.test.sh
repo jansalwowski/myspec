@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Regression fixture for the per-entry lockfile guard in worktree-provision.sh.
+# Regression fixture for worktree-provision.sh: the per-entry lockfile guard,
+# the provision record the Stop hook compares (.claude/state/provision.json),
+# copy, clean and install.
 #
 # Each isolation.provision.symlink entry is skipped when the branch changes a
 # lockfile that pins it, for any ecosystem: a vendor/ link survived a
 # composer.lock change before, because the guard only knew node_modules. The
-# entry-to-lockfile map is lib/dependency-map.sh, which
-# hooks/verify-before-stop.sh sources too; this fails if either script grows
-# a copy of its own again.
+# entry-to-lockfile map lives in the script itself; the Stop hook knows none
+# of it and reads the record instead.
 #
 # Usage: worktree-provision.test.sh [path-to-script]
 
@@ -14,8 +15,6 @@ set -uo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 SCRIPT="${1:-$HERE/../worktree-provision.sh}"
-HOOK="$HERE/../../hooks/verify-before-stop.sh"
-MAP="$(dirname "$SCRIPT")/dependency-map.sh"
 
 ROOT=$(cd "$(mktemp -d)" && pwd -P)
 trap 'rm -rf "$ROOT"' EXIT
@@ -24,13 +23,6 @@ PASS=0
 FAIL=0
 ok()   { PASS=$((PASS + 1)); }
 fail() { FAIL=$((FAIL + 1)); printf 'FAIL  %s\n' "$1" >&2; }
-
-# The dependency-directory map lives in lib/dependency-map.sh, which both
-# scripts source; neither keeps a copy of its own.
-for f in "$SCRIPT" "$HOOK"; do
-  grep -qE '^(dep_lockfiles|infer_entry|symlink_entries|tree_loads_checkout)\(\)' "$f" && fail "$(basename "$f") keeps its own dependency map" || ok
-  grep -qF 'dependency-map.sh' "$f" && ok || fail "$(basename "$f") sources lib/dependency-map.sh"
-done
 
 # run_case <name> <dir> <lockfile> <symlink-json> -> checks link, then skip
 run_case() {
@@ -58,10 +50,12 @@ run_case() {
   [ ! -e "$ROOT/$1-bump/$2" ] && ok || fail "$1: $2 is not linked when $3 changed"
   printf '%s' "$out" | grep -qF "not linking $2" && ok || fail "$1: output names the skipped $2"
 
-  # Without --base there is nothing to compare against: link as before.
+  # Without --base the lockfiles are compared with the main checkout's copies.
   git -C "$main" worktree add -q -b nobase "$ROOT/$1-nobase" bump
-  bash "$SCRIPT" "$ROOT/$1-nobase" >/dev/null
-  [ -L "$ROOT/$1-nobase/$2" ] && ok || fail "$1: $2 is linked when no --base is given"
+  out=$(bash "$SCRIPT" "$ROOT/$1-nobase")
+  [ ! -e "$ROOT/$1-nobase/$2" ] && ok || fail "$1: $2 is not linked without --base when $3 differs from the main checkout"
+  printf '%s' "$out" | grep -qF "$3 differs from the main checkout — not linking $2" && ok \
+    || fail "$1: output names the lockfile that differs from the main checkout (got: $out)"
 }
 
 run_case php vendor composer.lock '["vendor"]'
@@ -170,15 +164,16 @@ bash "$SCRIPT" "$ROOT/pathrepo-wt" --base main >/dev/null
 [ ! -e "$ROOT/pathrepo-wt/vendor" ] && ok || fail "pathrepo: a vendor with a path-repository link into main is not linked"
 
 # --- every link is resolved physically, whatever its text (PR #236 review) ---
-# tree_loads_checkout is called directly, from lib/dependency-map.sh, on a tree
+# tree_loads_checkout is called directly (sourcing the script defines its
+# functions and runs nothing), on a tree
 # inside a checkout. Each link below leaves the tree for the checkout, but
 # its text matches no ../-prefixed pattern, or it sits in pnpm's hidden
 # hoist four levels down.
 REAL_FIND=$(command -v find)
 # tlc <tree> <checkout> [PATH prefix] -> tree_loads_checkout's exit status
 tlc() {
-  # shellcheck source=lib/dependency-map.sh
-  ( PATH="${3:+$3:}$PATH"; . "$MAP"; tree_loads_checkout "$1" "$2" ) >/dev/null 2>&1
+  # shellcheck source=lib/worktree-provision.sh
+  ( PATH="${3:+$3:}$PATH"; . "$SCRIPT"; tree_loads_checkout "$1" "$2" ) >/dev/null 2>&1
 }
 # link_case <desc> <link path, tree-relative> <link text>
 link_case() {
@@ -397,7 +392,7 @@ printf '#!/bin/sh\nfor a in "$@"; do case "$a" in -c|--reflink*) echo "cp: illeg
 chmod +x "$SHIMDIR/cp"
 sed "s#/bin/cp #$SHIMDIR/cp #g" "$SCRIPT" > "$SHIMDIR/lib/worktree-provision.sh"
 cp "$(dirname "$SCRIPT")/myspec-config.sh" "$(dirname "$SCRIPT")/myspec-config.schema.json" "$(dirname "$SCRIPT")/glob-regex.sh" \
-  "$(dirname "$SCRIPT")/hook-core.sh" "$(dirname "$SCRIPT")/dependency-map.sh" "$SHIMDIR/lib/"
+  "$(dirname "$SCRIPT")/hook-core.sh" "$SHIMDIR/lib/"
 W=$(wt_for "$M" copydir-fallback)
 out=$(bash "$SHIMDIR/lib/worktree-provision.sh" "$W" --base main 2>&1)
 [ -f "$W/vendor/acme/lib/a.php" ] && printf '%s' "$out" | grep -qF "no copy-on-write clone on this filesystem — copied vendor" && ok \
@@ -427,16 +422,162 @@ out=$(bash "$SCRIPT" "$W" --base main 2>&1)
 NOGLOB="$ROOT/noglob-lib"
 mkdir -p "$NOGLOB"
 cp "$SCRIPT" "$(dirname "$SCRIPT")/myspec-config.sh" "$(dirname "$SCRIPT")/myspec-config.schema.json" \
-  "$(dirname "$SCRIPT")/hook-core.sh" "$(dirname "$SCRIPT")/dependency-map.sh" "$NOGLOB/"
+  "$(dirname "$SCRIPT")/hook-core.sh" "$NOGLOB/"
 W=$(wt_for "$M" noglob-wt)
 rc=0
 out=$(bash "$NOGLOB/worktree-provision.sh" "$W" --base main 2>&1) || rc=$?
 [ "$rc" = 1 ] && printf '%s' "$out" | grep -qF "glob-regex.sh missing" && [ ! -e "$W/node_modules" ] && ok \
   || fail "a missing glob-regex.sh stops provisioning before any link (rc=$rc, got: $out)"
 
+# --- the provision record (.claude/state/provision.json) -----------------------
+# The Stop hook compares this record and knows nothing else about
+# dependencies, so what it holds is the contract: the source, each link with
+# its physical target and the hash of each lockfile that pins it, the copies
+# and the install steps that ran.
+sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum < "$1"; else shasum -a 256 < "$1"; fi | cut -d' ' -f1; }
+rec() { jq -r "$2" "$1/.claude/state/provision.json" 2>/dev/null; }
+
+M=$(new_main record '{"isolation":{"provision":{"symlink":["node_modules",".env","apps/web/node_modules"],"copy":[".eslintcache",{"path":"build","mode":"clone"}]}}}')
+mkdir -p "$M/node_modules/dep" "$M/apps/web/node_modules/dep" "$M/build"
+printf 'X=1\n' > "$M/.env"; printf 'c\n' > "$M/.eslintcache"; printf 'b\n' > "$M/build/out"
+printf 'v1\n' > "$M/package-lock.json"; printf 'w1\n' > "$M/apps/web/package-lock.json"
+printf '.env\n.eslintcache\nbuild\napps/web/node_modules\n' >> "$M/.gitignore"; commit_all "$M" init
+W=$(wt_for "$M" record-wt)
+bash "$SCRIPT" "$W" --base main >/dev/null 2>&1
+[ -f "$W/.claude/state/provision.json" ] && ok || fail "record: provision writes .claude/state/provision.json"
+[ "$(rec "$W" '.source')" = "$M" ] && ok || fail "record: source is the main checkout"
+[ "$(rec "$W" '.provisionedAt | type')" = number ] && ok || fail "record: provisionedAt is a number"
+[ "$(rec "$W" '.links[] | select(.path == "node_modules") | .target')" = "$M/node_modules" ] && ok \
+  || fail "record: a link records its physical target"
+[ "$(rec "$W" '.links[] | select(.path == "node_modules") | .lockfiles["package-lock.json"]')" = "$(sha "$M/package-lock.json")" ] && ok \
+  || fail "record: a link records the SHA-256 of the main checkout's lockfile"
+[ "$(rec "$W" '.links[] | select(.path == "apps/web/node_modules") | .lockfiles | with_entries(select(.value != null)) | keys | join(",")')" = "apps/web/package-lock.json,package-lock.json" ] && ok \
+  || fail "record: a nested link records the lockfile beside it and the root one"
+[ "$(rec "$W" '.links[] | select(.path == ".env") | .lockfiles | length')" = 0 ] && ok \
+  || fail "record: an unguarded link records no lockfiles"
+[ "$(rec "$W" '[.copies[] | .path + ":" + .mode] | join(",")')" = ".eslintcache:copy,build:clone" ] && ok \
+  || fail "record: copies are recorded with their mode"
+[ "$(rec "$W" '.install | length')" = 0 ] && ok || fail "record: no install steps, none recorded"
+[ -z "$(git -C "$W" status --porcelain)" ] && ok || fail "record: the record is excluded from git"
+
+# A rerun decides each recorded link again: a lockfile that changed drops it,
+# and once both sides match again it is linked with the new hash.
+printf 'v2\n' > "$W/package-lock.json"
+out=$(bash "$SCRIPT" "$W" --base main 2>&1)
+[ ! -e "$W/node_modules" ] && ok || fail "record rerun: a link whose lockfile now differs is dropped"
+printf '%s' "$out" | grep -qF "package-lock.json differs from the main checkout — not linking node_modules" && ok \
+  || fail "record rerun: the dropped link is named (got: $out)"
+[ "$(rec "$W" '[.links[].path] | index("node_modules")')" = null ] && ok || fail "record rerun: the dropped link leaves the record"
+[ "$(rec "$W" '[.copies[].path] | join(",")')" = ".eslintcache,build" ] && ok || fail "record rerun: earlier copies stay on record"
+printf 'v2\n' > "$M/package-lock.json"
+bash "$SCRIPT" "$W" --base main >/dev/null 2>&1
+[ -L "$W/node_modules" ] && ok || fail "record rerun: matching lockfiles link again"
+[ "$(rec "$W" '.links[] | select(.path == "node_modules") | .lockfiles["package-lock.json"]')" = "$(sha "$M/package-lock.json")" ] && ok \
+  || fail "record rerun: the new hash is recorded"
+
+# A rerun drops an earlier link whatever spelling of the main checkout the
+# first run got (#256 review): the first run reaches main through a symlinked
+# alias, the Stop hook's rerun passes no --main, and the link text differs
+# from the physical path. Compared as text, the link survived as "already
+# exists" and the record lost it.
+M=$(new_main alias '{"isolation":{"provision":{"symlink":["node_modules"]}}}')
+mkdir -p "$M/node_modules/dep"; printf 'v1\n' > "$M/package-lock.json"; commit_all "$M" init
+ln -s "$M" "$ROOT/alias-link"
+W=$(wt_for "$M" alias-wt)
+bash "$SCRIPT" "$W" --base main --main "$ROOT/alias-link" >/dev/null 2>&1
+[ "$(readlink "$W/node_modules")" = "$ROOT/alias-link/node_modules" ] && ok || fail "alias: the first run links through the alias (got: $(readlink "$W/node_modules"))"
+printf 'v2\n' > "$M/package-lock.json"
+out=$(bash "$SCRIPT" "$W" --base main 2>&1)
+[ ! -e "$W/node_modules" ] && [ ! -L "$W/node_modules" ] && ok || fail "alias rerun: the link through the alias is dropped (got: $out)"
+printf '%s' "$out" | grep -qF "package-lock.json differs from the main checkout — not linking node_modules" && ok \
+  || fail "alias rerun: the drop is named (got: $out)"
+[ "$(rec "$W" '.links | length')" = 0 ] && ok || fail "alias rerun: the dropped link leaves the record"
+printf 'v2\n' > "$W/package-lock.json"
+bash "$SCRIPT" "$W" --base main >/dev/null 2>&1
+[ "$(readlink "$W/node_modules")" = "$M/node_modules" ] && ok || fail "alias rerun: matching lockfiles link again, physically"
+[ "$(rec "$W" '.links[] | select(.path == "node_modules") | .lockfiles["package-lock.json"]')" = "$(sha "$M/package-lock.json")" ] && ok \
+  || fail "alias rerun: the record holds the link with the new hash"
+
+# A lockfile pattern that matches nothing in the main checkout is recorded
+# with a null hash, so the gate can see one appear later (#256 review): only
+# the root lockfile exists for apps/web/node_modules here.
+M=$(new_main absent '{"isolation":{"provision":{"symlink":["apps/web/node_modules",".venv"]}}}')
+mkdir -p "$M/apps/web/node_modules/dep" "$M/.venv/lib"; printf 'v1\n' > "$M/package-lock.json"
+printf 'apps/web/node_modules\n' >> "$M/.gitignore"; commit_all "$M" init
+W=$(wt_for "$M" absent-wt)
+bash "$SCRIPT" "$W" --base main >/dev/null 2>&1
+[ "$(rec "$W" '.links[] | select(.path == "apps/web/node_modules") | .lockfiles | has("apps/web/package-lock.json") and .["apps/web/package-lock.json"] == null')" = true ] && ok \
+  || fail "absent: an unmatched lockfile pattern is recorded with a null hash (got: $(rec "$W" '.links[0].lockfiles'))"
+[ "$(rec "$W" '.links[] | select(.path == "apps/web/node_modules") | .lockfiles["package-lock.json"]')" = "$(sha "$M/package-lock.json")" ] && ok \
+  || fail "absent: the matched lockfile keeps its hash"
+[ "$(rec "$W" '.links[] | select(.path == ".venv") | .lockfiles | has("requirements*.txt") and .["requirements*.txt"] == null')" = true ] && ok \
+  || fail "absent: a glob pattern is recorded with a null hash"
+
+# Install steps that ran are recorded.
+M=$(new_main record-inst '{"isolation":{"provision":{"symlink":[],"install":[{"run":"true","cwd":"."},{"run":"true","when":["nope"]}]}}}')
+commit_all "$M" init
+W=$(wt_for "$M" record-inst-wt)
+bash "$SCRIPT" "$W" --base main >/dev/null 2>&1
+[ "$(rec "$W" '.install | map(.run + "@" + .cwd) | join(",")')" = "true@." ] && ok || fail "record: the install steps that ran are recorded"
+
+# allowLinkedModules links despite a lockfile difference and records no hashes.
+M=$(new_main record-allow '{"isolation":{"allowLinkedModules":true,"provision":{"symlink":["node_modules"]}}}')
+mkdir -p "$M/node_modules/dep"; printf 'v1\n' > "$M/package-lock.json"; commit_all "$M" init
+W=$(wt_for "$M" record-allow-wt)
+printf 'v2\n' > "$W/package-lock.json"
+bash "$SCRIPT" "$W" >/dev/null 2>&1
+[ -L "$W/node_modules" ] && ok || fail "allowLinkedModules: links despite a lockfile that differs from the main checkout"
+[ "$(rec "$W" '.links[0].lockfiles | length')" = 0 ] && ok || fail "allowLinkedModules: the link is recorded without lockfile hashes"
+W=$(wt_for "$M" record-allow-env)
+printf '{"isolation":{"provision":{"symlink":["node_modules"]}}}\n' > "$W/.myspec.json"
+printf 'v2\n' > "$W/package-lock.json"
+MYSPEC_ALLOW_LINKED_MODULES=1 bash "$SCRIPT" "$W" >/dev/null 2>&1
+[ "$(rec "$W" '.links[0].lockfiles | length')" = 0 ] && ok || fail "MYSPEC_ALLOW_LINKED_MODULES=1: the link is recorded without lockfile hashes"
+
+# --- a tracked placeholder in a directory to link is an error (#239) ------------
+M=$(new_main placeholder '{"isolation":{"provision":{"symlink":["node_modules"]}}}')
+mkdir -p "$M/node_modules/dep"; printf 'v1\n' > "$M/package-lock.json"
+: > "$M/node_modules/.gitkeep"; git -C "$M" add -f node_modules/.gitkeep; commit_all "$M" init
+W=$(wt_for "$M" placeholder-wt)
+out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
+[ "$st" -ne 0 ] && ok || fail "placeholder: a tracked file in node_modules stops provisioning (got $st)"
+printf '%s' "$out" | grep -qF "node_modules holds a tracked file (node_modules/.gitkeep)" && ok \
+  || fail "placeholder: the error names the tracked file (got: $out)"
+printf '%s' "$out" | grep -qF "git rm --cached node_modules/.gitkeep" && printf '%s' "$out" | grep -qF "isolation.provision.copy" && ok \
+  || fail "placeholder: the error gives both fixes (got: $out)"
+# The copy fix: a directory holding only tracked files is filled.
+printf '{"isolation":{"provision":{"symlink":[],"copy":["node_modules"]}}}\n' > "$W/.myspec.json"
+out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
+[ "$st" -eq 0 ] && [ -d "$W/node_modules/dep" ] && [ -e "$W/node_modules/.gitkeep" ] && ok \
+  || fail "placeholder: copy fills a directory that holds only tracked files (got $st: $out)"
+# Clone mode fills by clone, and the record says what was done (#256 review).
+printf '{"isolation":{"provision":{"symlink":[],"copy":[{"path":"node_modules","mode":"clone"}]}}}\n' > "$W/.myspec.json"
+git -C "$W" clean -qfdx -e .myspec.json -- node_modules
+out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
+[ "$st" -eq 0 ] && [ -d "$W/node_modules/dep" ] && printf '%s' "$out" | grep -qE "filled node_modules by clone|no copy-on-write clone on this filesystem — copied node_modules" && ok \
+  || fail "placeholder: clone mode fills by clone, or says it copied (got $st: $out)"
+want=clone; printf '%s' "$out" | grep -qF "filled node_modules by clone" || want=copy
+[ "$(jq -r '.copies[] | select(.path == "node_modules") | .mode' "$W/.claude/state/provision.json")" = "$want" ] && ok \
+  || fail "placeholder: the record says what the fill did ($want)"
+git -C "$W" clean -qfdx -e .myspec.json -- node_modules
+out=$(bash "$SHIMDIR/lib/worktree-provision.sh" "$W" --base main 2>&1); st=$?
+[ "$st" -eq 0 ] && [ -d "$W/node_modules/dep" ] && printf '%s' "$out" | grep -qF "no copy-on-write clone on this filesystem — copied node_modules" && ok \
+  || fail "placeholder: without a clone flag the fill copies and says so (got $st: $out)"
+[ "$(jq -r '.copies[] | select(.path == "node_modules") | .mode' "$W/.claude/state/provision.json")" = copy ] && ok \
+  || fail "placeholder: a fill that copied is recorded as copy, not clone"
+# An untracked directory already there is skipped, and the skip is named.
+M=$(new_main exists '{"isolation":{"provision":{"symlink":["node_modules"]}}}')
+mkdir -p "$M/node_modules/dep"; commit_all "$M" init
+W=$(wt_for "$M" exists-wt)
+mkdir -p "$W/node_modules/own"
+out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
+[ "$st" -eq 0 ] && printf '%s' "$out" | grep -qF "node_modules already exists in the worktree — not linking node_modules" && ok \
+  || fail "exists: an untracked directory in the worktree is skipped by name (got $st: $out)"
+
 # Globs compile through lib/glob-regex.sh (its own fixture covers the rules).
 # The scripts that read a glob setting source it and keep no copy, so one
 # glob means one thing in clean, ignorePaths and checks[].paths.
+# shellcheck disable=SC2031 # tlc's subshell sources the script, whose own HERE stays there
 for f in "$SCRIPT" "$HERE/../../hooks/mark-code-changed.sh" "$HERE/../../hooks/verify-before-stop.sh"; do
   grep -qE '^(glob_regex|glob_ere)\(\)' "$f" && fail "$(basename "$f") keeps its own glob compiler" || ok
   grep -qF 'glob-regex.sh' "$f" && ok || fail "$(basename "$f") uses lib/glob-regex.sh"
