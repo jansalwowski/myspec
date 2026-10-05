@@ -60,7 +60,7 @@ check_in() {  # check_in <cwd> <want> <desc> <session-id> <command>
   # An allow is exit 0 with EMPTY stdout. Anything printed on allow is a
   # defect: {"decision": "approve"} is the deprecated PreToolUse spelling of
   # "allow", which skips the user's permission prompt (issue #158).
-  if printf '%s' "$out" | grep -q '"block"'; then got=block
+  if printf '%s' "$out" | grep -q '"deny"'; then got=block
   elif [ "$rc" -eq 0 ] && [ -z "$out" ]; then got=allow
   else got="noisy"; fi
 
@@ -208,11 +208,14 @@ else
   FAIL=$((FAIL + 1))
   echo "FAIL  a payload with no command must pass silently (rc=$RC, stdout: $OUT)" >&2
 fi
-if run_hook "$REPO" none-sess 'git checkout develop' | jq -e '.hookSpecificOutput.permissionDecision == "deny" and .decision == "block"' >/dev/null; then
+# Since 3.0 the deny is the hookSpecificOutput form alone: the top-level
+# decision/reason pair is the deprecated PreToolUse spelling, dropped with
+# the host floor (#266).
+if run_hook "$REPO" none-sess 'git checkout develop' | jq -e '.hookSpecificOutput.permissionDecision == "deny" and (.hookSpecificOutput.permissionDecisionReason | length > 0) and (has("decision") or has("reason") | not)' >/dev/null; then
   PASS=$((PASS + 1))
 else
   FAIL=$((FAIL + 1))
-  echo "FAIL  a block must carry permissionDecision deny plus the legacy decision block" >&2
+  echo "FAIL  a block must carry permissionDecision deny with its reason, and no legacy decision/reason pair" >&2
 fi
 
 # --- gate A escape hatch, and gate A holds in develop mode too ---------------
@@ -375,7 +378,7 @@ check_as() {  # check_as <want> <desc> <session-id> <command> <extra input field
   out=$(jq -cn --arg c "$REPO" --arg s "$sid" --arg k "$cmd" --argjson x "$extra" \
     '{tool_input: {command: $k}, cwd: $c, session_id: $s} + $x' | "$HOOK")
   rc=$?
-  if printf '%s' "$out" | grep -q '"block"'; then got=block
+  if printf '%s' "$out" | grep -q '"deny"'; then got=block
   elif [ "$rc" -eq 0 ] && [ -z "$out" ]; then got=allow
   else got="noisy"; fi
   if [ "$got" = "$want" ]; then
@@ -434,7 +437,7 @@ rm -f "$BROKEN/lib/myspec-config.schema.json"
 mark broken-sess worktree 60 "$WT"
 out=$(printf '{"tool_input":{"command":"npm run build"},"cwd":%s,"session_id":"broken-sess"}' "$(printf '%s' "$REPO" | jq -Rs .)" \
   | CLAUDE_PLUGIN_ROOT="$BROKEN" "$BROKEN/hooks/guard-worktree-context.sh" 2>"$BROKEN/err")
-if printf '%s' "$out" | grep -q '"block"' && printf '%s' "$out" | grep -q 'run /myspec:update' \
+if printf '%s' "$out" | grep -q '"deny"' && printf '%s' "$out" | grep -q 'run /myspec:update' \
     && printf '%s' "$out" | grep -q 'schema not found'; then
   PASS=$((PASS + 1))
 else

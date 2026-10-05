@@ -4,7 +4,11 @@ Specification-Driven Development framework for Claude Code and Codex. Provides s
 
 ## Installation
 
-Requirements: git 2.31 or later recommended (older git falls back: the hooks resolve what `git rev-parse --path-format=absolute` would print themselves, but `memory-claim-id.sh` and the memory and friction-scan scripts still need it) and jq 1.6 or later (the settings reader uses `jq --rawfile`).
+Requirements — the host floor (raising it is a major, RELEASING.md "Breaking changes"):
+
+- **Claude Code 2.0.12 or later.** The hooks run from the plugin's `hooks.json` with `${CLAUDE_PLUGIN_ROOT}` (2.0.12, "Plugin System Released" in the [changelog](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md)), answer PreToolUse with `hookSpecificOutput.permissionDecision` alone (1.0.59, "Exposed PermissionDecision to hooks"; the top-level `decision`/`reason` pair is the deprecated PreToolUse spelling and is no longer printed) and read `stop_hook_active` from the Stop payload ([hooks reference](https://code.claude.com/docs/en/hooks); no changelog entry). 2.0.12 is the highest of these, so it is the floor. The behavioural eval suite is maintainer-only and needs `claude plugin eval` (2.1.269, `evals/README.md`); that is not a consumer requirement.
+- **git 2.31 or later** (`git rev-parse --path-format=absolute`, #253). Below it the hooks resolve those paths themselves and keep working, but `memory-claim-id.sh` and the memory and friction-scan scripts need it.
+- **jq 1.6 or later** (the settings reader uses `jq --rawfile`).
 
 ### Codex
 

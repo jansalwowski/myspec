@@ -87,11 +87,11 @@ ${aiDir}/
   memory/
     index.md           ← create with basic Layer 1 template
     procedural/
-      index.md         ← copy from framework-files/templates/index-procedural.md
+      index.md         ← copy from scaffolding/memory/procedural/index.md
     semantic/
-      index.md         ← copy from framework-files/templates/index-semantic.md
+      index.md         ← copy from scaffolding/memory/semantic/index.md
     episodic/
-      index.md         ← copy from framework-files/templates/index-episodic.md
+      index.md         ← copy from scaffolding/memory/episodic/index.md
     sessions/
       archive/
         .gitkeep            ← create empty file   (live logs go to .claude/state/sessions/, created by the hook)
