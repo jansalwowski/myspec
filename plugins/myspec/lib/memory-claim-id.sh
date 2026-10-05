@@ -105,8 +105,16 @@ AI_DIR=$("${READER[@]}" get aiDir --root "$MAIN_ROOT" 2>"$READER_ERR") || {
 [ ! -s "$READER_ERR" ] || sed 's/^/memory-claim-id: /' "$READER_ERR" >&2
 rm -f "$READER_ERR"
 AI_DIR=$(printf '%s' "$AI_DIR" | sed -n 's/^"\(.*\)"$/\1/p' | sed 's#^\./##; s#/*$##')
+# An empty string is unset, as hook-core's ai_dir and memory-files.mjs read
+# it: the schema default, which the reader returns for a root with no
+# .myspec.json.
 if [ -z "$AI_DIR" ]; then
-  echo "memory-claim-id: aiDir in .myspec.json is empty or not a string" >&2
+  EMPTY_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/.myspec-claim-root.XXXXXX")
+  AI_DIR=$("${READER[@]}" get aiDir --root "$EMPTY_ROOT" 2>/dev/null | sed -n 's/^"\(.*\)"$/\1/p') || AI_DIR=""
+  rmdir "$EMPTY_ROOT"
+fi
+if [ -z "$AI_DIR" ]; then
+  echo "memory-claim-id: aiDir is empty in .myspec.json and the reader gave no default" >&2
   exit 2
 fi
 

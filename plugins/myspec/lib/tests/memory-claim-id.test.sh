@@ -58,7 +58,7 @@ new_repo() {
   git init -q -b main .
   git config user.email t@t
   git config user.name t
-  printf '{\n  "aiDir": "%s",\n  "frameworkVersion": "1.27.0"\n}\n' "${2:-.ai}" > .myspec.json
+  printf '{\n  "aiDir": "%s",\n  "frameworkVersion": "1.27.0"\n}\n' "${2-.ai}" > .myspec.json
   mkdir -p .ai/memory/procedural .ai/memory/semantic .ai/memory/episodic
   echo "# index" > .ai/memory/procedural/index.md
   git add -A
@@ -362,6 +362,14 @@ mem procedural P012-branch.md "P012 on feat/slash"
 git checkout -q main
 got=$(claim)
 check "(k) aiDir .ai/ ref scan pathspec -> P013" P013 "$got"
+
+# An empty aiDir is unset, as hook-core's ai_dir and memory-files.mjs read
+# it: the schema default, not a refusal.
+new_repo k2 ""
+mem procedural P004-first.md "P004"
+got=$(claim)
+rc=$?
+check "(k) aiDir \"\" -> the .ai default, P005" "0 P005" "$rc $got"
 
 # --- (l) many refs: unique-tip scan stays fast --------------------------------
 
