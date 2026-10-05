@@ -10,7 +10,7 @@ Evals run **locally only**, on the maintainer's Claude Code login. There is no C
 |---|---|---|---|
 | pre-commit | static skill lint (no model) | `.githooks/pre-commit` | yes |
 | pre-push | cases for the skills changed on the branch, 1 run each, Sonnet | `.githooks/pre-push` → `run.sh --mode changed` | no (report-only) |
-| release | every case, 3 runs, two agent models (Sonnet, Haiku), judge Sonnet, compared with the previous release | `scripts/evals/release-check.sh` (RELEASING.md) | yes: a regressed verdict exits 1 (`quality/release-check.json` gate) |
+| release | every case, 3 runs, two agent models (Sonnet, Haiku), judge Sonnet, compared with the previous release | `scripts/evals/release-check.sh` (RELEASING.md) | yes: a Sonnet regression exits 1; Haiku is report-only (`quality/release-check.json` `gate`, `gateModels`) |
 
 Enable the hooks once per clone with `scripts/install-git-hooks.sh`. That script and `.githooks/pre-commit` come from PR #137 (requires #137). Skip the pre-push evals with `MYSPEC_SKIP_EVALS=1 git push` or `git push --no-verify`. Make a below-threshold result block the push with `MYSPEC_EVALS_STRICT=1`.
 

@@ -37,7 +37,10 @@
 #      quality/ until --record.
 #
 # Gate: quality/release-check.json "gate": false reports only; "gate": true
-# makes a regressed verdict exit 1. A --case run never exits 1.
+# makes a regressed verdict exit 1, but only when a model "gateModels" lists
+# regressed (no key: every model that ran gates). Every model still runs and
+# is reported; a regression on any other model is a report-only warning. A
+# --case run never exits 1.
 #
 # Exit status: 0 done (report-only, not regressed, or partial) · 1 regressed
 # and the gate is on · 2 infrastructure error (bad arguments, eval run failed,
@@ -53,7 +56,7 @@ CONFIG="$QUALITY_DIR/release-check.json"
 CLAUDE_BIN="${MYSPEC_EVAL_CLAUDE:-claude}"
 
 die() { echo "release-check: $*" >&2; exit 2; }
-usage() { sed -n '2,45p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,48p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
 
 VERSION="" PREV_TAG="" RUNS=3 MODELS="sonnet,haiku" CASE_GLOB="" OUT="" HEAD_RESULTS="" SKIP_REASON="" SKIP=0
 RECORD_FROM="" CC_MATCH="exact"
@@ -106,13 +109,18 @@ if [ "$SKIP" = 1 ]; then
   exit 0
 fi
 
-# gate seed resamples
-read -r GATE SEED RESAMPLES < <(node -e '
+# gate seed resamples gate-models: "*" when gateModels is absent (every model
+# gates), "-" for an empty list (none does).
+read -r GATE SEED RESAMPLES GATE_MODELS < <(node -e '
   const fs = require("fs");
   const c = fs.existsSync(process.argv[1]) ? JSON.parse(fs.readFileSync(process.argv[1], "utf8")) : {};
-  console.log([c.gate === true, c.seed ?? 42, c.resamples ?? 10000].join(" "));
+  const g = c.gateModels;
+  if (g !== undefined && !(Array.isArray(g) && g.every((m) => typeof m === "string" && /^[\w.-]+$/.test(m)))) {
+    throw new Error("gateModels must be an array of model aliases");
+  }
+  console.log([c.gate === true, c.seed ?? 42, c.resamples ?? 10000, g === undefined ? "*" : g.join(",") || "-"].join(" "));
 ' "$CONFIG") || die "unreadable $CONFIG"
-[ -n "${GATE:-}" ] || die "unreadable $CONFIG"
+[ -n "${GATE_MODELS:-}" ] || die "unreadable $CONFIG"
 
 if [ -z "$PREV_TAG" ]; then
   PREV_TAG=$(git describe --tags --abbrev=0 HEAD 2>/dev/null) || PREV_TAG=""
@@ -187,7 +195,7 @@ resolve_model_id() {
 
 json_field() { node -e 'try { console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))[process.argv[2]] ?? "") } catch { console.log("") }' "$1" "$2"; }
 
-echo "release-check: v$VERSION vs ${PREV_TAG:-<no previous tag>} · runs=$RUNS models=$MODELS${CASE_GLOB:+ case=$CASE_GLOB} · gate=$([ "$GATE" = true ] && echo on || echo 'off (report-only)')"
+echo "release-check: v$VERSION vs ${PREV_TAG:-<no previous tag>} · runs=$RUNS models=$MODELS${CASE_GLOB:+ case=$CASE_GLOB} · gate=$([ "$GATE" = true ] && echo "on ($([ "$GATE_MODELS" = '*' ] && echo 'every model' || echo "$GATE_MODELS"))" || echo 'off (report-only)')"
 echo "release-check: output in $OUT"
 
 # ------------------------------------------------------------------ 1. HEAD
@@ -314,8 +322,24 @@ if [ "$verdict" = regressed ]; then
     exit 0
   fi
   if [ "$GATE" = true ]; then
-    echo "release-check: REGRESSED and the gate is on (quality/release-check.json); blocking" >&2
-    exit 1
+    # compare.mjs's verdict is the worst model's; split the regressed models
+    # into the ones gateModels lists (block) and the rest (warn only).
+    read -r gated reported < <(node -e '
+      const d = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+      const g = process.argv[2];
+      const gates = (m) => g === "*" || g.split(",").includes(m);
+      const reg = Object.entries(d.models).filter(([, r]) => r.verdict === "regressed").map(([m]) => m);
+      console.log([reg.filter(gates).join(",") || "-", reg.filter((m) => !gates(m)).join(",") || "-"].join(" "));
+    ' "$OUT/compare.json" "$GATE_MODELS") || die "cannot read $OUT/compare.json"
+    if [ "$reported" != - ]; then
+      echo "release-check: WARNING: REGRESSED on $reported; report-only (not in gateModels, quality/release-check.json)" >&2
+    fi
+    if [ "$gated" != - ]; then
+      echo "release-check: REGRESSED on $gated and the gate is on (quality/release-check.json); blocking" >&2
+      exit 1
+    fi
+    echo "release-check: no gating model regressed; not blocking"
+    exit 0
   fi
   echo "release-check: REGRESSED; report-only (gate off in quality/release-check.json), the maintainer decides"
   exit 0

@@ -49,8 +49,9 @@ The script prints which applies (`baseline REUSE …`, `RERUN <model> <reason>`,
 2. Run `scripts/evals/release-check.sh --version {X.Y.Z}` in the background: it can outlast a 10-minute tool timeout. Wait for it to exit, then show the comparison report and note the output directory it printed (`release-check: output in <out>`).
 3. Act on the exit status, not on the output alone:
    - **0, verdict improved, no-change or insufficient-data:** go to item 4. Show any `warning:` line (a single regressed case).
+   - **0 with `WARNING: REGRESSED on <models>; report-only`** (a model not in `"gateModels"`, Haiku, regressed and no gating model did): show that model's reasons as a signal and go to item 4; it does not block.
    - **0 with `REGRESSED; report-only`** (only when `"gate": false` was set by hand): show the regressed models, their reasons, and the REGRESSED column. Call `AskUserQuestion`: continue the release, or stop to investigate. On stop, go to Abort.
-   - **1** (regressed; `"gate": true` in `quality/release-check.json` is the standing setting): stop and go to Abort. The release does not go out on a regressed verdict while the gate is on. The verdict is the worst model's, so a Haiku-only regression blocks too; read the Haiku column as a signal when deciding what to investigate, not as a reason to turn the gate off.
+   - **1** (a model in `"gateModels"`, Sonnet, regressed; `"gate": true` in `quality/release-check.json` is the standing setting): stop and go to Abort. The release does not go out on a gating model's regression while the gate is on.
    - **2** (infrastructure error: usage limit, logged out, run failed, interrupted): show the last lines it printed. Call `AskUserQuestion`: retry, skip with a reason (item 1), or stop. When HEAD's run finished, retry with `--head-results <out>/head` so it is not paid for twice.
 4. On a go: `scripts/evals/release-check.sh --record <out>` copies the staged baselines and trend line into `quality/`.
 5. Commit them before the bump: `git add quality && git commit -m "chore(quality): record v{X.Y.Z} eval baseline"`. This keeps the bump diff to version files only.
