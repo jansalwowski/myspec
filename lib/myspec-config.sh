@@ -6,7 +6,7 @@
 # parses .myspec.json its own way.
 #
 # Usage:
-#   .claude/lib/myspec-config.sh get <dotted.key> [--root <checkout>]
+#   "${CLAUDE_PLUGIN_ROOT}"/lib/myspec-config.sh get <dotted.key> [--root <checkout>]
 #
 # Prints the effective value as compact JSON on stdout (null when no layer
 # sets the key) and exits 0. Keys under `verification.` are read from

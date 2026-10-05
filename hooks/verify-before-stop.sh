@@ -36,11 +36,12 @@ approve() {
 command -v jq >/dev/null 2>&1 || approve
 PAYLOAD=$(cat)
 
-# The libs ship with the hooks (framework-files/manifest.json). A missing one
-# is a broken install: block once and say how to repair it, rather than
-# guess at the checks. The continuation after that block approves (R10).
-HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
-[ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
+# The libs are the plugin's lib/, reached through CLAUDE_PLUGIN_ROOT, which
+# the harness exports to a hook declared in the plugin's hooks.json. A missing
+# one means the hook did not run from the plugin (a stale project copy, or a
+# hand-wired command): block once and say so, rather than guess at the
+# checks. The continuation after that block approves (R10).
+HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
 LIB_DIR=$(dirname "$HOOK_CORE")
 MISSING=""
 for f in hook-core.sh session-event.sh glob-regex.sh myspec-config.sh myspec-config.schema.json \
@@ -49,7 +50,7 @@ for f in hook-core.sh session-event.sh glob-regex.sh myspec-config.sh myspec-con
 done
 if [ -n "$MISSING" ]; then
   [ "$(printf '%s' "$PAYLOAD" | jq -r '.stop_hook_active // false' 2>/dev/null)" != "true" ] || approve
-  jq -nc --arg r "myspec lib missing, run /myspec:update. The stop gate needs $MISSING beside its hook (.claude/lib/), so no check ran." '{decision: "block", reason: $r}'
+  jq -nc --arg r "myspec lib missing: the stop gate needs $MISSING under \${CLAUDE_PLUGIN_ROOT}/lib (${CLAUDE_PLUGIN_ROOT:-unset}), so no check ran. The hook runs from the plugin's hooks.json since 3.0; a copy wired in .claude/settings.json is retired by /myspec:update." '{decision: "block", reason: $r}'
   exit 0
 fi
 # shellcheck source=lib/hook-core.sh

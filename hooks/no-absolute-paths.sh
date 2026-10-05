@@ -8,8 +8,8 @@
 # Policy (framework-files/rules/paths.md): committed docs and framework files
 # must be portable across machines and users. Use the placeholders
 # `<repo_root>` and `<encoded_cwd>` (and the harness-fixed
-# `~/.claude-personal/...` prefix). `.claude/lib/path-normalize.sh` exposes
-# `normalize_path` and `encode_cwd`, which produce these forms.
+# `~/.claude-personal/...` prefix). The plugin's `lib/path-normalize.sh`
+# exposes `normalize_path` and `encode_cwd`, which produce these forms.
 #
 # Scope (#163). The hook checks only what can leak into a shared artifact:
 #   - files inside a git work tree and not gitignored there (scratch paths,
@@ -31,8 +31,18 @@
 set -euo pipefail
 
 command -v jq >/dev/null 2>&1 || exit 0
-HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
-[ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
+# The lib is the plugin's lib/, under CLAUDE_PLUGIN_ROOT, which the harness
+# exports to a hook the plugin's hooks.json declares. Without it the hook
+# cannot load hook-core.sh, and approving in silence would hide a gate that
+# is not running (a stale copy wired in .claude/settings.json, a harness that
+# did not export the variable). Say so, naming the variable and the repair.
+# The same preamble sits in every non-Stop hook: hook-core is what is missing.
+HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
+if [ ! -f "$HOOK_CORE" ]; then
+  LIB_MISSING="myspec lib missing: hook-core.sh not found under \${CLAUDE_PLUGIN_ROOT}/lib (CLAUDE_PLUGIN_ROOT is ${CLAUDE_PLUGIN_ROOT:-unset}). The hook did not run from the plugin's hooks.json; a copy wired in .claude/settings.json is retired by /myspec:update."
+  printf '%s\n' "$LIB_MISSING" >&2
+  exit 0
+fi
 [ -f "$HOOK_CORE" ] || exit 0
 # shellcheck source=lib/hook-core.sh
 . "$HOOK_CORE"
@@ -69,14 +79,12 @@ if git -C "$REPO_ROOT" check-ignore -q -- "$REL_PATH" 2>/dev/null; then
   exit 0
 fi
 
-# Allowlist: files that define the detected path shapes themselves.
+# Allowlist: the plugin's own files that define the detected path shapes.
 case "$REL_PATH" in
   lib/path-normalize.sh|\
   plugins/myspec/lib/path-normalize.sh|\
   hooks/no-absolute-paths.sh|\
-  plugins/myspec/hooks/no-absolute-paths.sh|\
-  .claude/hooks/no-absolute-paths.sh|\
-  .claude/lib/path-normalize.sh)
+  plugins/myspec/hooks/no-absolute-paths.sh)
     exit 0
     ;;
 esac
@@ -182,11 +190,11 @@ while IFS= read -r line; do
 done <<< "$MATCHES"
 
 REASON=$(cat <<EOF
-FIX NEEDED: ${REL_PATH} was written, but the new content contains absolute homedir paths. Committed docs and framework files must be portable across machines and users, so edit the file to use the placeholders <repo_root> and <encoded_cwd> (helper: .claude/lib/path-normalize.sh).
+FIX NEEDED: ${REL_PATH} was written, but the new content contains absolute homedir paths. Committed docs and framework files must be portable across machines and users, so edit the file to use the placeholders <repo_root> and <encoded_cwd> (helper: ${HOOK_LIB}/path-normalize.sh).
 
 Findings:
 ${HINT}
-Checked by .claude/hooks/no-absolute-paths.sh on doc files and on files under .claude/, docs/ or the aiDir that git does not ignore. To describe the pattern itself, write a placeholder such as /Users/<name>/ instead of a real name.
+Checked by the myspec plugin hook no-absolute-paths.sh on doc files and on files under .claude/, docs/ or the aiDir that git does not ignore. To describe the pattern itself, write a placeholder such as /Users/<name>/ instead of a real name.
 EOF
 )
 

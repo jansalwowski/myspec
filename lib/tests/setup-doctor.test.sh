@@ -68,20 +68,23 @@ const m=JSON.parse(readFileSync(join(plugin,"framework-files","manifest.json"),"
 const V=m.frameworkVersion;
 // init and update substitute ${aiDir} into the DOCUMENTS they copy, so copying
 // those verbatim would compare plugin bytes against plugin bytes and could
-// never catch a drift check that forgot the substitution. Hooks and lib are the
-// opposite: ${aiDir} there is live shell/JS syntax, so a faithful install copies
-// them byte-for-byte (issue #74).
+// never catch a drift check that forgot the substitution.
 const put=(src,dest)=>{mkdirSync(join(root,dirname(dest)),{recursive:true});writeFileSync(join(root,dest),readFileSync(src,"utf8").split("${aiDir}").join(aiDir));return dest;};
-const putRaw=(src,dest)=>{mkdirSync(join(root,dirname(dest)),{recursive:true});copyFileSync(src,join(root,dest));return dest;};
 for(const k of Object.keys(m.files)){
   const dest = k.startsWith("templates/") ? aiDir+"/.templates/"+k.slice(10) : aiDir+"/"+k;
   put(join(plugin,"framework-files",k),dest);
 }
 for(const [k,e] of Object.entries(m.rules)){ put(join(plugin,"framework-files","rules",k),e.dest); }
-for(const [k,e] of Object.entries(m.hooks)){ chmodSync(join(root,putRaw(join(plugin,"hooks",k),e.dest)),0o755); }
-for(const [k,e] of Object.entries(m.lib)){ chmodSync(join(root,putRaw(join(plugin,"lib",k),e.dest)),0o755); }
+// Since 3.0 the hooks and lib run from the plugin: nothing of them is copied
+// and settings.json carries no framework entry. A 3.0 init writes no
+// settings.json at all; this one holds a project hook, so the checks on
+// project-owned wiring have something to read.
+mkdirSync(join(root,"scripts"),{recursive:true});
+writeFileSync(join(root,"scripts","own-hook.sh"),"#!/bin/sh\nexit 0\n");
+chmodSync(join(root,"scripts","own-hook.sh"),0o755);
+mkdirSync(join(root,".claude"),{recursive:true});
+writeFileSync(join(root,".claude","settings.json"),JSON.stringify({hooks:{Stop:[{hooks:[{type:"command",command:"\"$CLAUDE_PROJECT_DIR\"/scripts/own-hook.sh"}]}]}},null,2)+"\n");
 writeFileSync(join(root,".myspec.json"),JSON.stringify({aiDir,frameworkVersion:V,project:{name:"fixture"},migrations:m.migrations||[]},null,2)+"\n");
-copyFileSync(join(plugin,"templates","settings-hooks.json"),join(root,".claude","settings.json"));
 copyFileSync(join(plugin,"templates","verification.json"),join(root,".claude","verification.json"));
 mkdirSync(join(root,aiDir,"features"),{recursive:true});
 copyFileSync(join(plugin,"scaffolding","features","index.yaml"),join(root,aiDir,"features","index.yaml"));
@@ -108,16 +111,15 @@ expect_exit 0 "clean install exits 0"
 expect_no_line '^ERROR' "clean install reports no errors"
 expect_no_line 'framework-drift' "clean install reports no drift"
 expect_no_line 'myspec-schema-stale' "a 2.0-shape .myspec.json is not stale"
-expect_no_line 'framework-removed' "a manifest with an empty removed block reports nothing retired"
-expect_no_line 'shipped-drift' "clean install reports no hook or lib drift"
+expect_no_line 'framework-removed' "a 3.0 install holds none of the retired copies"
+expect_no_line 'hook-copy-retired' "a 3.0 install holds no hook or lib copy under .claude/"
 expect_no_line 'dead-path-ref' "framework-owned rules are not scanned for dead refs"
 expect_no_line 'topology-missing' "a project with no topologyFile key is not reported"
 expect_no_line 'over-budget' "framework-owned rules are not warned about as over budget"
 expect_no_line 'framework files over their always-loaded budget' "no plugin-owned always-loaded rule is over the 1000-token budget (regression guard for the 2.0 rules diet)"
-expect_no_line 'hook-missing' "the template's \$CLAUDE_PROJECT_DIR hook commands resolve"
-expect_no_line 'hook-unregistered' "every shipped hook is recognised as wired"
-expect_no_line 'wiring-incomplete' "settings written from the template is fully wired"
-expect_no_line 'hook-command-relative' "the template's \$CLAUDE_PROJECT_DIR commands are not reported as relative"
+expect_no_line 'hook-missing' "the project's \$CLAUDE_PROJECT_DIR hook command resolves"
+expect_no_line 'hook-wired-locally' "a project hook is not a framework hook"
+expect_no_line 'hook-command-relative' "a \$CLAUDE_PROJECT_DIR command is not reported as relative"
 expect_line 'setup doctor: 0 error\(s\)' "summary counts zero errors"
 
 # The stop hook runs exactly these two groups; they must be silent on a clean
@@ -126,237 +128,117 @@ run_doctor --quiet wiring schema
 expect_exit 0 "the blocking groups exit 0 on a clean install"
 expect_no_line '^ERROR' "the blocking groups report no errors on a clean install"
 
-# --- pass 1b: hooks still registered in the pre-2.2 relative form ------------
-
-# The template now registers hooks as "$CLAUDE_PROJECT_DIR"/.claude/hooks/x.sh,
-# because a bare relative command resolves against the session's cwd rather than
-# the project — a nested worktree then fails every matching tool call. Pass 1
-# covers that shipped form. Every install written before the switch still holds
-# the relative one, and update must not treat it as unwired: the two spellings
-# name the same file, so a literal comparison would wire each hook a second time.
-# It is still reported, as hook-command-relative, so update rewrites it: once a
-# session cd's into a subdirectory the bare command fails, and a failing Stop
-# hook is non-blocking, so the verification gate is skipped silently (#217).
-# At a matching version that makes it an error: nothing else would ever report
-# the missing gate (#216).
-cp "$REPO/.claude/settings.json" "$ROOT/settings-projectdir.json"
-# The walk prints each command it strips, so the expected list checked below is
-# the one this mutation produced, not a second traversal of the template.
+# --- pass 1b: framework hooks still wired in a settings file (#262) ----------
+# Since 3.0 the plugin's hooks.json runs the framework hooks, and the harness
+# keeps a plugin's handler separate from a settings copy of the same command:
+# an entry a 2.x init or update wrote runs the retired copy a second time. The
+# doctor reports every such entry by the script's name, whatever the path in
+# front of it, and leaves the project's own entries in the same arrays alone.
+# At a matching version that is an error (the gate blocks on it); while an
+# update is pending it is a warning, because update is what unwires it.
+cp "$REPO/.claude/settings.json" "$ROOT/settings-clean.json"
 # shellcheck disable=SC2016 # literal text, not an expansion
-TEMPLATE_COMMANDS=$(set_json .claude/settings.json '
-const walk = (n) => {
-  if (Array.isArray(n)) { n.forEach(walk); return; }
-  if (!n || typeof n !== "object") { return; }
-  if (typeof n.command === "string") {
-    n.command = n.command.replace(/^"\$CLAUDE_PROJECT_DIR"\//, "");
-    console.log(n.command);
-  }
-  Object.values(n).forEach(walk);
-};
-walk(d.hooks)')
+set_json .claude/settings.json '
+d.hooks.PreToolUse = [
+  { matcher: "Bash", hooks: [{ type: "command", command: "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-worktree-context.sh" }] },
+  { matcher: "Write|Edit", hooks: [{ type: "command", command: ".claude/hooks/require-isolation-decision.sh" }, { type: "command", command: "bash \"$CLAUDE_PROJECT_DIR/scripts/lint-on-edit.sh\"" }] },
+];
+d.hooks.PostToolUse = [
+  { matcher: "Write|Edit|MultiEdit|NotebookEdit", hooks: [
+    { type: "command", command: "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/validate-frontmatter.sh\"" },
+    { type: "command", command: "./.claude/hooks/mark-code-changed.sh" },
+    { type: "command", command: "${CLAUDE_PROJECT_DIR}/.claude/hooks/no-absolute-paths.sh" },
+  ] },
+  { matcher: "Bash", hooks: [{ type: "command", command: "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/mark-code-changed.sh" }] },
+];
+d.hooks.Stop[0].hooks.push({ type: "command", command: "\"${CLAUDE_PLUGIN_ROOT}\"/hooks/verify-before-stop.sh", timeout: 330 });
+d.hooks.SessionEnd = [{ hooks: [{ type: "command", command: "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/record-session-metrics.sh" }] }];
+'
+printf '#!/bin/sh\nexit 0\n' > "$REPO/scripts/lint-on-edit.sh"
+chmod 755 "$REPO/scripts/lint-on-edit.sh"
 
 run_doctor wiring
-expect_exit 1 "hooks registered in the legacy relative form fail the wiring group"
-expect_no_line 'hook-missing' "a relative hook path is not reported missing"
-expect_no_line 'hook-unregistered' "a relative hook is recognised as wired"
-expect_no_line 'wiring-incomplete' "a relative command matches the template's \$CLAUDE_PROJECT_DIR one"
-expect_line 'ERROR hook-command-relative: .claude/settings.json: hook command ".claude/hooks/verify-before-stop.sh" runs .claude/hooks/verify-before-stop.sh by a relative path' "a bare relative Stop hook command is an error"
-expect_line 'run: /myspec:update' "a relative framework hook command names update as the fix"
-expect_no_line 'WARN +hook-command-relative' "no relative framework hook command is downgraded to a warning"
+expect_exit 1 "framework hooks still wired in settings.json fail the wiring group"
+REPORTED_COUNT=$(printf '%s\n' "$OUTPUT" | grep -cE '^ERROR hook-wired-locally: .claude/settings.json:')
+if [ "$REPORTED_COUNT" -eq 8 ]; then ok; else fail "every framework entry is reported once, whatever its spelling (want 8, got $REPORTED_COUNT)"; fi
+for name in guard-worktree-context require-isolation-decision validate-frontmatter mark-code-changed no-absolute-paths verify-before-stop record-session-metrics; do
+  expect_line "hook-wired-locally: .claude/settings.json: hook command \".*$name.sh\"* runs the framework hook $name.sh" "the entry for $name.sh is reported by its script name"
+done
+# shellcheck disable=SC2016 # literal text, not an expansion
+expect_line 'hook command "bash "\$CLAUDE_PROJECT_DIR/.claude/hooks/validate-frontmatter.sh"" runs the framework hook' "an interpreter-led framework entry is reported"
+expect_line 'hook command "./.claude/hooks/mark-code-changed.sh" runs the framework hook' "a bare relative framework entry is reported"
+expect_line 'hook command ""\$\{CLAUDE_PLUGIN_ROOT\}"/hooks/verify-before-stop.sh" runs the framework hook' "a plugin-root spelling in settings is still a second copy of the plugin's own entry"
+expect_line 'run: /myspec:update' "a framework entry names update as the fix"
+expect_no_line 'hook-wired-locally: .claude/settings.json: hook command ".*own-hook.sh' "the project's own hook in the same arrays is not reported"
+expect_no_line 'hook-wired-locally: .claude/settings.json: hook command ".*lint-on-edit.sh' "a project hook in the same matcher group is not reported"
+expect_no_line 'hook-missing' "a framework entry is not also reported as missing"
+expect_no_line 'hook-command-relative' "a framework entry is not also reported as relative"
+expect_no_line 'WARN +hook-wired-locally' "no framework entry is downgraded to a warning at a matching version"
 
-# Every template entry is reported, whatever its event and matcher: update
-# rewrites what the doctor lists, so an entry the scan skipped stays bare. The
-# expected list is the one the set_json walk above printed, not written out here.
-TEMPLATE_COUNT=$(printf '%s\n' "$TEMPLATE_COMMANDS" | grep -c .)
-REPORTED_COUNT=$(printf '%s\n' "$OUTPUT" | grep -cE '^ERROR hook-command-relative: .claude/settings.json:')
-if [ "$TEMPLATE_COUNT" -gt 0 ] && [ "$REPORTED_COUNT" -eq "$TEMPLATE_COUNT" ]; then ok; else fail "every bare template entry is reported once (template $TEMPLATE_COUNT, reported $REPORTED_COUNT)"; fi
-while IFS= read -r cmd; do
-  case "$OUTPUT" in
-    *"hook command \"$cmd\" runs"*) ok ;;
-    *) fail "the bare template command is reported: $cmd" ;;
-  esac
-done <<< "$TEMPLATE_COMMANDS"
-
-# While an update is pending the same bare commands are warnings, like framework
-# drift: update copies the new doctor before it rewrites the wiring, and a Stop
-# hook run in between must not block on the fix that is still landing.
+# While an update is pending the same entries are warnings, like framework
+# drift: the migration that unwires them lands with the version stamp, and a
+# Stop hook run in between must not block on the fix that is still landing.
 cp "$REPO/.myspec.json" "$ROOT/myspec-matching.json"
 set_json .myspec.json 'd.frameworkVersion = "0.0.1"'
 run_doctor wiring
-expect_exit 0 "bare framework hook commands do not fail the wiring group while an update is pending"
-expect_line 'WARN +hook-command-relative: .claude/settings.json: hook command ".claude/hooks/verify-before-stop.sh"' "a bare framework hook command is a warning while an update is pending"
+expect_exit 0 "framework entries do not fail the wiring group while an update is pending"
+expect_line 'WARN +hook-wired-locally: .claude/settings.json: hook command ".*verify-before-stop.sh' "a framework entry is a warning while an update is pending"
 expect_line 'run: /myspec:update' "the pending-update warning still names update as the fix"
-expect_no_line 'ERROR hook-command-relative' "no bare framework hook command is an error while an update is pending"
+expect_no_line 'ERROR hook-wired-locally' "no framework entry is an error while an update is pending"
 cp "$ROOT/myspec-matching.json" "$REPO/.myspec.json"
+cp "$ROOT/settings-clean.json" "$REPO/.claude/settings.json"
 
-# A project's own relative hook is not the framework's gate: a warning.
-mkdir -p "$REPO/scripts"
-printf '#!/bin/sh\nexit 0\n' > "$REPO/scripts/own-hook.sh"
-chmod 755 "$REPO/scripts/own-hook.sh"
+# settings.local.json is the developer's own file and update never rewrites it,
+# so a framework entry there is a warning that names the hand fix: an error
+# would block every stop with nothing the framework can do to clear it.
+printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":".claude/hooks/verify-before-stop.sh"}]}]}}' > "$REPO/.claude/settings.local.json"
+run_doctor --quiet wiring schema
+expect_exit 0 "a framework entry in settings.local.json does not fail the wiring group"
+expect_no_line '^ERROR hook-wired-locally' "settings.local.json adds no hook-wired-locally error"
+run_doctor wiring schema
+expect_line 'WARN +hook-wired-locally: .claude/settings.local.json: hook command ".claude/hooks/verify-before-stop.sh"' "a framework entry in settings.local.json is a warning"
+expect_line 'fix: delete that entry from .claude/settings.local.json by hand' "the settings.local.json warning says to delete the entry by hand"
+rm "$REPO/.claude/settings.local.json"
+
+# The project's own hooks keep their checks. A relative command is a warning
+# (the doctor does not own what that hook guards), a missing script an error,
+# an exec'd script without the bit an error, an interpreter-led one not.
 set_json .claude/settings.json 'd.hooks.Stop[0].hooks.push({type:"command",command:"scripts/own-hook.sh"})'
-run_doctor hook-command-relative
+run_doctor wiring
+expect_exit 0 "a project-owned relative hook command does not fail the wiring group"
 expect_line 'WARN +hook-command-relative: .claude/settings.json: hook command "scripts/own-hook.sh"' "a project-owned relative hook command is a warning"
 # shellcheck disable=SC2016 # literal text, not an expansion
 expect_line 'fix: add the "\$CLAUDE_PROJECT_DIR"/ prefix by hand' "a project-owned relative hook command names the prefix fix"
 set_json .claude/settings.json 'd.hooks.Stop[0].hooks.pop()'
-rm "$REPO/scripts/own-hook.sh"
 
-# The cases below change the Stop entry alone; with every other entry bare they
-# would also carry those entries' hook-command-relative errors.
-cp "$ROOT/settings-projectdir.json" "$REPO/.claude/settings.json"
-
-# settings.local.json is the developer's own file and update never rewrites it,
-# so a bare framework-path command there is a warning: an error would block
-# every stop with nothing the framework can do to clear it.
-printf '#!/bin/sh\nexit 0\n' > "$REPO/.claude/hooks/my-notify.sh"
-chmod 755 "$REPO/.claude/hooks/my-notify.sh"
-printf '%s\n' '{"hooks":{"Stop":[{"hooks":[{"type":"command","command":".claude/hooks/my-notify.sh"}]}]}}' > "$REPO/.claude/settings.local.json"
-run_doctor --quiet wiring schema
-expect_exit 0 "a bare hook command in settings.local.json does not fail the wiring group"
-expect_no_line '^ERROR hook-command-relative' "settings.local.json adds no hook-command-relative error"
-run_doctor wiring schema
-expect_line 'WARN +hook-command-relative: .claude/settings.local.json: hook command ".claude/hooks/my-notify.sh"' "a bare framework-path command in settings.local.json is a warning"
-# shellcheck disable=SC2016 # literal text, not an expansion
-expect_line 'add the "\$CLAUDE_PROJECT_DIR"/ prefix by hand' "the settings.local.json warning says to add the prefix by hand"
-rm "$REPO/.claude/settings.local.json"
-set_json .claude/settings.json 'd.hooks.Stop[0].hooks.push({type:"command",command:".claude/hooks/my-notify.sh"})'
-run_doctor --quiet wiring schema
-expect_exit 1 "the same bare command in settings.json fails the wiring group"
-expect_line 'ERROR hook-command-relative: .claude/settings.json: hook command ".claude/hooks/my-notify.sh"' "the same bare command in settings.json is an error"
-set_json .claude/settings.json 'd.hooks.Stop[0].hooks.pop()'
-rm "$REPO/.claude/hooks/my-notify.sh"
-
-# An interpreter may lead the command; the script is then token 1. Such a
-# command does not exec the file, so a mode 644 script there is correct and
-# calling it an error would block every session: the stop hook runs this group.
-# shellcheck disable=SC2016 # literal text, not an expansion
-set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/verify-before-stop.sh\""'
-chmod 644 "$REPO/.claude/hooks/verify-before-stop.sh"
-
-run_doctor wiring
-expect_exit 0 "an interpreter-led command with a non-executable script exits 0"
-expect_no_line '^ERROR' "an interpreter-led command reports no errors"
-expect_no_line 'hook-not-executable' "a script run through bash needs no executable bit"
-expect_no_line 'hook-unregistered: .claude/hooks/verify-before-stop.sh' "an interpreter-led command still resolves its script"
-expect_no_line 'wiring-incomplete' "an interpreter-led command matches the template's bare one"
-expect_no_line 'hook-command-relative: .claude/settings.json: hook command "bash' "an interpreter-led \$CLAUDE_PROJECT_DIR command is not relative"
-
-set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "bash ./.claude/hooks/verify-before-stop.sh"'
-run_doctor wiring
-expect_line 'ERROR hook-command-relative: .claude/settings.json: hook command "bash ./.claude/hooks/verify-before-stop.sh"' "an interpreter-led relative command is an error"
-
-# The bit still matters when the harness execs the file itself.
-set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = ".claude/hooks/verify-before-stop.sh"'
-
-run_doctor wiring
-expect_line 'ERROR hook-not-executable: .claude/hooks/verify-before-stop.sh' "a directly exec'd hook without the bit is still an error"
-chmod 755 "$REPO/.claude/hooks/verify-before-stop.sh"
-
-# The braced spelling resolves too. The template writes the bare one, so no
-# other case in the suite would catch a broken \${CLAUDE_PROJECT_DIR} branch.
-# shellcheck disable=SC2016 # literal text, not an expansion
-set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "${CLAUDE_PROJECT_DIR}/.claude/hooks/verify-before-stop.sh"'
-
-run_doctor wiring
-expect_exit 0 "a braced \${CLAUDE_PROJECT_DIR} hook path resolves"
-expect_no_line 'hook-missing' "a braced hook path is not reported missing"
-expect_no_line 'hook-unregistered' "a braced hook is recognised as wired"
-
-# A .sh that is only an argument is not the hook script: reporting it missing
-# blocks the gate on a file the harness never runs, and /myspec:update cannot
-# fix it.
-set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "npx prettier --check src/setup.sh"'
-
-run_doctor wiring
-expect_no_line 'hook-missing: src/setup.sh' "a .sh passed as an argument is not treated as the hook script"
-expect_line 'WARN +hook-unregistered: .claude/hooks/verify-before-stop.sh' "a command that runs no hook leaves that hook unregistered"
-expect_line 'wiring-incomplete' "a command that runs no hook leaves the Stop gate unwired"
-
-# Nor is a path a command merely mentions. Certifying that gate as wired is the
-# worse failure of the two: nothing then reports that the hook never runs.
-set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "echo .claude/hooks/verify-before-stop.sh"'
-
-run_doctor wiring
-expect_line 'WARN +hook-unregistered: .claude/hooks/verify-before-stop.sh' "a mentioned hook path does not count as wired"
-expect_line 'wiring-incomplete' "a mentioned hook path does not satisfy the template pair"
-
-# A variable this process cannot expand is unresolvable, not missing.
-# shellcheck disable=SC2016 # literal text, not an expansion
-set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "\"$CLAUDE_PLUGIN_ROOT\"/hooks/verify-before-stop.sh"'
-
-run_doctor wiring
-expect_no_line 'hook-missing' "an unexpandable variable in a hook path is not reported missing"
-
-set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = ".claude/hooks/verify-before-stop.sh"'
-
-# A genuinely absent hook must still be caught, in either spelling.
 # shellcheck disable=SC2016 # literal text, not an expansion
 set_json .claude/settings.json 'd.hooks.Stop[0].hooks.push({type:"command",command:"\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/ghost.sh"})'
-
 run_doctor wiring
-expect_line 'ERROR hook-missing: .claude/hooks/ghost.sh' "a missing hook is still an error, reported by its repo-relative path"
+expect_line 'ERROR hook-missing: .claude/hooks/ghost.sh' "a missing project hook is an error, reported by its repo-relative path"
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks.pop()'
 
-cp "$ROOT/settings-projectdir.json" "$REPO/.claude/settings.json"
-
-# --- pass 1c: the matcher is part of the wiring (issue #125) ------------------
-
-# The template wires mark-code-changed.sh under PostToolUse twice, once per
-# matcher. Keying the comparison on (event, script) alone let either entry
-# stand in for the other, so a project missing the Bash one reported clean and
-# update never added it. Claude Code reads a matcher as a regex, so each
-# template tool name is tested against the project's matchers: order, grouping
-# and anchors do not matter, a matcher that is absent, empty or "*" covers
-# every tool, and the warning names only the tools left uncovered.
-set_json .claude/settings.json 'd.hooks.PostToolUse = d.hooks.PostToolUse.filter(e => e.matcher !== "Bash")'
-
+chmod 644 "$REPO/scripts/own-hook.sh"
 run_doctor wiring
-expect_line 'WARN +wiring-incomplete: .claude/settings.json: .claude/hooks/mark-code-changed.sh is not wired under PostToolUse for matcher Bash' "a hook wired under only one of its template matchers is incomplete"
-expect_no_line 'validate-frontmatter.sh is not wired' "the hooks wired under their template matcher stay quiet"
-
-set_json .claude/settings.json 'd.hooks.PostToolUse[0].matcher = "Write|Edit"'
-
+expect_line 'ERROR hook-not-executable: scripts/own-hook.sh' "a directly exec'd project hook without the bit is an error"
+expect_line 'run: chmod \+x scripts/own-hook.sh' "the finding carries a literal fix command"
+# shellcheck disable=SC2016 # literal text, not an expansion
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "bash \"$CLAUDE_PROJECT_DIR/scripts/own-hook.sh\""'
 run_doctor wiring
-expect_line 'mark-code-changed.sh is not wired under PostToolUse for matcher MultiEdit\|NotebookEdit —' "a narrower matcher names only the tools it leaves uncovered"
+expect_exit 0 "an interpreter-led project hook with a non-executable script exits 0"
+expect_no_line 'hook-not-executable' "a script run through bash needs no executable bit"
+expect_no_line 'hook-command-relative' "an interpreter-led \$CLAUDE_PROJECT_DIR command is not relative"
+chmod 755 "$REPO/scripts/own-hook.sh"
 
-set_json .claude/settings.json 'd.hooks.PostToolUse[0].matcher = "NotebookEdit|Edit|Bash|MultiEdit|Write"'
-
+# A .sh that is only an argument is not the hook script, and neither is a path
+# a command merely mentions: nothing may claim a file the harness never runs.
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "npx prettier --check src/setup.sh"'
 run_doctor wiring
-expect_no_line 'wiring-incomplete' "one entry whose alternation covers both template matchers, in any order, is wired"
-
-set_json .claude/settings.json 'delete d.hooks.PostToolUse[0].matcher'
-
+expect_no_line 'hook-missing: src/setup.sh' "a .sh passed as an argument is not treated as the hook script"
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks[0].command = "echo .claude/hooks/verify-before-stop.sh"'
 run_doctor wiring
-expect_no_line 'wiring-incomplete' "an entry with no matcher covers every template matcher"
+expect_no_line 'hook-wired-locally' "a mentioned framework hook path is not a run of it"
 
-set_json .claude/settings.json 'd.hooks.PostToolUse[0].matcher = "*"'
-
-run_doctor wiring
-expect_no_line 'wiring-incomplete' "a \"*\" matcher covers every template matcher"
-
-set_json .claude/settings.json 'd.hooks.PostToolUse[0].matcher = ".*"'
-
-run_doctor wiring
-expect_no_line 'wiring-incomplete' "a regex matcher is compiled, not split on |"
-
-cp "$ROOT/settings-projectdir.json" "$REPO/.claude/settings.json"
-set_json .claude/settings.json 'd.hooks.PostToolUse.forEach(e => { e.matcher = e.matcher === "Bash" ? "^Bash$" : "(" + e.matcher + ")" })'
-
-run_doctor wiring
-expect_no_line 'wiring-incomplete' "anchored and grouped matchers cover the names they match"
-
-cp "$ROOT/settings-projectdir.json" "$REPO/.claude/settings.json"
-set_json .claude/settings.json 'd.hooks.Stop[0].matcher = "Bash"'
-
-run_doctor wiring
-expect_no_line 'wiring-incomplete' "a matcher on an event the template wires with none does not unwire it"
-
-cp "$ROOT/settings-projectdir.json" "$REPO/.claude/settings.json"
-set_json .claude/settings.json 'd.hooks.PostToolUse.find(e => e.matcher === "Bash").matcher = ["Bash"]'
-
-run_doctor wiring
-expect_line 'mark-code-changed.sh is not wired under PostToolUse for matcher Bash' "a matcher that is not a string covers nothing"
-
-cp "$ROOT/settings-projectdir.json" "$REPO/.claude/settings.json"
+cp "$ROOT/settings-clean.json" "$REPO/.claude/settings.json"
 
 # --- pass 2: one break per check ---------------------------------------------
 
@@ -364,13 +246,18 @@ printf '\n# hand edit\n' >> "$REPO/.claude/rules/paths.md"
 rm "$REPO/ai/.templates/session-log.md"
 perl -0pi -e 's/<!-- myspec:framework-start -->//' "$REPO/ai/pre-flight.md"
 perl -0pi -e 's/^# .*$/# Renamed Locally/m' "$REPO/ai/anti-patterns.md"
-printf '\n# hand edit\n' >> "$REPO/.claude/hooks/no-absolute-paths.sh"
 set_json .myspec.json 'd.frameworkFiles = {"rules/ideas.md": {version: "1.27.0", lastUpdated: "2026-08-01"}}'
 printf '## Project anchors\n' > "$REPO/.claude/rules/ai-setup-audit.md"
 mkdir -p "$REPO/ai/memory/sessions/active" && printf -- '---\nstatus: active\n---\n' > "$REPO/ai/memory/sessions/active/old.md"
-chmod -x "$REPO/.claude/hooks/guard-worktree-context.sh"
+mkdir -p "$REPO/.claude/hooks"
+printf '#!/bin/sh\nexit 0\n' > "$REPO/.claude/hooks/own.sh"
+chmod 644 "$REPO/.claude/hooks/own.sh"
+# shellcheck disable=SC2016 # literal text, not an expansion
+set_json .claude/settings.json 'd.hooks.Stop[0].hooks.push({type:"command",command:"\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/own.sh"})'
 set_json .claude/settings.json 'd.hooks.Stop[0].hooks.push({type:"command",command:".claude/hooks/ghost.sh"})'
-set_json .claude/settings.json 'd.hooks.PostToolUse[0].hooks = d.hooks.PostToolUse[0].hooks.filter(h => !/require-reuse-audit/.test(h.command))'
+# shellcheck disable=SC2016 # literal text, not an expansion
+set_json .claude/settings.json 'd.hooks.PreToolUse = [{matcher:"Bash",hooks:[{type:"command",command:"\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-worktree-context.sh"}]}]'
+cp "$PLUGIN/lib/hook-core.sh" "$REPO/.claude/hooks/guard-worktree-context.sh"
 printf '#!/usr/bin/env bash\nif [ 1 =\n' > "$REPO/.claude/hooks/broken.sh"
 chmod +x "$REPO/.claude/hooks/broken.sh"
 set_json .myspec.json 'd.aiDir = "ai/"'
@@ -393,15 +280,17 @@ expect_exit 1 "a broken install exits 1"
 expect_line 'ERROR framework-drift: .claude/rules/paths.md' "a hand-edited rule at a matching version is an error"
 expect_line 'ERROR framework-missing: ai/.templates/session-log.md' "a deleted framework file is an error"
 expect_line 'ERROR marker-missing: ai/pre-flight.md' "a marker-merge file without markers is an error"
-expect_line 'ERROR shipped-drift: .claude/hooks/no-absolute-paths.sh' "a hand-edited hook is an error"
 expect_line 'WARN +myspec-schema-stale: .myspec.json' "pre-2.0 per-file bookkeeping is a warning"
 expect_line 'WARN +doctor-rule-unrenamed: .claude/rules/ai-setup-audit.md' "the pre-rename doctor extension is a warning"
 expect_line 'WARN +sessions-unmigrated: ai/memory/sessions/active' "a 1.x live session log is a warning"
-expect_line 'ERROR hook-not-executable: .claude/hooks/guard-worktree-context.sh' "a registered hook without +x is an error"
+expect_line 'ERROR hook-not-executable: .claude/hooks/own.sh' "a registered project hook without +x is an error"
 expect_line 'ERROR hook-missing: .claude/hooks/ghost.sh' "a registered hook that does not exist is an error"
-expect_line 'WARN +hook-unregistered: .claude/hooks/broken.sh' "an unwired hook script is a warning"
-expect_line 'ERROR hook-syntax: .claude/hooks/broken.sh' "a hook that fails bash -n is an error"
-expect_line 'WARN +wiring-incomplete: .claude/settings.json' "a hook the template wires but settings does not is a warning"
+expect_line 'WARN +hook-unregistered: .claude/hooks/broken.sh' "an unwired project hook script is a warning"
+expect_line 'ERROR hook-syntax: .claude/hooks/broken.sh' "a project hook that fails bash -n is an error"
+expect_line 'ERROR hook-wired-locally: .claude/settings.json: hook command ".*guard-worktree-context.sh" runs the framework hook' "a framework hook still wired is an error"
+expect_line 'WARN +hook-copy-retired: .claude/hooks/guard-worktree-context.sh' "a framework hook copy still on disk is a warning"
+expect_no_line 'hook-unregistered: .claude/hooks/guard-worktree-context.sh' "a retired framework copy is not also an unregistered project hook"
+expect_no_line 'framework-removed: .claude/hooks/guard-worktree-context.sh' "a retired framework copy is not also reported by the install group"
 expect_line 'ERROR aidir-trailing-slash' "a trailing slash on aiDir is an error"
 expect_line 'ERROR verification-unparseable' "unparseable verification.json is an error"
 expect_line 'ERROR features-index-unreadable: ai/features/index.yaml:2' "a mis-indented manifest entry is an error, with its line"
@@ -412,7 +301,7 @@ expect_no_line 'references /(bootstrap|deps-check|vue-component),' "a slash comm
 expect_line 'WARN +dead-skill-ref: CLAUDE.md' "a reference to a skill the plugin does not ship is a warning"
 expect_line 'WARN +topology-missing: .myspec.json' "a topologyFile pointing at nothing is a warning, not a blocker"
 expect_line 'bootstrap and the reuse audit fall back to guessing' "the topology finding says what it breaks"
-expect_line 'run: chmod \+x .claude/hooks/guard-worktree-context.sh' "findings carry a literal fix command"
+expect_line 'run: chmod \+x .claude/hooks/own.sh' "findings carry a literal fix command"
 
 run_doctor --quiet
 expect_no_line '^WARN' "--quiet suppresses warnings"
@@ -658,71 +547,60 @@ set_json .myspec.json 'delete d.migrations'
 run_doctor schema
 expect_line 'WARN +myspec-schema-stale: .myspec.json has no migrations list' "a missing migrations list means the 2.0 migrations have not run"
 
-# --- pass 2b: ${aiDir} substituted into code is drift, not installation --------
-# hooks/ and lib/ resolve aiDir at runtime and carry ${aiDir} as live shell and
-# JS template-literal syntax. init/update must copy them byte-for-byte; a copy
-# with the value baked in is corrupt, and matchesShipped used to accept it — so
-# the corruption was invisible and survived every later update (issue #74).
-
-build_fixture
-# shellcheck disable=SC2016 # literal text, not an expansion
-node -e '
-const {readFileSync,writeFileSync}=require("fs");const {join}=require("path");
-const root=process.argv[1];
-for (const f of [".claude/lib/setup-doctor.mjs",".claude/hooks/validate-frontmatter.sh"]) {
-  const p=join(root,f);
-  writeFileSync(p, readFileSync(p,"utf8").split("${aiDir}").join("ai"));
-}
-' "$REPO"
-run_doctor install
-
-expect_line 'shipped-drift: .claude/lib/setup-doctor.mjs' "a lib helper with the aiDir value baked in is drift"
-expect_line 'shipped-drift: .claude/hooks/validate-frontmatter.sh' "a hook with the aiDir value baked in is drift"
-
-# Documents are the opposite case: both spellings are a correct install, because
+# --- pass 2b: both ${aiDir} spellings of a rule are a correct install ----------
 # init and update disagree about which of them substitutes the rules.
 build_fixture
 cp "$PLUGIN/framework-files/rules/paths.md" "$REPO/.claude/rules/paths.md"
 run_doctor install
 expect_no_line 'framework-drift: .claude/rules/paths.md' "a rule holding the literal placeholder is not drift"
 
-# --- pass 3a: pins are honoured for every manifest block -----------------------
-# update looks a pin up by its manifest key — `rules/workflow.md`,
-# `hooks/guard-worktree-context.sh`, `lib/branch-cleanup.sh` — and skips the
-# entry. The doctor tracked only `files` and `rules`, so a pinned hook or helper
-# drifted forever with no way to clear it (issue #71). Worse, `shipped-drift` is
-# what update Step 3.7 reads as "this entry did not get written, re-apply it",
-# which pointed at the one file that must not be re-applied.
+# --- pass 3a: retired hook and lib copies (#262) --------------------------------
+# A 2.x install left copies of the hooks and lib under .claude/. The plugin
+# runs its own since 3.0, so a copy is reported once, as hook-copy-retired,
+# whether or not it is pinned, hand-patched, broken or wired: update moves it
+# to .claude/state/retired-3.0/ rather than deleting it. The install group
+# does not report it a second time, and the project-hook checks do not read
+# it as a project hook.
 
 build_fixture
-node -e '
-const {readFileSync,writeFileSync}=require("fs");
-const {join}=require("path");
-const root=process.argv[1];
-const cfg=JSON.parse(readFileSync(join(root,".myspec.json"),"utf8"));
-cfg.frameworkFiles={
-  "hooks/guard-worktree-context.sh":{pinned:"extra guard for our monorepo"},
-  "lib/branch-cleanup.sh":{pinned:"local lint-gate fixes"},
-};
-writeFileSync(join(root,".myspec.json"),JSON.stringify(cfg,null,2)+"\n");
-for (const f of [".claude/hooks/guard-worktree-context.sh",".claude/lib/branch-cleanup.sh"]) {
-  writeFileSync(join(root,f), readFileSync(join(root,f),"utf8")+"\n# local fork\n");
-}
-' "$REPO"
-run_doctor install
+mkdir -p "$REPO/.claude/hooks" "$REPO/.claude/lib/stop-gate"
+cp "$PLUGIN/hooks/verify-before-stop.sh" "$REPO/.claude/hooks/verify-before-stop.sh"
+printf '#!/usr/bin/env bash\nif [ 1 =\n' > "$REPO/.claude/hooks/mark-code-changed.sh"
+cp "$PLUGIN/lib/hook-core.sh" "$REPO/.claude/lib/hook-core.sh"
+printf 'if [ 1 =\n' > "$REPO/.claude/lib/branch-cleanup.sh"
+cp "$PLUGIN/lib/stop-gate/run.sh" "$REPO/.claude/lib/stop-gate/run.sh"
+printf '#!/bin/sh\nexit 0\n' > "$REPO/.claude/hooks/own.sh"
+chmod 755 "$REPO/.claude/hooks/"*.sh
+set_json .myspec.json 'd.frameworkFiles = {"hooks/verify-before-stop.sh": {pinned: "local fork"}}'
+run_doctor
 
-expect_exit 0 "a pinned hook and lib helper do not fail the run"
-expect_no_line 'shipped-drift: .claude/hooks/guard-worktree-context.sh' "a pinned hook is not reported as drifted"
-expect_no_line 'shipped-drift: .claude/lib/branch-cleanup.sh' "a pinned lib helper is not reported as drifted"
+expect_exit 0 "retired copies alone do not fail the run"
+expect_line 'WARN +hook-copy-retired: .claude/hooks/verify-before-stop.sh: a copy of the plugin.s hook' "a hook copy is reported, pinned or not"
+expect_line 'WARN +hook-copy-retired: .claude/hooks/mark-code-changed.sh' "a hand-written hook copy is reported"
+expect_line 'WARN +hook-copy-retired: .claude/lib/hook-core.sh: a copy of the plugin.s lib helper' "a lib copy is reported"
+expect_line 'WARN +hook-copy-retired: .claude/lib/branch-cleanup.sh' "a lib copy that no longer matches is reported the same way"
+expect_line 'WARN +hook-copy-retired: .claude/lib/stop-gate/run.sh' "a lib copy in a subdirectory is reported"
+expect_line 'retired-3.0' "the finding says where update moves the copy"
+expect_line 'run: /myspec:update' "the finding carries the move command"
+expect_no_line 'framework-removed: .claude/' "the install group does not report the copies a second time"
+expect_no_line 'hook-syntax: .claude/hooks/mark-code-changed.sh' "a broken retired hook copy is not parsed: nothing runs it"
+expect_no_line 'hook-syntax: .claude/lib/branch-cleanup.sh' "a broken retired lib copy is not parsed"
+expect_no_line 'hook-unregistered: .claude/hooks/verify-before-stop.sh' "a retired hook copy is not an unregistered project hook"
+expect_line 'WARN +hook-unregistered: .claude/hooks/own.sh' "a project hook beside the copies is still checked"
+expect_no_line 'hook-copy-retired: .claude/hooks/own.sh' "a project hook is not a retired copy"
 
-# The pin must not blind the check for its neighbours.
-node -e '
-const {readFileSync,writeFileSync}=require("fs");const {join}=require("path");
-const root=process.argv[1];const f=join(root,".claude/hooks/mark-code-changed.sh");
-writeFileSync(f, readFileSync(f,"utf8")+"\n# unpinned drift\n");
-' "$REPO"
-run_doctor install
-expect_line 'shipped-drift: .claude/hooks/mark-code-changed.sh' "an unpinned hook still drifts while a sibling is pinned"
+# A 2.0 retirement under .claude/hooks/ (guard-git-branch.sh, since 2.0.0) is a
+# plain deletion update already performs, not a plugin-run copy: it keeps its
+# framework-removed finding and is never reported as hook-copy-retired, nor
+# routed to a move the migration would then compare with a file the plugin
+# does not ship.
+build_fixture
+mkdir -p "$REPO/.claude/hooks"
+printf '#!/bin/sh\nexit 0\n' > "$REPO/.claude/hooks/guard-git-branch.sh"
+chmod 755 "$REPO/.claude/hooks/guard-git-branch.sh"
+run_doctor
+expect_line 'WARN +framework-removed: .claude/hooks/guard-git-branch.sh: retired by the framework in v2.0.0' "a 2.0-retired hook copy keeps its framework-removed finding"
+expect_no_line 'hook-copy-retired: .claude/hooks/guard-git-branch.sh' "a 2.0-retired hook is not a plugin-run copy"
 
 # --- pass 3b: a pinned framework rule over budget ------------------------------
 # The 2.0 rules diet shrank the always-loaded rules, but two consumer repos pin
@@ -832,19 +710,6 @@ expect_no_line 'dead-path-ref' "the main checkout has no dead refs"
 OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" refs 2>&1); STATUS=$?
 expect_no_line 'dead-path-ref: CLAUDE.md: references .claude/worktrees' "a linked worktree does not report the main checkout's .claude/worktrees as dead"
 expect_line 'WARN +dead-path-ref: CLAUDE.md: references docs/gone.md' "a tracked file this branch removed is still a dead ref from the worktree"
-
-# --- pass 3f2: a Stop entry without the template's timeout (#257 review) -----
-# update never rewrites an existing entry's timeout, so a project wired
-# before the template had one keeps the harness's 600 s default.
-
-build_fixture
-run_doctor wiring
-expect_no_line 'hook-stop-no-timeout' "the template's Stop entry, with its timeout, is not reported"
-set_json .claude/settings.json 'd.hooks.Stop.forEach(g => g.hooks.forEach(h => { delete h.timeout; }));'
-run_doctor wiring
-expect_line '^WARN +hook-stop-no-timeout: \.claude/settings\.json: the Stop entry for \.claude/hooks/verify-before-stop\.sh has no timeout' "a Stop entry without a timeout is reported"
-expect_line 'add "timeout": 330 to that hook entry' "the fix names the template's timeout"
-expect_exit 0 "a missing Stop timeout is a warning"
 
 # --- pass 3g: links the provision record does not list (#239) ----------------
 #

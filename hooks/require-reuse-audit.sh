@@ -24,12 +24,22 @@
 
 set -euo pipefail
 
-# The hook and its libs ship as a set: hooks/ + lib/ in the plugin,
-# .claude/hooks/ + .claude/lib/ in a project. A missing jq or lib fails open
-# rather than block on an infra error.
+# The hook runs from the plugin (hooks.json), which exports CLAUDE_PLUGIN_ROOT,
+# and its libs are the plugin's lib/. A missing jq or lib fails open rather
+# than block on an infra error.
 command -v jq >/dev/null 2>&1 || exit 0
-HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
-[ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
+# The lib is the plugin's lib/, under CLAUDE_PLUGIN_ROOT, which the harness
+# exports to a hook the plugin's hooks.json declares. Without it the hook
+# cannot load hook-core.sh, and approving in silence would hide a gate that
+# is not running (a stale copy wired in .claude/settings.json, a harness that
+# did not export the variable). Say so, naming the variable and the repair.
+# The same preamble sits in every non-Stop hook: hook-core is what is missing.
+HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
+if [ ! -f "$HOOK_CORE" ]; then
+  LIB_MISSING="myspec lib missing: hook-core.sh not found under \${CLAUDE_PLUGIN_ROOT}/lib (CLAUDE_PLUGIN_ROOT is ${CLAUDE_PLUGIN_ROOT:-unset}). The hook did not run from the plugin's hooks.json; a copy wired in .claude/settings.json is retired by /myspec:update."
+  printf '%s\n' "$LIB_MISSING" >&2
+  exit 0
+fi
 if [ ! -f "$HOOK_CORE" ] || [ ! -f "$(dirname "$HOOK_CORE")/markdown-section-check.sh" ]; then
   exit 0
 fi

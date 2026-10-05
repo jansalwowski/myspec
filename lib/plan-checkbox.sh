@@ -6,7 +6,7 @@
 # Execution Order table instead of the task, and corrupted the plan).
 #
 # Usage:
-#   .claude/lib/plan-checkbox.sh <plan-file> <task> [todo|doing|done]
+#   "${CLAUDE_PLUGIN_ROOT}"/lib/plan-checkbox.sh <plan-file> <task> [todo|doing|done]
 #
 # <task>   the task number: `3`, `T3`, or `Task 3`
 # state    todo → `[ ]`, doing → `[~]`, done → `[x]`. Omitted: print the

@@ -122,7 +122,7 @@ yes
 
 ### Result
 
-- Claimed `P016` via `.claude/lib/memory-claim-id.sh procedural`.
+- Claimed `P016` via `"${CLAUDE_PLUGIN_ROOT}/lib/memory-claim-id.sh" procedural`.
 - Wrote `${aiDir}/memory/procedural/P016-test-user-factory.md`.
 - Regenerated `${aiDir}/memory/procedural/index.md` (`--check` clean).
 - No Layer 1 promotion — the rule is local to the test layer.
@@ -364,11 +364,11 @@ A one-line summary lands in `${aiDir}/memory/index.md` under **Rules**.
 
 ### Result
 
-- Claimed `P017`, `S008`, `E010` via `.claude/lib/memory-claim-id.sh` (one call per type, each after its consolidation check).
+- Claimed `P017`, `S008`, `E010` via `"${CLAUDE_PLUGIN_ROOT}/lib/memory-claim-id.sh"` (one call per type, each after its consolidation check).
 - Wrote `${aiDir}/memory/procedural/P017-webhook-signature-in-middleware.md`.
 - Wrote `${aiDir}/memory/semantic/S008-stripe-webhook-secret-per-env.md`.
 - Wrote `${aiDir}/memory/episodic/E010-webhook-body-retention-90d.md`.
-- All three indexes regenerated (`node .claude/lib/memory-index.mjs`, `--check` clean), `updated: 2026-04-30` bumped.
+- All three indexes regenerated (`node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs"`, `--check` clean), `updated: 2026-04-30` bumped.
 - P017 promoted to Layer 1.
 - Final tally: **Saved 3 memories: P017, S008, E010. Skipped 0.**
 

@@ -19,6 +19,8 @@
 set -uo pipefail
 
 HOOK="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../mark-code-changed.sh}"
+# The hooks find their lib through CLAUDE_PLUGIN_ROOT, as the harness exports it.
+export CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$HOOK")/.." && pwd)}"
 SESSION_EVENT="$(cd "$(dirname "$HOOK")" && pwd)/../lib/session-event.sh"
 
 if [ ! -x "$HOOK" ]; then

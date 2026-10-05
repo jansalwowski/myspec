@@ -101,9 +101,8 @@ expect_line '^memory doctor: no memory tree at \.ai/memory$' "no memory tree is 
 
 # --- 1. a clean project -------------------------------------------------------
 
-mkdir -p .ai/memory/procedural .ai/memory/semantic .ai/memory/episodic .claude/lib .claude/state
+mkdir -p .ai/memory/procedural .ai/memory/semantic .ai/memory/episodic .claude/state
 printf '.claude/state/\n' > .gitignore
-touch .claude/lib/memory-claim-id.sh .claude/lib/memory-index.mjs .claude/lib/memory-files.mjs
 
 memory .ai/memory/procedural/P001-first.md P001 "first thing" 'anchors: [{file: "src/a.js", pattern: "foo"}]' 'related: [S001]'
 memory .ai/memory/procedural/P002-old.md P002 "second thing"
@@ -188,7 +187,6 @@ index .ai/memory/semantic/index.md '| ID | Hook | Anchor |' \
 mkdir -p ai/memory/procedural .claude/rules
 printf -- '---\nload_when: always\n---\n# rule\n' > .claude/rules/inert.md
 printf -- '---\npaths: ["src/**"]\n---\n# rule\n' > .claude/rules/fine.md
-rm .claude/lib/memory-index.mjs
 
 run_doctor --root "$REPO"
 
@@ -211,7 +209,6 @@ expect_line '^ERROR index-drift: \.ai/memory/procedural/index\.md: P008 links to
 expect_no_line '^ERROR index-drift: \.ai/memory/procedural/index\.md: P005' "bare-ID row still counts as indexed"
 expect_line '^ERROR index-drift: \.ai/memory/episodic/index\.md: E003 on disk but not in the table' "the episodic index is checked for drift like any other"
 expect_line '^ERROR malformed-anchor: \.ai/memory/semantic/S002-bad\.md: anchor value "false"' "anchor: false"
-expect_line '^ERROR tooling-missing: \.claude/lib/: missing memory-index\.mjs — run /myspec:update$' "missing lib file"
 
 # warnings
 expect_line '^WARN anchor-no-pattern: \.ai/memory/semantic/S003-scalar\.md: anchor src/c\.js has no pattern' "scalar anchor has no pattern"
@@ -252,12 +249,6 @@ if [ "$(printf '%s' "$OUTPUT" | jq '.warnings | length')" -eq "$N_WARN" ]; then 
 if printf '%s' "$OUTPUT" | jq -e '[.errors[], .warnings[]] | all(has("id") and has("detail") and has("path"))' >/dev/null 2>&1; then ok; else fail "--json findings carry id, detail, path"; fi
 if [ "$(printf '%s' "$OUTPUT" | jq -r '.errors[] | select(.id == "duplicate-id" and (.detail | startswith("S001"))) | .path')" = ".ai/memory/semantic/S001-main.md" ]; then ok; else fail "--json duplicate path is the on-disk file"; fi
 if [ "$(printf '%s' "$OUTPUT" | jq -r '.warnings[] | select(.id == "state-not-ignored") | .path')" = ".claude/state/" ]; then ok; else fail "--json project-level finding carries a path"; fi
-
-# --- 3. no .claude/lib means the project opted out of tooling -----------------
-
-rm -rf .claude/lib
-run_doctor --root "$REPO"
-expect_no_line '^ERROR tooling-missing' "no .claude/lib skips tooling-missing"
 
 # --- 4. issue #124: an ID deleted on the default branch and reused there -----
 #

@@ -18,6 +18,8 @@
 set -uo pipefail
 
 HOOK="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../guard-worktree-context.sh}"
+# The hooks find their lib through CLAUDE_PLUGIN_ROOT, as the harness exports it.
+export CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$HOOK")/.." && pwd)}"
 
 if [ ! -x "$HOOK" ]; then
   echo "FATAL: hook not executable: $HOOK" >&2
@@ -427,11 +429,11 @@ mv "$REPO/.myspec.json.bak" "$REPO/.myspec.json"
 BROKEN=$(dirname "$REPO")/broken-install
 mkdir -p "$BROKEN/hooks"
 cp "$HOOK" "$BROKEN/hooks/"
-cp -R "$(dirname "$HOOK")/../lib" "$BROKEN/lib"
+cp -R "$CLAUDE_PLUGIN_ROOT/lib" "$BROKEN/lib"
 rm -f "$BROKEN/lib/myspec-config.schema.json"
 mark broken-sess worktree 60 "$WT"
 out=$(printf '{"tool_input":{"command":"npm run build"},"cwd":%s,"session_id":"broken-sess"}' "$(printf '%s' "$REPO" | jq -Rs .)" \
-  | "$BROKEN/hooks/guard-worktree-context.sh" 2>"$BROKEN/err")
+  | CLAUDE_PLUGIN_ROOT="$BROKEN" "$BROKEN/hooks/guard-worktree-context.sh" 2>"$BROKEN/err")
 if printf '%s' "$out" | grep -q '"block"' && printf '%s' "$out" | grep -q 'run /myspec:update' \
     && printf '%s' "$out" | grep -q 'schema not found'; then
   PASS=$((PASS + 1))
@@ -444,7 +446,7 @@ else
   FAIL=$((FAIL + 1)); printf 'FAIL  the reader error goes to stderr (stderr: %s)\n' "$(cat "$BROKEN/err")" >&2
 fi
 out=$(printf '{"tool_input":{"command":"npm run build"},"cwd":%s,"session_id":"broken-sess"}' "$(printf '%s' "$REPO" | jq -Rs .)" \
-  | "$BROKEN/hooks/guard-worktree-context.sh" 2>/dev/null)
+  | CLAUDE_PLUGIN_ROOT="$BROKEN" "$BROKEN/hooks/guard-worktree-context.sh" 2>/dev/null)
 if [ -z "$out" ]; then
   PASS=$((PASS + 1))
 else

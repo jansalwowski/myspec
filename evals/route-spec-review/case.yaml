@@ -53,7 +53,7 @@ execution:
 
     # Agent Memory System
 
-    Governs the project-level memory under `.ai/memory/`. User-level auto-memory: `.claude/rules/auto-memory-style.md`. Always loaded, so it holds only triggers and contracts; procedures live in the skills, escalation and risky-change protocols in `.ai/pre-flight.md`.
+    Governs the project-level memory under `.ai/memory/`. User-level auto-memory: `.claude/rules/auto-memory-style.md`. Always loaded, so it holds only triggers and contracts; procedures are in the skills, protocols in `.ai/pre-flight.md`.
 
     ## Triggers
 
@@ -69,9 +69,9 @@ execution:
     | Work complete | `/myspec:session-complete` — extraction plus archive of your own session file only |
     | User says "remember / note / keep in mind …" | Project fact (environment, gotcha, decision, convention) → `/myspec:memorize`, not auto-memory. Personal preference (style, role) → auto-memory. `/memorize` always wins |
     | User approves a memory | `/myspec:memory-create` |
-    | Allocating a memory ID | `.claude/lib/memory-claim-id.sh <procedural\|semantic\|episodic>` — never read the index and pick a number; parallel sessions pick the same one. Exit 3 → fix the conformance errors it printed |
-    | After adding, removing, or superseding a memory | `node .claude/lib/memory-index.mjs` — the tables are generated from the files. On an `index.md` merge conflict keep either side and re-run |
-    | Memory drift suspected | `node .claude/lib/memory-doctor.mjs` — reports each disagreement and its fix |
+    | Allocating a memory ID | `/myspec:memory-create` claims it (`memory-claim-id.sh`) — never read the index and pick a number; parallel sessions pick the same one. Exit 3 → fix the conformance errors it printed |
+    | After adding, removing, or superseding a memory | The skill that edited it regenerates the tables (`/myspec:memory-create`, `/myspec:memory-optimize`); never hand-write an index row. On an `index.md` merge conflict keep either side and regenerate |
+    | Memory drift suspected | `/myspec:memory-optimize` — runs the doctor, which reports each disagreement and its fix |
     | Before reporting anything as done | Run the check and read the output first; "should work" is not a result |
 
     ## Budgets
@@ -89,10 +89,10 @@ execution:
     | Aspect | Convention |
     |--------|-----------|
     | Live file | `.claude/state/sessions/{session_id}.md` in the **main checkout** of the repo the edited file belongs to — gitignored, never inside a linked worktree (where `git worktree remove` destroys it) |
-    | Own session | The live file whose `## Files touched` lists a path you edited untagged, or tags your subagent; several or none → newest mtime, and confirm. The model never sees its session id, so never pass this one to `set-isolation.sh` |
-    | Archive file | `.ai/memory/sessions/archive/YYYY-MM-DD-{slug}.md`; sessions swept without a real topic use `orphaned-{first 8 of session_id}` |
+    | Own session | The live file whose `## Files touched` lists a path you edited untagged, or tags your subagent; several or none → newest mtime, and confirm. You never see your session id; never pass this one to `set-isolation.sh` |
+    | Archive file | `.ai/memory/sessions/archive/YYYY-MM-DD-{slug}.md`; topic-less sweeps use `orphaned-{first 8 of session_id}` |
     | Terminal statuses | `completed` (via `/myspec:session-complete`) or `abandoned` (swept). Archive is a location, not a status |
-    | Age policy | mtime < 1h: live, never touch. 1–6h: ambiguous — report and route to `/myspec:session-clean`. > 6h: sweep as `abandoned` |
+    | Age policy | mtime < 1h: live, never touch. 1–6h: ambiguous, route to `/myspec:session-clean`. > 6h: sweep as `abandoned` |
     | Ownership | Own → `/myspec:session-complete`; others' → `/myspec:session-clean` or bootstrap's > 6h sweep |
 
     Contents of .claude/rules/work-isolation.md (project instructions, checked into the codebase):

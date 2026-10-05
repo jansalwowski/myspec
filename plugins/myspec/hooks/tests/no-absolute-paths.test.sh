@@ -6,14 +6,17 @@
 # What it must leave alone: gitignored files (.claude/state/sessions/), files
 # outside any repository (scratch paths), lines an Edit did not touch, app
 # code such as a /home/Dashboard route, and container paths such as a
-# Dockerfile WORKDIR /home/node/app. Its message must cite the installed
-# .claude/hooks/ and .claude/lib/ paths, not the plugin source tree.
+# Dockerfile WORKDIR /home/node/app. Its message must name the helper by the
+# path that runs it, the plugin's lib/ (CLAUDE_PLUGIN_ROOT), not a copy under
+# the project's .claude/.
 #
 # Usage: no-absolute-paths.test.sh [path-to-hook]
 
 set -uo pipefail
 
 HOOK="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../no-absolute-paths.sh}"
+# The hooks find their lib through CLAUDE_PLUGIN_ROOT, as the harness exports it.
+export CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$HOOK")/.." && pwd)}"
 
 if [ ! -x "$HOOK" ]; then
   echo "FATAL: hook not executable: $HOOK" >&2
@@ -78,8 +81,9 @@ See $LEAK for the entry point.
 expect_flag "aiDir doc with a homedir path"
 expect_reason "line 2: /Users/alice" "Write reports the file line"
 expect_reason "contains absolute homedir paths" "friction-scan signature kept"
-expect_reason ".claude/hooks/no-absolute-paths.sh" "message cites the installed hook"
-expect_reason ".claude/lib/path-normalize.sh" "message cites the installed helper"
+expect_reason "no-absolute-paths.sh" "message names the hook"
+expect_reason "$CLAUDE_PLUGIN_ROOT/lib/path-normalize.sh" "message cites the helper under the plugin's lib/"
+expect_no_reason ".claude/lib/" "message does not point at a project-local lib copy"
 expect_no_reason "add its repo-relative path to the allowlist" "message does not ask adopters to edit a framework-owned hook"
 expect_no_reason "BLOCKED" "PostToolUse message does not claim the write was blocked"
 

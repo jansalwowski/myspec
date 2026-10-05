@@ -6,9 +6,9 @@
 # any phase after the first cannot see the feature commits it builds on.
 #
 # Usage (run from the controller's checkout, on the feature branch):
-#   .claude/lib/task-worktree.sh create <slug> [--no-symlink]
-#   .claude/lib/task-worktree.sh merge  <slug> [--keep]
-#   .claude/lib/task-worktree.sh discard <slug>
+#   "${CLAUDE_PLUGIN_ROOT}"/lib/task-worktree.sh create <slug> [--no-symlink]
+#   "${CLAUDE_PLUGIN_ROOT}"/lib/task-worktree.sh merge  <slug> [--keep]
+#   "${CLAUDE_PLUGIN_ROOT}"/lib/task-worktree.sh discard <slug>
 #
 # create   adds <main-checkout>/<worktreeRoot>/<slug> (`isolation.worktreeRoot`
 #          in .myspec.json, default .claude/worktrees) on a new branch

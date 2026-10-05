@@ -14,6 +14,8 @@
 set -uo pipefail
 
 HOOK="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../require-isolation-decision.sh}"
+# The hooks find their lib through CLAUDE_PLUGIN_ROOT, as the harness exports it.
+export CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$HOOK")/.." && pwd)}"
 
 if [ ! -x "$HOOK" ]; then
   echo "FATAL: hook not executable: $HOOK" >&2
@@ -102,11 +104,14 @@ check block "no decision, source file"     new-sess "$REPO/components/Foo.vue"
 check block "no decision, config file"     new-sess "$REPO/vite.config.js"
 
 # The ask names the session id, the worktree root, and the detected base branch
-# (no remote here, so the documented fallback).
-OUT=$(run_hook "$REPO" new-sess "$REPO/components/Foo.vue")
-for needle in 'set-isolation.sh new-sess develop' '.claude/worktrees/' '.ai/work-isolation.md'; do
+# (no remote here, so the documented fallback). The recorder is named by its
+# path under the plugin's lib/: the model runs the line through Bash, where
+# CLAUDE_PLUGIN_ROOT is not set, so a variable or a project path would fail.
+OUT=$(run_hook "$REPO" new-sess "$REPO/components/Foo.vue" | jq -r '.reason')
+for needle in "\"$CLAUDE_PLUGIN_ROOT/lib/set-isolation.sh\" new-sess develop" "\"$CLAUDE_PLUGIN_ROOT/lib/set-isolation.sh\" --show" "\"$CLAUDE_PLUGIN_ROOT/lib/set-isolation.sh\" --reset new-sess" "\"$CLAUDE_PLUGIN_ROOT/lib/promote-to-worktree.sh\" --branch" '.claude/worktrees/' '.ai/work-isolation.md'; do
   if printf '%s' "$OUT" | grep -qF -- "$needle"; then PASS=$((PASS + 1)); else FAIL=$((FAIL + 1)); echo "FAIL  ask does not mention: $needle" >&2; fi
 done
+if printf '%s' "$OUT" | grep -qF -- '.claude/lib/'; then FAIL=$((FAIL + 1)); echo "FAIL  the ask names a project-local lib copy" >&2; else PASS=$((PASS + 1)); fi
 # The always-loaded rule is only the contract since #226; the heuristic and the
 # procedure live in the aiDir reference file, so no block may send the model
 # back to the rule for them.
