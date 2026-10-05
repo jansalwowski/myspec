@@ -2,7 +2,9 @@
 # session-event.sh
 # The session-state file: one append-only JSONL file per session,
 # .claude/state/sessions/<session_id>.jsonl in the main checkout, beside the
-# session's live log (<session_id>.md). The only writer and reader of it.
+# session's live log (<session_id>.md); myspec-state/sessions/ in the git
+# common dir for a repository with no main checkout (session_home,
+# session_dir). The only writer and reader of it.
 # Sourced by the hooks (after lib/hook-core.sh), run by skills and libs.
 #
 # One event per line, each with "at" (epoch seconds), added on append:
@@ -16,6 +18,10 @@
 #       mark-code-changed.sh, when a Bash command runs `session-event.sh
 #       implement start|stop` (the model never sees its session id; the
 #       hook's payload carries it)
+#   {"t":"notice","what":<key>}
+#       a one-time step was taken: "imported-implement" (this session read
+#       the 2.x implement marker), "guard-settings" (guard-worktree-context.sh
+#       denied once because the settings reader failed)
 #
 # Subagents share their parent's session_id (#225), so a subagent's events
 # land in, and its reads come from, the parent's file. There is no
@@ -51,20 +57,22 @@ SESSION_LEGACY_LEDGER_DIR=/tmp
 # (a truncated last line, garbage) is skipped.
 SESSION_EVENTS_JQ='inputs | try fromjson catch empty | select(type == "object" and (.t | type) == "string")'
 
-# session_home <path> -> the checkout whose state directory holds the session
-# file for <path>: the main checkout of the checkout holding it (CF_MAIN, or
-# the checkout itself when git names none), after climbing out of any
+# session_home <path> -> where the session file for <path> lives: the main
+# checkout of the checkout holding it (CF_MAIN), after climbing out of any
 # submodule into its superproject, so a submodule write is filed with the
-# checkout that verifies it. Without git, the nearest directory holding a
-# .myspec.json.
+# checkout that verifies it. A repository with no main checkout git can name
+# from every worktree (a bare clone with worktrees, a --separate-git-dir
+# checkout) gets its common dir instead, so all its worktrees share one file
+# (session_dir). Without git, the nearest directory holding a .myspec.json.
 session_home() {
-  local dir root main
+  local dir
   if checkout_facts "$1"; then
-    root="$CF_ROOT" main="${CF_MAIN:-$CF_ROOT}"
-    while [ "$CF_SUBMODULE" = 1 ] && [ -n "$CF_SUPER" ] && checkout_facts "$CF_SUPER"; do
-      root="$CF_ROOT" main="${CF_MAIN:-$CF_ROOT}"
-    done
-    printf '%s\n' "${main:-$root}"
+    while [ "$CF_SUBMODULE" = 1 ] && [ -n "$CF_SUPER" ] && checkout_facts "$CF_SUPER"; do :; done
+    if [ -n "$CF_MAIN" ] && [ "$CF_COMMON_DIR" = "$CF_MAIN/.git" ]; then
+      printf '%s\n' "$CF_MAIN"
+    else
+      printf '%s\n' "$CF_COMMON_DIR"
+    fi
     return 0
   fi
   dir=$(existing_dir "$1") || return 1
@@ -86,13 +94,53 @@ session_tracked() {
   [ -f "$1/.myspec.json" ] || [ -f "$1/.claude/verification.json" ]
 }
 
+# session_tracked_at <home> <checkout> -> 0 when the session home or the
+# checkout written to is tracked: a linked worktree's branch can add the stop
+# gate, or .myspec.json, that its main checkout does not have yet. The
+# events still go to <home>.
+session_tracked_at() {
+  session_tracked "$1" || { [ -n "${2:-}" ] && session_tracked "$2"; }
+}
+
+# session_dir <home> -> the directory holding the session files of <home>:
+# .claude/state/sessions/ in a checkout, myspec-state/sessions/ in a git
+# common dir (session_home). A checkout passed directly whose repository
+# files under its common dir (a --separate-git-dir main checkout) maps there
+# too, so a reader given the checkout finds the writers' file.
+session_dir() {
+  if [ -f "$1/HEAD" ] && [ -d "$1/objects" ] && [ ! -e "$1/.git" ]; then
+    printf '%s/myspec-state/sessions\n' "$1"
+    return 0
+  fi
+  if [ -e "$1/.git" ] && [ ! -d "$1/.git" ] && checkout_facts "$1" && [ "$CF_ROOT" = "$1" ] \
+      && [ "$CF_SUBMODULE" = 0 ] && [ "$CF_LINKED" = 0 ] && [ "$CF_COMMON_DIR" != "$1/.git" ]; then
+    printf '%s/myspec-state/sessions\n' "$CF_COMMON_DIR"
+    return 0
+  fi
+  printf '%s/.claude/state/sessions\n' "$1"
+}
+
 # session_file <home> <session id> -> the file's path. Fails on an id that
 # cannot be a file name.
 session_file() {
+  local dir
   case "$2" in
     ''|.*|*[!A-Za-z0-9._:-]*) return 1 ;;
   esac
-  printf '%s/.claude/state/sessions/%s.jsonl\n' "$1" "$2"
+  dir=$(session_dir "$1")
+  printf '%s/%s.jsonl\n' "$dir" "$2"
+}
+
+# _session_write <file> <line>: appends one line, starting on a fresh line
+# when the file ends in a truncated one (a writer killed mid-write), which
+# would otherwise swallow this line too. Every append goes through it.
+_session_write() {
+  local line="$2"
+  mkdir -p "$(dirname "$1")" 2>/dev/null || return 1
+  if [ -s "$1" ] && [ -n "$(tail -c 1 "$1")" ]; then
+    line=$'\n'"$line"
+  fi
+  printf '%s\n' "$line" >> "$1"
 }
 
 # _session_import <file> <session id>: when the legacy ledger
@@ -116,12 +164,52 @@ _session_import() {
   mv -f "$legacy" "$legacy.imported" 2>/dev/null || true
 }
 
+# _session_import_markers <file> <session id> <home>: the 2.x markers the
+# state file replaced, for the same one minor release as the ledger import.
+# A fresh <home>/.claude/state/implement-in-progress.json ({started_at}, at
+# most HOOK_DECISION_TTL old) becomes an implement start dated started_at,
+# and the session's own .claude/state/isolation/<id>.json ({mode,
+# worktree_path, decided_at}) an isolation event dated decided_at, so a
+# session upgraded mid feature-implement keeps its run and its decision.
+# The implement marker belongs to the checkout, not to a session (2.x never
+# recorded which session ran it), so it is left in place, to expire by its
+# own TTL (session-clean may sweep it): each session imports it once and
+# records a `notice` "imported-implement" in its own file, so the session
+# actually running feature-implement gets the run whichever session read it
+# first. A session that already has an implement event takes no start. The
+# isolation marker is the session's own and is renamed .imported, fresh or
+# not, so it is read once.
+_session_import_markers() {
+  local dir="$3/.claude/state" marker at ev now
+  marker="$dir/implement-in-progress.json"
+  if [ -f "$marker" ] && ! grep -q '"what":"imported-implement"' "$1" 2>/dev/null; then
+    now=$(date +%s)
+    at=$(jq -r '.started_at // empty | numbers | floor' "$marker" 2>/dev/null || printf '')
+    if [ -n "$at" ] && [ $((now - at)) -ge 0 ] && [ $((now - at)) -le "$HOOK_DECISION_TTL" ] \
+        && ! grep -q '"t":"implement"' "$1" 2>/dev/null; then
+      _session_write "$1" "{\"t\":\"implement\",\"state\":\"start\",\"at\":$at}" || true
+    fi
+    _session_write "$1" "{\"t\":\"notice\",\"what\":\"imported-implement\",\"at\":$now}" || true
+  fi
+  marker="$dir/isolation/$2.json"
+  if [ -f "$marker" ]; then
+    ev=$(jq -c 'select(type == "object" and (.decided_at | type) == "number")
+      | {t: "isolation", mode: (.mode // "" | tostring), path: (.worktree_path // "" | tostring),
+         note: "imported from the 2.x marker", at: (.decided_at | floor)}' "$marker" 2>/dev/null || printf '')
+    if mv -f "$marker" "$marker.imported" 2>/dev/null && [ -n "$ev" ]; then
+      _session_write "$1" "$ev" || true
+    fi
+  fi
+  return 0
+}
+
 # session_path <home> <session id> -> the file's path, after the one-time
-# legacy import. Every reader and writer goes through it.
+# legacy imports. Every reader and writer goes through it.
 session_path() {
   local f
   f=$(session_file "$1" "$2") || return 1
   _session_import "$f" "$2"
+  _session_import_markers "$f" "$2" "$1"
   printf '%s\n' "$f"
 }
 
@@ -134,13 +222,7 @@ session_append() {
   line=$(printf '%s' "$3" | jq -c --argjson at "$(date +%s)" \
     'if type == "object" and (.t | type) == "string" then . + {at: $at} else error("not an event") end' 2>/dev/null) || return 1
   case "$line" in *$'\n'*) return 1 ;; esac
-  mkdir -p "$(dirname "$f")" || return 1
-  # A truncated last line (a writer killed mid-write) would swallow this
-  # event too: start on a fresh line.
-  if [ -s "$f" ] && [ -n "$(tail -c 1 "$f")" ]; then
-    line=$'\n'"$line"
-  fi
-  printf '%s\n' "$line" >> "$f"
+  _session_write "$f" "$line"
 }
 
 # session_query <home> <session id> <jq program over $ev, the event array>

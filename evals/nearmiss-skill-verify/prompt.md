@@ -1,6 +1,6 @@
 ---
-description: "Reviewing a SKILL.md is skill-verify, not code-review or feature-spec-review."
-tags: [skill:skill-verify, skill:code-review, skill:feature-spec-review, trigger, near-miss, regression]
+description: "Reviewing a SKILL.md is skill-verify, not the built-in /code-review or feature-spec-review."
+tags: [skill:skill-verify, skill:feature-spec-review, trigger, near-miss, regression]
 max_turns: 6
 timeout_seconds: 300
 allowed_tools: [Read, Glob, Grep, Skill]

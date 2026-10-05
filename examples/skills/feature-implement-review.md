@@ -2,7 +2,7 @@
 
 Independent, retrospective audit of whether the **built code** fulfills the feature's spec and plan. A fresh subagent (the *conformance reviewer*) sees only the artifacts and the diff — never the implementation conversation — builds a bidirectional traceability matrix, runs four conformance checks, and returns a verdict. The skill persists `conformance-report.md` and routes each finding via `AskUserQuestion`. **Never edits implementation code unless the user explicitly picks "Fix now."**
 
-> **Not the same as `/myspec:code-review`.** Code-review asks *is this code good* (quality, standards, bugs). This skill asks *is this the code we agreed to build* (every acceptance criterion traced to implementing code and a test, no undocumented scope). A file can pass code-review and still fail conformance — clean code that does the wrong thing.
+> **Not the same as Claude Code's built-in `/code-review`.** That asks *does this code have bugs*. This skill asks *is this the code we agreed to build* (every acceptance criterion traced to implementing code and a test, no undocumented scope). A file can pass `/code-review` and still fail conformance — clean code that does the wrong thing.
 
 **Contents**
 
@@ -158,7 +158,7 @@ The cache is sound and the user wants to keep it, so they pick **Route to featur
 ### Why this example matters
 
 - **Scope drift is invisible to forward-only checks.** All four ACs trace cleanly to code and tests — a forward trace alone would call this done. Only the *reverse* trace (every changed file must serve a plan item) surfaces the cache. That bidirectional matrix is what separates this skill from "did we build the features."
-- **"Good code" and "drift" are orthogonal.** The cache might pass code-review with flying colors. Conformance review still flags it, because the spec/plan no longer describe what shipped — a future reader trusting the docs would be wrong.
+- **"Good code" and "drift" are orthogonal.** The cache might pass `/code-review` with flying colors. Conformance review still flags it, because the spec/plan no longer describe what shipped — a future reader trusting the docs would be wrong.
 - **An overwrite no longer erases the failure.** The final report reads `conformant`, but its first history row is `divergent`, so `delivery-metrics` does not count the feature as a first-time pass. That holds even if the branch is squash-merged and the `divergent` version was never committed.
 - **Routing respects the nature of the gap.** This wasn't a code defect, so it routed to `feature-spec-sync` (fix the docs), not `feature-implement` (change the code) or "Fix now" (rip the cache out). The four routing options exist precisely so the disposition matches the cause.
 

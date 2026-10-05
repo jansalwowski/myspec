@@ -1,10 +1,11 @@
 {
-  "frameworkVersion": "2.11.0",
+  "frameworkVersion": "2.12.0",
   "migrations": [
     "2.0.0-schema",
     "2.0.0-doctor-rule",
     "2.0.0-sessions",
-    "2.0.0-base-agents"
+    "2.0.0-base-agents",
+    "3.0.0-code-review"
   ],
   "files": {
     "anti-patterns.md": {
@@ -132,9 +133,25 @@
       "type": "overwrite",
       "dest": ".claude/lib/session-event.sh"
     },
-    "dependency-map.sh": {
+    "stop-gate/arm.sh": {
       "type": "overwrite",
-      "dest": ".claude/lib/dependency-map.sh"
+      "dest": ".claude/lib/stop-gate/arm.sh"
+    },
+    "stop-gate/provision.sh": {
+      "type": "overwrite",
+      "dest": ".claude/lib/stop-gate/provision.sh"
+    },
+    "stop-gate/run.sh": {
+      "type": "overwrite",
+      "dest": ".claude/lib/stop-gate/run.sh"
+    },
+    "stop-gate/attribute.sh": {
+      "type": "overwrite",
+      "dest": ".claude/lib/stop-gate/attribute.sh"
+    },
+    "stop-gate/report.sh": {
+      "type": "overwrite",
+      "dest": ".claude/lib/stop-gate/report.sh"
     },
     "branch-cleanup.sh": {
       "type": "overwrite",
@@ -202,6 +219,10 @@
     }
   },
   "removed": {
+    "lib/dependency-map.sh": {
+      "dest": ".claude/lib/dependency-map.sh",
+      "since": "3.0.0"
+    },
     "hooks/guard-git-branch.sh": {
       "dest": ".claude/hooks/guard-git-branch.sh",
       "since": "2.0.0"

@@ -41,11 +41,12 @@ const KNOWN_BAD_KEYS = {
 // Confusable siblings each description's "Do NOT" clause must keep naming.
 // d60997b restored these after a description diet cut them: the sibling name is
 // what steers the model away from the wrong skill. Update this map when a
-// description deliberately changes its exclusions.
+// description deliberately changes its exclusions. `code-review` is Claude Code's
+// built-in (myspec's own was removed in 3.0, #150); it stays a sibling because
+// it is still the skill these descriptions must steer away from.
 const SIBLINGS = {
   'backbone-sync': ['feature-spec-sync', 'setup'],
   brainstorm: ['feature-plan'],
-  'code-review': ['feature-spec-review', 'feature-tech-spec-review', 'skill-verify'],
   'cross-spec-validation': ['feature-spec-review'],
   doctor: ['code-review', 'feature-verify', 'skill-verify'],
   'feature-implement': ['feature-plan'],

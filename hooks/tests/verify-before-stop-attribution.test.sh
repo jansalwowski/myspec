@@ -7,7 +7,9 @@
 # run only after this session wrote code in this checkout (#145), and it must
 # not block a session on failures that name only files another session left
 # uncommitted in a shared checkout (#198). When it can't tell, it still blocks,
-# and says which changes are not the session's.
+# and says which changes are not the session's. How a path in the output is
+# matched, and that a timeout is never downgraded, are function tests in
+# lib/tests/stop-gate-attribute.test.sh.
 #
 # Usage: verify-before-stop-attribution.test.sh [path-to-hook]
 
@@ -134,19 +136,6 @@ expect_text "$OUT" 'worktree per session' "#198: the warning points at isolation
 OUT=$(stop 10)
 ran && fail "a warned run counts as verified: no re-run without a new write" || ok
 
-# Absolute paths in the output are the same file.
-# shellcheck disable=SC2016 # literal text, not an expansion
-set_checks 'grep -q BROKEN other.ts && echo "$PWD/other.ts:2:1 error" && exit 1 || true'
-mark_write 11 "$REPO/app.ts"
-OUT=$(stop 11)
-expect_decision approve "$OUT" "an absolute path to the foreign file counts as naming it"
-
-# A clean file that shares the foreign file's name is not that file.
-set_checks 'grep -q BROKEN other.ts && echo "pkg/other.ts:2:1 error" && exit 1 || true'
-mark_write 12 "$REPO/app.ts"
-OUT=$(stop 12)
-expect_decision block "$OUT" "a clean file with the foreign file's basename does not count as foreign"
-
 # A silent failure can't be attributed: block, but say whose changes are whose.
 set_checks '! grep -q BROKEN other.ts'
 mark_write 13 "$REPO/app.ts"
@@ -164,13 +153,30 @@ mark_write 14 "$REPO/app.ts"
 OUT=$(stop 14)
 expect_decision block "$OUT" "a failure naming the session's file blocks"
 expect_text "$OUT" 'names files this session wrote: app.ts' "the block says which failure is the session's"
+reset_tree
 
-# A timeout is never downgraded.
-set_checks "$LINT" 'sleep 5'
-mark_write 15 "$REPO/app.ts"
-git -C "$REPO" checkout -q -- app.ts
-OUT=$(export MYSPEC_CHECK_CAP_SECONDS=1; stop 15)
-expect_decision block "$OUT" "a timeout blocks even when every failure is foreign"
+# A check run from a cwd prints its paths relative to it (src/Foo.php for
+# api/src/Foo.php), and full-mode attribution must still find the foreign
+# file by that path (#255 review): a failure naming only another session's
+# file warns, as it does from the root.
+mkdir -p "$REPO/api/src"
+printf '<?php\n' > "$REPO/api/src/Foo.php"
+git -C "$REPO" add api && git -C "$REPO" commit -q -m api
+jq -n --arg c "touch $RAN; ! grep -H BROKEN src/Foo.php" '{checks: [{name: "phpcs", command: $c, required: true, cwd: "api"}]}' > "$REPO/.claude/verification.json"
+git -C "$REPO" add .claude/verification.json && git -C "$REPO" commit -q -m checks
+printf 'BROKEN\n' >> "$REPO/api/src/Foo.php"
+printf 'export const a = 4;\n' > "$REPO/app.ts"
+mark_write 16 "$REPO/app.ts"
+OUT=$(stop 16)
+expect_decision approve "$OUT" "cwd: a failure naming another session's file relative to the cwd warns"
+expect_text "$OUT" 'names only files changed outside this session: api/src/Foo.php' "cwd: the warning names the foreign file repo-relative"
+# A path that only resolves at the root still does, and the session's own
+# file, named relative to the cwd, still blocks.
+printf 'BROKEN\n' >> "$REPO/api/src/Foo.php"
+mark_write 17 "$REPO/api/src/Foo.php"
+OUT=$(stop 17)
+expect_decision block "$OUT" "cwd: a failure naming the session's own file relative to the cwd blocks"
+expect_text "$OUT" 'names files this session wrote: api/src/Foo.php' "cwd: the block says which failure is the session's"
 reset_tree
 
 # --- single session: nothing uncommitted is anyone else's --------------------------

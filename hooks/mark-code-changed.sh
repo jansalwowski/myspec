@@ -375,20 +375,95 @@ bash_write_targets() {
 # ledger_add <kind> <root> <rel>: records the write in the session-state
 # file of <root>'s repository, unless the same write is already there since
 # the root's last `verified` event. A subagent's event carries its agent_id.
+# A checkout nested in the cwd's (a plain clone, not a submodule) whose own
+# repository is untracked is filed with the cwd's checkout instead, under its
+# own root: the Stop gate verifies such a root through the cwd's checkout
+# (NESTED_ROOTS in lib/stop-gate/arm.sh). A checkout counts as tracked when
+# its home or the checkout itself has the config: a linked worktree's branch
+# can add a stop gate the main checkout does not have yet.
 ledger_add() {
   local home
   home=$(session_home "$2") || return 0
-  session_tracked "$home" || return 0
+  if ! session_tracked_at "$home" "$2"; then
+    [ -n "$CWD_ROOT" ] && [ -n "$CWD_HOME" ] || return 0
+    case "$2/" in
+      "$CWD_ROOT"/?*) home="$CWD_HOME" ;;
+      *) return 0 ;;
+    esac
+  fi
   session_seen "$home" "$SESSION_ID" "$1" "$2" "$3" "$AGENT_ID" && return 0
   session_append "$home" "$SESSION_ID" "$(jq -nc --arg k "$1" --arg r "$2" --arg p "$3" --arg a "$AGENT_ID" \
     '{t: "write", root: $r, rel: $p, kind: $k} + (if $a != "" then {agent: $a} else {} end)')" || true
 }
 
+# script_word <word...> -> the index of the word that names the program a
+# command runs, past `env` (its options and NAME=value assignments),
+# `command` and a `bash`/`sh` interpreter with its options. Fails when the
+# command runs no file: `bash -c`, `command -v`, `env -S`.
+script_word() {
+  local i=0 w n=$#
+  local -a words=("$@")
+  while [ "$i" -lt "$n" ]; do
+    w=${words[$i]##*/}
+    case "$w" in
+      env)
+        i=$((i + 1))
+        while [ "$i" -lt "$n" ]; do
+          case "${words[$i]}" in
+            --) i=$((i + 1)); break ;;
+            -u|-C|--unset|--chdir) i=$((i + 2)) ;;
+            -S*|--split-string*) return 1 ;;
+            -*) i=$((i + 1)) ;;
+            [A-Za-z_]*=*) i=$((i + 1)) ;;
+            *) break ;;
+          esac
+        done
+        while [ "$i" -lt "$n" ] && [[ "${words[$i]}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; do
+          i=$((i + 1))
+        done
+        ;;
+      command)
+        i=$((i + 1))
+        while [ "$i" -lt "$n" ]; do
+          case "${words[$i]}" in
+            --) i=$((i + 1)); break ;;
+            -p) i=$((i + 1)) ;;
+            -*) return 1 ;;
+            *) break ;;
+          esac
+        done
+        ;;
+      bash|sh)
+        i=$((i + 1))
+        while [ "$i" -lt "$n" ]; do
+          case "${words[$i]}" in
+            --) i=$((i + 1)); break ;;
+            -o|+o|-O|+O) i=$((i + 2)) ;;
+            --*) i=$((i + 1)) ;;
+            -*c*) return 1 ;;
+            -*o|+*o|-*O|+*O) i=$((i + 2)) ;;
+            -*|+*) i=$((i + 1)) ;;
+            *) break ;;
+          esac
+        done
+        printf '%s\n' "$i"
+        return 0
+        ;;
+      *)
+        printf '%s\n' "$i"
+        return 0
+        ;;
+    esac
+  done
+  return 1
+}
+
 # implement_requests <command> -> `start` or `stop` for each segment that
-# runs session-event.sh implement <state>, the script called by any path.
+# runs session-event.sh implement <state>, the script called by any path,
+# directly or through bash, sh, env or command.
 implement_requests() {
-  local line kline seg kseg
-  local -a words kwords
+  local line kline seg kseg i w
+  local -a words kwords decoded
   while IFS= read -r line && IFS= read -r kline <&3; do
     seg=$(strip_command_prefix "${line#*$'\t'}")
     kseg=$(strip_command_prefix "${kline#*$'\t'}")
@@ -397,40 +472,45 @@ implement_requests() {
     if [ "${#kwords[@]}" -lt 3 ] || [ "${#kwords[@]}" -ne "${#words[@]}" ]; then
       continue
     fi
-    [ "$(basename "$(decode_word "${kwords[0]}")")" = session-event.sh ] || continue
-    [ "${words[1]}" = implement ] || continue
-    case "${words[2]}" in start|stop) printf '%s\n' "${words[2]}" ;; esac
+    decoded=()
+    for w in "${kwords[@]}"; do decoded+=("$(decode_word "$w")"); done
+    i=$(script_word "${decoded[@]}") || continue
+    [ $((i + 2)) -lt "${#words[@]}" ] || continue
+    [ "${decoded[$i]##*/}" = session-event.sh ] || continue
+    [ "${words[$((i + 1))]}" = implement ] || continue
+    case "${words[$((i + 2))]}" in start|stop) printf '%s\n' "${words[$((i + 2))]}" ;; esac
   done < <(printf '%s' "$1" | sanitize_command | split_segments) \
        3< <(printf '%s' "$1" | sanitize_command keep | split_segments)
   return 0
 }
 
 # write_session_log <checkout root> <path>...: creates or extends the live log
-# in the primary checkout of <checkout root>, a myspec project only.
+# beside the session's state file (session_home and session_dir in
+# lib/session-event.sh decide where both live), a myspec project only.
 write_session_log() {
   local raw_root="$1" repo_root state_dir active_file worktree topic_seed started short_id p rel entry
   shift
 
   # raw_root is the repository root as seen from the edit (a linked worktree
-  # resolves to itself); repo_root is pinned to the primary checkout, where the
-  # session store lives.
-  if ! repo_root="$(main_worktree_root "$raw_root")"; then
+  # resolves to itself); repo_root is the session home: the primary checkout,
+  # a submodule's superproject, or a bare repository's common dir.
+  if ! repo_root="$(session_home "$raw_root")"; then
     repo_root="$raw_root"
   fi
 
   # Logs only in a myspec-managed project: an edit in an unrelated repository
   # must not grow a stray state tree there.
-  [ -f "$repo_root/.myspec.json" ] || return 0
+  [ -f "$repo_root/.myspec.json" ] || [ -f "$raw_root/.myspec.json" ] || return 0
 
-  state_dir="$repo_root/.claude/state/sessions"
+  state_dir=$(session_dir "$repo_root")
   active_file="$state_dir/${SESSION_ID}.md"
 
-  # Worktree marker: the edit resolved to a linked worktree when the raw root
-  # differs from the pinned primary checkout. The basename is portable (no
-  # absolute path) and lets session-clean's liveness gate match the session
-  # against `git worktree list`. Main checkout: empty (gate uses mtime).
+  # Worktree marker: the edit resolved to a linked worktree. The basename is
+  # portable (no absolute path) and lets session-clean's liveness gate match
+  # the session against `git worktree list`. Main checkout, submodule:
+  # empty (gate uses mtime).
   worktree=""
-  if [ "$raw_root" != "$repo_root" ]; then
+  if checkout_facts "$raw_root" && [ "$CF_LINKED" = 1 ]; then
     worktree=$(basename "$raw_root")
   fi
 
@@ -540,7 +620,7 @@ elif [ -n "$COMMAND" ]; then
   # feature-implement's orchestration state, recorded with this payload's
   # session id in the cwd's checkout.
   if [[ "$COMMAND" == *session-event.sh*implement* ]] && IMPLEMENT_HOME=$(session_home "$BASE_DIR") \
-      && session_tracked "$IMPLEMENT_HOME"; then
+      && session_tracked_at "$IMPLEMENT_HOME" "$(checkout_root "$BASE_DIR" || true)"; then
     while IFS= read -r state; do
       session_append "$IMPLEMENT_HOME" "$SESSION_ID" "{\"t\":\"implement\",\"state\":\"$state\"}" || true
     done < <(implement_requests "$COMMAND")
@@ -569,6 +649,17 @@ else
 fi
 
 [ "${#TARGETS[@]}" -gt 0 ] || exit 0
+
+# The cwd's checkout and its tracked session home, for a write into a
+# nested untracked clone (ledger_add). Empty when the cwd is in no tracked
+# project.
+CWD_ROOT="" CWD_HOME=""
+if CWD_ROOT=$(checkout_root "$BASE_DIR") && CWD_HOME=$(session_home "$CWD_ROOT") \
+    && session_tracked_at "$CWD_HOME" "$CWD_ROOT"; then
+  :
+else
+  CWD_ROOT="" CWD_HOME=""
+fi
 
 CODE_ROOTS=()
 CODE_PATHS=()

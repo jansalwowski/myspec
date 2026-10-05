@@ -232,11 +232,11 @@ expect_exit 1 "a model-invocable description with no Do-NOT clause exits 1"
 expect_line "DESC-DO-NOT .*no \"Do NOT" "missing Do-NOT clause is reported"
 
 fresh
-{ printf -- '---\nname: code-review\ndescription: "Use when code needs review. Do NOT use for spec.md (feature-spec-review) or SKILL.md (skill-verify)."\n---\n'; body; } | skill code-review
+{ printf -- '---\nname: feature-spec-sync\ndescription: "Use when docs drifted. Do NOT use for topology (backbone-sync)."\n---\n'; body; } | skill feature-spec-sync
 run
 expect_exit 1 "a sibling dropped from the Do-NOT clause exits 1"
-expect_line "DESC-DO-NOT .*feature-tech-spec-review" "the dropped sibling is named"
-expect_no_line "DESC-DO-NOT .*skill-verify" "kept siblings are not reported"
+expect_line "DESC-DO-NOT .*feature-status-audit" "the dropped sibling is named"
+expect_no_line "DESC-DO-NOT .*backbone-sync" "kept siblings are not reported"
 
 fresh
 { printf -- '---\nname: feature-spec\ndescription: "Use when starting a feature. Do NOT use for tech design (feature-tech-spec-review)."\n---\n'; body; } | skill feature-spec
@@ -244,12 +244,12 @@ run
 expect_line "DESC-DO-NOT .*feature-tech-spec" "a longer name containing the sibling does not count as naming it"
 
 fresh
-{ printf -- '---\nname: code-review\ndescription: "Use when code (not feature-tech-spec-review) needs review. Do NOT use for spec.md (feature-spec-review) or SKILL.md (skill-verify)."\n---\n'; body; } | skill code-review
+{ printf -- '---\nname: feature-spec-sync\ndescription: "Use when docs drifted (not feature-status-audit). Do NOT use for topology (backbone-sync)."\n---\n'; body; } | skill feature-spec-sync
 run
-expect_line "DESC-DO-NOT .*feature-tech-spec-review" "a sibling named before the Do-NOT clause does not count"
+expect_line "DESC-DO-NOT .*feature-status-audit" "a sibling named before the Do-NOT clause does not count"
 
 fresh
-{ printf -- '---\nname: code-review\ndescription: "Use when code needs review. Do NOT use for spec.md (feature-spec-review), tech-spec.md (feature-tech-spec-review), or SKILL.md (skill-verify)."\n---\n'; body; } | skill code-review
+{ printf -- '---\nname: feature-spec-sync\ndescription: "Use when docs drifted. Do NOT use for topology (backbone-sync) or the manifest (feature-status-audit)."\n---\n'; body; } | skill feature-spec-sync
 run
 expect_exit 0 "a Do-NOT clause naming every sibling passes"
 

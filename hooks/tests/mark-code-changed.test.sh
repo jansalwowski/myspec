@@ -12,7 +12,7 @@
 # the root of the checkout holding it, so a write elsewhere never arms this
 # checkout. A repository with neither .myspec.json nor a stop gate gets
 # neither ledger nor log. A Bash command running `session-event.sh implement
-# start|stop` records the implement event with the payload's session id.
+# start|stop`, directly or through bash, sh, env or command, records the implement event with the payload's session id.
 #
 # Usage: mark-code-changed.test.sh [path-to-hook]
 
@@ -445,6 +445,19 @@ bashcmd "$SID-96" "$REPO" 'echo "session-event.sh implement start" > notes.txt; 
 [ -z "$(implement_events "$SID-96")" ] && ok || fail "a mention of the command is not a run of it"
 bashcmd "$SID-97" "$REPO/.claude/worktrees/wt-a" '.claude/lib/session-event.sh implement start'
 [ -f "$STATE/$SID-97.jsonl" ] && [ "$(implement_events "$SID-97")" = "start " ] && ok || fail "from a linked worktree the event lands in the main checkout's file"
+# The script run through an interpreter or a wrapper is still a run of it.
+n=0
+for c in 'bash .claude/lib/session-event.sh implement start' \
+         'sh .claude/lib/session-event.sh implement start' \
+         'env -i PATH=/usr/bin .claude/lib/session-event.sh implement start' \
+         'command bash -e .claude/lib/session-event.sh implement start' \
+         'env -u HOME -- bash -euo pipefail .claude/lib/session-event.sh implement start'; do
+  n=$((n + 1))
+  bashcmd "$SID-98-$n" "$REPO" "$c"
+  [ "$(implement_events "$SID-98-$n")" = "start " ] && ok || fail "'$c' records implement start (got: $(implement_events "$SID-98-$n"))"
+done
+bashcmd "$SID-99" "$REPO" 'bash -c "echo session-event.sh implement start"'
+[ -z "$(implement_events "$SID-99")" ] && ok || fail "bash -c with the words in its string is not a run of the script"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

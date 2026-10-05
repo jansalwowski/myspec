@@ -1,5 +1,5 @@
 {
-  "$comment": "Every myspec setting: its file, type, default and the issue that introduced it (docs/project-settings-design.md, principle 7). lib/myspec-config.sh and lib/myspec-config.mjs read it to build the framework-default layer and to type-check the project layer; doctor validates against it. Keys under 'verification.' live in .claude/verification.json, every other key in .myspec.json. 'type' lists the JSON types a value may have. 'merge' says how a list combines across layers: 'extend' appends a later layer's entries (principle 3), 'replace' lets the later layer win, which existing lists keep so that no project's behaviour changes (principle 2). A key with no 'default' is absent unless a layer sets it. 'loosens' marks a setting that weakens a gate, which doctor's settings listing marks. 'bookkeeping': true marks a key that records state or free text rather than policy, which that listing leaves out. A key ending in '[]' types each item of the list above it, and 'X[].field' a field of such an item; the readers ignore both, and doctor validates them. 'format' asks doctor for more than the type: 'glob' is a repo-relative glob the readers accept (not empty, not absolute, no .. segment), 'dir' a repo-relative directory that exists in the checkout. 'refersTo' names the map setting the value must be a key of. 'catalogue': false marks a key the design's catalogue tables do not list; lib/tests/myspec-config.test.sh checks every other key against those tables. 'env' is the session layer: an 'override' sets 'key' to 'value' when the variable matches 'match'; the other kinds are read or exported by one script and set no key.",
+  "$comment": "Every myspec setting: its file, type, default and the issue that introduced it (docs/project-settings-design.md, principle 7). lib/myspec-config.sh and lib/myspec-config.mjs read it to build the framework-default layer and to type-check the project layer; doctor validates against it. Keys under 'verification.' live in .claude/verification.json, every other key in .myspec.json. 'type' lists the JSON types a value may have. 'merge' says how a list combines across layers: 'extend' appends a later layer's entries (principle 3), 'replace' lets the later layer win, which existing lists keep so that no project's behaviour changes (principle 2). A key with no 'default' is absent unless a layer sets it. 'loosens' marks a setting that weakens a gate, which doctor's settings listing marks. 'bookkeeping': true marks a key that records state or free text rather than policy, which that listing leaves out. A key ending in '[]' types each item of the list above it, and 'X[].field' a field of such an item; the readers ignore both, and doctor validates them. 'format' asks doctor for more than the type: 'glob' is a repo-relative glob the readers accept (not empty, not absolute, no .. segment), 'dir' a repo-relative directory that exists in the checkout. 'refersTo' names the map setting the value must be a key of. 'itemOf' names the list setting each item must be an entry of, by exact text, in its effective value (defaults plus the project's entries). 'catalogue': false marks a key the design's catalogue tables do not list; lib/tests/myspec-config.test.sh checks every other key against those tables. 'env' is the session layer: an 'override' sets 'key' to 'value' when the variable matches 'match'; the other kinds are read or exported by one script and set no key.",
   "version": 1,
   "files": {
     "project": ".myspec.json",
@@ -81,10 +81,36 @@
     "isolation.blockInMain": {
       "file": "project",
       "type": ["array"],
+      "default": [
+        "^(yarn|npm|pnpm|bun)[[:space:]]+((run|run-script)[[:space:]]+)?build([[:space:]]|:|$)",
+        "^composer[[:space:]]+((run|run-script)[[:space:]]+)?build([[:space:]]|:|$)",
+        "^(docker[[:space:]]+compose|docker-compose)([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+exec([[:space:]]|$)",
+        "^(yarn|pnpm|bun)[[:space:]]+(install|add|upgrade|remove|dedupe|up)([[:space:]]|$)",
+        "^npm[[:space:]]+(install|ci|i|uninstall|update)([[:space:]]|$)",
+        "^(yarn|npm|pnpm|bun)[[:space:]]+(run[[:space:]]+)?test:e2e",
+        "^(yarn|npm|pnpm|bun)[[:space:]]+(run[[:space:]]+)?lint:fix([[:space:]]|$)",
+        "^(pip|pip3|poetry|composer|bundle)[[:space:]]+install([[:space:]]|$)",
+        "^(cargo|go)[[:space:]]+build([[:space:]]|$)",
+        "^(\\./)?mvnw?([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+(clean|compile|package|install|verify|deploy)([[:space:]]|$)",
+        "^(\\./)?gradlew?([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+([^[:space:]]*:)?(build|assemble|clean)([[:space:]]|$)",
+        "^make([[:space:]]+(-[A-Za-z]*[CfIoWE][[:space:]]+[^[:space:]]+|-[A-Za-z]*[jl][[:space:]]+[0-9.]+|--(directory|file|makefile|include-dir|old-file|assume-old|what-if|new-file|assume-new|eval)[[:space:]]+[^[:space:]]+|--(jobs|load-average|max-load)[[:space:]]+[0-9.]+|-[^[:space:]]+))*([[:space:]]+(all|build|install))?[[:space:]]*$",
+        "^dotnet[[:space:]]+(build|publish|restore|pack|clean)([[:space:]]|$)",
+        "^git[[:space:]]+push([[:space:]]|$)",
+        "^git[[:space:]]+worktree[[:space:]]+prune([[:space:]]|$)"
+      ],
+      "merge": "extend",
+      "issue": ["exists", "#250"],
+      "description": "Anchored EREs over a command segment: commands guard-worktree-context.sh blocks in the main checkout while a session is in worktree mode. The default covers builds, installs and other tree-specific commands across the common stacks; a project's entries are added to it."
+    },
+    "isolation.ignoreBlockInMain": {
+      "file": "project",
+      "type": ["array"],
       "default": [],
       "merge": "extend",
-      "issue": ["exists"],
-      "description": "Anchored EREs: extra commands blocked in the main checkout while a session is in worktree mode."
+      "issue": ["#250"],
+      "loosens": true,
+      "itemOf": "isolation.blockInMain",
+      "description": "Entries of isolation.blockInMain, by their exact text, that the guard does not apply: how a project drops a default pattern."
     },
     "isolation.allowLinkedModules": {
       "file": "project",
@@ -92,7 +118,7 @@
       "default": false,
       "issue": ["exists"],
       "loosens": true,
-      "description": "Accept a linked dependency tree at the Stop gate."
+      "description": "Read by worktree-provision.sh only: link a dependency tree even when its lockfiles differ from the main checkout's, and record it without lockfile hashes, so the Stop gate does not compare them."
     },
     "isolation.worktreeRoot": {
       "file": "project",
@@ -259,7 +285,7 @@
       "type": ["string"],
       "issue": ["exists"],
       "catalogue": false,
-      "description": "Command run from the repo root."
+      "description": "Command run from the repo root, or from the check's cwd."
     },
     "verification.checks[].diffCommand": {
       "file": "verification",
@@ -310,8 +336,15 @@
       "file": "verification",
       "type": ["string"],
       "issue": ["#221"],
-      "description": "Name of the container (in containers) the check's command runs in. The check gets MYSPEC_CHECK_WORKDIR and is exempt from the linked-worktree container-exec refusal; it is refused when the container is undefined or cannot see this checkout.",
+      "description": "Name of the container (in containers) the check's command runs in. The check gets MYSPEC_CHECK_WORKDIR and its command is trusted to use it; without runIn, a container exec is refused in a linked worktree. It is refused when the container is undefined or cannot see this checkout.",
       "refersTo": "verification.containers"
+    },
+    "verification.checks[].cwd": {
+      "file": "verification",
+      "type": ["string"],
+      "issue": ["#250"],
+      "format": "dir",
+      "description": "Repo-relative directory of the verified checkout the command runs from (default the root; \".\" and \"\" are the root). An absolute value or one with a .. segment is ignored and named in the stop message. With runIn, MYSPEC_CHECK_WORKDIR includes it."
     }
   },
   "env": {
@@ -321,7 +354,7 @@
       "match": "^1$",
       "value": true,
       "issue": ["exists"],
-      "description": "Session override of isolation.allowLinkedModules."
+      "description": "Session override of isolation.allowLinkedModules, read while worktree-provision.sh runs."
     },
     "MYSPEC_DISABLE_METRICS": {
       "kind": "override",
@@ -352,6 +385,12 @@
       "type": "integer",
       "issue": ["exists"],
       "description": "Lowers the Stop gate's per-check time cap; it cannot raise it."
+    },
+    "MYSPEC_GATE_BUDGET_SECONDS": {
+      "kind": "standalone",
+      "type": "integer",
+      "issue": ["#250"],
+      "description": "Lowers the Stop gate's time budget for the whole stop (300 s); it cannot raise it."
     },
     "MYSPEC_METRICS_CAP_SECONDS": {
       "kind": "standalone",
@@ -389,7 +428,7 @@
       "kind": "exported",
       "type": "string",
       "issue": ["exists"],
-      "description": "Exported by the Stop gate to checks: the files this session wrote in this checkout."
+      "description": "Exported by the Stop gate to checks: the files this session wrote in this checkout, one per line, relative to the directory the check runs from (its cwd, else the checkout root); a file outside the cwd gets ../."
     },
     "MYSPEC_CHECK_RUN_ID": {
       "kind": "exported",
@@ -401,7 +440,7 @@
       "kind": "exported",
       "type": "flag",
       "issue": ["exists"],
-      "description": "Exported by the Stop gate to checks so a check that ends a nested session does not re-enter the gate."
+      "description": "Exported by the Stop gate to every check it runs, so a check can tell it runs under the gate. The Stop hook approves at once when it finds it in its own environment: a nested Claude Code session a check started is not verified again."
     },
     "MYSPEC_WORKTREE": {
       "kind": "exported",

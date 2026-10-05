@@ -103,8 +103,12 @@ esac
 # Compare physical paths. The tool's file_path is the path as the session
 # spelled it, which can run through a symlink (a linked home directory,
 # macOS /tmp), while git reports the physical toplevel: the prefix strip
-# below then failed and the edit was approved as outside the repo.
-ABS_PATH=$(physical_path "$ABS_PATH")
+# below then failed and the edit was approved as outside the repo. An
+# ancestor that cannot be entered keeps the path as spelled: under set -e an
+# unguarded failure would exit 1, which the harness reads as allow.
+if P=$(physical_path "$ABS_PATH"); then
+  ABS_PATH="$P"
+fi
 
 # A linked worktree lives INSIDE the repo (<worktreeRoot>/<slug>/), so a file
 # there is reached by a main-checkout-relative path and would otherwise be

@@ -381,11 +381,16 @@ printf 'features:\n    - name: misindented\n      status: complete\n' > "$REPO/a
   echo '# Fixture'
   echo
   # shellcheck disable=SC2016 # literal text, not an expansion
-  echo 'Rules live in `.claude/rules/nope.md`. Route to `/myspec:not-a-skill`.'
+  echo 'Rules live in `.claude/rules/nope.md`. Route to `/myspec:not-a-skill` or `/myspec:code-review`.'
   # shellcheck disable=SC2016 # literal text, not an expansion
   echo 'Run `/bootstrap` first; `/deps-check` weekly; `/vue-component` for components.'
   head -c 4000 /dev/zero | tr '\0' 'x'
 } > "$REPO/CLAUDE.md"
+# The 2.x `setup code-review` blueprint wrote this file, addressed to a skill
+# 3.0 no longer ships. The 3.0.0-code-review migration leaves it, so the name
+# in its own header must not be reported on every run.
+# shellcheck disable=SC2016 # literal text, not an expansion
+printf '# Code Review Rules\n\nProject-specific rules for `/myspec:code-review`.\n\n## Standards\n- Handlers validate their input.\n' > "$REPO/.claude/rules/code-review.md"
 
 run_doctor
 
@@ -409,7 +414,9 @@ expect_line 'ERROR framework-drift: ai/anti-patterns.md: header above' "a change
 expect_line 'WARN +over-budget: CLAUDE.md' "an oversized project CLAUDE.md is a warning"
 expect_line 'WARN +dead-path-ref: CLAUDE.md' "a dead path reference in a project file is a warning"
 expect_no_line 'references /(bootstrap|deps-check|vue-component),' "a slash command is not a dead path reference"
-expect_line 'WARN +dead-skill-ref: CLAUDE.md' "a reference to a skill the plugin does not ship is a warning"
+expect_line 'WARN +dead-skill-ref: CLAUDE.md: routes to /myspec:not-a-skill' "a reference to a skill the plugin does not ship is a warning"
+expect_line 'WARN +dead-skill-ref: CLAUDE.md: routes to /myspec:code-review' "the retired code-review name in a project file is still a dead route"
+expect_no_line 'dead-skill-ref: .claude/rules/code-review.md' "the retired name in the blueprint-generated code-review.md header is not reported"
 expect_line 'WARN +topology-missing: .myspec.json' "a topologyFile pointing at nothing is a warning, not a blocker"
 expect_line 'bootstrap and the reuse audit fall back to guessing' "the topology finding says what it breaks"
 expect_line 'run: chmod \+x .claude/hooks/guard-worktree-context.sh' "findings carry a literal fix command"
@@ -833,6 +840,156 @@ OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" refs 2>&1); STATUS=
 expect_no_line 'dead-path-ref: CLAUDE.md: references .claude/worktrees' "a linked worktree does not report the main checkout's .claude/worktrees as dead"
 expect_line 'WARN +dead-path-ref: CLAUDE.md: references docs/gone.md' "a tracked file this branch removed is still a dead ref from the worktree"
 
+# --- pass 3f2: a Stop entry without the template's timeout (#257 review) -----
+# update never rewrites an existing entry's timeout, so a project wired
+# before the template had one keeps the harness's 600 s default.
+
+build_fixture
+run_doctor wiring
+expect_no_line 'hook-stop-no-timeout' "the template's Stop entry, with its timeout, is not reported"
+set_json .claude/settings.json 'd.hooks.Stop.forEach(g => g.hooks.forEach(h => { delete h.timeout; }));'
+run_doctor wiring
+expect_line '^WARN +hook-stop-no-timeout: \.claude/settings\.json: the Stop entry for \.claude/hooks/verify-before-stop\.sh has no timeout' "a Stop entry without a timeout is reported"
+expect_line 'add "timeout": 330 to that hook entry' "the fix names the template's timeout"
+expect_exit 0 "a missing Stop timeout is a warning"
+
+# --- pass 3g: links the provision record does not list (#239) ----------------
+#
+# The Stop hook compares only what worktree-provision.sh recorded in
+# .claude/state/provision.json. A link out of the worktree it did not record,
+# and a recorded lockfile that changed, are the doctor's to report.
+
+build_fixture
+mkdir -p "$REPO/node_modules/dep" "$REPO/apps/web/node_modules/dep" "$REPO/vendor/dep" "$ROOT/outside"
+printf 'node_modules\napps/web/node_modules\nvendor\n' > "$REPO/.gitignore"
+printf 'v1\n' > "$REPO/composer.lock"
+printf '{}\n' > "$REPO/apps/web/package.json"
+ln -s "$ROOT/outside" "$REPO/shared"
+git -C "$REPO" add -A
+git -C "$REPO" -c user.name=t -c user.email=t@t commit -qm fixture
+git -C "$REPO" worktree add -q -b wt2 "$REPO/.claude/worktrees/wt2"
+WT="$REPO/.claude/worktrees/wt2"
+ln -s "$REPO/node_modules" "$WT/node_modules"
+ln -s "$REPO/apps/web/node_modules" "$WT/apps/web/node_modules"
+ln -s "$REPO/vendor" "$WT/vendor"
+mkdir -p "$WT/inner" "$WT/.claude/state"
+ln -s "$WT/inner" "$WT/inside"
+jq -n --arg s "$REPO" --arg t "$REPO/vendor" --arg h "$(shasum -a 256 < "$REPO/composer.lock" 2>/dev/null | cut -d' ' -f1 || sha256sum < "$REPO/composer.lock" | cut -d' ' -f1)" \
+  '{source: $s, links: [{path: "vendor", target: $t, lockfiles: {"composer.lock": $h}}]}' > "$WT/.claude/state/provision.json"
+
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +link-unrecorded: node_modules links out of this worktree \(to $REPO/node_modules\) and was not recorded by provision; checks here may describe the main checkout" "worktree: a hand-made top-level link out of the worktree is reported"
+expect_line "WARN +link-unrecorded: apps/web/node_modules links out of this worktree" "worktree: a hand-made link one level down (a workspace package) is reported"
+expect_no_line "link-unrecorded: vendor" "worktree: a link the record lists is not reported"
+expect_no_line "link-unrecorded: inside" "worktree: a link that stays inside the worktree is not reported"
+expect_no_line "link-unrecorded: shared" "worktree: a link git tracks is not reported"
+expect_no_line "provision-stale" "worktree: a recorded lockfile that still matches is not reported"
+expect_exit 0 "worktree: the findings are warnings"
+
+# One git-dir probe serves the refs and worktree groups, and the tracked-link
+# test reuses the first ls-files listing (#256 review).
+GITLOG="$ROOT/git.log"
+mkdir -p "$ROOT/gitshim"
+# shellcheck disable=SC2016 # expanded by the shim when it runs
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s"\nexec %s "$@"\n' "$GITLOG" "$(command -v git)" > "$ROOT/gitshim/git"
+chmod +x "$ROOT/gitshim/git"
+cp "$WT/CLAUDE.md" "$ROOT/claude.md.bak"
+# shellcheck disable=SC2016 # literal backticks
+printf 'See `.claude/rules/gone-rule.md`.\n' >> "$WT/CLAUDE.md"
+: > "$GITLOG"
+OUTPUT=$(PATH="$ROOT/gitshim:$PATH" node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" refs worktree 2>&1); STATUS=$?
+expect_line 'dead-path-ref: CLAUDE.md: references .claude/rules/gone-rule.md' "probe: the dead ref that needs the main checkout is found"
+eq_count() { local n; n=$(grep -cxF -- "$1" "$GITLOG"); [ "$n" -eq "$2" ] && ok || fail "$3 (ran $n times)"; }
+eq_count "rev-parse --git-dir --git-common-dir" 1 "probe: git rev-parse --git-dir --git-common-dir runs once"
+[ "$(grep -c '^ls-files -z --' "$GITLOG")" -eq 0 ] && ok || fail "probe: no second ls-files for the link candidates"
+cp "$ROOT/claude.md.bak" "$WT/CLAUDE.md"
+
+printf 'v2\n' > "$WT/composer.lock"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +provision-stale: vendor was provisioned from composer.lock, which has changed since \(in this worktree\)" "worktree: a recorded lockfile changed in the worktree is reported"
+git -C "$WT" checkout -q -- composer.lock
+printf 'v3\n' > "$REPO/composer.lock"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +provision-stale: vendor was provisioned from composer.lock, which has changed since \(in $REPO\)" "worktree: a recorded lockfile changed in the source checkout is reported"
+# A lockfile pattern recorded absent (null) that now matches a file is
+# reported, as the Stop hook blocks on it (#256 review).
+printf 'v1\n' > "$REPO/composer.lock"
+jq '.links[0].lockfiles += {"sub/composer.lock": null, "compo*.lock": null}' "$WT/.claude/state/provision.json" > "$ROOT/prov.json" \
+  && mv "$ROOT/prov.json" "$WT/.claude/state/provision.json"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_no_line "provision-stale" "worktree: recorded-absent lockfiles still absent, and a glob matching only hashed files, are not reported"
+mkdir -p "$WT/sub" && printf 'x\n' > "$WT/sub/composer.lock"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +provision-stale: vendor was provisioned while sub/composer.lock did not exist, and it has appeared since \(in this worktree\)" "worktree: a recorded-absent lockfile that appears is reported"
+rm -rf "$WT/sub"
+# A [...] class is a shell class, as provision expands it (#257 review).
+jq '.links[0].lockfiles += {"packages/[ab]/package-lock.json": null, "packages/[!ab]x/package-lock.json": null}' "$WT/.claude/state/provision.json" > "$ROOT/prov.json" \
+  && mv "$ROOT/prov.json" "$WT/.claude/state/provision.json"
+mkdir -p "$WT/packages/c" "$WT/packages/ax" "$WT/packages/[ab]"
+printf 'x\n' > "$WT/packages/c/package-lock.json"
+printf 'x\n' > "$WT/packages/ax/package-lock.json"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_no_line "provision-stale" "worktree: a lockfile outside a [...] class is not a match"
+mkdir -p "$WT/packages/b" && printf 'x\n' > "$WT/packages/b/package-lock.json"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +provision-stale: vendor was provisioned while packages/b/package-lock.json did not exist" "worktree: packages/[ab]/package-lock.json matches packages/b as the shell does"
+rm -rf "$WT/packages/b"
+printf 'x\n' > "$WT/packages/[ab]/package-lock.json"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_no_line "provision-stale" "worktree: [ab] is a class, not the literal directory [ab]"
+mkdir -p "$WT/packages/cx" && printf 'x\n' > "$WT/packages/cx/package-lock.json"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +provision-stale: vendor was provisioned while packages/cx/package-lock.json did not exist" "worktree: [!ab] negates the class"
+rm -rf "$WT/packages"
+
+# A recorded link that dangles or moved, and a record that cannot be read,
+# are named as the Stop hook blocks on them (#256 review).
+cp "$WT/.claude/state/provision.json" "$ROOT/prov.bak"
+rm "$WT/vendor" && ln -s "$ROOT/nowhere/vendor" "$WT/vendor"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +provision-link-dangling: vendor was linked by provision but its target no longer exists" "worktree: a dangling recorded link is reported"
+mkdir -p "$ROOT/elsewhere/vendor"
+rm "$WT/vendor" && ln -s "$ROOT/elsewhere/vendor" "$WT/vendor"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +provision-link-moved: vendor was linked by provision to $REPO/vendor and now resolves to $ROOT/elsewhere/vendor" "worktree: a recorded link that moved is reported"
+rm "$WT/vendor" && ln -s "$REPO/vendor" "$WT/vendor"
+printf '{"source":' > "$WT/.claude/state/provision.json"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_line "WARN +provision-record-unreadable: \.claude/state/provision\.json cannot be read" "worktree: a truncated record is reported as unreadable"
+expect_no_line "link-unrecorded" "worktree: a truncated record is not read as no record"
+cp "$ROOT/prov.bak" "$WT/.claude/state/provision.json"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_no_line "provision-link|provision-record" "worktree: a recorded link back on its target is not reported"
+
+# A recorded link whose tree starts loading the source checkout's own code
+# after provisioning: doctor runs provision's tree_loads_checkout checks
+# (#256 review, the plan's doctor backstop).
+loads_main() {  # loads_main <description> -> expects the finding, then cleans the tree
+  OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+  expect_line "WARN +provision-link-loads-main: vendor links to $REPO/vendor, which now loads the source checkout's own code \($2" "worktree: $1"
+  expect_line "move vendor to isolation\.provision\.copy" "worktree: $1, with the fix"
+  rm -rf "$REPO/vendor/composer" "$REPO/vendor/lib" "$REPO/vendor/@acme" "$REPO/packages"
+}
+ln -s "$REPO/vendor/dep" "$REPO/vendor/inner-link"
+OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" worktree 2>&1); STATUS=$?
+expect_no_line "provision-link-loads-main" "worktree: a link inside the tree loads nothing"
+rm "$REPO/vendor/inner-link"
+mkdir -p "$REPO/vendor/composer"
+# shellcheck disable=SC2016 # the literal $baseDir text Composer writes
+printf '<?php\nreturn array(\x27App\\\\\x27 => array($baseDir . \x27/src\x27));\n' > "$REPO/vendor/composer/autoload_psr4.php"
+# shellcheck disable=SC2016 # a literal $baseDir in the expected line
+loads_main "a Composer autoload against \$baseDir" 'composer/autoload_psr4\.php loads the root package from \$baseDir'
+mkdir -p "$REPO/vendor/lib/python3.12/site-packages/app-1.0.dist-info" "$REPO/packages/app"
+printf '{"url":"file://%s/packages/app","dir_info":{"editable":true}}\n' "$REPO" > "$REPO/vendor/lib/python3.12/site-packages/app-1.0.dist-info/direct_url.json"
+loads_main "an editable install of the source checkout" 'app-1\.0\.dist-info is an editable install of '"$REPO"'/packages/app'
+mkdir -p "$REPO/vendor/@acme" "$REPO/packages/ui"
+ln -s ../../packages/ui "$REPO/vendor/@acme/ui"
+loads_main "a workspace link two levels down" '@acme/ui links to '"$REPO"'/packages/ui'
+
+ln -s "$ROOT/outside" "$REPO/elsewhere"
+run_doctor worktree
+expect_no_line "link-unrecorded" "worktree: the main checkout is never checked"
+
 # --- pass 5: project settings against the schema (#233) ------------------------
 # The doctor names no setting itself: every key, type, format and reference
 # comes from lib/myspec-config.schema.json, so these fixtures exercise the
@@ -870,7 +1027,7 @@ expect_no_line '^SET +[a-zA-Z]+.* = ' "settings: defaults only lists no key"
 # A project file plus a session override.
 set_json .myspec.json 'd.isolation={worktreeRoot:"wt", allowLinkedModules:false}; d.hooks={markCodeChanged:{ignorePaths:["gen/**"]}}; d.reuseAudit={enabled:false};'
 set_json .claude/verification.json 'd.containers={api:{mountSource:".", mountTarget:"/srv/app"}}; d.checks[0].paths=["api/**"]; d.checks[0].runIn="api";'
-run_doctor_env MYSPEC_ALLOW_LINKED_MODULES=1 MYSPEC_CHECK_CAP_SECONDS=30 -- settings
+run_doctor_env MYSPEC_ALLOW_LINKED_MODULES=1 MYSPEC_CHECK_CAP_SECONDS=30 MYSPEC_GATE_BUDGET_SECONDS=120 -- settings
 expect_line '^SET +isolation\.worktreeRoot = "wt" \(\.myspec\.json\)$' "settings: a project value is listed with its file and is not marked"
 expect_line '^SET +isolation\.allowLinkedModules = true \(session: MYSPEC_ALLOW_LINKED_MODULES=1\) — loosens a gate$' "settings: a session override wins over the project file, names its variable, and is marked"
 expect_line '^SET +hooks\.markCodeChanged\.ignorePaths = \["gen/\*\*"\] \(\.myspec\.json\) — loosens a gate$' "settings: ignorePaths is marked as loosening"
@@ -878,6 +1035,7 @@ expect_line '^SET +reuseAudit\.enabled = false \(\.myspec\.json\) — loosens a 
 expect_line '^SET +checks\[0\]\.paths = \["api/\*\*"\] \(\.claude/verification\.json\) — loosens a gate$' "settings: a check's paths is marked as loosening"
 expect_line '^SET +checks\[0\]\.runIn = "api" \(\.claude/verification\.json\)$' "settings: runIn is listed, unmarked"
 expect_line '^SET +MYSPEC_CHECK_CAP_SECONDS = "30" \(session\)$' "settings: a standalone session variable is listed"
+expect_line '^SET +MYSPEC_GATE_BUDGET_SECONDS = "120" \(session\)$' "settings: a lowered gate budget is listed"
 expect_no_line '^SET +every setting' "settings: a project with settings does not claim defaults"
 
 run_doctor_env MYSPEC_ALLOW_LINKED_MODULES=1 -- --json settings
@@ -946,6 +1104,94 @@ for f in '\.myspec\.json' '\.claude/verification\.json'; do
   N=$(printf '%s\n' "$OUTPUT" | grep -cE "^ERROR setting-wrong-type: $f: $f is not a JSON object")
   if [ "$N" -eq 1 ]; then ok; else fail "settings: a non-object $f is one finding, got $N"; fi
 done
+
+# --- container checks (#220, #221): what the stop gate no longer parses -------
+# exec_checks <json array of [command, runIn or ""]> -> verification.json
+# with one required check per pair, named C0, C1, ... and one container "app".
+exec_checks() {
+  set_json .claude/verification.json "d.containers={app:{mountSource:'.', mountTarget:'/srv/app'}}; d.checks=$1.map(([c, r], i) => Object.assign({name: 'C' + i, command: c, required: true}, r ? {runIn: r} : {}));"
+}
+build_fixture
+# shellcheck disable=SC2016 # literal $MYSPEC_CHECK_WORKDIR in the commands
+exec_checks '[
+  ["docker compose exec app make lint", ""],
+  ["docker compose -p x exec -w /srv/app app make lint", ""],
+  ["docker compose exec app make lint", "app"],
+  ["docker compose exec -Tw /srv/app/wt app make lint", "app"],
+  ["docker exec -ew app make lint", "app"],
+  ["docker exec --workdir=/srv/app app make lint", "app"],
+  ["docker compose exec -w \"$MYSPEC_CHECK_WORKDIR\" app make lint", "app"],
+  ["docker compose exec app sh -c \"cd $MYSPEC_CHECK_WORKDIR && make\"", "app"],
+  ["docker compose exec -T app make -w lint", "app"],
+  ["docker compose run --rm app make lint", ""],
+  ["npm run lint", ""]
+]'
+run_doctor_env -- schema
+expect_exit 0 "containers: the container findings are warnings, not errors"
+expect_line '^WARN +verification-exec-no-runin: .*check C0 runs a container exec without runIn — in a linked worktree this check will be refused' "containers: an exec without runIn is warned about"
+expect_line '^WARN +verification-exec-no-runin: .*check C1 ' "containers: a -w does not stand in for runIn"
+expect_line 'declare runIn and a containers entry' "containers: the fix names runIn and containers"
+# docs/ exists in the plugin repository, not in the project the doctor runs in:
+# a fix pointing there sends the user to a file they do not have.
+expect_no_line '(^|[^/[:alnum:]_.-])docs/' "containers: no finding points at a bare docs/ path"
+# shellcheck disable=SC2016 # a literal $ in the pattern
+# shellcheck disable=SC2016 # a literal $ in the pattern
+expect_line '^WARN +verification-runin-no-workdir: .*check C2 has runIn but its container exec passes neither -w/--workdir nor \$MYSPEC_CHECK_WORKDIR' "containers: a runIn exec without the workdir is warned about"
+expect_no_line 'check C3 ' "containers: a -Tw <dir> cluster sets the workdir"
+expect_line '^WARN +verification-runin-no-workdir: .*check C4 ' "containers: -ew is -e w, not a workdir"
+expect_no_line 'check C5 ' "containers: --workdir= sets the workdir"
+expect_no_line 'check C6 ' "containers: -w \"\$MYSPEC_CHECK_WORKDIR\" is the workdir"
+expect_no_line 'check C7 ' "containers: a command that names MYSPEC_CHECK_WORKDIR is trusted"
+expect_line '^WARN +verification-runin-no-workdir: .*check C8 ' "containers: a -w after the service name belongs to the inner command"
+expect_no_line 'check C9 |check C10 ' "containers: a compose run and a host command raise nothing"
+
+# Every form the hook declares is found the way the hook finds it.
+FORMS=$(sed -n 's/^CONTAINER_EXEC_FORMS=(\(.*\))$/\1/p' "$PLUGIN/lib/stop-gate/run.sh" | grep -o '"[^"]*"' | tr -d '"')
+[ "$(printf '%s\n' "$FORMS" | grep -c .)" -ge 8 ] && ok || fail "containers: the gate's CONTAINER_EXEC_FORMS were read (got: $FORMS)"
+build_fixture
+exec_checks "$(printf '%s\n' "$FORMS" | jq -Rnc '[inputs | [. + " app make lint", ""]]')"
+run_doctor_env -- verification-exec-no-runin
+N=$(printf '%s\n' "$OUTPUT" | grep -cE '^WARN +verification-exec-no-runin')
+[ "$N" -eq "$(printf '%s\n' "$FORMS" | grep -c .)" ] && ok || fail "containers: every hook exec form is warned about without runIn (got $N)"
+
+# runIn naming an undefined container: an error before a stop refuses it.
+build_fixture
+exec_checks '[["docker compose exec -w /x app make lint", "nope"]]'
+run_doctor_env -- schema
+expect_exit 1 "containers: runIn naming an undefined container is an error"
+expect_line '^ERROR setting-unknown-ref: .*checks\[0\]\.runIn names "nope"' "containers: the error names the container"
+
+# A check's cwd is a repo-relative directory that must exist.
+build_fixture
+mkdir -p "$REPO/api"
+set_json .claude/verification.json 'd.checks[0].cwd="api"; d.checks[1].cwd="nope"; d.checks[2].cwd="/abs"; d.checks.push({name:"root",command:"true",required:true,cwd:""}, {name:"slashes",command:"true",required:true,cwd:".//api"});'
+run_doctor_env -- schema
+expect_no_line 'checks\[3\]\.cwd' "cwd: an empty cwd is the root, as the hook reads it (#255 review)"
+expect_line '^WARN +setting-dir-missing: \.claude/verification\.json: checks\[4\]\.cwd is "\.//api"' "cwd: .//api, which the hook ignores, is reported"
+expect_no_line 'checks\[0\]\.cwd' "cwd: an existing directory raises nothing"
+expect_line '^WARN +setting-dir-missing: \.claude/verification\.json: checks\[1\]\.cwd is "nope"' "cwd: a missing directory is reported"
+expect_line '^WARN +setting-dir-missing: \.claude/verification\.json: checks\[2\]\.cwd is "/abs"' "cwd: an absolute cwd is reported"
+run_doctor_env -- settings
+expect_line '^SET +checks\[0\]\.cwd = "api" \(\.claude/verification\.json\)$' "cwd: a check's cwd is listed"
+
+# An ignoreBlockInMain entry that is no blockInMain entry removes nothing:
+# warned, while a default's or a project entry's exact text is not (#255 review).
+build_fixture
+set_json .myspec.json 'd.isolation={blockInMain:["^make[[:space:]]+deploy"], ignoreBlockInMain:["^git[[:space:]]+push([[:space:]]|$)", "^make[[:space:]]+deploy", "^git[[:space:]]+push"]};'
+run_doctor_env -- schema
+expect_line '^WARN +setting-unmatched-item: \.myspec\.json: isolation\.ignoreBlockInMain\[2\] is "\^git\[\[:space:\]\]\+push", which is not an entry of isolation\.blockInMain' "ignoreBlockInMain: a near-miss of a default is reported"
+expect_no_line 'ignoreBlockInMain\[0\]|ignoreBlockInMain\[1\]' "ignoreBlockInMain: a default's or a project entry's exact text is not reported"
+expect_exit 0 "ignoreBlockInMain: the finding is a warning"
+
+# The worktree guard's list is a setting: a project's entries and its
+# ignoreBlockInMain are listed in force, the trim marked as loosening.
+build_fixture
+set_json .myspec.json 'd.isolation={blockInMain:["^make[[:space:]]+deploy"], ignoreBlockInMain:["^git[[:space:]]+push([[:space:]]|$)"]};'
+run_doctor_env -- settings
+expect_line '^SET +isolation\.blockInMain = default \+ \["\^make\[\[:space:\]\]\+deploy"\] \(\.myspec\.json\)$' "blockInMain: the list in force, default plus the project entry, is listed"
+expect_line '^SET +isolation\.ignoreBlockInMain = \["\^git.*push.*"\] \(\.myspec\.json\) — loosens a gate$' "blockInMain: ignoreBlockInMain is listed as loosening"
+run_doctor_env -- schema
+expect_no_line 'setting-' "blockInMain: both keys are known settings of the right type"
 
 # --- pass 4: argument handling ------------------------------------------------
 

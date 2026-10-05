@@ -4,6 +4,8 @@ Specification-Driven Development framework for Claude Code and Codex. Provides s
 
 ## Installation
 
+Requirements: git 2.31 or later recommended (older git falls back: the hooks resolve what `git rev-parse --path-format=absolute` would print themselves, but `memory-claim-id.sh` and the memory and friction-scan scripts still need it) and jq 1.6 or later (the settings reader uses `jq --rawfile`).
+
 ### Codex
 
 This repository now includes a native Codex manifest at `.codex-plugin/plugin.json`.
@@ -27,9 +29,9 @@ The same hook scripts are now portable:
 
 Both runtimes share the same project-level verification config at `.claude/verification.json` when it exists. A repo whose lint or type-check is already red on the default branch gives that check a `diffCommand`: the gate runs it in place of `command`, with `$MYSPEC_BASE_REF` exported as the merge base with the default branch, so the check covers what the branch changed instead of blocking on pre-existing debt.
 
-The gate runs only after the session wrote code, and it verifies each checkout of the repository the session wrote in, so a linked worktree edited from the main checkout gets verified. Reading, grepping or running a file doesn't count, and neither does a write in another repository. When several sessions share one checkout, the checks can fail on another session's uncommitted work. A failure that names only files this session didn't write becomes a warning. Any other failure still blocks, and the block lists the uncommitted changes that aren't the session's. Each check also gets `$MYSPEC_SESSION_FILES`, one repo-relative path per line, for a per-file linter that should cover only the files this session wrote. Rules and known limits: [`docs/stop-gate.md`](docs/stop-gate.md).
+The gate runs only after the session wrote code, and it verifies each checkout of the repository the session wrote in, so a linked worktree edited from the main checkout gets verified. Reading, grepping or running a file doesn't count, and neither does a write in another repository. When several sessions share one checkout, the checks can fail on another session's uncommitted work. A failure that names only files this session didn't write becomes a warning. Any other failure still blocks, and the block lists the uncommitted changes that aren't the session's. Each check also gets `$MYSPEC_SESSION_FILES`, one path per line relative to the directory the check runs from (the root, or its `cwd`), for a per-file linter that should cover only the files this session wrote. Rules and known limits: [`docs/stop-gate.md`](docs/stop-gate.md).
 
-Each check runs under a 120 s cap. At the cap the gate kills the check's process group on this machine, and nothing else. Work a check runs in a container or on another host (`docker exec`, `docker compose exec`, `kubectl exec`, `ssh`) keeps running after its client dies, and the next stop starts another run on top of it (issue #147). Give such a check a `cleanup` command. The gate runs it after a timeout, under its own 30 s cap, with the same `$MYSPEC_CHECK_RUN_ID` the check saw:
+Each check runs under a 120 s cap, and the whole stop, every check in every checkout, under a 300 s budget: a check the budget leaves no time for is reported as not run, and the stop blocks. `MYSPEC_GATE_BUDGET_SECONDS` lowers the budget and cannot raise it. At the cap the gate kills the check's process group on this machine, and nothing else. Work a check runs in a container or on another host (`docker exec`, `docker compose exec`, `kubectl exec`, `ssh`) keeps running after its client dies, and the next stop starts another run on top of it (issue #147). Give such a check a `cleanup` command. The gate runs it after a timeout, under its own 30 s cap, with the same `$MYSPEC_CHECK_RUN_ID` the check saw:
 
 ```json
 {
@@ -92,7 +94,7 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref main
 | **Project Setup** | |
 | `/myspec:init` | Initialize myspec in a new project |
 | `/myspec:update` | Update framework files to latest version |
-| `/myspec:setup <type>` | Generate project-specific files from guided wizards (backbone, claude-md, conventions, code-review, mockup, index-md, workflow, pre-flight, anti-patterns) |
+| `/myspec:setup <type>` | Generate project-specific files from guided wizards (backbone, claude-md, conventions, mockup, index-md, workflow, pre-flight, anti-patterns) |
 | `/myspec:bootstrap` | Load project context, memory indexes, and active session at session start |
 | **Feature Workflow** | |
 | `/myspec:feature-discover` | Reverse-engineer an undocumented feature from existing code into discovery.md (+ optional spec.md / tech-spec.md) ([examples](examples/skills/feature-discover.md)) |
@@ -107,7 +109,6 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref main
 | `/myspec:feature-plan` | Create execution-ready implementation plan from tech-spec: milestones, phases, parallel groups, per-task spec contracts and interfaces |
 | `/myspec:feature-implement` | Execute implementation plan by dispatching one implementer subagent per task, reviewing at every phase boundary, and closing with a holistic full-diff review |
 | `/myspec:feature-implement-review` | Independently audit that the built code fulfills the spec and plan (traceability + behavioral); writes conformance-report.md and routes findings — never edits code |
-| `/myspec:code-review` | Review changed code for quality, standards, and bugs — universal dimensions plus project rules. Configurable via `/myspec:setup code-review` |
 | `/myspec:feature-update` | Plan changes to an already-implemented feature |
 | `/myspec:feature-verify` | Verify feature implementation matches spec |
 | `/myspec:feature-status-audit` | Batch-audit the whole feature manifest against on-disk docs (`lib/feature-status-audit/audit.mjs`) |
@@ -173,11 +174,12 @@ An optional `isolation` block configures the work-isolation hooks; every key has
   "worktreeRoot": ".claude/worktrees",
   "allowLinkedModules": false,
   "blockInMain": [],
+  "ignoreBlockInMain": [],
   "provision": { "symlink": ["node_modules"], "copy": [".eslintcache"] }
 }
 ```
 
-`allowLinkedModules` lets the Stop hook verify a worktree whose dependency directory is a symlink even when the lockfiles that pin it differ from the linked checkout (a link with identical lockfiles is accepted without it); `blockInMain` adds command patterns the Bash guard blocks in the main checkout while a session works in a worktree; `provision` is what `worktree-provision.sh` links and copies into a new worktree.
+`allowLinkedModules` makes `worktree-provision.sh` link a dependency directory even when its lockfiles differ from the main checkout's, and record the link without lockfile hashes, so the Stop hook does not compare them (for repos whose worktrees share one tree by design); `blockInMain` adds command patterns (anchored EREs) to the ones the Bash guard blocks in the main checkout while a session works in a worktree, whose default list in `lib/myspec-config.schema.json` covers builds and installs across the common stacks, and `ignoreBlockInMain` drops a default pattern by its exact text; `provision` is what `worktree-provision.sh` links and copies into a new worktree.
 
 A `symlink` entry is a path string or an object naming the lockfiles that pin it; `"lockfiles": []` marks an entry unguarded:
 
@@ -185,7 +187,7 @@ A `symlink` entry is a path string or an object naming the lockfiles that pin it
 "symlink": ["node_modules", ".env", { "path": "deps", "lockfiles": ["deps.lock"] }]
 ```
 
-A string entry whose basename is a well-known dependency directory takes its lockfiles from a built-in map — `node_modules` (npm, Yarn, pnpm, Bun lockfiles), `vendor` (`composer.lock`, `Gemfile.lock`, `go.sum`), `vendor/bundle` (`Gemfile.lock`), `.venv` / `venv` (`poetry.lock`, `Pipfile.lock`, `uv.lock`, `pdm.lock`, `requirements*.txt`) — matched beside the entry and at the repo root; a `*` stays within one directory. Any other string entry is unguarded. Provisioning skips an entry whose lockfiles the branch changed against `--base`; the Stop hook blocks on a linked entry whose lockfiles differ from the checkout it points into. Neither accepts a tree that loads the project's own source from the main checkout (a Composer `vendor`, a `.venv` with an editable install, a tree holding workspace links such as an npm, Yarn, pnpm or Bun workspace package or a Composer path repository): through a link, checks would run the main checkout's code. Without config, the Stop hook also guards the Composer bin plugin's `vendor-bin/*/vendor`.
+A string entry whose basename is a well-known dependency directory takes its lockfiles from a built-in map — `node_modules` (npm, Yarn, pnpm, Bun lockfiles), `vendor` (`composer.lock`, `Gemfile.lock`, `go.sum`), `vendor/bundle` (`Gemfile.lock`), `.venv` / `venv` (`poetry.lock`, `Pipfile.lock`, `uv.lock`, `pdm.lock`, `requirements*.txt`) — matched beside the entry and at the repo root; a `*` stays within one directory. Any other string entry is unguarded. Provisioning skips an entry whose lockfiles the branch changed against `--base` or that differ from the main checkout's, and a tree that loads the project's own source from the main checkout (a Composer `vendor`, a `.venv` with an editable install, a tree holding workspace links such as an npm, Yarn, pnpm or Bun workspace package or a Composer path repository): through a link, checks would run the main checkout's code. It records what it linked, with each lockfile's hash, in the worktree's `.claude/state/provision.json`; the Stop hook blocks when a recorded lockfile changed, a lockfile that was absent at provisioning appeared, or a recorded link moved, and says to rerun provision. A link provision did not make is reported by `/myspec:doctor` (`link-unrecorded`), not blocked.
 
 When a session ends, a hook records one line per skill run in `.claude/state/metrics/runs.jsonl`: time, tokens, subagents, hook blocks and fix rounds. The file is gitignored, stays on your machine, and stores no prompt or file content. `/myspec:doctor` summarises it. To turn recording off, set `"feedback": { "metrics": false }`, `MYSPEC_DISABLE_METRICS=1` or `DO_NOT_TRACK=1`. See [docs/field-metrics.md](docs/field-metrics.md), which also covers opt-in OpenTelemetry.
 
@@ -220,6 +222,8 @@ After updating the plugin (`/plugin marketplace update`), run in each project:
 ```
 
 This updates framework-owned files while preserving your project customizations. Since 2.0 it also runs the one-shot migrations listed in the manifest (recorded in `.myspec.json` `migrations`), deletes files the framework retired, and wires its own hooks in `.claude/settings.json`.
+
+**Upgrading to 3.0 — code review:** the `code-review` skill and the `setup code-review` blueprint are gone; use Claude Code's built-in `/code-review` for bugs in a diff (`feature-implement` offers it after the holistic review). `/myspec:update` drops the `codeReview` block from `.myspec.json` and leaves `.claude/rules/code-review.md` in place as a project-owned file. What is lost: the project rules under its `## Standards` / `## Suppress` headings were read by the removed skill only; the built-in does not read them, so keep what still matters as ordinary always-loaded rules or delete the file.
 
 **Upgrading from 1.x:** see [docs/upgrading-to-2.0.md](docs/upgrading-to-2.0.md) — `/myspec:update` does the mechanical work, and that page covers what it cannot: references in your own files, and the behaviour changes with no file to grep. 2.0 migrates from 1.28.0 or later; a project on an older version runs the 1.28 update first (check out the plugin at tag `v1.28.0`, start Claude with `--plugin-dir` pointing at it, run `/myspec:update`, then return to the current plugin).
 

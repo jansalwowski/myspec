@@ -1,6 +1,6 @@
 ---
 name: doctor
-description: "Use when the project's myspec setup needs a health check — CLAUDE.md, rules, skills, agents, hooks, ${aiDir} docs, memory tree, feature manifest. An optional surface (A-F) checks one. Keywords: healthcheck, setup broken, context bloat, rules drift. Do NOT use for project code (code-review), one skill (skill-verify), or one feature (feature-verify)."
+description: "Use when the project's myspec setup needs a health check — CLAUDE.md, rules, skills, agents, hooks, ${aiDir} docs, memory tree, feature manifest. A surface letter (A-F) checks one. Keywords: healthcheck, setup broken, context bloat, rules drift. Do NOT use for project code (/code-review), one skill (skill-verify), or one feature (feature-verify)."
 tags: [audit, maintenance, hooks, context-budget, drift]
 ---
 
@@ -48,7 +48,7 @@ due for a pass; reach for tier 1 when the user named a surface or tier 0 pointed
 
    Each record is `{ id, group, path, detail, remediation: { commands, text } }`. Group them by
    `group` and carry them forward: `install` and `wiring` records go into surface E's brief,
-   `schema` into E, `features` into F, `budget` and `refs` into A. The `settings` array is the
+   `schema` and `worktree` into E, `features` into F, `budget` and `refs` into A. The `settings` array is the
    effective project policy, `{ key, value, source, loosens }` for every setting that differs
    from its default; it goes into E's brief and, as given, into the Phase 3 report. The brief says *these are established
    facts, verified by command — do not re-check them, and do not report a finding that
