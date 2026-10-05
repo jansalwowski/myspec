@@ -197,10 +197,12 @@ frontmatter_scope() {
 
 # frontmatter_region <file> -> the part of the file an edit must touch to
 # change its frontmatter: line 1 through the closing `---` when line 1 opens
-# a fence (through the end when it never closes), else line 1 alone.
+# a fence (through the end when it never closes), else nothing. A doc with no
+# fence has no region, so retitling its first line is not a frontmatter
+# change (PR #274 review); adding or removing a fence is.
 frontmatter_region() {
   [ -f "$1" ] || return 0
-  awk 'NR == 1 { print; if ($0 !~ /^---[ \t\r]*$/) exit; next } { print } /^---[ \t\r]*$/ { exit }' "$1" 2>/dev/null
+  awk 'NR == 1 { if ($0 !~ /^---[ \t\r]*$/) exit; print; next } { print } /^---[ \t\r]*$/ { exit }' "$1" 2>/dev/null
 }
 
 # frontmatter_issues <file> -> one issue per line; nothing when the

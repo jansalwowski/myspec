@@ -11,11 +11,12 @@
 # What is judged (#263, lib/content-checks.sh): a Write that creates the doc
 # by its whole content; any other Write, Edit or MultiEdit by the content it
 # would leave, and only when that changes the frontmatter region (line 1
-# through the closing `---`, or line 1 alone when there is no fence). A body
-# edit or a body rewrite of a doc whose frontmatter is already wrong is not
-# blocked for it: the file is never rescanned for what was there before. A Bash write (a heredoc) never
-# reaches this hook: the Stop gate validates a doc it created or whose
-# frontmatter region it changed (lib/stop-gate/content.sh).
+# through the closing `---`; a doc with no fence has none, so only adding one
+# changes it). A body edit or a body rewrite of a doc whose frontmatter is
+# already wrong is not blocked for it: the file is never rescanned for what
+# was there before. A Bash write (a heredoc) never reaches this hook: the
+# Stop gate validates a doc it created or whose frontmatter region it changed
+# (lib/stop-gate/content.sh).
 #
 # Output contract: a block prints the PreToolUse deny form (pretool_deny in
 # lib/hook-core.sh). An allowed call prints NOTHING.

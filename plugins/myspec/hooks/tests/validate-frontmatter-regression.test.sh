@@ -209,6 +209,8 @@ edit "$REPO" "$F" "nowhere in the file" "x"
 expect_quiet "an edit whose old_string the file does not hold changes nothing and passes"
 
 F="$REPO/.ai/features/x/body-only.md"
+edit "$REPO" "$F" "# Title" "# Title 2"
+expect_quiet "retitling line 1 of a doc without a fence is not a frontmatter change (PR #274 review)"
 edit "$REPO" "$F" "# Title" $'---\ntitle: Added\nupdated: 2026-01-01\n---\n# Title'
 expect_quiet "an edit that adds valid frontmatter to a doc without one passes"
 edit "$REPO" "$F" "# Title" $'---\ntitle: Added\n---\n# Title'
@@ -228,6 +230,10 @@ rewrite "$REPO" "$F" $'---\ntitel: X\n---\nbody 2\n'
 expect_block "a Write that changes the broken header and leaves it broken is denied"
 rewrite "$REPO" "$F" $'---\ntitle: X\nupdated: 2026-01-01\n---\nbody 2\n'
 expect_quiet "a Write that fixes the header passes"
+F="$REPO/.ai/features/x/fenced.md"
+printf -- '---\ntitle: F\nupdated: 2026-01-01\n---\nbody\n' > "$F"
+edit "$REPO" "$F" $'---\ntitle: F\nupdated: 2026-01-01\n---\n' ""
+expect_block "an edit that removes the fence is a frontmatter change"
 
 # --- 4eb8ccb: ideas/ seed docs are exempt --------------------------------------
 mkdir -p "$REPO/.ai/ideas"

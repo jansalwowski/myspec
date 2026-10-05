@@ -122,7 +122,7 @@ title: T
 updated: 2026-01-01
 ---" "$(frontmatter_region "$CUR")" "the region ends at the closing fence"
 printf '# T\nbody\n' > "$CUR"
-expect "# T" "$(frontmatter_region "$CUR")" "without a fence the region is line 1"
+expect "" "$(frontmatter_region "$CUR")" "without a fence there is no region"
 printf -- '---\ntitle: T\nnever closed\n' > "$CUR"
 expect "---
 title: T
