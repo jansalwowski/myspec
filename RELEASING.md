@@ -2,21 +2,19 @@
 
 > The repo-local `/release` skill (`.claude/skills/release/` — maintainer tooling, not shipped with the plugin) automates this entire process: preflight, semver suggestion, bump, tag, notes. This document stays the authoritative reference; if the skill and this file disagree, this file wins.
 
-## Why the version is in five places
+## Why the version is in three places
 
-myspec ships through three plugin manifests (Claude marketplace, Claude plugin, Codex plugin) and is consumed by projects that read a fourth (`framework-files/manifest.json`). Plus a local-source wrapper used by the Codex agents marketplace. All five must agree, or one of three things breaks:
+myspec ships through two plugin manifests (Claude marketplace, Claude plugin) and is consumed by projects that read a third (`framework-files/manifest.json`). All three must agree, or one of three things breaks:
 
 | If this is stale                          | Symptom                                                                                              |
 |-------------------------------------------|------------------------------------------------------------------------------------------------------|
 | `framework-files/manifest.json`           | `/myspec:update` reports "Already up to date" and ships nothing — even though new files exist        |
 | `.claude-plugin/plugin.json`              | Claude reports the wrong version after `/plugin install`                                              |
 | `.claude-plugin/marketplace.json`         | Claude pins to a stale git ref; users get an old snapshot                                            |
-| `.codex-plugin/plugin.json`               | Codex shows the wrong version                                                                        |
-| `plugins/myspec/.codex-plugin/plugin.json`| Local-source install (Codex marketplace pointing at `./plugins/myspec`) shows the wrong version      |
 
 ## The bump script
 
-`scripts/bump-version.sh` updates all five in one shot. Requires `jq`.
+`scripts/bump-version.sh` updates all three in one shot. Requires `jq`.
 
 ```bash
 ./scripts/bump-version.sh 1.7.0
@@ -26,7 +24,7 @@ It:
 
 1. Validates the X.Y.Z format
 2. Warns if the working tree has uncommitted changes
-3. Rewrites the five JSON files (`jq` reformats them as a side effect — consistent indentation)
+3. Rewrites the three JSON files (`jq` reformats them as a side effect — consistent indentation)
 4. Prints next-step commands
 5. Does **not** commit, tag, or push — review the diff first
 
@@ -150,7 +148,7 @@ Breaking, unless a migration ships with it:
 - A removed or renamed skill, or a renamed agent dispatch name (`myspec:<agent>`)
 - A renamed or removed config-contract heading (see AGENTS.md, "Config contracts")
 - A changed or dropped manifest key without `renamedFrom` or a `removed` entry
-- A dropped harness (Codex, #143) or a dropped supported stack
+- A dropped harness (Codex in 3.0, #143) or a dropped supported stack
 - A workflow change that needs consumers to act, such as a new required plan field that old plans lack and a skill now rejects
 
 **Tracking.** Every candidate gets an issue with the `breaking` label, in the next major's milestone (currently [v3.0.0](https://github.com/jansalwowski/myspec/milestone/1)). That milestone is the major's roadmap; do not keep one anywhere else. A PR that lands a breaking change carries the `breaking` label too, which is what the release gate reads.

@@ -80,8 +80,8 @@ const SIBLINGS = {
 // skill-self-test as Critical in every repo the plugin is installed in
 // (AGENTS.md, "Never declare plugin-internal paths"; v1.20.0 mockup audits).
 const PLUGIN_INTERNAL_DIRS = [
-  'skills', 'plugins', 'blueprints', 'framework-files', 'scaffolding', 'templates',
-  'lib', 'hooks', 'examples', '.codex-plugin', '.claude-plugin',
+  'skills', 'blueprints', 'framework-files', 'scaffolding', 'templates',
+  'lib', 'hooks', 'examples', '.claude-plugin',
 ];
 
 // Caps from skills/skill-verify/references/detection-patterns.md.

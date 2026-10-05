@@ -1,5 +1,4 @@
-// ESLint config for the JS this plugin ships (lib/ and its plugins/myspec/lib/
-// mirror). Downstream projects commonly lint with eslint:recommended, and
+// ESLint config for the JS this plugin ships (lib/). Downstream projects commonly lint with eslint:recommended, and
 // /myspec:update copies lib/ into them, so shipped code must pass it (#208).
 //
 // The repo has no package.json: CI and pre-commit run a pinned

@@ -5,7 +5,7 @@ description: "Use when cutting a new version of the myspec plugin — semver bum
 
 # Release
 
-Cut a myspec release from `main`. Repo-local maintainer skill — lives in `.claude/skills/`, deliberately not shipped in the plugin (useless in consumer projects). Automates the process in `RELEASING.md` — the five version files must stay in lockstep, and the tag-push automation (not `gh release create`) produces the release.
+Cut a myspec release from `main`. Repo-local maintainer skill — lives in `.claude/skills/`, deliberately not shipped in the plugin (useless in consumer projects). Automates the process in `RELEASING.md` — the three version files must stay in lockstep, and the tag-push automation (not `gh release create`) produces the release.
 
 **Announce at start:** "Preparing a myspec release."
 
@@ -21,14 +21,13 @@ Cut a myspec release from `main`. Repo-local maintainer skill — lives in `.cla
 Run all checks; any failure → report it and stop (fix first, never release around a failure):
 
 1. On `main` (`git rev-parse --abbrev-ref HEAD`), clean tree (`git status --porcelain` empty), synced (`git pull` reports up to date), and not ahead: `git status -sb` must not say `ahead`. `git pull` reports "Already up to date" even when a local commit, such as a `chore(quality)` commit left by an aborted release, sits unpushed; show `git log --oneline origin/main..HEAD` and resolve it (Step 3's Abort) first.
-2. Mirror parity — the same diffs CI runs: `diff -r skills plugins/myspec/skills`, `diff -r hooks plugins/myspec/hooks`, `diff hooks.json plugins/myspec/hooks.json`, `diff -r lib plugins/myspec/lib`, `diff -r .codex-plugin plugins/myspec/.codex-plugin`.
-3. Hooks parse: `bash -n` every `hooks/*.sh`.
-4. Latest CI run on main succeeded: `gh run list --branch main --limit 1`. If not green, show the failure and ask for explicit confirmation before continuing.
+2. Hooks parse: `bash -n` every `hooks/*.sh`.
+3. Latest CI run on main succeeded: `gh run list --branch main --limit 1`. If not green, show the failure and ask for explicit confirmation before continuing.
 
 ### Step 2: Determine the Version
 
 1. Last tag: `git describe --tags --abbrev=0`. Commits since: `git log {last_tag}..HEAD --oneline`.
-2. **No-op guard:** check the shipped surfaces for changes — `git diff --stat {last_tag}..HEAD -- framework-files skills hooks hooks.json lib plugins .codex-plugin .claude-plugin scaffolding templates blueprints`. If empty, nothing consumers can receive has changed: report "nothing to release since {last_tag} — all changes are repo-meta (docs, CI, repo-local tooling)" and stop. Only continue past this with explicit user confirmation.
+2. **No-op guard:** check the shipped surfaces for changes — `git diff --stat {last_tag}..HEAD -- framework-files skills hooks lib .claude-plugin scaffolding templates blueprints`. If empty, nothing consumers can receive has changed: report "nothing to release since {last_tag} — all changes are repo-meta (docs, CI, repo-local tooling)" and stop. Only continue past this with explicit user confirmation.
 3. **Breaking gate:** list merged PRs labelled `breaking` since the last tag: `gh pr list --state merged --label breaking --search "merged:>=$(git log -1 --format=%cI {last_tag})" --json number,title,url`. No `--base main`: a stacked PR keeps its parent branch as base after the parent merges, so that filter drops it (#110). It must exit 0; a non-zero exit is a failed check, never "no breaking PRs" — stop and report. A non-empty list means the release is **major**; minor and patch are not offered. To ship a minor anyway, the user removes the label from each listed PR with a comment saying why it is not breaking (RELEASING.md "Breaking changes"), then re-run the breaking gate.
 4. Suggest a bump from the RELEASING.md semver table and its "Breaking changes" definition: a breaking change (the breaking-gate list, or one the commits show without a label, which you flag to the user) → **major**; new skills, new framework files, new manifest entries, or any change under `framework-files/` → **minor**; body-only bug fixes → **patch**.
 5. Call `AskUserQuestion` with the suggested version first, marked `(Recommended)`, plus the other bump levels the breaking gate allows. Wait for the choice. For a major, also list the open issues still in its milestone (`gh issue list --milestone v{X}.0.0 --state open`) and confirm they are deferred to a later major or done.
@@ -63,7 +62,7 @@ The script prints which applies (`baseline REUSE …`, `RERUN <model> <reason>`,
 ### Step 4: Bump, Commit, Tag, Push
 
 1. `./scripts/bump-version.sh {X.Y.Z}`
-2. Show `git diff` — the only changes must be version fields (and the marketplace `ref`) in the five files. Anything else → stop and investigate.
+2. Show `git diff` — the only changes must be version fields (and the marketplace `ref`) in the three files. Anything else → stop and investigate.
 3. `git add -A && git commit -m "chore: bump to v{X.Y.Z}"`
 4. `git tag v{X.Y.Z}` then `git push && git push --tags`
 
@@ -88,24 +87,24 @@ Pushing the tag **auto-publishes** the release — the workflow runs `gh release
 ### Step 6: Verify
 
 - `gh release view v{X.Y.Z}` shows the enriched notes.
-- All five version files report `{X.Y.Z}`: `grep -r '"version"\|frameworkVersion\|"ref"' framework-files/manifest.json .claude-plugin/plugin.json .claude-plugin/marketplace.json .codex-plugin/plugin.json plugins/myspec/.codex-plugin/plugin.json`.
+- All three version files report `{X.Y.Z}`: `grep -r '"version"\|frameworkVersion\|"ref"' framework-files/manifest.json .claude-plugin/plugin.json .claude-plugin/marketplace.json`.
 - `git status` clean; local `main` matches `origin/main`.
 
 ## Rules
 
 - Never release from a branch other than `main`, or with a dirty tree — the tag must point at exactly what CI validated.
-- Never hand-edit the five version files; only `scripts/bump-version.sh` writes them.
+- Never hand-edit the three version files; only `scripts/bump-version.sh` writes them.
 - Show the bump diff and the notes draft before committing/publishing — no silent releases.
 - Never release on a regressed or failed eval check without the user's explicit go-ahead, and never on a regressed verdict while the gate is on.
 - The Upgrading note is required whenever `framework-files/` changed since the last tag: that is what gates `/myspec:update` for every consumer.
 
 ## Verification Checklist
 
-- [ ] Preflight fully passed (main, clean, synced, not ahead of origin, mirrors identical, hooks parse, CI green or explicitly overridden)
+- [ ] Preflight fully passed (main, clean, synced, not ahead of origin, hooks parse, CI green or explicitly overridden)
 - [ ] Breaking gate ran (exit 0): no `breaking` PRs since the last tag, or the release is major
 - [ ] Version confirmed by the user against the semver table
 - [ ] Eval comparison ran or a skip was recorded with its reason; a regressed or failed run was confirmed by the user before `--record`; `quality/` committed as `chore(quality): record v{X.Y.Z} eval baseline` before the bump
-- [ ] Bump diff contained only the five version files; committed as `chore: bump to v{X.Y.Z}`
+- [ ] Bump diff contained only the three version files; committed as `chore: bump to v{X.Y.Z}`
 - [ ] Notes written and approved **before** the tag was pushed
 - [ ] Notes landed via `gh release edit` (the tag auto-publishes; `create` only as a fallback if the workflow failed)
 - [ ] Release page shows enriched notes with PR links preserved; Upgrading section present if framework-files changed

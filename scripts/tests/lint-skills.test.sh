@@ -417,13 +417,9 @@ expect_line "no such file" "a missing --files path is named"
 run --bogus
 expect_exit 2 "an unknown flag exits 2"
 
-# ── the real repo lints clean, and so does its plugin mirror ────────────────
+# ── the real repo lints clean ───────────────────────────────────────────────
 OUTPUT=$(cd "$REPO_ROOT" && node "$SCRIPT" 2>&1); STATUS=$?
 expect_exit 0 "the real repo has no error findings"
-if [ -d "$REPO_ROOT/plugins/myspec/skills" ]; then
-  OUTPUT=$(cd "$REPO_ROOT" && node "$SCRIPT" --files plugins/myspec/skills/*/SKILL.md 2>&1); STATUS=$?
-  expect_exit 0 "the plugin mirror has no error findings"
-fi
 
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

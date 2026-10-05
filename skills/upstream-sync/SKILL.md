@@ -9,7 +9,7 @@ Check tracked upstream repos for new commits, diff each upstream path against it
 
 ## Config
 
-Source of truth: `plugins/myspec/upstream-sources.yml` (resolved relative to repo root).
+Source of truth: `upstream-sources.yml` at the repo root.
 
 Shape:
 
@@ -22,7 +22,7 @@ sources:
     last_checked_date: YYYY-MM-DD
     mappings:
       - upstream: <path-in-upstream>     # e.g. "skills/brainstorming"
-        local: <path-in-our-repo>        # e.g. "plugins/myspec/skills/brainstorm"
+        local: <path-in-our-repo>        # e.g. "skills/brainstorm"
         divergences:                     # intentional differences — do NOT re-propose
           - "<one-line rationale>"
 ```
@@ -35,7 +35,7 @@ Complete in order. Process **one mapping at a time** — do not batch.
 
 1. **Preflight** — `gh auth status` must succeed; `gh` is the only network dep. If it fails, stop and ask the user to authenticate.
 2. **Parse args** — if the user passed an argument (e.g. `/myspec:upstream-sync brainstorm`), filter mappings whose `local` or `upstream` path contains the arg. Otherwise process all.
-3. **Read config** — load `plugins/myspec/upstream-sources.yml`. If missing, offer to scaffold it from a template.
+3. **Read config** — load `upstream-sources.yml`. If missing, offer to scaffold it from a template.
 4. **For each source** (in config order):
    1. Fetch HEAD: `gh api repos/<repo>/commits?sha=<branch>&per_page=1` → record new HEAD sha.
    2. For each mapping (filtered by args):

@@ -16,13 +16,13 @@ sources:
     last_checked_date: "2026-08-21"
     mappings:
       - upstream: skills/brainstorming
-        local: plugins/myspec/skills/brainstorm
+        local: skills/brainstorm
         divergences:
           - "Output is optional (A/B/C wrap-up) — upstream mandates spec doc + writing-plans handoff."
           - "We keep SCAMPER / Six Hats / reverse-brainstorm / first-principles techniques table; upstream removed it."
           - "No HARD-GATE block — our skill is a thinking tool, not a pipeline kickoff."
           - "Frontmatter description stays exploratory; upstream uses 'You MUST use this before any creative work' trigger language."
-          - "Visual-companion server ported from upstream scripts/ to lib/brainstorm-server/ (invoked via ${CLAUDE_PLUGIN_ROOT}/lib/...). Mirrored into plugins/myspec/lib/brainstorm-server/ so it resolves under the Codex plugin root too (where ${CLAUDE_PLUGIN_ROOT} → plugins/myspec/)."
+          - "Visual-companion server ported from upstream scripts/ to lib/brainstorm-server/ (invoked via ${CLAUDE_PLUGIN_ROOT}/lib/...)."
           - "Server session dir + frame branding rebranded .superpowers/ → .myspec/ and 'Superpowers Brainstorming' → 'myspec Brainstorming'."
           - "Three-path router (spike/bounded/architectural), reworked HARD-GATE, Red Flags table, per-path checklists, dot graph (v6.3.0) not adopted — machinery for scaling a mandatory spec pipeline we do not have; only the one-way depth ratchet was folded into Before-diving-in."
           - "spec-document-reviewer-prompt.md deleted locally — unreferenced dead file in both trees (upstream flow switched to inline self-review; ours always was)."

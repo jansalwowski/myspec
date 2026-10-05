@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 # ShellCheck the shell this plugin ships (#209): hooks/ and lib/, tests
 # included. `bash -n` only proves a script parses; ShellCheck catches unused
-# variables, quoting and $? mistakes. The plugins/myspec/ mirrors are skipped:
-# sync-check.yml keeps them byte-identical, so linting them only doubles every
-# finding.
+# variables, quoting and $? mistakes.
 #
 # Runs at ShellCheck's default severity (style). Suppressions are inline
 # `# shellcheck disable=SCxxxx # reason` directives, plus the .shellcheckrc in

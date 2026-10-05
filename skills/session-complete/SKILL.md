@@ -106,7 +106,7 @@ It reads the session's Claude Code transcript and its subagent transcripts, uses
 |------|----|
 | 0, empty output | Say nothing about friction |
 | 0, a table | Show the table as printed, with its footer lines. Do not re-attribute rows: `owner` comes from fixed rules (repeats, known hook messages, subagent verdicts), and `unknown` is an answer, not a gap to fill |
-| 1 (usage error), 2 (no transcript, e.g. Codex) or 3 (format not recognized) | One line: "Friction report skipped: <stderr>" |
+| 1 (usage error), 2 (no transcript) or 3 (format not recognized) | One line: "Friction report skipped: <stderr>" |
 
 Owners: `myspec` — framework-side; `setup` — this project's myspec install drifted (a registered hook is missing, fixed by `/myspec:update`) or a command a hook needs is missing on this machine; `harness` — Claude Code itself; `project` — the project's checks, spec or hooks; `unknown` — not attributable from the transcript alone.
 

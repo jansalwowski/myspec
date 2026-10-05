@@ -82,9 +82,7 @@ fi
 # Allowlist: the plugin's own files that define the detected path shapes.
 case "$REL_PATH" in
   lib/path-normalize.sh|\
-  plugins/myspec/lib/path-normalize.sh|\
-  hooks/no-absolute-paths.sh|\
-  plugins/myspec/hooks/no-absolute-paths.sh)
+  hooks/no-absolute-paths.sh)
     exit 0
     ;;
 esac

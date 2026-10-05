@@ -26,7 +26,7 @@ HOOK_LIB=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 HOOK_DECISION_TTL=28800
 
 # jq expression for payload_parse: the payload's cwd candidates, one per line.
-# `cwd` is what Claude Code and Codex send; the tool's own `cwd`/`workdir`
+# `cwd` is what Claude Code sends; the tool's own `cwd`/`workdir`
 # argument is the fallback.
 HOOK_CWDS='[.cwd, .tool_input.cwd, .tool_input.workdir] | map(select(type == "string" and . != "")) | join("\n")'
 

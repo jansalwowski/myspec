@@ -84,7 +84,7 @@ cp "$SRC_ROOT/scripts/evals/run.sh" "$SRC_ROOT/scripts/evals/summary.mjs" script
 cp "$SRC_ROOT/.githooks/pre-push" .githooks/pre-push
 chmod +x scripts/evals/run.sh .githooks/pre-push
 
-mkdir -p skills/alpha skills/beta skills/gamma skills/_shared plugins/myspec/skills/beta \
+mkdir -p skills/alpha skills/beta skills/gamma skills/_shared \
   evals/_fixtures/fx-billing evals/case-alpha evals/case-beta evals/case-alpha-gamma
 echo "see [conv](../_shared/outer.md)" > skills/beta/SKILL.md
 echo "alpha" > skills/alpha/SKILL.md
@@ -95,7 +95,6 @@ echo "deepest" > skills/_shared/zz-deep.md
 echo "see [inner](inner.md) and _shared/inner.md" > skills/_shared/outer.md
 echo "inner rules" > skills/_shared/inner.md
 echo "orphan shared" > skills/_shared/unused.md
-cp skills/beta/SKILL.md plugins/myspec/skills/beta/SKILL.md
 printf '#!/usr/bin/env bash\necho lib\n' > evals/_fixtures/lib.sh
 echo data > evals/_fixtures/fx-billing/data.txt
 mkcase() {  # mkcase <name> <tags> <fixture body>
@@ -132,8 +131,6 @@ selected() {
 echo "# case selection (changed mode)"
 expect_eq "skill change selects the cases tagged with it" \
   "$(selected s1 skills/alpha/SKILL.md)" "case-alpha case-alpha-gamma"
-expect_eq "mirror path under plugins/myspec/ maps to the same skill" \
-  "$(selected s2 plugins/myspec/skills/beta/SKILL.md)" "case-beta"
 expect_eq "_shared change selects cases of skills that reference it" \
   "$(selected s3 skills/_shared/outer.md)" "case-beta"
 expect_eq "_shared change propagates through another _shared file" \
