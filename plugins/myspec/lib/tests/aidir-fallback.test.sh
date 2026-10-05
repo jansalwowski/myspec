@@ -54,14 +54,14 @@ process.stdout.write(aiDirFor('$REPO'));
 " 2>/dev/null
 }
 
-# Whether validate-frontmatter.sh polices a file at <dir>/notes.md. It blocks
-# on missing frontmatter, so a non-zero decision means it claimed that tree.
+# Whether validate-frontmatter.sh polices a Write to <dir>/notes.md. It denies
+# a frontmatter-less content (PreToolUse since #263, so the content travels in
+# the payload), so a deny means it claimed that tree.
 frontmatter_polices() {  # frontmatter_polices <dir>
   local dir="$1"
   mkdir -p "$REPO/$dir"
-  printf 'no frontmatter here\n' > "$REPO/$dir/notes.md"
   local out
-  out=$(printf '{"cwd":"%s","tool_input":{"file_path":"%s/%s/notes.md"}}' "$REPO" "$REPO" "$dir" \
+  out=$(printf '{"cwd":"%s","tool_name":"Write","tool_input":{"file_path":"%s/%s/notes.md","content":"no frontmatter here\\n"}}' "$REPO" "$REPO" "$dir" \
     | bash "$PLUGIN/hooks/validate-frontmatter.sh" 2>&1)
   case "$out" in
     *block*|*BLOCKED*|*frontmatter*) printf 'yes' ;;
