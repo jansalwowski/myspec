@@ -63,7 +63,7 @@ Completion % is computed from **implementation-plan.md checkboxes**, the canonic
 - Calculate completion % = checked / total * 100
 - Compare to `status` field in index.yaml
 - Detect: MISMATCH if status doesn't match completion (e.g., status=complete but <100%, status=draft but >80%)
-- No `implementation-plan.md`: nothing to count. `complete` needs an archived plan under `plans/` (`feature-complete` moves it there) and `in-progress` needs a live plan; either without one is a MISMATCH, and `draft` or `planned` is consistent
+- No `implementation-plan.md`: nothing to count. `in-progress` needs a live plan, so that pair is a MISMATCH; for any other status the missing plan is informational, as in `feature-status-audit`'s matrix (authoritative per `workflow.md`): `complete` requires only spec.md and tech-spec.md, and `plans/` or `CHANGELOG.md` are never required
 
 ### 3. Present Findings
 
