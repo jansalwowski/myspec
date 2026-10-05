@@ -21,7 +21,7 @@ tags: [technical, specification, architecture, implementation]
    - Check related features for consistency
    - Review database schema for related entities
    - **Enumerate reuse candidates** (feeds the `### Reuse audit` section in step 3):
-     - This is **required by default**. Skip ONLY if `.myspec.json` has `reuseAudit: { "enabled": false }`.
+     - This is **required**. A tech-spec that genuinely has nothing to reuse (a greenfield service, no shared surfaces yet) opts out with `<!-- myspec:reuse-audit skip: <reason> -->` in its own text instead of the section; there is no project-wide switch.
      - Read the topology file (`.myspec.json` → `topologyFile`, falling back to `backbone.yml` at the project root). If neither exists, enumerate surfaces by inspection instead of skipping.
      - Enumerate the project's shared surfaces:
        - Every top-level key under `packages:` — read its `path:` and `entry:` (or the package's `src/index.ts`) for exported primitives.
@@ -57,16 +57,17 @@ Required sections:
 
 ### Reuse audit
 
-Required (default-on; omit only when `.myspec.json` sets `reuseAudit.enabled: false`). Comes before Key Interfaces because interface decisions depend on what is reused. Populate from the step-2 enumeration. At least one row.
+Required (a tech-spec with nothing to reuse carries `<!-- myspec:reuse-audit skip: <reason> -->` instead). Comes before Key Interfaces because interface decisions depend on what is reused. Populate from the step-2 enumeration. At least one row.
 
 | Candidate | Surface | Decision | Reason |
 |-----------|---------|----------|--------|
 | BaseDialog | packages/uikit | reuse | matches modal need in REQ-12 |
 | useFormState | apps/web/src/composables | skip | needs multi-step state outside its scope |
 
-Rules (mechanically enforced by the `require-reuse-audit` hook; also checked by `feature-tech-spec-review`):
+Rules (mechanically enforced by the `require-reuse-audit` hook when the tech-spec is created and whenever a write changes this section or the marker; also checked by `feature-tech-spec-review`):
 - `Decision` is exactly `reuse` or `skip` — one token, no prose.
 - `Reason` is mandatory for every `skip` row; optional for `reuse`.
+- The marker needs a reason too: `<!-- myspec:reuse-audit skip: greenfield service, no shared surfaces yet -->`.
 - Do not proceed to "Validate Alignment" with an empty audit.
 
 ### Key Interfaces / Types
@@ -145,7 +146,7 @@ Document key architectural decisions as ADRs:
 - [ ] All implementation steps have dependency notes where applicable
 - [ ] Implementation Steps is a numbered outline with no `[ ]`/`[x]` checkboxes
 - [ ] File Inventory table covers all files to be created/modified
-- [ ] `### Reuse audit` section present with >= 1 row; every `skip` row has a Reason (unless `reuseAudit.enabled: false`)
+- [ ] `### Reuse audit` section present with >= 1 row; every `skip` row has a Reason (or the tech-spec carries `<!-- myspec:reuse-audit skip: <reason> -->`)
 - [ ] Key Interfaces / Types section defines new types introduced
 - [ ] Database Changes section present (or explicitly marked "None")
 - [ ] If `verification_mode` is set and not `none`: `### Test Hooks` has Target and Contract surface (plus Scratch environment when the mode is `visual` / `mixed`, *Real inputs* is named, or a probe mutates data), with no style-class or internal-structure handles

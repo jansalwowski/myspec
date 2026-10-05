@@ -58,7 +58,7 @@ new_repo() {
   git init -q -b main .
   git config user.email t@t
   git config user.name t
-  printf '{\n  "aiDir": "%s",\n  "frameworkVersion": "1.27.0"\n}\n' "${2:-.ai}" > .myspec.json
+  printf '{\n  "aiDir": "%s",\n  "frameworkVersion": "1.27.0"\n}\n' "${2-.ai}" > .myspec.json
   mkdir -p .ai/memory/procedural .ai/memory/semantic .ai/memory/episodic
   echo "# index" > .ai/memory/procedural/index.md
   git add -A
@@ -219,10 +219,19 @@ check "(e3) no registry: nothing to do, exit 0" "0 memory-ids.json: no registry,
 
 BIN="$ROOT/bin"
 mkdir -p "$BIN"
-for tool in bash git sed tail dirname mkdir stat date mv rmdir rm sleep find sort awk; do
+# node is on the restricted PATH: since schema v2 the script reads aiDir
+# through lib/myspec-config.mjs (it needs node for the doctor gate anyway);
+# the registry read and write below still run without jq. A second PATH
+# without node but with jq (case j) proves the shell reader takes over.
+BIN_NONODE="$ROOT/bin-nonode"
+mkdir -p "$BIN_NONODE"
+for tool in bash git sed tail dirname mkdir stat date mv rmdir rm sleep find sort awk mktemp; do
   src=$(command -v "$tool") || { fail "(f) fixture: $tool not found"; continue; }
   ln -s "$src" "$BIN/$tool"
+  ln -s "$src" "$BIN_NONODE/$tool"
 done
+ln -s "$(command -v node)" "$BIN/node"
+ln -s "$(command -v jq)" "$BIN_NONODE/jq"
 if PATH="$BIN" command -v jq >/dev/null 2>&1; then
   fail "(f) fixture: jq still reachable on the restricted PATH"
 fi
@@ -313,6 +322,9 @@ GATE_BIN="$ROOT/gate-bin"
 mkdir -p "$GATE_BIN"
 cp "$SCRIPT" "$GATE_BIN/memory-claim-id.sh"
 chmod +x "$GATE_BIN/memory-claim-id.sh"
+# The settings readers sit beside the script in lib/; a copy needs them too.
+LIB_DIR=$(dirname "$SCRIPT")
+cp "$LIB_DIR/myspec-config.mjs" "$LIB_DIR/myspec-config.sh" "$LIB_DIR/myspec-config.schema.json" "$GATE_BIN/"
 cat > "$GATE_BIN/memory-doctor.mjs" <<'EOF'
 import { writeFileSync } from 'node:fs';
 writeFileSync(process.env.FAKE_DOCTOR_ARGV, process.argv.slice(2).join(' '));
@@ -355,8 +367,9 @@ if command -v node >/dev/null 2>&1; then
   rc=$?
   check "(j) MYSPEC_SKIP_MEMORY_DOCTOR=1 bypasses a failing doctor" "0 P003" "$rc $got"
 
-  # node absent from PATH: the gate is skipped with a warning, not a refusal.
-  got=$(PATH="$BIN" FAKE_DOCTOR_MODE=fail FAKE_DOCTOR_ARGV="$ROOT/argv" "$GATE_BIN/memory-claim-id.sh" procedural 2>"$ERR")
+  # node absent from PATH: the gate is skipped with a warning, not a refusal,
+  # and aiDir is read through the shell reader (jq) instead.
+  got=$(PATH="$BIN_NONODE" FAKE_DOCTOR_MODE=fail FAKE_DOCTOR_ARGV="$ROOT/argv" "$GATE_BIN/memory-claim-id.sh" procedural 2>"$ERR")
   rc=$?
   check "(j) no node on PATH -> warning and a claim" "0 P004" "$rc $got"
   check_contains "(j) no node on PATH -> skip warning" "conformance check skipped" "$(cat "$ERR")"
@@ -369,6 +382,7 @@ NODOC_BIN="$ROOT/nodoc-bin"
 mkdir -p "$NODOC_BIN"
 cp "$SCRIPT" "$NODOC_BIN/memory-claim-id.sh"
 chmod +x "$NODOC_BIN/memory-claim-id.sh"
+cp "$LIB_DIR/myspec-config.mjs" "$LIB_DIR/myspec-config.sh" "$LIB_DIR/myspec-config.schema.json" "$NODOC_BIN/"
 new_repo j2
 mem procedural P001-first.md "P001"
 got=$("$NODOC_BIN/memory-claim-id.sh" procedural 2>"$ERR")
@@ -387,6 +401,14 @@ mem procedural P012-branch.md "P012 on feat/slash"
 git checkout -q main
 got=$(claim)
 check "(k) aiDir .ai/ ref scan pathspec -> P013" P013 "$got"
+
+# An empty aiDir is unset, as hook-core's ai_dir and memory-files.mjs read
+# it: the schema default, not a refusal.
+new_repo k2 ""
+mem procedural P004-first.md "P004"
+got=$(claim)
+rc=$?
+check "(k) aiDir \"\" -> the .ai default, P005" "0 P005" "$rc $got"
 
 # --- (l) many refs: unique-tip scan stays fast --------------------------------
 

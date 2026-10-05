@@ -144,12 +144,14 @@ echo "partial" > "$REPO/.claude/worktrees/t8/partial.js"
 # --- a failed provision leaves nothing behind ---------------------------------
 STUB="$ROOT/stub"
 mkdir -p "$STUB"
-# The script sources hook-core.sh (which sources glob-regex.sh): copy them
+# The script sources hook-core.sh (which sources glob-regex.sh) and reads
+# isolation.worktreeRoot through the settings reader beside it: copy them
 # too, or the stub exits before it creates anything and the case below
 # passes without running the cleanup (#253 review). The stub provision
 # leaves a marker, so the case proves it got that far.
 cp "$SCRIPT" "$STUB/task-worktree.sh"
-cp "$(dirname "$SCRIPT")/hook-core.sh" "$(dirname "$SCRIPT")/glob-regex.sh" "$STUB/"
+cp "$(dirname "$SCRIPT")/hook-core.sh" "$(dirname "$SCRIPT")/glob-regex.sh" \
+  "$(dirname "$SCRIPT")/myspec-config.sh" "$(dirname "$SCRIPT")/myspec-config.schema.json" "$STUB/"
 printf '#!/bin/sh\n: > "%s/provision-ran"\nexit 1\n' "$STUB" > "$STUB/worktree-provision.sh"
 chmod +x "$STUB"/*.sh
 "$STUB/task-worktree.sh" create t9 >/dev/null 2>&1
@@ -171,6 +173,41 @@ if command -v jq >/dev/null 2>&1; then
   [ "$(printf '%s\n' "$OUT" | tail -1)" = "$REPO/.wt/t11" ]; ok "create uses isolation.worktreeRoot (output: $OUT)" $?
   "$SCRIPT" discard t11 >/dev/null 2>&1
   [ ! -e "$REPO/.wt/t11" ]; ok "discard resolves the same root" $?
+  rm -f "$REPO/.myspec.json"
+fi
+
+# nojq_path -> a PATH holding every command on this one but jq, in a
+# directory of symlinks (jq can sit in /usr/bin, so dropping PATH entries is
+# not enough).
+nojq_path() {
+  local bin="$ROOT/nojq-bin" d f
+  if [ ! -d "$bin" ]; then
+    mkdir -p "$bin"
+    local IFS=:
+    for d in $PATH; do
+      for f in "$d"/*; do
+        [ -x "$f" ] && [ ! -d "$f" ] || continue
+        [ "${f##*/}" != jq ] || continue
+        [ -e "$bin/${f##*/}" ] || ln -s "$f" "$bin/${f##*/}"
+      done
+    done
+  fi
+  printf '%s' "$bin"
+}
+
+# --- without jq: the Node reader resolves worktreeRoot (#275 review) ----------
+# Before schema v2 a missing jq meant the default root; reading through the
+# shell reader alone made create fail outright.
+if command -v node >/dev/null 2>&1; then
+  NOJQ=$(nojq_path)
+  OUT=$(PATH="$NOJQ" "$SCRIPT" create t12 --no-symlink 2>&1); ok "create without jq exits 0 (output: $OUT)" $?
+  [ "$(printf '%s\n' "$OUT" | tail -1)" = "$REPO/.claude/worktrees/t12" ]; ok "create without jq uses the default root" $?
+  PATH="$NOJQ" "$SCRIPT" discard t12 >/dev/null 2>&1
+  printf '{"aiDir":".ai","isolation":{"worktreeRoot":".wt-nojq"}}\n' > "$REPO/.myspec.json"
+  OUT=$(PATH="$NOJQ" "$SCRIPT" create t13 --no-symlink 2>&1)
+  [ "$(printf '%s\n' "$OUT" | tail -1)" = "$REPO/.wt-nojq/t13" ]; ok "create without jq honours isolation.worktreeRoot (output: $OUT)" $?
+  PATH="$NOJQ" "$SCRIPT" discard t13 >/dev/null 2>&1
+  [ ! -e "$REPO/.wt-nojq/t13" ]; ok "discard without jq resolves the same root" $?
   rm -f "$REPO/.myspec.json"
 fi
 

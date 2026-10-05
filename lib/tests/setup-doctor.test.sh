@@ -898,13 +898,12 @@ expect_line '^SET +every setting is at its default$' "settings: defaults only sa
 expect_no_line '^SET +[a-zA-Z]+.* = ' "settings: defaults only lists no key"
 
 # A project file plus a session override.
-set_json .myspec.json 'd.isolation={worktreeRoot:"wt", allowLinkedModules:false}; d.hooks={markCodeChanged:{ignorePaths:["gen/**"]}}; d.reuseAudit={enabled:false};'
+set_json .myspec.json 'd.isolation={worktreeRoot:"wt", allowLinkedModules:false}; d.hooks={markCodeChanged:{ignorePaths:["gen/**"]}};'
 set_json .claude/verification.json 'd.containers={api:{mountSource:".", mountTarget:"/srv/app"}}; d.checks[0].paths=["api/**"]; d.checks[0].runIn="api";'
 run_doctor_env MYSPEC_ALLOW_LINKED_MODULES=1 MYSPEC_CHECK_CAP_SECONDS=30 MYSPEC_GATE_BUDGET_SECONDS=120 -- settings
 expect_line '^SET +isolation\.worktreeRoot = "wt" \(\.myspec\.json\)$' "settings: a project value is listed with its file and is not marked"
 expect_line '^SET +isolation\.allowLinkedModules = true \(session: MYSPEC_ALLOW_LINKED_MODULES=1\) — loosens a gate$' "settings: a session override wins over the project file, names its variable, and is marked"
 expect_line '^SET +hooks\.markCodeChanged\.ignorePaths = \["gen/\*\*"\] \(\.myspec\.json\) — loosens a gate$' "settings: ignorePaths is marked as loosening"
-expect_line '^SET +reuseAudit\.enabled = false \(\.myspec\.json\) — loosens a gate$' "settings: a gate turned off is marked as loosening"
 expect_line '^SET +checks\[0\]\.paths = \["api/\*\*"\] \(\.claude/verification\.json\) — loosens a gate$' "settings: a check's paths is marked as loosening"
 expect_line '^SET +checks\[0\]\.runIn = "api" \(\.claude/verification\.json\)$' "settings: runIn is listed, unmarked"
 expect_line '^SET +MYSPEC_CHECK_CAP_SECONDS = "30" \(session\)$' "settings: a standalone session variable is listed"
@@ -955,7 +954,7 @@ expect_no_line 'setting-wrong-type|setting-unknown-key' "settings: selecting one
 # near miss; a non-object settings file is one finding; a list setting of the
 # wrong type is not also read as a glob.
 build_fixture
-set_json .myspec.json 'd.isolation={provision:{symlink:[], copy:[]}}; d.isolaton={}; d.reuseAudt={}; d.hooks={markCodeChanged:{ignorePaths:7}};'
+set_json .myspec.json 'd.isolation={provision:{symlink:[], copy:[]}}; d.isolaton={}; d.feedbak={}; d.reuseAudit={enabled:false}; d.hooks={markCodeChanged:{ignorePaths:7}};'
 set_json .claude/verification.json 'd.checks=[];'
 run_doctor_env -- settings
 expect_line '^SET +isolation\.provision\.symlink = \[\] \(\.myspec\.json\)$' "settings: an emptied symlink list is listed"
@@ -964,7 +963,11 @@ expect_line '^SET +checks = \[\] \(\.claude/verification\.json\)$' "settings: an
 
 run_doctor_env -- schema
 expect_line '^WARN +setting-unknown-key: \.myspec\.json: isolaton is not a myspec setting \(did you mean isolation\?\)' "settings: a top-level typo gets its near miss"
-expect_line '^WARN +setting-unknown-key: \.myspec\.json: reuseAudt is not a myspec setting \(did you mean reuseAudit\?\)' "settings: a second top-level typo gets its near miss"
+expect_line '^WARN +setting-unknown-key: \.myspec\.json: feedbak is not a myspec setting \(did you mean feedback\?\)' "settings: a second top-level typo gets its near miss"
+# The 2.x reuseAudit switch is no setting since 3.0 (#263): the key is
+# reported as unknown, and never listed as a gate turned off.
+expect_line '^WARN +setting-unknown-key: \.myspec\.json: reuseAudit is not a myspec setting' "settings: the retired reuseAudit key is reported as unknown"
+expect_no_line 'reuseAudit\.enabled' "settings: the retired reuseAudit.enabled is not a catalogued setting"
 GLOB_LINES=$(printf '%s\n' "$OUTPUT" | grep -c 'ignorePaths')
 if [ "$GLOB_LINES" -eq 1 ]; then ok; else fail "settings: a non-array ignorePaths is one finding, got $GLOB_LINES"; fi
 expect_line '^ERROR setting-wrong-type: \.myspec\.json: hooks\.markCodeChanged\.ignorePaths is ignored — expected array, got number' "settings: a non-array ignorePaths is a wrong type"
@@ -977,6 +980,38 @@ for f in '\.myspec\.json' '\.claude/verification\.json'; do
   N=$(printf '%s\n' "$OUTPUT" | grep -cE "^ERROR setting-wrong-type: $f: $f is not a JSON object")
   if [ "$N" -eq 1 ]; then ok; else fail "settings: a non-object $f is one finding, got $N"; fi
 done
+
+# --- schema v2 (#265): the keys the blueprints write are settings ------------
+# A lockin-shaped .myspec.json: the mockups block the setup mockup blueprint
+# writes (blueprints/mockup.md, Post-generation) and a pin. Before v2 the
+# doctor warned `mockups is not a myspec setting` on every mockup-enabled
+# consumer. The keys v2 removed (project.description, codeReview) are reported
+# as unknown until their migrations drop them.
+build_fixture
+# shellcheck disable=SC2016 # literal text, not an expansion
+set_json .myspec.json 'd.project={name:"lockin", description:"GeoGuessr Meta Guides Platform", techStack:"Vue 3"}; d.mockups={extension:".vue", commands:{verify:"pnpm --filter @lockin/mockups typecheck", preview:"pnpm dev:mockups", compileCheck:"curl -s \"$PREVIEW_URL/@fs{absPath}\"", audit:"pnpm mockups:audit"}, siblingRoots:["apps/web/src/components", "packages/uikit/src/components"]}; d.frameworkFiles={"rules/ideas.md":{pinned:"gated with paths", hash:"0".repeat(64), upstreamHash:"1".repeat(64)}}; d.orchestration={featureImplement:"workflow"}; d.probes={portSource:"$DEV_PORTS", scratchEnvScript:"scripts/scratch-env.sh"}; d.codeReview={verbosity:"standard"};'
+run_doctor_env -- schema
+expect_no_line 'setting-unknown-key: \.myspec\.json: mockups' "schema v2: the mockups block is a setting, not an unknown key"
+expect_no_line 'setting-unknown-key: \.myspec\.json: (project\.name|project\.techStack|frameworkFiles|orchestration|probes)' "schema v2: project.name, techStack, a pin, orchestration and probes are settings"
+expect_line '^WARN +setting-unknown-key: \.myspec\.json: project\.description is not a myspec setting' "schema v2: project.description is unknown (dropped by 3.0.0-schema-v2)"
+expect_line '^WARN +setting-unknown-key: \.myspec\.json: codeReview is not a myspec setting' "schema v2: codeReview is unknown (dropped by 3.0.0-code-review)"
+expect_no_line 'setting-wrong-type' "schema v2: a well-typed pin and mockups block raise no type error"
+run_doctor_env -- settings
+expect_line '^SET +mockups\.extension = "\.vue" \(\.myspec\.json\)$' "schema v2: a mockups key is listed as in force"
+expect_line '^SET +orchestration\.featureImplement = "workflow" \(\.myspec\.json\)$' "schema v2: a non-default featureImplement is listed"
+expect_line '^SET +probes\.portSource = ' "schema v2: probes.portSource is listed"
+expect_no_line '^SET +(project|frameworkFiles\.)' "schema v2: project fields and the pin hashes are bookkeeping, not listed"
+
+# A pin is typed through the `*` entry: a reason that is not a string, a hash
+# of the wrong type, and a pin that is not an object are errors; a field no
+# pin has is unknown and gets its near miss.
+set_json .myspec.json 'd.frameworkFiles={"rules/ideas.md":{pinned:true, hash:7, hsah:"x"}, "pre-flight.md":"a reason"};'
+run_doctor_env -- schema
+expect_exit 1 "schema v2: a mistyped pin is an error"
+expect_line '^ERROR setting-wrong-type: \.myspec\.json: frameworkFiles\.rules/ideas\.md\.pinned is boolean, expected string' "schema v2: a non-string pin reason is a wrong type"
+expect_line '^ERROR setting-wrong-type: \.myspec\.json: frameworkFiles\.rules/ideas\.md\.hash is number, expected string' "schema v2: a non-string hash is a wrong type"
+expect_line '^ERROR setting-wrong-type: \.myspec\.json: frameworkFiles\.pre-flight\.md is string, expected object' "schema v2: a pin that is not an object is a wrong type"
+expect_line '^WARN +setting-unknown-key: \.myspec\.json: frameworkFiles\.rules/ideas\.md\.hsah is not a myspec setting \(did you mean frameworkFiles\.rules/ideas\.md\.hash\?\)' "schema v2: an unknown pin field gets its near miss"
 
 # --- container checks (#220, #221): what the stop gate no longer parses -------
 # exec_checks <json array of [command, runIn or ""]> -> verification.json

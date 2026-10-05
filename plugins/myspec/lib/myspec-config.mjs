@@ -62,7 +62,9 @@ function delp(data, path) {
 }
 
 const fileOf = (key) => (key.split('.')[0] === 'verification' ? 'verification' : 'project');
-const plainKeys = (schema) => Object.entries(schema.keys).filter(([k]) => !k.includes('[]'));
+// A `name[]` or `name.*` key types items or map values for doctor; the readers
+// never look inside a list or a map.
+const plainKeys = (schema) => Object.entries(schema.keys).filter(([k]) => !k.includes('[]') && !k.includes('.*'));
 const relevant = (k, req) => k === req || k.startsWith(`${req}.`) || req.startsWith(`${k}.`);
 
 function parse(path, name, schema, req) {

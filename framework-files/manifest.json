@@ -6,7 +6,9 @@
     "2.0.0-sessions",
     "2.0.0-base-agents",
     "3.0.0-plugin-hooks",
-    "3.0.0-memory-registry"
+    "3.0.0-reuse-audit",
+    "3.0.0-memory-registry",
+    "3.0.0-schema-v2"
   ],
   "files": {
     "anti-patterns.md": {
