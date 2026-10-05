@@ -79,16 +79,18 @@ proposed_content() {
 #   -home-<name>-...        the encoded form of /home/<name>/...   (leading - kept)
 ABSOLUTE_PATH_RE='(^|[^A-Za-z0-9._/-])(/Users/[A-Za-z][A-Za-z0-9._-]*|/home/[A-Za-z][A-Za-z0-9._-]*)|(-Users-[A-Za-z][A-Za-z0-9._-]+|-home-[A-Za-z][A-Za-z0-9._-]+)'
 
-# absolute_paths_scope <repo root> <repo-relative path> -> 0 when the file is
-# one the rule covers (#163): a doc kind anywhere (*.md, *.mdx, *.markdown,
-# *.txt, *.rst, *.adoc), or any file under .claude/, docs/ or the project
-# aiDir (.myspec.json; a repository without one has no aiDir in scope). App
-# code, Dockerfiles and CI workflows are out: a route such as /home/Dashboard
-# or a container path such as /home/node/app is not a developer home. Also
-# out: anything under .git/, a gitignored file (never committed), and the
-# plugin's own files that define the shapes.
+# absolute_paths_scope <repo root> <repo-relative path> [aiDir] -> 0 when the
+# file is one the rule covers (#163): a doc kind anywhere (*.md, *.mdx,
+# *.markdown, *.txt, *.rst, *.adoc), or any file under .claude/, docs/ or the
+# project aiDir (.myspec.json; a repository without one has no aiDir in
+# scope). A caller asking per file passes the aiDir it resolved once (ai_dir
+# in hook-core.sh runs the settings reader). App code, Dockerfiles and CI
+# workflows are out: a route such as /home/Dashboard or a container path such
+# as /home/node/app is not a developer home. Also out: anything under .git/,
+# a gitignored file (never committed), and the plugin's own files that define
+# the shapes.
 absolute_paths_scope() {
-  local root="$1" rel="$2" ai=""
+  local root="$1" rel="$2" ai="${3:-}"
   case "$rel" in
     .git/*|*/.git/*) return 1 ;;
     lib/path-normalize.sh|plugins/myspec/lib/path-normalize.sh|\
@@ -101,7 +103,7 @@ absolute_paths_scope() {
     *.md|*.mdx|*.markdown|*.txt|*.rst|*.adoc|.claude/*|docs/*) return 0 ;;
   esac
   if [ -f "$root/.myspec.json" ]; then
-    ai=$(ai_dir "$root")
+    [ -n "$ai" ] || ai=$(ai_dir "$root")
     case "$rel" in
       "$ai"/*) return 0 ;;
     esac

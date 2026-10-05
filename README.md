@@ -152,14 +152,13 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref main
   "frameworkVersion": "<current plugin version>",
   "project": {
     "name": "Project Name",
-    "description": "One-line description",
     "techStack": "PHP 8.3, Laravel 11, PostgreSQL"
   },
   "migrations": ["2.0.0-schema", "2.0.0-doctor-rule"]
 }
 ```
 
-`init` copies `frameworkVersion` and `migrations` from `framework-files/manifest.json` at run time. `aiDir` is required, stored without a trailing slash, and defaults to `.ai`.
+`init` copies `frameworkVersion` and `migrations` from `framework-files/manifest.json` at run time. `aiDir` is required, stored without a trailing slash, and defaults to `.ai`. Every key the file may hold, with its type, default and the issue behind it, is in `lib/myspec-config.schema.json` (schema version 2 since 3.0; a key rename or removal bumps it and ships a migration, an added key does not — [docs/project-settings-design.md](docs/project-settings-design.md), Schema version); `/myspec:doctor` reports a key the schema does not list.
 
 A project that deliberately customizes a framework-owned file pins it, so `update` skips it instead of reverting the local edits:
 
@@ -171,7 +170,7 @@ A project that deliberately customizes a framework-owned file pins it, so `updat
 }
 ```
 
-The key is the manifest key, not the destination path. Pinning is the project's decision — `update` reports pinned files and never adds or clears a pin itself.
+The key is the manifest key, not the destination path. Pinning is the project's decision — `update` reports pinned files and never adds or clears a pin itself. After adding a pin, run `node "<plugin dir>/lib/pin-reconcile.mjs" --record "rules/auto-memory-style.md"` from the project root: it records `hash` (the file) and `upstreamHash` (the plugin copy) on the pin, and `update` then tells a pin the project still edits from one whose edit upstream absorbed (`drop`) or that upstream moved under (`review`). `update` backfills the hashes of a pin that has none.
 
 An optional `isolation` block configures the work-isolation hooks; every key has a default:
 

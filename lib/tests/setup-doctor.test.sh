@@ -981,6 +981,38 @@ for f in '\.myspec\.json' '\.claude/verification\.json'; do
   if [ "$N" -eq 1 ]; then ok; else fail "settings: a non-object $f is one finding, got $N"; fi
 done
 
+# --- schema v2 (#265): the keys the blueprints write are settings ------------
+# A lockin-shaped .myspec.json: the mockups block the setup mockup blueprint
+# writes (blueprints/mockup.md, Post-generation) and a pin. Before v2 the
+# doctor warned `mockups is not a myspec setting` on every mockup-enabled
+# consumer. The keys v2 removed (project.description, codeReview) are reported
+# as unknown until their migrations drop them.
+build_fixture
+# shellcheck disable=SC2016 # literal text, not an expansion
+set_json .myspec.json 'd.project={name:"lockin", description:"GeoGuessr Meta Guides Platform", techStack:"Vue 3"}; d.mockups={extension:".vue", commands:{verify:"pnpm --filter @lockin/mockups typecheck", preview:"pnpm dev:mockups", compileCheck:"curl -s \"$PREVIEW_URL/@fs{absPath}\"", audit:"pnpm mockups:audit"}, siblingRoots:["apps/web/src/components", "packages/uikit/src/components"]}; d.frameworkFiles={"rules/ideas.md":{pinned:"gated with paths", hash:"0".repeat(64), upstreamHash:"1".repeat(64)}}; d.orchestration={featureImplement:"workflow"}; d.probes={portSource:"$DEV_PORTS", scratchEnvScript:"scripts/scratch-env.sh"}; d.codeReview={verbosity:"standard"};'
+run_doctor_env -- schema
+expect_no_line 'setting-unknown-key: \.myspec\.json: mockups' "schema v2: the mockups block is a setting, not an unknown key"
+expect_no_line 'setting-unknown-key: \.myspec\.json: (project\.name|project\.techStack|frameworkFiles|orchestration|probes)' "schema v2: project.name, techStack, a pin, orchestration and probes are settings"
+expect_line '^WARN +setting-unknown-key: \.myspec\.json: project\.description is not a myspec setting' "schema v2: project.description is unknown (dropped by 3.0.0-schema-v2)"
+expect_line '^WARN +setting-unknown-key: \.myspec\.json: codeReview is not a myspec setting' "schema v2: codeReview is unknown (dropped by 3.0.0-code-review)"
+expect_no_line 'setting-wrong-type' "schema v2: a well-typed pin and mockups block raise no type error"
+run_doctor_env -- settings
+expect_line '^SET +mockups\.extension = "\.vue" \(\.myspec\.json\)$' "schema v2: a mockups key is listed as in force"
+expect_line '^SET +orchestration\.featureImplement = "workflow" \(\.myspec\.json\)$' "schema v2: a non-default featureImplement is listed"
+expect_line '^SET +probes\.portSource = ' "schema v2: probes.portSource is listed"
+expect_no_line '^SET +(project|frameworkFiles\.)' "schema v2: project fields and the pin hashes are bookkeeping, not listed"
+
+# A pin is typed through the `*` entry: a reason that is not a string, a hash
+# of the wrong type, and a pin that is not an object are errors; a field no
+# pin has is unknown and gets its near miss.
+set_json .myspec.json 'd.frameworkFiles={"rules/ideas.md":{pinned:true, hash:7, hsah:"x"}, "pre-flight.md":"a reason"};'
+run_doctor_env -- schema
+expect_exit 1 "schema v2: a mistyped pin is an error"
+expect_line '^ERROR setting-wrong-type: \.myspec\.json: frameworkFiles\.rules/ideas\.md\.pinned is boolean, expected string' "schema v2: a non-string pin reason is a wrong type"
+expect_line '^ERROR setting-wrong-type: \.myspec\.json: frameworkFiles\.rules/ideas\.md\.hash is number, expected string' "schema v2: a non-string hash is a wrong type"
+expect_line '^ERROR setting-wrong-type: \.myspec\.json: frameworkFiles\.pre-flight\.md is string, expected object' "schema v2: a pin that is not an object is a wrong type"
+expect_line '^WARN +setting-unknown-key: \.myspec\.json: frameworkFiles\.rules/ideas\.md\.hsah is not a myspec setting \(did you mean frameworkFiles\.rules/ideas\.md\.hash\?\)' "schema v2: an unknown pin field gets its near miss"
+
 # --- container checks (#220, #221): what the stop gate no longer parses -------
 # exec_checks <json array of [command, runIn or ""]> -> verification.json
 # with one required check per pair, named C0, C1, ... and one container "app".
