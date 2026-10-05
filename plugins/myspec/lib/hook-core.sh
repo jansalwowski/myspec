@@ -220,6 +220,7 @@ hook_repo_root() {
       return 0
     fi
   done <<< "$1"
+  # #262: $HOOK_LIB/../.. is the repo root only for a project-local .claude/lib; a plugin-run hook needs another root.
   for c in "$PWD" "$HOOK_LIB/../.."; do
     if top=$(git -C "$c" rev-parse --show-toplevel 2>/dev/null); then
       printf '%s\n' "$top"
@@ -276,4 +277,21 @@ read_setting() {
   SETTING_NOTES=$(sed 's/^myspec-config: //' "$err")
   rm -f "$err"
   return "$rc"
+}
+
+# lock_paths_for <dir> <pattern>... -> the <dir>-relative regular files the
+# lockfile patterns match there, one per line, in pattern order. A pattern
+# is a shell glob: * and ? stay within one directory, [...] is a class. The
+# one matcher for worktree-provision.sh, which records what a pattern
+# matched, and the Stop hook's provision check (stop-gate/provision.sh),
+# which compares it, so the two cannot drift on what a pattern matches.
+lock_paths_for() {
+  local dir="$1" pat f IFS=''
+  shift
+  for pat in "$@"; do
+    for f in "$dir"/$pat; do
+      [ -f "$f" ] && printf '%s\n' "${f#"$dir"/}"
+    done
+  done
+  return 0
 }

@@ -386,6 +386,12 @@
       "issue": ["exists"],
       "description": "Lowers the Stop gate's per-check time cap; it cannot raise it."
     },
+    "MYSPEC_GATE_BUDGET_SECONDS": {
+      "kind": "standalone",
+      "type": "integer",
+      "issue": ["#250"],
+      "description": "Lowers the Stop gate's time budget for the whole stop (300 s); it cannot raise it."
+    },
     "MYSPEC_METRICS_CAP_SECONDS": {
       "kind": "standalone",
       "type": "integer",
@@ -422,7 +428,7 @@
       "kind": "exported",
       "type": "string",
       "issue": ["exists"],
-      "description": "Exported by the Stop gate to checks: the files this session wrote in this checkout."
+      "description": "Exported by the Stop gate to checks: the files this session wrote in this checkout, one per line, relative to the directory the check runs from (its cwd, else the checkout root); a file outside the cwd gets ../."
     },
     "MYSPEC_CHECK_RUN_ID": {
       "kind": "exported",
@@ -434,7 +440,7 @@
       "kind": "exported",
       "type": "flag",
       "issue": ["exists"],
-      "description": "Exported by the Stop gate to checks so a check that ends a nested session does not re-enter the gate."
+      "description": "Exported by the Stop gate to every check it runs, so a check can tell it runs under the gate. The Stop hook approves at once when it finds it in its own environment: a nested Claude Code session a check started is not verified again."
     },
     "MYSPEC_WORKTREE": {
       "kind": "exported",

@@ -833,6 +833,19 @@ OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" refs 2>&1); STATUS=
 expect_no_line 'dead-path-ref: CLAUDE.md: references .claude/worktrees' "a linked worktree does not report the main checkout's .claude/worktrees as dead"
 expect_line 'WARN +dead-path-ref: CLAUDE.md: references docs/gone.md' "a tracked file this branch removed is still a dead ref from the worktree"
 
+# --- pass 3f2: a Stop entry without the template's timeout (#257 review) -----
+# update never rewrites an existing entry's timeout, so a project wired
+# before the template had one keeps the harness's 600 s default.
+
+build_fixture
+run_doctor wiring
+expect_no_line 'hook-stop-no-timeout' "the template's Stop entry, with its timeout, is not reported"
+set_json .claude/settings.json 'd.hooks.Stop.forEach(g => g.hooks.forEach(h => { delete h.timeout; }));'
+run_doctor wiring
+expect_line '^WARN +hook-stop-no-timeout: \.claude/settings\.json: the Stop entry for \.claude/hooks/verify-before-stop\.sh has no timeout' "a Stop entry without a timeout is reported"
+expect_line 'add "timeout": 330 to that hook entry' "the fix names the template's timeout"
+expect_exit 0 "a missing Stop timeout is a warning"
+
 # --- pass 3g: links the provision record does not list (#239) ----------------
 #
 # The Stop hook compares only what worktree-provision.sh recorded in
@@ -1007,7 +1020,7 @@ expect_no_line '^SET +[a-zA-Z]+.* = ' "settings: defaults only lists no key"
 # A project file plus a session override.
 set_json .myspec.json 'd.isolation={worktreeRoot:"wt", allowLinkedModules:false}; d.hooks={markCodeChanged:{ignorePaths:["gen/**"]}}; d.reuseAudit={enabled:false};'
 set_json .claude/verification.json 'd.containers={api:{mountSource:".", mountTarget:"/srv/app"}}; d.checks[0].paths=["api/**"]; d.checks[0].runIn="api";'
-run_doctor_env MYSPEC_ALLOW_LINKED_MODULES=1 MYSPEC_CHECK_CAP_SECONDS=30 -- settings
+run_doctor_env MYSPEC_ALLOW_LINKED_MODULES=1 MYSPEC_CHECK_CAP_SECONDS=30 MYSPEC_GATE_BUDGET_SECONDS=120 -- settings
 expect_line '^SET +isolation\.worktreeRoot = "wt" \(\.myspec\.json\)$' "settings: a project value is listed with its file and is not marked"
 expect_line '^SET +isolation\.allowLinkedModules = true \(session: MYSPEC_ALLOW_LINKED_MODULES=1\) — loosens a gate$' "settings: a session override wins over the project file, names its variable, and is marked"
 expect_line '^SET +hooks\.markCodeChanged\.ignorePaths = \["gen/\*\*"\] \(\.myspec\.json\) — loosens a gate$' "settings: ignorePaths is marked as loosening"
@@ -1015,6 +1028,7 @@ expect_line '^SET +reuseAudit\.enabled = false \(\.myspec\.json\) — loosens a 
 expect_line '^SET +checks\[0\]\.paths = \["api/\*\*"\] \(\.claude/verification\.json\) — loosens a gate$' "settings: a check's paths is marked as loosening"
 expect_line '^SET +checks\[0\]\.runIn = "api" \(\.claude/verification\.json\)$' "settings: runIn is listed, unmarked"
 expect_line '^SET +MYSPEC_CHECK_CAP_SECONDS = "30" \(session\)$' "settings: a standalone session variable is listed"
+expect_line '^SET +MYSPEC_GATE_BUDGET_SECONDS = "120" \(session\)$' "settings: a lowered gate budget is listed"
 expect_no_line '^SET +every setting' "settings: a project with settings does not claim defaults"
 
 run_doctor_env MYSPEC_ALLOW_LINKED_MODULES=1 -- --json settings
@@ -1110,6 +1124,9 @@ expect_exit 0 "containers: the container findings are warnings, not errors"
 expect_line '^WARN +verification-exec-no-runin: .*check C0 runs a container exec without runIn — in a linked worktree this check will be refused' "containers: an exec without runIn is warned about"
 expect_line '^WARN +verification-exec-no-runin: .*check C1 ' "containers: a -w does not stand in for runIn"
 expect_line 'declare runIn and a containers entry' "containers: the fix names runIn and containers"
+# docs/ exists in the plugin repository, not in the project the doctor runs in:
+# a fix pointing there sends the user to a file they do not have.
+expect_no_line '(^|[^/[:alnum:]_.-])docs/' "containers: no finding points at a bare docs/ path"
 # shellcheck disable=SC2016 # a literal $ in the pattern
 # shellcheck disable=SC2016 # a literal $ in the pattern
 expect_line '^WARN +verification-runin-no-workdir: .*check C2 has runIn but its container exec passes neither -w/--workdir nor \$MYSPEC_CHECK_WORKDIR' "containers: a runIn exec without the workdir is warned about"
@@ -1122,8 +1139,8 @@ expect_line '^WARN +verification-runin-no-workdir: .*check C8 ' "containers: a -
 expect_no_line 'check C9 |check C10 ' "containers: a compose run and a host command raise nothing"
 
 # Every form the hook declares is found the way the hook finds it.
-FORMS=$(sed -n 's/^CONTAINER_EXEC_FORMS=(\(.*\))$/\1/p' "$PLUGIN/hooks/verify-before-stop.sh" | grep -o '"[^"]*"' | tr -d '"')
-[ "$(printf '%s\n' "$FORMS" | grep -c .)" -ge 8 ] && ok || fail "containers: the hook's CONTAINER_EXEC_FORMS were read (got: $FORMS)"
+FORMS=$(sed -n 's/^CONTAINER_EXEC_FORMS=(\(.*\))$/\1/p' "$PLUGIN/lib/stop-gate/run.sh" | grep -o '"[^"]*"' | tr -d '"')
+[ "$(printf '%s\n' "$FORMS" | grep -c .)" -ge 8 ] && ok || fail "containers: the gate's CONTAINER_EXEC_FORMS were read (got: $FORMS)"
 build_fixture
 exec_checks "$(printf '%s\n' "$FORMS" | jq -Rnc '[inputs | [. + " app make lint", ""]]')"
 run_doctor_env -- verification-exec-no-runin

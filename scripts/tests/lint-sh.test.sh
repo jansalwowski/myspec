@@ -83,6 +83,12 @@ printf '%s\n' '#!/usr/bin/env bash' 'set -eu' 'x=$(printf y | head -1)' > "$TMP/
 lint "$TMP/no-pipefail.sh"
 [ "$STATUS" -eq 0 ] && ok || fail "a script without pipefail is out of scope (got $STATUS: $OUT)"
 
+# A sourced module declares the options it runs under.
+# shellcheck disable=SC2016 # fixture text, written literally
+printf '%s\n' '#!/usr/bin/env bash' '# lint: sourced under set -euo pipefail' 'f() { x=$(printf y | head -1); }' > "$TMP/sourced.sh"
+lint "$TMP/sourced.sh"
+flags_line "$TMP/sourced.sh" 3 "a module sourced under pipefail is in scope"
+
 mkdir -p "$TMP/hooks/tests"
 cp "$TMP/errexit.sh" "$TMP/hooks/tests/fixture.test.sh"
 lint "$TMP/hooks/tests/fixture.test.sh"

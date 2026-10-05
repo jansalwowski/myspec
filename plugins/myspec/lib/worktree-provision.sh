@@ -14,7 +14,10 @@
 #   1. symlink: links each entry (default: node_modules) that exists in the
 #      main checkout, and lists it in the worktree's info/exclude so it is
 #      never staged. A link an earlier run made is dropped and decided again,
-#      so a rerun refreshes the record below. An entry is SKIPPED, with a line
+#      so a rerun refreshes the record below. An entry with a glob
+#      (vendor-bin/*/vendor) is expanded against the main checkout, a * staying
+#      within one directory: each match is linked and recorded on its own, and
+#      a glob that matches nothing is named. An entry is SKIPPED, with a line
 #      saying why,
 #      - when the branch changes one of the lockfiles that pin it relative
 #        to --base, or a lockfile that pins it differs from the main
@@ -174,14 +177,36 @@ symlink_entries() {
     while [ "${path#./}" != "$path" ]; do path="${path#./}"; done
     path="${path%/}"
     [ -n "$path" ] || continue
-    if [ "$mode" = "-" ]; then
-      infer_entry "$path"
-    elif [ "$rest" = "=" ]; then
-      printf '%s\n' "$path"
-    else
-      printf '%s\t%s\n' "$path" "${rest#=$'\t'}"
-    fi
+    while IFS= read -r match; do
+      [ -n "$match" ] || continue
+      if [ "$mode" = "-" ]; then
+        infer_entry "$match"
+      elif [ "$rest" = "=" ]; then
+        printf '%s\n' "$match"
+      else
+        printf '%s\t%s\n' "$match" "${rest#=$'\t'}"
+      fi
+    done < <(expand_entry "$path")
   done <<< "$raw"
+}
+
+# expand_entry <path> -> the path itself, or for a glob (vendor-bin/*/vendor,
+# the Composer bin plugin's layout) each match in the main checkout, a *
+# staying within one directory. A glob with no match prints itself, so the
+# caller can say so.
+expand_entry() {
+  case "$1" in
+    *[*?[]*) ;;
+    *) printf '%s\n' "$1"; return ;;
+  esac
+  # The glob is meant to expand; IFS is empty, so nothing splits.
+  local IFS='' found=0 match
+  while IFS= read -r match; do
+    [ -n "$match" ] || continue
+    printf '%s\n' "$match"
+    found=1
+  done < <(cd "$MAIN" 2>/dev/null && shopt -s nullglob && for m in $1; do printf '%s\n' "$m"; done)
+  [ "$found" -eq 1 ] || printf '%s\n' "$1"
 }
 
 # tree_loads_checkout <tree> <checkout> -> 0 when the dependency tree at
@@ -292,18 +317,6 @@ repo_relative() {
   [ "${1#/}" = "$1" ]
 }
 
-# lock_paths <dir> <pattern>... -> the repo-relative paths under checkout
-# <dir> that the lockfile patterns match (a * stays within one directory).
-lock_paths() {
-  local dir="$1" pat f
-  shift
-  for pat in "$@"; do
-    for f in "$dir"/$pat; do
-      [ -f "$f" ] && printf '%s\n' "${f#"$dir"/}"
-    done
-  done
-}
-
 # lockfile_diff <pattern>... -> prints the first lockfile whose copies in the
 # worktree and the main checkout differ (one missing on either side counts),
 # and returns 0; returns 1 when every copy matches.
@@ -314,7 +327,7 @@ lockfile_diff() {
     cmp -s "$WORKTREE/$rel" "$MAIN/$rel" && continue
     printf '%s\n' "$rel"
     return 0
-  done < <({ lock_paths "$WORKTREE" "$@"; lock_paths "$MAIN" "$@"; } | sort -u)
+  done < <({ lock_paths_for "$WORKTREE" "$@"; lock_paths_for "$MAIN" "$@"; } | sort -u)
   return 1
 }
 
@@ -466,9 +479,17 @@ while IFS= read -r line; do
   SPECS=()
   if [ "$line" != "$entry" ]; then
     IFS=$'\t' read -ra LOCKS <<< "${line#*$'\t'}"
-    # :(glob) keeps a * inside one directory, as the shell glob in lock_paths does.
+    # :(glob) keeps a * inside one directory, as the shell glob in lock_paths_for does.
     for lock in "${LOCKS[@]}"; do SPECS+=(":(glob)$lock"); done
   fi
+  # A glob comes back unexpanded only when nothing in the main checkout matched.
+  case "$entry" in
+    *[*?[]*)
+      if [ ! -e "$MAIN/$entry" ]; then
+        echo "worktree-provision: no match for $entry in the main checkout — nothing linked for it"
+        continue
+      fi ;;
+  esac
   # A link an earlier run made is decided again, so a rerun after a lockfile
   # change drops a link that no longer matches and records the one that does.
   # Compared physically: an earlier run may have got --main through a symlink
@@ -534,7 +555,7 @@ while IFS= read -r line; do
         break
       fi
       LOCK_JSON=$(jq -c --arg k "$rel" --arg v "$sum" '. + {($k): $v}' <<< "$LOCK_JSON")
-    done < <(lock_paths "$MAIN" "${LOCKS[@]}" | sort -u)
+    done < <(lock_paths_for "$MAIN" "${LOCKS[@]}" | sort -u)
     [ "$hashed" -eq 1 ] || continue
     # A pattern that matched nothing, and every glob, is recorded with a null
     # hash, so the gate sees a lockfile that appears later on either side.
@@ -542,7 +563,7 @@ while IFS= read -r line; do
     for lock in "${LOCKS[@]}"; do
       case "$lock" in
         *[*?[]*) ABSENT+=("$lock") ;;
-        *) [ -n "$(lock_paths "$MAIN" "$lock")" ] || ABSENT+=("$lock") ;;
+        *) [ -n "$(lock_paths_for "$MAIN" "$lock")" ] || ABSENT+=("$lock") ;;
       esac
     done
     if [ "${#ABSENT[@]}" -gt 0 ]; then
