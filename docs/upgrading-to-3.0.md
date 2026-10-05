@@ -16,7 +16,6 @@ breaking changes are tracked in the
 | **Claude Code 2.0.12 or later** | The hooks run from the plugin's `hooks.json` with `${CLAUDE_PLUGIN_ROOT}`, which arrived in 2.0.12. README "Installation" lists the sources. |
 | **git 2.31 or later** | `git rev-parse --path-format=absolute`, which the memory scripts and the friction scan need. |
 | **jq 1.6 or later** | Unchanged from 2.x. |
-| **Claude Code, not Codex** | Codex support is gone (see [Codex support removed](#codex-support-removed)). |
 
 **Finish open sessions first.** 3.0 does not import in-flight 2.x session state.
 Run `/myspec:session-complete` in every running session before `/myspec:update`.
@@ -228,13 +227,6 @@ or failing settings reader blocks the stop instead of guessing.
   lacks it; every log the hook or the template creates has it.
 - A plan with no `### Milestone` heading still runs: that is the single-milestone
   form `feature-plan` emits.
-
-## Codex support removed
-
-3.0 is a Claude Code plugin only: the Codex manifest, the Codex marketplace entry
-and the `plugins/myspec/` mirror are gone. A project that uses myspec from Codex
-stays on 2.12. `update` removes nothing downstream for this; Codex just stops
-receiving new versions.
 
 ## What 3.0 no longer carries
 
