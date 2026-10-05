@@ -37,7 +37,6 @@ try {
 if (!Array.isArray(files)) usage('stdin is not a JSON array');
 
 const names = files.map((f) => f.filename);
-// Mirror paths follow their source, so only top-level skills/ counts.
 const skills = [...new Set(names.map((n) => n.match(/^skills\/([^/]+)\//)?.[1]).filter((s) => s && s !== '_shared'))].sort();
 const examplesTouched = names.some((n) => n.startsWith('examples/'));
 const examplesTicked = /^\s*[-*]\s+\[[xX]\]\s+Examples\b/m.test(body);

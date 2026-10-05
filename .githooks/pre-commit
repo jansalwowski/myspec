@@ -24,11 +24,11 @@ skills=()
 shells=()
 jsfiles=()
 while IFS= read -r -d '' f; do
-  if [[ "$f" =~ ^(plugins/[^/]+/|\.claude/)?skills/[^/]+/SKILL\.md$ ]]; then
+  if [[ "$f" =~ ^(\.claude/)?skills/[^/]+/SKILL\.md$ ]]; then
     skills+=("$f")
-  elif [[ "$f" =~ ^(plugins/[^/]+/)?(hooks|lib)/.*\.sh$ ]]; then
+  elif [[ "$f" =~ ^(hooks|lib)/.*\.sh$ ]]; then
     shells+=("$f")
-  elif [[ "$f" =~ ^(plugins/[^/]+/)?lib/.*\.(mjs|cjs|js)$ ]]; then
+  elif [[ "$f" =~ ^lib/.*\.(mjs|cjs|js)$ ]]; then
     jsfiles+=("$f")
   fi
 done < <(git diff --cached --name-only --diff-filter=ACMR -z)
@@ -53,14 +53,7 @@ for f in ${shells[@]+"${shells[@]}"}; do
   fi
 done
 
-# The plugins/ mirrors are byte-identical to hooks/ and lib/ (sync-check.yml),
-# so ShellCheck sees each script once; bash -n above still parses both.
-sclist=()
-for f in ${shells[@]+"${shells[@]}"}; do
-  [[ "$f" == plugins/* ]] || sclist+=("$f")
-done
-
-if [ ${#sclist[@]} -gt 0 ]; then
+if [ ${#shells[@]} -gt 0 ]; then
   # Same entry point as CI (test.yml), which pins the version; here the
   # shellcheck on PATH, or $SHELLCHECK, will do. Run from the export so the
   # staged tests/.shellcheckrc files apply and findings print as repo paths.
@@ -73,7 +66,7 @@ if [ ${#sclist[@]} -gt 0 ]; then
   else
     # Any non-zero exit blocks: ShellCheck exits 2 when one file cannot be
     # read but still reports findings in the rest.
-    if ! (cd "$tmp" && bash "$shlint" "${sclist[@]}") >&2; then
+    if ! (cd "$tmp" && bash "$shlint" "${shells[@]}") >&2; then
       echo "pre-commit: shellcheck failed on staged shell scripts" >&2
       status=1
     fi

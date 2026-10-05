@@ -8,7 +8,7 @@
   { "name": "area:hooks", "color": "5319e7", "description": "hooks/ and hooks.json" },
   { "name": "area:lib", "color": "5319e7", "description": "lib/ helpers called by skills and hooks" },
   { "name": "area:framework-files", "color": "5319e7", "description": "framework-files/, blueprints/, templates/ and the manifest; init and update" },
-  { "name": "area:plugin", "color": "5319e7", "description": "Plugin packaging: .claude-plugin/, .codex-plugin/, the plugins/myspec mirror" },
+  { "name": "area:plugin", "color": "5319e7", "description": "Plugin packaging: .claude-plugin/" },
   { "name": "area:tooling", "color": "5319e7", "description": "Maintainer tooling: scripts/, evals/, quality/, .github/, .githooks/, .claude/" },
 
   { "name": "P1", "color": "b60205", "description": "Wrong result, data loss, security, or blocks consumers; fix before the next release" },

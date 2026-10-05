@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Bump the myspec version in lockstep across all five version sources.
+# Bump the myspec version in lockstep across all three version sources.
 # Does NOT commit, tag, or push — review the diff first, then do those manually.
 #
 # Usage: scripts/bump-version.sh X.Y.Z
@@ -59,12 +59,6 @@ bump_json_field .claude-plugin/plugin.json '.version = $v'
 # 3. Claude marketplace manifest — both version AND git ref.
 bump_json_field .claude-plugin/marketplace.json \
   '.plugins[0].version = $v | .plugins[0].source.ref = $r'
-
-# 4. Codex plugin manifest.
-bump_json_field .codex-plugin/plugin.json '.version = $v'
-
-# 5. Local-source wrapper (used by .agents/plugins/marketplace.json).
-bump_json_field plugins/myspec/.codex-plugin/plugin.json '.version = $v'
 
 echo ""
 echo "Bumped to v$VERSION. Modified files:"

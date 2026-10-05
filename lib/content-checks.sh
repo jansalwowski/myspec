@@ -93,8 +93,7 @@ absolute_paths_scope() {
   local root="$1" rel="$2" ai="${3:-}"
   case "$rel" in
     .git/*|*/.git/*) return 1 ;;
-    lib/path-normalize.sh|plugins/myspec/lib/path-normalize.sh|\
-    lib/content-checks.sh|plugins/myspec/lib/content-checks.sh) return 1 ;;
+    lib/path-normalize.sh|lib/content-checks.sh) return 1 ;;
   esac
   if git -C "$root" check-ignore -q -- "$rel" 2>/dev/null; then
     return 1

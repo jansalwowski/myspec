@@ -114,22 +114,21 @@ resolve_base() {
 }
 
 # Prints the selected case names, one per line. Rules (evals/README.md):
-#   skills/<s>/…, plugins/myspec/skills/<s>/…  → cases tagged skill:<s>
+#   skills/<s>/…                                → cases tagged skill:<s>
 #   skills/_shared/<f>                          → cases tagged with any skill whose
 #                                                 files mention _shared/<f> (transitively
 #                                                 through other _shared files)
 #   evals/<case>/…                              → that case
 #   evals/_fixtures/<entry>…                    → cases whose files mention <entry>
 select_changed() {
-  local base="$1" changed f rest skill entry c
+  local base="$1" changed f skill entry c
   changed=$(git -C "$REPO_ROOT" diff --name-only "$base" HEAD) || die "git diff $base HEAD failed"
   local skills="" shared="" fixtures="" cases=""
   while IFS= read -r f; do
     [ -n "$f" ] || continue
-    rest="${f#plugins/myspec/}"
-    case "$rest" in
-      skills/_shared/*) shared="$shared ${rest#skills/_shared/}" ;;
-      skills/*/*) skill="${rest#skills/}"; skills="$skills ${skill%%/*}" ;;
+    case "$f" in
+      skills/_shared/*) shared="$shared ${f#skills/_shared/}" ;;
+      skills/*/*) skill="${f#skills/}"; skills="$skills ${skill%%/*}" ;;
     esac
     case "$f" in
       evals/_fixtures/*) entry="${f#evals/_fixtures/}"; fixtures="$fixtures ${entry%%/*}" ;;

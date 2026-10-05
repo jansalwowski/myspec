@@ -18,10 +18,9 @@ set -uo pipefail
 PATTERN='(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]):[0-9]+'
 
 # Files that show real output of a myspec-owned tool, whose port is chosen at
-# runtime. Keep this list short; repo-relative, mirrors included.
+# runtime. Keep this list short; repo-relative.
 ALLOW=(
   skills/brainstorm/visual-companion.md
-  plugins/myspec/skills/brainstorm/visual-companion.md
 )
 
 EXCLUDES=()
@@ -30,7 +29,7 @@ for f in "${ALLOW[@]}"; do
 done
 
 MATCHES=$(git grep --untracked -nE "$PATTERN" -- \
-  skills blueprints framework-files templates examples plugins/myspec/skills \
+  skills blueprints framework-files templates examples \
   "${EXCLUDES[@]}" || true)
 
 if [ -n "$MATCHES" ]; then

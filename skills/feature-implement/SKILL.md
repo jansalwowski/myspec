@@ -338,7 +338,7 @@ Recommend `feature-implement-review` when the holistic verdict is not READY TO M
 
 ## Model Selection
 
-Skill text uses **tier names** (`cheap` / `mid` / `premium`). Controller (main thread) maps tier → concrete model based on runtime availability. Plugin runs across Claude Code, Codex, Cursor, etc. — no hardcoded model IDs.
+Skill text uses **tier names** (`cheap` / `mid` / `premium`). Controller (main thread) maps tier → concrete model based on runtime availability. Model IDs change between releases, so no hardcoded model IDs.
 
 | Role | Complexity | Tier | Hint (controller picks concrete model) |
 |------|-----------|------|----------------------------------------|

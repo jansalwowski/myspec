@@ -4,8 +4,7 @@
 // deterministic and free: no model call.
 //
 // - type:*   from the Conventional Commit type in the title (AGENTS.md)
-// - area:*   from the changed files, by the path table in the /triage skill;
-//            plugins/myspec/ mirror files follow their source and add nothing
+// - area:*   from the changed files, by the path table in the /triage skill
 // - breaking from `type!:` in the title, a ticked "Breaking: yes" box in the body,
 //            or a closing issue labelled breaking
 // - P1-P3    the highest priority among the closing issues
@@ -39,16 +38,13 @@ const files = fs.readFileSync(0, 'utf8').split('\n').map((s) => s.trim()).filter
 // refactor, chore, ci and test change no shipped behaviour a type label describes.
 const TYPES = { feat: 'type:enhancement', refine: 'type:enhancement', perf: 'type:enhancement', fix: 'type:bug', docs: 'type:docs' };
 
-// Mirrored trees (AGENTS.md "Mirrored trees"): the source path carries the area.
-const MIRROR = /^plugins\/myspec\/(skills\/|hooks\/|hooks\.json$|lib\/|\.codex-plugin\/)/;
-
 // First match wins. Order is the output order.
 const AREAS = [
   ['area:skills', /^skills\//],
   ['area:hooks', /^(hooks\/|hooks\.json$)/],
   ['area:lib', /^lib\//],
   ['area:framework-files', /^(framework-files|blueprints|templates)\//],
-  ['area:plugin', /^(\.claude-plugin|\.codex-plugin|plugins\/myspec)\//],
+  ['area:plugin', /^\.claude-plugin\//],
   ['area:tooling', /^(scripts|evals|quality|\.github|\.githooks|\.claude)\//],
 ];
 
@@ -58,7 +54,6 @@ if (head && TYPES[head[1]]) labels.push(TYPES[head[1]]);
 
 const areas = new Set();
 for (const f of files) {
-  if (MIRROR.test(f)) continue;
   const hit = AREAS.find(([, re]) => re.test(f));
   if (hit) areas.add(hit[0]);
 }

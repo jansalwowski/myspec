@@ -63,7 +63,7 @@ Files changed between `--base` (default: `git merge-base origin/main HEAD`) and 
 
 | Changed path | Selects |
 |---|---|
-| `skills/<name>/…` or `plugins/myspec/skills/<name>/…` | every case tagged `skill:<name>` |
+| `skills/<name>/…` | every case tagged `skill:<name>` |
 | `skills/_shared/<file>` | every case tagged with a skill whose files mention `_shared/<file>`, following `_shared` files that reference each other |
 | `evals/<case>/…` | that case |
 | `evals/_fixtures/<entry>…` | every case whose files mention `<entry>` (a top-level file or directory name); `lib.sh` is sourced by every case, so it selects them all |

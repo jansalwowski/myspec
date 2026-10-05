@@ -1,6 +1,6 @@
 # myspec
 
-Specification-Driven Development framework for Claude Code and Codex. Provides skills for feature workflows, memory system, ideas pipeline, and project scaffolding.
+Specification-Driven Development framework for Claude Code. Provides skills for feature workflows, memory system, ideas pipeline, and project scaffolding.
 
 ## Installation
 
@@ -10,26 +10,11 @@ Requirements — the host floor (raising it is a major, RELEASING.md "Breaking c
 - **git 2.31 or later** (`git rev-parse --path-format=absolute`, #253). Below it the hooks resolve those paths themselves and keep working, but `memory-claim-id.sh` and the memory and friction-scan scripts need it.
 - **jq 1.6 or later** (the settings reader uses `jq --rawfile`).
 
-### Codex
-
-This repository now includes a native Codex manifest at `.codex-plugin/plugin.json`.
-It also includes a Codex marketplace manifest at `.agents/plugins/marketplace.json` and a marketplace-compatible plugin wrapper at `plugins/myspec/`.
-
-Install it as a local plugin by pointing Codex at this repository root, then use the skills from `skills/`.
-
-In Codex, use skill names directly, for example:
-
-```
-Use the myspec init skill to set up this project.
-Use the myspec bootstrap skill before making changes.
-Use the myspec feature-spec skill for the new authentication flow.
-```
-
 ### How the hooks run
 
-The framework hooks (the work-isolation guards, session tracking, frontmatter validation, the stop gate, field metrics) run from the plugin: `hooks.json` at the repository root is declared in `.claude-plugin/plugin.json`, Claude Code merges it with the project's own `.claude/settings.json` hooks while the plugin is enabled, and every hook finds its helpers under `${CLAUDE_PLUGIN_ROOT}/lib`. Nothing is copied into a project's `.claude/hooks/` or `.claude/lib/` (that was the 2.x layout; `/myspec:update` retires those copies to `.claude/state/retired-3.0/` and unwires them), so a hook fix ships with the plugin version and reaches every project at once. A teammate without the plugin gets no gates, as they already got no skills. `frameworkVersion` in `.myspec.json` now covers only the rules and the `${aiDir}` files `init` and `update` write. Codex runs the same `hooks.json`.
+The framework hooks (the work-isolation guards, session tracking, frontmatter validation, the stop gate, field metrics) run from the plugin: `hooks.json` at the repository root is declared in `.claude-plugin/plugin.json`, Claude Code merges it with the project's own `.claude/settings.json` hooks while the plugin is enabled, and every hook finds its helpers under `${CLAUDE_PLUGIN_ROOT}/lib`. Nothing is copied into a project's `.claude/hooks/` or `.claude/lib/` (that was the 2.x layout; `/myspec:update` retires those copies to `.claude/state/retired-3.0/` and unwires them), so a hook fix ships with the plugin version and reaches every project at once. A teammate without the plugin gets no gates, as they already got no skills. `frameworkVersion` in `.myspec.json` now covers only the rules and the `${aiDir}` files `init` and `update` write.
 
-Both runtimes share the same project-level verification config at `.claude/verification.json` when it exists. A repo whose lint or type-check is already red on the default branch gives that check a `diffCommand`: the gate runs it in place of `command`, with `$MYSPEC_BASE_REF` exported as the merge base with the default branch, so the check covers what the branch changed instead of blocking on pre-existing debt.
+The stop gate reads the project-level verification config at `.claude/verification.json` when it exists. A repo whose lint or type-check is already red on the default branch gives that check a `diffCommand`: the gate runs it in place of `command`, with `$MYSPEC_BASE_REF` exported as the merge base with the default branch, so the check covers what the branch changed instead of blocking on pre-existing debt.
 
 The gate runs only after the session wrote code, and it verifies each checkout of the repository the session wrote in, so a linked worktree edited from the main checkout gets verified. Reading, grepping or running a file doesn't count, and neither does a write in another repository. When several sessions share one checkout, the checks can fail on another session's uncommitted work. A failure that names only files this session didn't write becomes a warning. Any other failure still blocks, and the block lists the uncommitted changes that aren't the session's. Each check also gets `$MYSPEC_SESSION_FILES`, one path per line relative to the directory the check runs from (the root, or its `cwd`), for a per-file linter that should cover only the files this session wrote. Rules and known limits: [`docs/stop-gate.md`](docs/stop-gate.md).
 
@@ -80,14 +65,6 @@ Run `scripts/install-git-hooks.sh` once per clone. It sets up two hooks:
 - **pre-push:** runs the eval cases for the skills you changed. These evals run on your Claude Code login and only report; they never block the push. Skip them with `MYSPEC_SKIP_EVALS=1`.
 
 See [evals/README.md](evals/README.md) and the Quality gates section of [AGENTS.md](AGENTS.md).
-
-For Codex, reload or reinstall the local plugin after editing the manifest or skills, depending on your Codex setup.
-
-To add this repository as a Codex marketplace from Git, use:
-
-```bash
-codex marketplace add git@github.com:jansalwowski/myspec.git --ref main
-```
 
 ## Skills Reference
 
@@ -198,7 +175,7 @@ A string entry whose basename is a well-known dependency directory takes its loc
 
 When a session ends, a hook records one line per skill run in `.claude/state/metrics/runs.jsonl`: time, tokens, subagents, hook blocks and fix rounds. The file is gitignored, stays on your machine, and stores no prompt or file content. `/myspec:doctor` summarises it. To turn recording off, set `"feedback": { "metrics": false }`, `MYSPEC_DISABLE_METRICS=1` or `DO_NOT_TRACK=1`. See [docs/field-metrics.md](docs/field-metrics.md), which also covers opt-in OpenTelemetry.
 
-`frameworkVersion` is kept in lockstep across `framework-files/manifest.json`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` (with matching git `ref`), `.codex-plugin/plugin.json`, and `plugins/myspec/.codex-plugin/plugin.json`. Use `./scripts/bump-version.sh X.Y.Z` to update all five in one shot; see [RELEASING.md](RELEASING.md) for the full release workflow.
+`frameworkVersion` is kept in lockstep across `framework-files/manifest.json`, `.claude-plugin/plugin.json`, and `.claude-plugin/marketplace.json` (with matching git `ref`). Use `./scripts/bump-version.sh X.Y.Z` to update all three in one shot; see [RELEASING.md](RELEASING.md) for the full release workflow.
 
 ## Auto-setup for team repos
 
