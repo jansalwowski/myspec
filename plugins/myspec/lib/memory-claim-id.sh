@@ -100,7 +100,7 @@ if [ -f "$MAIN_ROOT/.myspec.json" ]; then
   AI_DIR=$(printf '%s' "$AI_DIR" | sed 's#^\./##; s#/*$##')
 fi
 # No configured value: the documented default, never a guess from disk. aiDir
-# is required since 2.0; the setup doctor reports its absence and `update`
+# is required since 2.0; the setup doctor reports its absence and `init`
 # writes it. memory-files.mjs resolves the same way.
 if [ -z "$AI_DIR" ]; then
   AI_DIR=".ai"

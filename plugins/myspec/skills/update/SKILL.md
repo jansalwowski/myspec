@@ -38,11 +38,11 @@ Resolve the plugin directory in this order:
 
 Compare versions. If they match, tell the user: "Already up to date (v{version}). No changes needed." and stop.
 
-**Upgrade base.** 2.0 migrates from 1.28.0 or later only. If the project's `frameworkVersion` is missing or lower than 1.28.0, stop with:
+**Upgrade base.** The manifest's `upgradeFrom` is the oldest version this plugin migrates from (RELEASING.md, "Upgrade base"). If the project's `frameworkVersion` is missing or lower, stop with:
 
-"This project is on v{version}; myspec 2.0 upgrades from 1.28.0 or later. Run the 1.28 update first: check out the plugin at tag v1.28.0 (`git clone --branch v1.28.0 https://github.com/jansalwowski/myspec`), start Claude with `--plugin-dir <that checkout>`, run `/myspec:update`, then return to this version."
+"This project is on v{version}; myspec v{manifest frameworkVersion} upgrades from {upgradeFrom} or later. Run the {upgradeFrom} update first: check out the plugin at tag v{upgradeFrom} (`git clone --branch v{upgradeFrom} https://github.com/jansalwowski/myspec`), start Claude with `--plugin-dir <that checkout>`, run `/myspec:update`, then return to this version."
 
-The 1.x updates carried migrations (legacy memory-index headers, hand-written `frameworkFiles` inventories) that 2.0 no longer ships.
+Every migration, rename and removal an older version needed ran in that update; this plugin no longer ships them.
 
 ### Step 1.5: Run One-Shot Migrations
 
@@ -50,10 +50,6 @@ The 1.x updates carried migrations (legacy memory-index headers, hand-written `f
 
 | id | What it does |
 |---|---|
-| `2.0.0-schema` | **`aiDir`:** if the key is missing, decide once from disk — `.ai` if `.ai/` exists, else `ai` if `ai/` exists, else `.ai` — and write it; strip any trailing slash. This replaces the runtime detection the 1.x hooks carried, so it lands before any hook runs against the new lib. **`frameworkFiles`:** drop `version` and `lastUpdated` from every entry (bookkeeping nothing ever read); drop entries left empty; drop the key when no pins remain. Since 2.0 the block holds pins only. |
-| `2.0.0-doctor-rule` | `.claude/rules/ai-setup-audit.md` → `.claude/rules/doctor.md` via `git mv` when only the old name exists (the `doctor` skill reads only the new one). Both present → leave both, report it, and tell the user to merge by hand. |
-| `2.0.0-sessions` | Live session logs move from `{aiDir}/memory/sessions/active/` to `.claude/state/sessions/` in the primary checkout (gitignored). Move every `*.md` there with plain `mv` (they were never tracked), delete `active/` and its `.gitkeep` (`git rm` if tracked), leave `archive/` where it is. |
-| `2.0.0-base-agents` | The user-scope `worker-base` / `reviewer-base` subagents backed the orchestrator agent-chain mode, retired in 2.0. For each of `~/.claude/agents/`, `~/.cursor/agents/`, `~/.codex/agents/` that exists, list the `worker-base.{md\|toml}` and `reviewer-base.{md\|toml}` files present and ask once: "Delete these N files? They are inert since 2.0. (y/n, default: n)". On `n`, leave them and say so. Delete nothing else in those directories, and never touch project-scope agent dirs. |
 | `3.0.0-plugin-hooks` | Since 3.0 the plugin runs the framework hooks itself (its `hooks.json`) and nothing is copied into `.claude/hooks/` or `.claude/lib/`. This migration runs before the `removed` handling in Step 2, which must not touch what it moves. **(a) Unwire.** Run `node "${CLAUDE_PLUGIN_ROOT}/lib/settings-unwire.mjs"` from the project root (`--dry-run` first to show the plan). It removes from `.claude/settings.json` `hooks` every entry whose `command` runs a hook the plugin's `hooks.json` runs, matched by the script's name whatever precedes it (`"$CLAUDE_PROJECT_DIR"/…/x.sh`, bare, `./…`, `bash "…/x.sh"`, even `"${CLAUDE_PLUGIN_ROOT}"/hooks/x.sh` — the plugin's own entry already runs it; a settings copy runs it twice), leaves every other entry in the same arrays and matcher groups, drops a matcher group, an event array or the `hooks` key only when it empties, and changes nothing else in the file. Report its `removed:` lines. Never touch `settings.local.json`: report a framework entry there with "delete by hand". **(b) Move, never delete.** For each `removed` entry with `since` 3.0.0 or later whose `dest` is under `.claude/hooks/` or `.claude/lib/` and exists: move it (plain `mv`, or `git mv` when tracked) to `.claude/state/retired-3.0/<same path under .claude/>` (`.claude/hooks/x.sh` → `.claude/state/retired-3.0/hooks/x.sh`, `.claude/lib/<dir>/<y>` → `.claude/state/retired-3.0/lib/<dir>/<y>`), creating directories; `git rm --cached` a tracked one so the move leaves the index. Before moving, take its SHA-256 (`shasum -a 256 <dest>` or `sha256sum <dest>`) and look the entry's key up in the plugin's `framework-files/retired-hashes.json` `files` — the hash of each file as the last 2.x release (the upgrade floor, 2.12.0) installed it; the 3.0 plugin copies are no reference, since 3.0 rewrote them all. A match is moved in silence. A mismatch, or a key under `unreleased` (added after the floor, so no 2.x release installed it), is listed as **"locally modified, compare before discarding"** — a hand patch may hold a fix worth an upstream issue or a project hook of its own. Drop the `frameworkFiles` key of every `hooks/*` and `lib/*` entry, pinned or not, and list a dropped pin: the plugin runs its own copy, so a pin no longer keeps anything running; a patched copy the project still wants is re-wired under a project name. Delete `.claude/hooks/` and `.claude/lib/` only when empty afterwards. **(c) Report, don't touch.** Anything left under `.claude/hooks/` or `.claude/lib/` that the manifest never listed (`.claude/hooks/tests/`, `.claude/lib/tests/`, a project's own helper) is listed as "unmanaged, left in place". **(d)** `.gitignore` already covers `.claude/state/` (Step 3 adds the line when it is missing). Print the moved list, the unwired entries and the leftovers under `Hooks` in the Step 6 summary. |
 | `3.0.0-memory-registry` | Versions before 1.28 wrote `.claude/state/memory-ids.json` jq pretty-printed, one key per line; since 3.0 `memory-claim-id.sh` reads only the one-line form it writes, and a claim against the old form would restart the other floors at zero. Run `"${CLAUDE_PLUGIN_ROOT}/lib/memory-claim-id.sh" --normalize` from the project root: it rewrites the registry as one line from either form, keeping every floor, and prints what it did (nothing to do without a registry). Idempotent; runs before Step 3.6's health check. |
 
@@ -89,7 +85,7 @@ Pinning is the project's call, not the skill's. Never add or remove a pin on the
 
 **Pin reconciliation.** A pinned rule never receives the plugin copy, so a pin taken to trim always-loaded context outlives the trim upstream. When a pinned entry's plugin copy is now *smaller* than the local one (`wc -c` both), the reason for the pin has probably been absorbed: show both sizes and the pin reason, and ask — keep the pin, take the plugin copy and drop the pin, or see a diff first. Apply the answer; never decide alone. Report the outcome under `Pinned` in the Step 6 summary.
 
-**Removed entries.** The manifest's `removed` block lists files the framework retired: `"<old key>": { "dest": "<path>", "since": "<version>" }`. An entry falls in exactly one of two classes, by `since` and `dest` together — the same rule as the doctor's `retiredCopies` (`lib/setup-doctor.mjs`). **A retired copy**: `since` 3.0.0 or later **and** `dest` under `.claude/hooks/` or `.claude/lib/`. **A deleted file**: everything else — the 2.0 entries (`hooks/guard-git-branch.sh`, since 2.0.0, is one of these although its `dest` is under `.claude/hooks/`; the aiDir files) and the 3.0 `${aiDir}/.templates/index-*.md` (the memory index headers nothing read, which `init` scaffolds once and `lib/memory-index.mjs` maintains). For a deleted file: when `dest` exists (after `${aiDir}` substitution), `git rm` it if tracked, else delete it, drop its `frameworkFiles` key, and for `guard-git-branch.sh` delete every `settings.json` hook entry whose `command` names it (`settings-unwire.mjs` matches `hooks.json` names only, and that hook is in no `hooks.json`); a pinned one is a deliberate local keep — leave the file and the pin, report it as "retired upstream, kept locally"; list deletions under `Removed` in the Step 6 summary. For a retired copy: the `3.0.0-plugin-hooks` migration's, which Step 1.5 ran first — moved to `.claude/state/retired-3.0/`, never deleted, its pin dropped rather than honoured, its wiring removed by `settings-unwire.mjs`. Nothing to do here when `dest` is gone (the usual case); when it still exists — the migration was recorded on an earlier run and the copy came back — apply the migration's move to that one file, with the same hash comparison, and list it under `Hooks`.
+**Removed entries.** The manifest's `removed` block lists files the framework retired: `"<old key>": { "dest": "<path>", "since": "<version>" }`. An entry falls in exactly one of two classes, by `since` and `dest` together — the same rule as the doctor's `retiredCopies` (`lib/setup-doctor.mjs`). **A retired copy**: `since` 3.0.0 or later **and** `dest` under `.claude/hooks/` or `.claude/lib/`. **A deleted file**: everything else — today the 3.0 `${aiDir}/.templates/index-*.md` (the memory index headers nothing read, which `init` scaffolds once and `lib/memory-index.mjs` maintains). For a deleted file: when `dest` exists (after `${aiDir}` substitution), `git rm` it if tracked, else delete it, and drop its `frameworkFiles` key; a pinned one is a deliberate local keep — leave the file and the pin, report it as "retired upstream, kept locally"; list deletions under `Removed` in the Step 6 summary. For a retired copy: the `3.0.0-plugin-hooks` migration's, which Step 1.5 ran first — moved to `.claude/state/retired-3.0/`, never deleted, its pin dropped rather than honoured, its wiring removed by `settings-unwire.mjs`. Nothing to do here when `dest` is gone (the usual case); when it still exists — the migration was recorded on an earlier run and the copy came back — apply the migration's move to that one file, with the same hash comparison, and list it under `Hooks`.
 
 ### Step 3: Apply Updates
 
@@ -161,7 +157,7 @@ Read the result as a checklist of this run:
 - `hook-wired-locally` / `hook-copy-retired` → the `3.0.0-plugin-hooks` migration left a framework entry in `settings.json` or a copy under `.claude/hooks/` or `.claude/lib/`; unwire or move it as the migration does, do not stamp over it.
 - Anything in the `schema` or `features` group → fix before finishing; an unparseable `.myspec.json` or `verification.json` silently disables the surfaces that read it, and an entry the features parser cannot read is invisible to every status audit. Exception: `note-over-cap` / `note-volatile` / `manifest-unknown-key` are project content, not install state — report them and leave the notes alone.
 
-Report the summary line in Step 6. `myspec-schema-stale` cannot appear here: Step 1.5 ran the schema migration first. If it does, that migration did not complete — re-run it before stamping.
+Report the summary line in Step 6.
 
 ### Step 4: Refresh `${aiDir}` binding in project context
 
@@ -221,23 +217,6 @@ Setup:  {clean / N error(s), M warning(s) — see above / skipped — node not f
 Next: Run the `bootstrap` skill to verify the setup is still correct.
 ```
 
-**2.0 advisory (print only when a `2.0.0-*` migration ran in this session).** The
-mechanical work is done; what remains lives in files this skill is forbidden to
-touch. Append:
-
-```
-2.0 changed things update cannot fix for you:
-  - references to `{aiDir}/memory/sessions/active/` in your own hooks and docs
-  - references to the renamed skills: features-status-audit, worktree-cleanup,
-    docs-sanitize
-  - plans written under 1.x: implementers no longer run tests, so any
-    "Run test — expect FAIL" step now has no owner
-  Full list, with the greps: docs/upgrading-to-2.0.md in the plugin.
-```
-
-Print it once, after the summary, and do not act on any of it — each item is a
-judgment call in a file the project owns.
-
 **Generated-config advisory (print only when `.myspec.json` has a `mockups` block):** blueprint-generated files are project-owned and never auto-updated. Read `{aiDir}/conventions/mockup-design.md` frontmatter `myspec_version` (treat a missing key as "unstamped") and append to the summary:
 
 ```
@@ -254,17 +233,17 @@ Do NOT modify the file — this is advisory only.
 - **Never copy a hook or lib helper into the project.** Since 3.0 they run from the plugin, and a copy under `.claude/` is dead weight at best and a second, stale run of a gate at worst (a copy is moved to `.claude/state/retired-3.0/`, never written). Only the `files` and `rules` blocks exist, and both carry `${aiDir}` as a placeholder to substitute.
 - Never overwrite a file whose `frameworkFiles[...].pinned` is set, and never add or clear a pin yourself — except the `hooks/*` and `lib/*` pins the `3.0.0-plugin-hooks` migration drops, which it reports
 - Never overwrite content after `<!-- myspec:framework-end -->` in a `marker-merge` file
-- Never modify files not listed in `manifest.json`, with three exceptions this skill owns: the `hooks` key of `.claude/settings.json` (framework entries removed, nothing added), `.claude/state/retired-3.0/` (where the migration moves the retired copies), and `.claude/rules/ai-setup-audit.md` for the `2.0.0-doctor-rule` migration
-- Never update `.myspec.json` project fields (`name`, `description`, `techStack`); `aiDir` is written only by the `2.0.0-schema` migration, and only when absent or carrying a trailing slash
+- Never modify files not listed in `manifest.json`, with two exceptions this skill owns: the `hooks` key of `.claude/settings.json` (framework entries removed, nothing added) and `.claude/state/retired-3.0/` (where the migration moves the retired copies)
+- Never update `.myspec.json` project fields (`name`, `description`, `techStack`), or `aiDir`
 - Never run a migration whose id is already in `.myspec.json` `migrations`; record each one the moment it completes
 - If a source file is missing from the plugin, skip it and warn the user — do not delete the destination
-- The plugin ships no subagent definitions. Never write to `~/.{harness}/agents/` outside the `2.0.0-base-agents` migration, and never to project-scope `.claude/agents/`, `.cursor/agents/`, `.codex/agents/`.
+- The plugin ships no subagent definitions. Never write to `~/.{harness}/agents/` or to project-scope `.claude/agents/`, `.cursor/agents/`, `.codex/agents/`.
 
 ## Verification Checklist
 
 After running the skill:
 
-- [ ] `.myspec.json` `frameworkVersion` read and compared to `manifest.json`; stopped early if already current, or with the 1.28 instruction if below 1.28.0
+- [ ] `.myspec.json` `frameworkVersion` read and compared to `manifest.json`; stopped early if already current, or with the step-through instruction if below the manifest's `upgradeFrom`
 - [ ] Every manifest `migrations` id not yet in `.myspec.json` run in order and recorded as it completed
 - [ ] Every `manifest.json` entry processed with its declared strategy (`overwrite` / `marker-merge`)
 - [ ] Every entry carrying `renamedFrom` checked before applying: destination migrated and its `frameworkFiles` key renamed (kept even when the apply could not merge), a dead old key dropped, or the both-exist case offered a merge (or deletion, for a marker-less old file)
@@ -279,7 +258,6 @@ After running the skill:
 - [ ] `.myspec.json` `frameworkVersion` bumped; project fields (`name`, `description`, `techStack`) untouched; `frameworkFiles` holds pins only
 - [ ] `setup-doctor.mjs wiring` run from the plugin: `hook-wired-locally` and `hook-copy-retired` gone, nothing added to `settings.json`, project-hook findings and `settings.local.json` entries reported with their fix line; `.gitignore` has a `.claude/state/` line
 - [ ] Full `setup-doctor.mjs` run in Step 3.7, before the Step 5 version stamp; every `install`-, `schema`- and `features`-group error resolved or reported
-- [ ] No file outside `manifest.json` was modified, except `settings.json` `hooks` (removals only), `.claude/state/retired-3.0/` and the doctor-rule rename
+- [ ] No file outside `manifest.json` was modified, except `settings.json` `hooks` (removals only) and `.claude/state/retired-3.0/`
 - [ ] Summary printed with `Updated files`, `Migrations`, `Removed`, `Preserved` and `Hooks` lines
 - [ ] Generated-config advisory printed when a `mockups` block exists (`mockup-design.md` read, never modified)
-- [ ] 2.0 advisory printed when a `2.0.0-*` migration ran this session, pointing at `docs/upgrading-to-2.0.md`; nothing it names was acted on

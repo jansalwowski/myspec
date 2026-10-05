@@ -38,7 +38,7 @@ due for a pass; reach for tier 1 when the user named a surface or tier 0 pointed
 ### Phase 0 — Load configuration
 
 1. Read `.myspec.json` for `aiDir` — the key is required since 2.0; when it is absent the tooling uses `.ai` and the setup doctor reports it. Use it everywhere `${aiDir}` appears below.
-2. Read the project extension if present — `.claude/rules/doctor.md`. Take its `## Project anchors`, `## Read-only`, and `## Extra checks` sections. Not present → note "no project extension; auditing framework surfaces only." The pre-rename `ai-setup-audit.md` is not read: tier 0 reports it as `doctor-rule-unrenamed` and `update` moves it.
+2. Read the project extension if present — `.claude/rules/doctor.md`. Take its `## Project anchors`, `## Read-only`, and `## Extra checks` sections. Not present → note "no project extension; auditing framework surfaces only."
 3. Detect the default branch: `git symbolic-ref --short refs/remotes/origin/HEAD`, falling back to `main`/`master`.
 4. Run the deterministic checks and keep the result — it is the ground truth every later phase quotes:
 

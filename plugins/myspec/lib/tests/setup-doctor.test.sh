@@ -49,7 +49,7 @@ expect_exit() {     # expect_exit <want> <description>
 }
 
 run_doctor() {      # run_doctor <args...>; sets OUTPUT and STATUS
-  OUTPUT=$(node "$SCRIPT" --root "$REPO" --plugin-root "$PLUGIN" "$@" 2>&1)
+  OUTPUT=$(node "$SCRIPT" --root "$REPO" --plugin-root "${RUN_PLUGIN:-$PLUGIN}" "$@" 2>&1)
   STATUS=$?
 }
 
@@ -110,7 +110,6 @@ run_doctor
 expect_exit 0 "clean install exits 0"
 expect_no_line '^ERROR' "clean install reports no errors"
 expect_no_line 'framework-drift' "clean install reports no drift"
-expect_no_line 'myspec-schema-stale' "a 2.0-shape .myspec.json is not stale"
 expect_no_line 'framework-removed' "a 3.0 install holds none of the retired copies"
 expect_no_line 'hook-copy-retired' "a 3.0 install holds no hook or lib copy under .claude/"
 expect_no_line 'dead-path-ref' "framework-owned rules are not scanned for dead refs"
@@ -246,8 +245,6 @@ printf '\n# hand edit\n' >> "$REPO/.claude/rules/paths.md"
 rm "$REPO/ai/.templates/session-log.md"
 perl -0pi -e 's/<!-- myspec:framework-start -->//' "$REPO/ai/pre-flight.md"
 perl -0pi -e 's/^# .*$/# Renamed Locally/m' "$REPO/ai/anti-patterns.md"
-set_json .myspec.json 'd.frameworkFiles = {"rules/ideas.md": {version: "1.27.0", lastUpdated: "2026-08-01"}}'
-printf '## Project anchors\n' > "$REPO/.claude/rules/ai-setup-audit.md"
 mkdir -p "$REPO/ai/memory/sessions/active" && printf -- '---\nstatus: active\n---\n' > "$REPO/ai/memory/sessions/active/old.md"
 mkdir -p "$REPO/.claude/hooks"
 printf '#!/bin/sh\nexit 0\n' > "$REPO/.claude/hooks/own.sh"
@@ -280,8 +277,6 @@ expect_exit 1 "a broken install exits 1"
 expect_line 'ERROR framework-drift: .claude/rules/paths.md' "a hand-edited rule at a matching version is an error"
 expect_line 'ERROR framework-missing: ai/.templates/session-log.md' "a deleted framework file is an error"
 expect_line 'ERROR marker-missing: ai/pre-flight.md' "a marker-merge file without markers is an error"
-expect_line 'WARN +myspec-schema-stale: .myspec.json' "pre-2.0 per-file bookkeeping is a warning"
-expect_line 'WARN +doctor-rule-unrenamed: .claude/rules/ai-setup-audit.md' "the pre-rename doctor extension is a warning"
 expect_line 'WARN +sessions-unmigrated: ai/memory/sessions/active' "a 1.x live session log is a warning"
 expect_line 'ERROR hook-not-executable: .claude/hooks/own.sh' "a registered project hook without +x is an error"
 expect_line 'ERROR hook-missing: .claude/hooks/ghost.sh' "a registered hook that does not exist is an error"
@@ -422,6 +417,17 @@ expect_no_line 'ERROR framework-drift' "drift while an update is pending is not 
 # Until a project runs update it holds the old filename. Reporting the new one
 # as missing would be true, useless, and would fire on every project the day
 # the rename ships — so the doctor names the migration instead, as a warning.
+# The real manifest renames nothing since 3.0 dropped the 2.0 memory-index.md
+# rename, so a copy of the plugin root carries that rename again; hooks, lib,
+# templates and skills are linked from the real one.
+
+RENAMED="$ROOT/plugin-renamed"
+mkdir -p "$RENAMED"
+cp -R "$PLUGIN/framework-files" "$RENAMED/"
+for d in hooks lib templates skills hooks.json; do ln -s "$PLUGIN/$d" "$RENAMED/$d"; done
+jq '.files["anti-patterns.md"].renamedFrom = "memory-index.md"' "$PLUGIN/framework-files/manifest.json" \
+  > "$RENAMED/framework-files/manifest.json"
+RUN_PLUGIN="$RENAMED"
 
 build_fixture
 mv "$REPO/ai/anti-patterns.md" "$REPO/ai/memory-index.md"
@@ -510,6 +516,8 @@ run_doctor install
 expect_no_line 'marker-missing' "a pinned marker-less file is not marker-missing"
 expect_no_line 'framework-renamed' "a pinned moved file leaves no rename finding"
 
+unset RUN_PLUGIN
+
 # --- pass 3c: a file the framework retired ----------------------------------
 #
 # The manifest's removed block is how a deletion travels; the real manifest
@@ -555,13 +563,6 @@ expect_line 'WARN +framework-removed: ai/.templates/index-semantic.md' "the sema
 expect_line 'WARN +framework-removed: ai/.templates/index-episodic.md' "and the episodic one"
 expect_no_line 'hook-copy-retired: ai/' "an aiDir retirement is not a retired hook copy"
 
-# --- pass 3d: the migrations list is the schema marker ----------------------
-
-build_fixture
-set_json .myspec.json 'delete d.migrations'
-run_doctor schema
-expect_line 'WARN +myspec-schema-stale: .myspec.json has no migrations list' "a missing migrations list means the 2.0 migrations have not run"
-
 # --- pass 2b: both ${aiDir} spellings of a rule are a correct install ----------
 # init and update disagree about which of them substitutes the rules.
 build_fixture
@@ -604,16 +605,23 @@ expect_no_line 'hook-unregistered: .claude/hooks/verify-before-stop.sh' "a retir
 expect_line 'WARN +hook-unregistered: .claude/hooks/own.sh' "a project hook beside the copies is still checked"
 expect_no_line 'hook-copy-retired: .claude/hooks/own.sh' "a project hook is not a retired copy"
 
-# A 2.0 retirement under .claude/hooks/ (guard-git-branch.sh, since 2.0.0) is a
-# plain deletion update already performs, not a plugin-run copy: it keeps its
+# A removal under .claude/hooks/ dated before 3.0 (2.x retired guard-git-branch.sh
+# this way) is a plain deletion, not a plugin-run copy: it keeps its
 # framework-removed finding and is never reported as hook-copy-retired, nor
 # routed to a move the migration would then compare with a file the plugin
-# does not ship.
+# does not ship. The real manifest dropped that entry with the 2.12.0 upgrade
+# floor, so a copy of the plugin root carries it again.
+OLDRM="$ROOT/plugin-old-removal"
+mkdir -p "$OLDRM"
+cp -R "$PLUGIN/framework-files" "$OLDRM/"
+for d in hooks lib templates skills hooks.json; do ln -s "$PLUGIN/$d" "$OLDRM/$d"; done
+jq '.removed["hooks/guard-git-branch.sh"] = {dest: ".claude/hooks/guard-git-branch.sh", since: "2.0.0"}' \
+  "$PLUGIN/framework-files/manifest.json" > "$OLDRM/framework-files/manifest.json"
 build_fixture
 mkdir -p "$REPO/.claude/hooks"
 printf '#!/bin/sh\nexit 0\n' > "$REPO/.claude/hooks/guard-git-branch.sh"
 chmod 755 "$REPO/.claude/hooks/guard-git-branch.sh"
-run_doctor
+RUN_PLUGIN="$OLDRM" run_doctor
 expect_line 'WARN +framework-removed: .claude/hooks/guard-git-branch.sh: retired by the framework in v2.0.0' "a 2.0-retired hook copy keeps its framework-removed finding"
 expect_no_line 'hook-copy-retired: .claude/hooks/guard-git-branch.sh' "a 2.0-retired hook is not a plugin-run copy"
 

@@ -195,7 +195,6 @@ Created:
   .myspec.json
   ${aiDir}/ (features, memory, ideas, templates)
   {if harness config: .claude/rules/ (8 rules), .claude/verification.json, .gitignore line for .claude/state/}
-  {if base agents installed: list each ~/.{harness}/agents/{file} that was installed or updated, grouped by harness}
 
 Next steps:
   1. Run the `bootstrap` skill to verify the setup
@@ -210,9 +209,7 @@ Next steps:
 - Skip empty verification commands gracefully (write placeholder, note it needs filling)
 - Never overwrite existing `.myspec.json` without explicit confirmation
 - Never write to `.claude/settings.json`, `.claude/hooks/` or `.claude/lib/`: the plugin runs the framework hooks and lib itself
-- Base subagents (`skills/feature-implement/agents/`) install to user scope only. Never copy to project-scope `.claude/agents/`, `.cursor/agents/`, `.codex/agents/` in the repo root.
-- Skip a harness entirely if `~/.{harness}/` does not exist — the user does not use that tool.
-- Never silently overwrite a locally-customized agent file; always diff + prompt.
+- The plugin ships no subagent definitions. Never write to `~/.{harness}/agents/` or to project-scope `.claude/agents/`, `.cursor/agents/`, `.codex/agents/`.
 
 ## Verification Checklist
 

@@ -155,7 +155,7 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref main
     "description": "One-line description",
     "techStack": "PHP 8.3, Laravel 11, PostgreSQL"
   },
-  "migrations": ["2.0.0-schema", "2.0.0-doctor-rule"]
+  "migrations": []
 }
 ```
 

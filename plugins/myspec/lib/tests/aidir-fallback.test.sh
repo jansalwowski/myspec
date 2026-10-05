@@ -2,9 +2,9 @@
 # Regression fixture for aiDir resolution.
 #
 # Since 2.0 aiDir is a required key in .myspec.json. The setup doctor reports
-# its absence and the 2.0.0-schema migration in `update` writes it, so the
-# shipped code no longer reads the disk to guess: with no key, every consumer
-# resolves the documented default `.ai` — even when only ai/ exists on disk.
+# its absence and `init` writes it, so the shipped code never reads the disk
+# to guess: with no key, every consumer resolves the documented default `.ai`
+# — even when only ai/ exists on disk.
 # In 1.x five consumers each carried their own detection and disagreed, which
 # is the bug this fixture was written against. (Since 2.0 the session hook
 # writes under .claude/state/ and no longer reads aiDir at all; the remaining
