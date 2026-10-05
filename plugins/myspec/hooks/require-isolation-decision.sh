@@ -79,7 +79,12 @@ if read_setting isolation.worktreeRoot "$REPO_ROOT"; then
   [ -z "$SETTING_NOTES" ] || printf '%s\n' "$SETTING_NOTES" | sed 's/^/myspec-config: /' >&2
 fi
 WORKTREE_ROOT="${WORKTREE_ROOT%/}"
-[ -n "$WORKTREE_ROOT" ] || exit 0
+# An empty value, or a reader that failed, never opens the gate: the value
+# only names where worktrees go, so the schema default stands in for it.
+if [ -z "$WORKTREE_ROOT" ]; then
+  WORKTREE_ROOT=$(jq -r '.keys["isolation.worktreeRoot"].default // empty' "$HOOK_LIB/myspec-config.schema.json" 2>/dev/null || printf '')
+  WORKTREE_ROOT="${WORKTREE_ROOT:-.claude/worktrees}"
+fi
 # Installed by init/update from the manifest `files` entry work-isolation.md.
 PROCEDURE="$AI_DIR/work-isolation.md"
 

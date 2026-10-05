@@ -285,5 +285,18 @@ else
   FAIL=$((FAIL + 1)); echo "FAIL  after --reset the next source edit asks again" >&2
 fi
 
+# --- an empty worktreeRoot never opens the gate (#275 review) ------------------
+# The value only names where worktrees go; the schema default stands in.
+cp "$REPO/.myspec.json" "$ROOT/myspec.saved"
+printf '{"aiDir":".ai","frameworkVersion":"3.0.0","isolation":{"worktreeRoot":""}}\n' > "$REPO/.myspec.json"
+rm -f "$STATE/"*.jsonl
+check block "worktreeRoot \"\", no decision, source file" empty-root "$REPO/components/Foo.vue"
+if run_hook "$REPO" empty-root "$REPO/components/Foo.vue" | jq -r '.reason' | grep -qF '.claude/worktrees/'; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); echo "FAIL  with worktreeRoot \"\" the ask names the default root" >&2
+fi
+cp "$ROOT/myspec.saved" "$REPO/.myspec.json"
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
