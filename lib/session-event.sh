@@ -265,6 +265,15 @@ session_written() {
       else empty end' --arg r "$3" | LC_ALL=C sort -u
 }
 
+# session_writes <home> <session id> -> every file the session wrote, code or
+# not, as `<root>\t<rel>` lines, sorted and unique: the input of the Stop
+# gate's content checks (lib/stop-gate/content.sh).
+session_writes() {
+  session_query "$1" "$2" '
+    $ev[] | select(.t == "write" and (.root | type) == "string" and (.rel | type) == "string")
+    | .root + "\t" + .rel' | LC_ALL=C sort -u
+}
+
 # session_seen <home> <session id> <kind> <root> <rel> <agent> -> 0 when the
 # same write is already recorded since <root>'s last verified event.
 session_seen() {

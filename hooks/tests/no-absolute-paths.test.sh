@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# Regression fixture for no-absolute-paths.sh (#163, #210 items 6 and 9).
+# Regression fixture for no-absolute-paths.sh (#163, #210 items 6 and 9, #263).
 #
 # The hook exists to stop a developer's absolute home paths leaking into
-# committed docs and framework files, so those writes must still be flagged.
+# committed docs and framework files, so those writes must be denied before
+# they land (PreToolUse, #263): a Write by its content, an Edit by its
+# new_string, a MultiEdit by each edit's, a NotebookEdit by its new_source.
 # What it must leave alone: gitignored files (.claude/state/sessions/), files
-# outside any repository (scratch paths), lines an Edit did not touch, app
-# code such as a /home/Dashboard route, and container paths such as a
+# outside any repository (scratch paths), a leak already in the file that the
+# edit does not touch (the file is never rescanned), a call without content,
+# app code such as a /home/Dashboard route, and container paths such as a
 # Dockerfile WORKDIR /home/node/app. Its message must name the helper by the
 # path that runs it, the plugin's lib/ (CLAUDE_PLUGIN_ROOT), not a copy under
 # the project's .claude/.
@@ -50,21 +53,19 @@ run() {  # run <json>
 
 j() { printf '%s' "$1" | jq -Rs .; }
 
-write_call() {  # write_call <path> <content>: put the file on disk, then run the hook as PostToolUse
-  mkdir -p "$(dirname "$1")"
-  printf '%s' "$2" > "$1"
-  run "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":$(j "$1"),\"content\":$(j "$2")}}"
+write_call() {  # write_call <path> <content>: the hook runs BEFORE the write; the file need not exist
+  run "{\"tool_name\":\"Write\",\"cwd\":$(j "$REPO"),\"tool_input\":{\"file_path\":$(j "$1"),\"content\":$(j "$2")}}"
 }
 
-edit_call() {  # edit_call <path> <new_string>: the file already holds the edited content
-  run "{\"tool_name\":\"Edit\",\"tool_input\":{\"file_path\":$(j "$1"),\"old_string\":\"x\",\"new_string\":$(j "$2")}}"
+edit_call() {  # edit_call <path> <new_string>: the file holds its current content, not yet the edit
+  run "{\"tool_name\":\"Edit\",\"cwd\":$(j "$REPO"),\"tool_input\":{\"file_path\":$(j "$1"),\"old_string\":\"x\",\"new_string\":$(j "$2")}}"
 }
 
-expect_flag() {
-  if printf '%s' "$OUT" | jq -e '.decision == "block"' >/dev/null 2>&1; then ok; else fail "$1 (not flagged)"; fi
+expect_deny() {
+  if printf '%s' "$OUT" | jq -e '.hookSpecificOutput.permissionDecision == "deny" and .decision == "block"' >/dev/null 2>&1; then ok; else fail "$1 (not denied: $(printf '%s' "$OUT" | head -c 160))"; fi
 }
 expect_quiet() {
-  if [ -z "$OUT" ]; then ok; else fail "$1 (flagged: $(printf '%s' "$OUT" | head -c 160))"; fi
+  if [ -z "$OUT" ]; then ok; else fail "$1 (denied: $(printf '%s' "$OUT" | head -c 160))"; fi
 }
 expect_reason() {  # expect_reason <fixed-string> <desc>
   if printf '%s' "$OUT" | jq -r '.reason' 2>/dev/null | grep -qF -- "$1"; then ok; else fail "$2 (reason lacks: $1)"; fi
@@ -73,55 +74,62 @@ expect_no_reason() {
   if printf '%s' "$OUT" | jq -r '.reason' 2>/dev/null | grep -qF -- "$1"; then fail "$2 (reason has: $1)"; else ok; fi
 }
 
-# --- still flagged: the leaks the hook exists for -------------------------
+# --- denied: the leaks the hook exists for ----------------------------------
 
 write_call "$REPO/.ai/features/foo/spec.md" "# Spec
 See $LEAK for the entry point.
 "
-expect_flag "aiDir doc with a homedir path"
-expect_reason "line 2: /Users/alice" "Write reports the file line"
+expect_deny "aiDir doc with a homedir path"
+[ ! -e "$REPO/.ai/features/foo/spec.md" ] && ok || fail "fixture: the hook runs before the file exists"
+expect_reason "line 2: /Users/alice" "Write reports the content line"
 expect_reason "contains absolute homedir paths" "friction-scan signature kept"
 expect_reason "no-absolute-paths.sh" "message names the hook"
 expect_reason "$CLAUDE_PLUGIN_ROOT/lib/path-normalize.sh" "message cites the helper under the plugin's lib/"
 expect_no_reason ".claude/lib/" "message does not point at a project-local lib copy"
 expect_no_reason "add its repo-relative path to the allowlist" "message does not ask adopters to edit a framework-owned hook"
-expect_no_reason "BLOCKED" "PostToolUse message does not claim the write was blocked"
+expect_reason "BLOCKED" "a PreToolUse deny says the write was blocked"
+expect_no_reason "was written" "a PreToolUse deny does not claim the file was written"
+[ "$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecisionReason == .reason')" = true ] && ok || fail "the deny reason and the legacy reason are the same text"
 
 write_call "$REPO/README.md" "Run from /home/bob/checkout."
-expect_flag "root README with a /home path"
+expect_deny "root README with a /home path"
 
 write_call "$REPO/.ai/features/foo/seed.json" "{\"p\":\"$LEAK\"}"
-expect_flag "non-doc file under the aiDir"
+expect_deny "non-doc file under the aiDir"
 
 write_call "$REPO/.claude/hooks/custom.sh" "cd $LEAK"
-expect_flag "non-doc file under .claude/"
+expect_deny "non-doc file under .claude/"
 
 write_call "$REPO/docs/notes.html" "<p>$LEAK</p>"
-expect_flag "non-doc file under docs/"
+expect_deny "non-doc file under docs/"
 
 write_call "$REPO/CLAUDE.md" "Memory: ~/.claude-personal/projects/-Users-alice-work-proj/memory"
-expect_flag "encoded-cwd literal in a doc"
+expect_deny "encoded-cwd literal in a doc"
 
-printf 'intro\nclean line\nnow %s\n' "$LEAK" > "$REPO/docs/edit.md"
+mkdir -p "$REPO/docs"
+printf 'intro\nclean line\n' > "$REPO/docs/edit.md"
 edit_call "$REPO/docs/edit.md" "now $LEAK"
-expect_flag "Edit whose new_string adds a homedir path"
-expect_reason "line 3: /Users/alice" "Edit finding points at the file line"
+expect_deny "Edit whose new_string adds a homedir path"
+expect_reason "new text line 1: /Users/alice" "Edit finding points at the line of the new text"
 
-printf 'a\n%s\n' "$LEAK" > "$REPO/docs/multi.md"
-run "{\"tool_name\":\"MultiEdit\",\"tool_input\":{\"file_path\":$(j "$REPO/docs/multi.md"),\"edits\":[{\"old_string\":\"x\",\"new_string\":\"a\"},{\"old_string\":\"y\",\"new_string\":$(j "$LEAK")}]}}"
-expect_flag "MultiEdit with one dirty edit"
+printf 'a\n' > "$REPO/docs/multi.md"
+run "{\"tool_name\":\"MultiEdit\",\"cwd\":$(j "$REPO"),\"tool_input\":{\"file_path\":$(j "$REPO/docs/multi.md"),\"edits\":[{\"old_string\":\"x\",\"new_string\":\"a\"},{\"old_string\":\"y\",\"new_string\":$(j "$LEAK")}]}}"
+expect_deny "MultiEdit with one dirty edit"
 
-printf '%s\n' "$LEAK" > "$REPO/docs/nocontent.md"
-run "{\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":$(j "$REPO/docs/nocontent.md")}}"
-expect_flag "call without new content falls back to the whole file"
+run "{\"tool_name\":\"NotebookEdit\",\"cwd\":$(j "$REPO"),\"tool_input\":{\"notebook_path\":$(j "$REPO/docs/nb.ipynb"),\"new_source\":$(j "print('$LEAK')")}}"
+expect_deny "NotebookEdit whose new_source adds a homedir path, under docs/"
+
+# A relative file_path resolves against the payload cwd.
+run "{\"tool_name\":\"Write\",\"cwd\":$(j "$REPO"),\"tool_input\":{\"file_path\":\"docs/rel-path.md\",\"content\":$(j "$LEAK")}}"
+expect_deny "a repo-relative file_path is resolved against the cwd"
 
 # #210 item 6: a file in a real linked worktree under .claude/worktrees/ is
 # that worktree's own committed content, so it is checked like any other.
 git -C "$REPO" worktree add -q -b wt1 "$REPO/.claude/worktrees/wt1" 2>/dev/null
 write_call "$REPO/.claude/worktrees/wt1/doc.md" "$LEAK"
-expect_flag "doc in a real linked worktree under .claude/worktrees/"
+expect_deny "doc in a real linked worktree under .claude/worktrees/"
 
-# --- not flagged ----------------------------------------------------------
+# --- allowed ------------------------------------------------------------------
 
 write_call "$REPO/.claude/state/sessions/s1.md" "cwd: $LEAK"
 expect_quiet "gitignored session log"
@@ -130,9 +138,14 @@ mkdir -p "$ROOT/norepo"
 write_call "$ROOT/norepo/a.md" "$LEAK"
 expect_quiet "file outside any repository"
 
+# #263: the file is never rescanned. A leak already there blocks no edit
+# that leaves it alone, and no call without content.
 printf '%s\nclean line\n' "$LEAK" > "$REPO/docs/untouched.md"
 edit_call "$REPO/docs/untouched.md" "clean line"
 expect_quiet "Edit with a clean new_string on a file with an old leak"
+
+run "{\"tool_name\":\"Write\",\"cwd\":$(j "$REPO"),\"tool_input\":{\"file_path\":$(j "$REPO/docs/untouched.md")}}"
+expect_quiet "a call without content is not judged by the file on disk"
 
 write_call "$REPO/app/r.ts" "router.push('/home/Dashboard')"
 expect_quiet "app route string in source code"
@@ -162,7 +175,7 @@ new_repo() {  # new_repo <dir> [myspec.json content]: an initialised repo
 NOAIDIR="$ROOT/noaidir"
 new_repo "$NOAIDIR" '{}'
 write_call "$NOAIDIR/.ai/index.yaml" "a: /Users/alice/x"
-expect_flag "non-doc file under the default .ai when .myspec.json has no aiDir"
+expect_deny "non-doc file under the default .ai when .myspec.json has no aiDir"
 
 NOCONFIG="$ROOT/noconfig"
 new_repo "$NOCONFIG"

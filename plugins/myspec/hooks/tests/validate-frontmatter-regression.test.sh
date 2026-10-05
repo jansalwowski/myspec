@@ -16,6 +16,11 @@
 #   (doctor) `grep "^---"` matched anywhere and awk took the first `---`
 #            block, so body text first and a later block holding title/updated
 #            passed. Frontmatter must open on line 1.
+#   #263     The hook rescanned the whole file after every edit, so a body
+#            edit to a doc with broken frontmatter was blocked for a defect
+#            it did not make. It now runs at PreToolUse on the proposed
+#            content: a Write by its content, an Edit only when it changes
+#            the frontmatter region.
 #
 # Usage: validate-frontmatter-regression.test.sh [path-to-hook]
 
@@ -47,18 +52,27 @@ printf '{"aiDir":".ai"}\n' > "$REPO/.myspec.json"
 git -C "$REPO" add -A
 git -C "$REPO" commit -q -m init
 
-# run <cwd> <file> -> hook stdout; exit status of the hook in $RC
+# run <cwd> <file> -> hook stdout for a Write of the file's content (the
+# fixture on disk stands in for the proposed content); exit status in $RC
 run() {
-  OUT=$(printf '{"cwd":%s,"tool_name":"Write","tool_input":{"file_path":%s}}' \
-    "$(printf '%s' "$1" | jq -Rs .)" "$(printf '%s' "$2" | jq -Rs .)" | bash "$HOOK" 2>/dev/null)
+  OUT=$(jq -nc --arg c "$1" --arg f "$2" --rawfile body "$2" '{cwd: $c, tool_name: "Write", tool_input: {file_path: $f, content: $body}}' \
+    | bash "$HOOK" 2>/dev/null)
+  RC=$?
+}
+
+# edit <cwd> <file> <old> <new> -> hook stdout for an Edit of the file on disk
+edit() {
+  OUT=$(jq -nc --arg c "$1" --arg f "$2" --arg o "$3" --arg n "$4" '{cwd: $c, tool_name: "Edit", tool_input: {file_path: $f, old_string: $o, new_string: $n}}' \
+    | bash "$HOOK" 2>/dev/null)
   RC=$?
 }
 
 decision() { printf '%s' "$OUT" | jq -r '.decision // "none"' 2>/dev/null || printf 'not-json'; }
 reason()   { printf '%s' "$OUT" | jq -r '.reason // ""' 2>/dev/null; }
 
-expect_block() {  # expect_block <desc>
-  if [ "$RC" -eq 0 ] && [ "$(decision)" = block ]; then ok; else fail "$1 (exit $RC, output: ${OUT:0:200})"; fi
+expect_block() {  # expect_block <desc>: the PreToolUse deny, with the legacy block field
+  if [ "$RC" -eq 0 ] && [ "$(decision)" = block ] \
+      && [ "$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = deny ]; then ok; else fail "$1 (exit $RC, output: ${OUT:0:200})"; fi
 }
 expect_quiet() {  # expect_quiet <desc>: exit 0 and no output
   if [ "$RC" -eq 0 ] && [ -z "$OUT" ]; then ok; else fail "$1 (exit $RC, output: ${OUT:0:200})"; fi
@@ -157,6 +171,40 @@ F="$REPO/.ai/features/x/crlf.md"
 printf -- '---\r\ntitle: Win\r\nupdated: 2026-01-01\r\n---\r\nbody\r\n' > "$F"
 run "$REPO" "$F"
 expect_quiet "CRLF frontmatter on line 1 passes"
+
+# --- #263: the proposed content is judged, never the file on disk --------------
+F="$REPO/.ai/features/x/new-doc.md"
+rm -f "$F"
+OUT=$(jq -nc --arg c "$REPO" --arg f "$F" '{cwd: $c, tool_name: "Write", tool_input: {file_path: $f, content: "# No frontmatter\n\nbody\n"}}' | bash "$HOOK" 2>/dev/null); RC=$?
+expect_block "a Write is judged by its content before the file exists"
+[ ! -e "$F" ] && ok || fail "the hook creates nothing"
+
+F="$REPO/.ai/features/x/body-only.md"
+printf '# Title\n\nold body\n' > "$F"
+edit "$REPO" "$F" "old body" "new body"
+expect_quiet "a body edit to a doc without frontmatter is not blocked for the missing frontmatter (regression #263)"
+
+F="$REPO/.ai/features/x/good.md"
+printf -- '---\ntitle: Good\nupdated: 2026-01-01\n---\nbody\n' > "$F"
+edit "$REPO" "$F" "body" "more body"
+expect_quiet "a body edit to a valid doc passes"
+edit "$REPO" "$F" "title: Good" "titel: Good"
+expect_block "an edit that breaks the frontmatter is denied"
+reason | grep -q 'missing identity field' && ok || fail "the edit's deny names the field it removed"
+edit "$REPO" "$F" "updated: 2026-01-01" "updated: 2026-02-02"
+expect_quiet "an edit that keeps the frontmatter valid passes"
+edit "$REPO" "$F" "nowhere in the file" "x"
+expect_quiet "an edit whose old_string the file does not hold changes nothing and passes"
+
+F="$REPO/.ai/features/x/body-only.md"
+edit "$REPO" "$F" "# Title" $'---\ntitle: Added\nupdated: 2026-01-01\n---\n# Title'
+expect_quiet "an edit that adds valid frontmatter to a doc without one passes"
+edit "$REPO" "$F" "# Title" $'---\ntitle: Added\n---\n# Title'
+expect_block "an edit that adds incomplete frontmatter is denied"
+
+OUT=$(jq -nc --arg c "$REPO" --arg f "$F" '{cwd: $c, tool_name: "MultiEdit", tool_input: {file_path: $f, edits: [{old_string: "old body", new_string: "body 2"}, {old_string: "# Title", new_string: "---\ntitle: Multi\n---\n# Title"}]}}' | bash "$HOOK" 2>/dev/null); RC=$?
+expect_block "a MultiEdit is judged by the content all its edits leave"
+reason | grep -q 'missing temporal field' && ok || fail "the MultiEdit deny names the missing field"
 
 # --- 4eb8ccb: ideas/ seed docs are exempt --------------------------------------
 mkdir -p "$REPO/.ai/ideas"

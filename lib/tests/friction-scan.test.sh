@@ -238,14 +238,21 @@ expect_exit 1 "no arguments: usage error"
 
 # ── 10. the signature table matches the hook sources ──
 # A hook's messages may live in the modules it sources: verify-before-stop.sh
-# is a shim over lib/stop-gate/.
+# is a shim over lib/stop-gate/, and the three content gates print the
+# reasons lib/content-checks.sh builds (#263).
 OUTPUT=$(node --input-type=module -e "
   import { HOOK_SIGNATURES, MYSPEC_HOOKS } from '$SCRIPT'
-  import { readFileSync, existsSync, readdirSync } from 'node:fs'
+  import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
   const retired = ['guard-git-branch.sh']
-  const modules = { 'verify-before-stop.sh': '$HERE/../stop-gate' }
+  const modules = {
+    'verify-before-stop.sh': '$HERE/../stop-gate',
+    'no-absolute-paths.sh': '$HERE/../content-checks.sh',
+    'validate-frontmatter.sh': '$HERE/../content-checks.sh',
+    'require-reuse-audit.sh': '$HERE/../content-checks.sh',
+  }
+  const sources = (p) => statSync(p).isDirectory() ? readdirSync(p).map((f) => readFileSync(p + '/' + f, 'utf8')) : [readFileSync(p, 'utf8')]
   const text = (h) => [readFileSync('$HOOKS_DIR/' + h, 'utf8')]
-    .concat(modules[h] ? readdirSync(modules[h]).map((f) => readFileSync(modules[h] + '/' + f, 'utf8')) : []).join('\\n')
+    .concat(modules[h] ? sources(modules[h]) : []).join('\\n')
   for (const s of HOOK_SIGNATURES) {
     const src = '$HOOKS_DIR/' + s.hook
     if (!existsSync(src)) { console.log('missing hook ' + s.hook); continue }

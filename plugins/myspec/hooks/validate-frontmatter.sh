@@ -1,12 +1,24 @@
 #!/usr/bin/env bash
 # validate-frontmatter.sh
-# PostToolUse hook — validates frontmatter on ${aiDir}/**/*.md writes/edits.
-# Emits a block-decision JSON so the agent sees the issues as feedback and
-# fixes them before continuing (exit-0 stdout alone never reaches the agent).
+# PreToolUse hook (Write|Edit|MultiEdit|NotebookEdit matcher) — validates the
+# frontmatter a Write or Edit of a ${aiDir}/**/*.md file would leave, and
+# denies the call when it is wrong, so the agent fixes it before it lands.
 # Reads aiDir from .myspec.json (required since 2.0; .ai when absent).
 # Accepted fields mirror the framework's own templates: identity is any of
 # title/name/topic/id/type; temporal is any of updated/last_updated/created/
 # started/date. ${aiDir}/ideas/ is exempt (its seed docs ship frontmatter-less).
+#
+# What is judged (#263, lib/content-checks.sh): a Write by its whole content;
+# an Edit or MultiEdit by the content it would leave, and only when that
+# changes the frontmatter region (line 1 through the closing `---`, or line 1
+# alone when there is no fence). An edit to the body of a doc whose
+# frontmatter is already wrong is not blocked for it: the file is never
+# rescanned for what was there before. A Bash write (a heredoc) never
+# reaches this hook: the Stop gate validates a doc it created or whose
+# frontmatter region it changed (lib/stop-gate/content.sh).
+#
+# Output contract: a block prints the PreToolUse deny form (pretool_deny in
+# lib/hook-core.sh). An allowed call prints NOTHING.
 
 set -euo pipefail
 
@@ -21,13 +33,16 @@ HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
 if [ ! -f "$HOOK_CORE" ]; then
   LIB_MISSING="myspec lib missing: hook-core.sh not found under \${CLAUDE_PLUGIN_ROOT}/lib (CLAUDE_PLUGIN_ROOT is ${CLAUDE_PLUGIN_ROOT:-unset}). The hook did not run from the plugin's hooks.json; a copy wired in .claude/settings.json is retired by /myspec:update."
   printf '%s\n' "$LIB_MISSING" >&2
+  jq -nc --arg r "$LIB_MISSING" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}, decision: "block", reason: $r}'
   exit 0
 fi
-[ -f "$HOOK_CORE" ] || exit 0
+[ -f "$HOOK_CORE" ] && [ -f "$(dirname "$HOOK_CORE")/content-checks.sh" ] || exit 0
 # shellcheck source=lib/hook-core.sh
 . "$HOOK_CORE"
+# shellcheck source=lib/content-checks.sh
+. "$HOOK_LIB/content-checks.sh"
 
-payload_parse "$(cat)" FILE_PATH=.tool_input.file_path CWDS="$HOOK_CWDS"
+payload_parse "$(cat)" FILE_PATH=.tool_input.file_path TOOL_INPUT=.tool_input CWDS="$HOOK_CWDS"
 [ -n "$FILE_PATH" ] || exit 0
 REPO_ROOT=$(hook_repo_root "$CWDS" myspec) || exit 0
 
@@ -45,87 +60,32 @@ if checkout_facts "$FILE_PATH"; then
   REPO_ROOT="$CF_ROOT"
 fi
 
-# Only check .md files
-if [[ "$FILE_PATH" != *.md ]]; then
-  exit 0
-fi
-
 # aiDir from .myspec.json (ai_dir in lib/hook-core.sh). The trailing slash is
-# stripped: the prefix test below builds the glob ${AI_DIR}/*, and a
-# configured ".ai/" would make that ".ai//*", which matches nothing and
-# silently disables this hook — the same derived-pattern break the doctor
-# flags as aidir-trailing-slash. No configured value: the documented default,
-# never a guess from disk. aiDir is required since 2.0; the setup doctor
-# reports its absence and `update` writes it. memory-files.mjs resolves the
-# same way.
+# stripped: the prefix test builds the glob ${AI_DIR}/*, and a configured
+# ".ai/" would make that ".ai//*", which matches nothing and silently
+# disables this hook — the same derived-pattern break the doctor flags as
+# aidir-trailing-slash. No configured value: the documented default, never a
+# guess from disk. aiDir is required since 2.0; the setup doctor reports its
+# absence and `update` writes it. memory-files.mjs resolves the same way.
 AI_DIR=$(ai_dir "$REPO_ROOT")
 
-# Only check files inside the AI documentation directory (pure-shell prefix
-# strip — no python3 dependency, no quote-injection via the file path)
+# Only markdown inside the AI documentation directory, ideas/ excepted (pure-
+# shell prefix strip — no python3 dependency, no quote-injection via the path)
 RELATIVE="${FILE_PATH#"$REPO_ROOT"/}"
-if [[ "$RELATIVE" != ${AI_DIR}/* ]]; then
-  exit 0
+frontmatter_scope "$AI_DIR" "$RELATIVE" || exit 0
+
+TMP=$(mktemp "${TMPDIR:-/tmp}/.myspec-fm.XXXXXX")
+trap 'rm -f "$TMP"' EXIT
+proposed_content "$TOOL_INPUT" "$FILE_PATH" "$TMP" || exit 0
+
+# An edit is judged only when it changes the frontmatter region; a Write
+# proposes the whole file.
+if [ "$PROPOSED_KIND" != write ]; then
+  [ -f "$FILE_PATH" ] || exit 0
+  [ "$(frontmatter_region "$FILE_PATH")" != "$(frontmatter_region "$TMP")" ] || exit 0
 fi
 
-# The ideas queue ships frontmatter-less seed docs (PRIORITY-LISTING.md,
-# *-INSTRUCTIONS.md) that idea skills edit on every triage — exempt the subtree
-if [[ "$RELATIVE" == ${AI_DIR}/ideas/* ]]; then
-  exit 0
-fi
+ISSUES=$(frontmatter_issues "$TMP")
+[ -n "$ISSUES" ] || exit 0
 
-# File must exist
-if [ ! -f "$FILE_PATH" ]; then
-  exit 0
-fi
-
-ISSUES=()
-
-# Check frontmatter block exists. Read the file directly — echoing the content
-# into grep -q/awk SIGPIPEs the echo once the file exceeds the 64 KiB pipe
-# buffer, and under pipefail that reads as "no frontmatter" (issue #33).
-# Frontmatter is a `---` fence on LINE 1 closed by the next `---` line. Taking
-# the first `---` anywhere let a doc with body text first and a later `---`
-# block (a horizontal rule, a pasted example) pass as if it had frontmatter.
-FIRST_LINE=$(head -n 1 "$FILE_PATH" | tr -d '\r')
-if ! grep -qE "^---" "$FILE_PATH"; then
-  ISSUES+=("missing frontmatter block entirely")
-elif ! [[ "$FIRST_LINE" =~ ^---[[:space:]]*$ ]]; then
-  ISSUES+=("frontmatter must start on line 1 with '---' (a '---' block further down is not frontmatter)")
-else
-  # || true: an empty frontmatter block leaves grep -v with no output (exit 1),
-  # which under set -e would kill the hook before it can report the real issue
-  FM_CLOSED=1
-  FRONTMATTER=$(awk 'NR == 1 { next } /^---[ \t\r]*$/ { closed = 1; exit } { print } END { if (!closed) exit 3 }' "$FILE_PATH") || FM_CLOSED=0
-
-  if [ "$FM_CLOSED" = 0 ]; then
-    ISSUES+=("frontmatter opened on line 1 is never closed with '---'")
-  fi
-
-  # Check an identity field (matches every framework template:
-  # docs use title, skills use name, sessions use topic, memories use id,
-  # type indexes use type)
-  if ! grep -qE "^(title|name|topic|id|type):" <<< "$FRONTMATTER"; then
-    ISSUES+=("missing identity field: one of 'title', 'name', 'topic', 'id', 'type'")
-  fi
-
-  # Check at least one temporal field (sessions use started, episodic
-  # memories use date)
-  if ! grep -qE "^(updated|last_updated|created|started|date):" <<< "$FRONTMATTER"; then
-    ISSUES+=("missing temporal field: one of 'updated', 'last_updated', 'created', 'started', 'date'")
-  fi
-fi
-
-if [ ${#ISSUES[@]} -gt 0 ]; then
-  REASON="Frontmatter issue in ${RELATIVE}:"
-  for ISSUE in "${ISSUES[@]}"; do
-    REASON="${REASON}
-  - ${ISSUE}"
-  done
-  REASON="${REASON}
-Fix the frontmatter before continuing (templates: ${AI_DIR}/.templates/)."
-  # Emit a block decision — the harness surfaces the reason back to the agent;
-  # plain stdout with exit 0 would be transcript-only and never seen.
-  decision_block '%s' "$REASON"
-fi
-
-exit 0
+pretool_deny "$(frontmatter_reason "$RELATIVE" "$ISSUES" "$AI_DIR")"

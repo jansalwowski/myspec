@@ -5,12 +5,12 @@
 # harness exports to a hook the plugin's hooks.json declares. A hook started
 # without it (a stale copy wired in .claude/settings.json, a harness that
 # substitutes the variable in the command but does not export it) must not
-# approve in silence, as the first 3.0 draft did: a PreToolUse hook denies
-# with a reason naming the variable and /myspec:update, a PostToolUse or
-# SessionEnd hook, which cannot deny, prints the same line to stderr and
-# exits 0, and the Stop hook blocks once (verify-before-stop-regression
-# covers that one). With the variable pointing at a plugin whose lib/ exists,
-# every hook runs as before.
+# approve in silence, as the first 3.0 draft did: a PreToolUse hook (the
+# guards and, since #263, the three content gates) denies with a reason
+# naming the variable and /myspec:update, a PostToolUse or SessionEnd hook,
+# which cannot deny, prints the same line to stderr and exits 0, and the Stop
+# hook blocks once (verify-before-stop-regression covers that one). With the
+# variable pointing at a plugin whose lib/ exists, every hook runs as before.
 #
 # Usage: lib-missing.test.sh
 
@@ -44,7 +44,7 @@ run_without() {
   ERR=$(cat "$ROOT/err")
 }
 
-for hook in guard-worktree-context require-isolation-decision; do
+for hook in guard-worktree-context require-isolation-decision validate-frontmatter no-absolute-paths require-reuse-audit; do
   run_without "$hook"
   [ "$STATUS" -eq 0 ] && ok || fail "$hook: exits 0 without the variable (got $STATUS)"
   [ "$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = deny ] && ok || fail "$hook: denies without the variable (got: ${OUT:0:160})"
@@ -56,13 +56,12 @@ for hook in guard-worktree-context require-isolation-decision; do
   printf '%s' "$ERR" | grep -qF 'myspec lib missing' && ok || fail "$hook: the line also goes to stderr"
 done
 
-for hook in validate-frontmatter mark-code-changed no-absolute-paths require-reuse-audit; do
-  run_without "$hook"
-  [ "$STATUS" -eq 0 ] && ok || fail "$hook: exits 0 without the variable (got $STATUS)"
-  [ -z "$OUT" ] && ok || fail "$hook: a PostToolUse hook prints no decision without the variable (got: ${OUT:0:160})"
-  printf '%s' "$ERR" | grep -qF 'CLAUDE_PLUGIN_ROOT is unset' && ok || fail "$hook: stderr names the unset variable (got: ${ERR:0:160})"
-  printf '%s' "$ERR" | grep -qF '/myspec:update' && ok || fail "$hook: stderr names the repair"
-done
+# The one PostToolUse hook left since #263 cannot deny: the line goes to stderr.
+run_without mark-code-changed
+[ "$STATUS" -eq 0 ] && ok || fail "mark-code-changed: exits 0 without the variable (got $STATUS)"
+[ -z "$OUT" ] && ok || fail "mark-code-changed: a PostToolUse hook prints no decision without the variable (got: ${OUT:0:160})"
+printf '%s' "$ERR" | grep -qF 'CLAUDE_PLUGIN_ROOT is unset' && ok || fail "mark-code-changed: stderr names the unset variable (got: ${ERR:0:160})"
+printf '%s' "$ERR" | grep -qF '/myspec:update' && ok || fail "mark-code-changed: stderr names the repair"
 
 # SessionEnd closes its own streams before doing anything, so the line has to
 # come first or it could never be seen.
