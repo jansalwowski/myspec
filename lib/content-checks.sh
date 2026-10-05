@@ -9,7 +9,8 @@
 #   - at Stop, on the lines a Bash write added (lib/stop-gate/content.sh),
 #     which those hooks never see.
 # Neither rescans a file for what was already there: an Edit is judged by what
-# it adds or changes, a Bash write by its diff against HEAD (#263). The
+# it adds or changes, a Bash write by the diff between its before and after
+# snapshots (#263). The
 # reasons both print are built here, so the two paths say the same thing.
 # Sourced after lib/hook-core.sh (HOOK_LIB, ai_dir, physical paths); it
 # sources lib/markdown-section-check.sh beside it (the reuse-audit table

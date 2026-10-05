@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Function tests for lib/stop-gate/content.sh (R14, #263): which lines count
-# as added (numbered from the hunk headers; the whole file when it is not in
-# HEAD or HEAD is unborn), git's status per written path (renames included),
-# and which roots the content gates own. The gate end to end:
-# hooks/tests/verify-before-stop-content.test.sh.
+# Function tests for lib/stop-gate/content.sh (R14, #263): which lines a Bash
+# write added (numbered from the hunk headers), which of them the file still
+# holds, the content before a write (a snapshot blob, no file, or HEAD's
+# version when no snapshot was taken), and which roots the content gates own.
+# The gate end to end: hooks/tests/verify-before-stop-content.test.sh.
 #
 # Usage: stop-gate-content.test.sh
 
@@ -37,56 +37,50 @@ mkdir -p "$REPO/docs"
 git init -q -b main "$REPO"
 git -C "$REPO" config user.email t@t
 git -C "$REPO" config user.name t
-OUT="$ROOT/added"
+OUT="$ROOT/out"
 
-# --- added_lines on an unborn branch: the whole file -------------------------
-printf 'one\ntwo\n' > "$REPO/docs/a.md"
-added_lines "$REPO" docs/a.md "$OUT"
-expect 1 "$CONTENT_WHOLE" "unborn HEAD: the whole file counts"
-expect "1	one
-2	two" "$(cat "$OUT")" "unborn HEAD: every line, numbered"
-
-git -C "$REPO" add -A && git -C "$REPO" commit -q -m init
-
-# --- added_lines against HEAD -----------------------------------------------
-added_lines "$REPO" docs/a.md "$OUT"
-expect 0 "$CONTENT_WHOLE" "a tracked file is diffed"
-expect "" "$(cat "$OUT")" "an unchanged file adds nothing"
-
-printf 'zero\none\ntwo-edited\nthree\n' > "$REPO/docs/a.md"
-added_lines "$REPO" docs/a.md "$OUT"
+# --- added_lines: the `+` lines of before -> after, numbered in after ----------
+printf 'one\ntwo\n' > "$ROOT/before"
+printf 'zero\none\ntwo-edited\nthree\n' > "$ROOT/after"
+added_lines "$ROOT/before" "$ROOT/after" "$OUT"
 expect "1	zero
 3	two-edited
 4	three" "$(cat "$OUT")" "added lines carry their line numbers across several hunks"
 
-printf 'one\n+++ not a header\n' > "$REPO/docs/a.md"
-added_lines "$REPO" docs/a.md "$OUT"
+added_lines "$ROOT/before" "$ROOT/before" "$OUT"
+expect "" "$(cat "$OUT")" "an unchanged file adds nothing"
+
+printf 'one\n+++ not a header\n' > "$ROOT/after"
+added_lines "$ROOT/before" "$ROOT/after" "$OUT"
 expect "2	+++ not a header" "$(cat "$OUT")" "a body line starting with +++ is content"
 
-printf 'untracked\n' > "$REPO/docs/new.md"
-added_lines "$REPO" docs/new.md "$OUT"
-expect 1 "$CONTENT_WHOLE" "an untracked file is whole"
-expect "1	untracked" "$(cat "$OUT")" "an untracked file's lines"
+: > "$ROOT/empty"
+added_lines "$ROOT/empty" "$ROOT/before" "$OUT"
+expect "1	one
+2	two" "$(cat "$OUT")" "from nothing, every line"
 
-git -C "$REPO" add docs/new.md
-added_lines "$REPO" docs/new.md "$OUT"
-expect 1 "$CONTENT_WHOLE" "a staged new file is not in HEAD, so it is whole"
+# --- session_lines: the lines the file still holds -----------------------------
+printf '5\tadded\n9\tgone\n' > "$ROOT/session-added"
+printf 'old\nadded\nother\n' > "$ROOT/now"
+session_lines "$ROOT/now" "$ROOT/session-added" "$OUT"
+expect "2	added" "$(cat "$OUT")" "a line the session added is judged where it is now; one removed since is not"
 
-# --- content_changed / content_status ------------------------------------------
+# --- content_before: the blob, nothing, or HEAD's version ------------------------
+printf 'one\ntwo\n' > "$REPO/docs/a.md"
+content_before "$REPO" docs/a.md "?" "$OUT"
+expect 1 "$CONTENT_NEW" "no snapshot on an unborn branch: no file before"
+git -C "$REPO" add -A && git -C "$REPO" commit -q -m init
+printf 'uncommitted\n' > "$REPO/docs/a.md"
+content_before "$REPO" docs/a.md "?" "$OUT"
+expect "0 one
+two" "$CONTENT_NEW $(cat "$OUT")" "no snapshot: HEAD's version"
+content_before "$REPO" docs/a.md - "$OUT"
+expect "1 " "$CONTENT_NEW $(cat "$OUT")" "- : there was no file"
+BLOB=$(git -C "$REPO" hash-object -w -- docs/a.md)
+content_before "$REPO" docs/a.md "$BLOB" "$OUT"
+expect "0 uncommitted" "$CONTENT_NEW $(cat "$OUT")" "a blob: its content"
+content_before "$REPO" docs/a.md 0000000000000000000000000000000000000000 "$OUT" && fail "a blob git does not have fails" || ok
 git -C "$REPO" checkout -q -- docs/a.md
-git -C "$REPO" mv docs/new.md docs/moved.md
-printf 'x\n' > "$REPO/docs/plain.md"
-content_changed "$REPO"
-expect "" "$(content_status docs/a.md)" "an unchanged file has no status"
-expect "??" "$(content_status docs/plain.md)" "an untracked file is ??"
-expect "A " "$(content_status docs/moved.md)" "a staged new file is A"
-expect "" "$(content_status docs/nowhere.md)" "a path git never saw has no status"
-
-git -C "$REPO" commit -q -m two
-git -C "$REPO" mv docs/moved.md docs/renamed.md
-content_changed "$REPO"
-expect "R " "$(content_status docs/renamed.md)" "the new side of a rename carries R"
-expect "R" "$(content_status docs/moved.md)" "the old side of a rename is listed, marked R"
 
 # --- content_root_ok -----------------------------------------------------------
 arm_init "$REPO"

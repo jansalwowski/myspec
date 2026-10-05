@@ -8,8 +8,12 @@
 # Sourced by the hooks (after lib/hook-core.sh), run by skills and libs.
 #
 # One event per line, each with "at" (epoch seconds), added on append:
-#   {"t":"write","root":<checkout>,"rel":<repo-relative path>,"kind":"code|file","agent":<agent_id>}
-#       mark-code-changed.sh, per written file; "agent" only from a subagent
+#   {"t":"write","root":<checkout>,"rel":<repo-relative path>,"kind":"code|file","via":"bash|tool","blob":<id>,"agent":<agent_id>}
+#       mark-code-changed.sh, per written file; "agent" only from a subagent;
+#       "blob" (the file after the write) only for a Bash write to a file the
+#       content checks cover
+#   {"t":"pre","root":<checkout>,"rel":<repo-relative path>,"blob":<id or "">}
+#       mark-code-changed.sh at PreToolUse, the file before a Bash write
 #   {"t":"verified","root":<checkout>}
 #       verify-before-stop.sh, per checkout it ran the checks in
 #   {"t":"isolation","mode":"develop|worktree|","path":<worktree>,"note":<text>}
@@ -270,14 +274,36 @@ session_written() {
       else empty end' --arg r "${3:-}" | LC_ALL=C sort -u
 }
 
-# session_seen <home> <session id> <kind> <root> <rel> <agent> -> 0 when the
-# same write is already recorded since <root>'s last verified event.
+# session_bash_writes <home> <session id> -> one `<root>\t<rel>\t<before>\t<after>`
+# line per Bash write that carries an after-blob (mark-code-changed.sh), in
+# order: the input of the Stop gate's content checks (lib/stop-gate/content.sh).
+# <before> is the blob of the `pre` event recorded for the file since its
+# last write event, "-" when that event found no file, else the after-blob
+# of the session's previous Bash write to it, else "?" (unknown: no snapshot
+# was taken). A write whose after-blob is "" (the file is gone) is left out.
+session_bash_writes() {
+  session_query "$1" "$2" '
+    reduce ($ev[] | select(.t == "pre" or .t == "write")
+      | select((.root | type) == "string" and (.rel | type) == "string")) as $e
+      ({pre: {}, last: {}, out: []};
+      ($e.root + "\t" + $e.rel) as $k
+      | if $e.t == "pre" then .pre[$k] = (if $e.blob == "" then "-" else ($e.blob | tostring) end)
+        elif $e.via == "bash" and ($e.blob | type) == "string" then
+          (if $e.blob == "" then . else .out += [$k + "\t" + (.pre[$k] // .last[$k] // "?") + "\t" + $e.blob] end)
+          | .last[$k] = (if $e.blob == "" then "-" else $e.blob end) | del(.pre[$k])
+        else del(.pre[$k]) | del(.last[$k]) end)
+    | .out[]'
+}
+
+# session_seen <home> <session id> <kind> <root> <rel> <agent> [via] -> 0 when
+# the same write is already recorded since <root>'s last verified event.
 session_seen() {
   [ "$(session_query "$1" "$2" '
     reduce ($ev[] | select(.root == $r)) as $e (false;
       if $e.t == "verified" then false
-      elif $e.t == "write" and $e.rel == $p and $e.kind == $k and ($e.agent // "") == $a then true
-      else . end)' --arg k "$3" --arg r "$4" --arg p "$5" --arg a "$6")" = true ]
+      elif $e.t == "write" and $e.rel == $p and $e.kind == $k and ($e.agent // "") == $a
+        and ($e.via // "") == $v then true
+      else . end)' --arg k "$3" --arg r "$4" --arg p "$5" --arg a "$6" --arg v "${7:-}")" = true ]
 }
 
 # session_isolation <home> <session id> -> sets ISO_MODE (develop, worktree,

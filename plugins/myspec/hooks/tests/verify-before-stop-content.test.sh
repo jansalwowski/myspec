@@ -3,12 +3,14 @@
 # catch-all for writes the PreToolUse content gates never see. A Bash
 # heredoc, `sed -i` or `tee` is recorded by mark-code-changed.sh as a write,
 # and at Stop lib/stop-gate/content.sh runs the three checks over the lines
-# such a write added: absolute homedir paths (in the files paths.md covers),
+# such a write added (before/after snapshots taken at PreToolUse and
+# PostToolUse): absolute homedir paths (in the files paths.md covers),
 # frontmatter (a ${aiDir} doc the session created, or whose frontmatter it
 # changed) and the reuse audit (a tech-spec the session created). What it
-# must leave alone: a leak that was already in HEAD on a line the session did
-# not add, a tech-spec that predates the session, a file git does not report
-# changed, a gitignored file, and another session's writes.
+# must leave alone: a line the file held before the session (in HEAD or
+# not), a line another session added (in another file or the same one), a
+# tech-spec that predates the session, a gitignored file, and Edit-tool
+# writes. What it must still catch: a Bash write committed in the session.
 #
 # Usage: verify-before-stop-content.test.sh [path-to-stop-hook]
 
@@ -44,11 +46,25 @@ printf -- '---\ntitle: Notes\nupdated: 2026-01-01\n---\nold leak: %s\nclean line
 git -C "$REPO" add -A
 git -C "$REPO" commit -q -m init
 
-# bashcmd <sid-suffix> <command>: runs the command in the repo, then records
-# it the way the harness does (PostToolUse Bash through mark-code-changed.sh).
+# mark <sid-suffix> <event> <command>: the harness's call of
+# mark-code-changed.sh for a Bash command at <event>.
+mark() {
+  jq -nc --arg s "$SID-$1" --arg e "$2" --arg c "$REPO" --arg cmd "$3" '{hook_event_name: $e, session_id: $s, tool_name: "Bash", cwd: $c, tool_input: {command: $cmd}}' \
+    | bash "$MARK" >/dev/null 2>&1
+}
+
+# bashcmd <sid-suffix> <command>: runs the command in the repo the way the
+# harness does: PreToolUse Bash (the snapshot), the command, PostToolUse Bash.
 bashcmd() {
+  mark "$1" PreToolUse "$2"
   (cd "$REPO" && eval "$2") >/dev/null 2>&1
-  jq -nc --arg s "$SID-$1" --arg c "$REPO" --arg cmd "$2" '{session_id: $s, tool_name: "Bash", cwd: $c, tool_input: {command: $cmd}}' \
+  mark "$1" PostToolUse "$2"
+}
+
+# editcall <sid-suffix> <rel>: records an Edit of <rel> (PostToolUse), as the
+# harness does after the PreToolUse hooks allowed it.
+editcall() {
+  jq -nc --arg s "$SID-$1" --arg c "$REPO" --arg f "$REPO/$2" '{hook_event_name: "PostToolUse", session_id: $s, tool_name: "Edit", cwd: $c, tool_input: {file_path: $f, old_string: "a", new_string: "b"}}' \
     | bash "$MARK" >/dev/null 2>&1
 }
 
@@ -157,8 +173,8 @@ bashcmd 11 "printf '\n<!-- myspec:reuse-audit skip: greenfield, nothing shared y
 OUT=$(stop 11)
 [ "$(decision "$OUT")" = approve ] && ok || fail "the marker added by a Bash write satisfies the gate at Stop (got: ${OUT:0:300})"
 
-# A tech-spec created and committed in the session is in HEAD, so Stop
-# treats it as pre-existing; the PreToolUse hook is the gate for a Write.
+# A tech-spec another session created and committed predates this one, so
+# an edit elsewhere in it is not judged for the section.
 git -C "$REPO" add -A && git -C "$REPO" commit -q -m new
 bashcmd 12 "sed -i.bak 's/^fresh$/fresh, edited/' .ai/features/new/tech-spec.md && rm -f .ai/features/new/tech-spec.md.bak"
 OUT=$(stop 12)
@@ -174,6 +190,46 @@ OUT=$(stop 14)
 OUT=$(stop 13)
 [ "$(decision "$OUT")" = block ] && ok || fail "the session that wrote the leak is blocked (got: ${OUT:0:200})"
 rm -f "$REPO/docs/other.md"
+
+# --- the baseline is the session's own Bash writes, not HEAD (PR #274 review) -------
+# Uncommitted files with defects that predate the session, edited through the
+# Edit tool (which its PreToolUse hooks judged): nothing to judge at Stop.
+printf -- '---\ntitle: U\ncreated: 2026-01-01\n---\n\nbody a\n' > "$REPO/.ai/features/old/tech-spec.md"
+printf 'old leak %s\nline a\n' "$LEAK" > "$REPO/docs/uncommitted.md"
+editcall 16 .ai/features/old/tech-spec.md
+editcall 16 docs/uncommitted.md
+OUT=$(stop 16)
+[ "$(decision "$OUT")" = approve ] && ok || fail "Edit-tool writes to uncommitted files with old defects approve (got: ${OUT:0:300})"
+
+# A Bash append beside an uncommitted leak that predates the session.
+bashcmd 17 "printf 'clean\n' >> docs/uncommitted.md"
+OUT=$(stop 17)
+[ "$(decision "$OUT")" = approve ] && ok || fail "a clean Bash append to an uncommitted file with an old leak approves (got: ${OUT:0:300})"
+rm -f "$REPO/docs/uncommitted.md"
+git -C "$REPO" checkout -q -- .
+
+# A Bash write committed in the same session is still this session's.
+bashcmd 18 "printf 'see $LEAK\n' >> docs/committed.md && git add -A && git commit -qm leak"
+OUT=$(stop 18)
+[ "$(decision "$OUT")" = block ] && ok || fail "a Bash leak committed in the session still blocks (got: ${OUT:0:200})"
+expect_in "lines this session added to docs/committed.md" "$(reason "$OUT")" "the committed file is named"
+
+# Two sessions append to one shared file: each is judged on its own lines.
+bashcmd 19 "printf 'x leak $LEAK\n' >> docs/shared.md"
+bashcmd 20 "printf 'y clean\n' >> docs/shared.md"
+OUT=$(stop 20)
+[ "$(decision "$OUT")" = approve ] && ok || fail "another session's line in a shared file is not this session's (got: ${OUT:0:300})"
+OUT=$(stop 19)
+[ "$(decision "$OUT")" = block ] && ok || fail "the session that added the leak to the shared file is blocked (got: ${OUT:0:200})"
+expect_in "line 1: /Users/alice" "$(reason "$OUT")" "the shared file's leak line is named"
+rm -f "$REPO/docs/shared.md"
+
+# A leak a Bash write added and a later write removed is gone.
+bashcmd 21 "printf 'see $LEAK\n' > docs/fixed.md"
+bashcmd 21 "printf 'fixed\n' > docs/fixed.md"
+OUT=$(stop 21)
+[ "$(decision "$OUT")" = approve ] && ok || fail "a leak removed by a later Bash write approves (got: ${OUT:0:300})"
+rm -f "$REPO/docs/fixed.md"
 
 # --- the continuation after a block is approved (R10) -----------------------------
 bashcmd 15 "printf 'see $LEAK\n' > docs/again.md"
