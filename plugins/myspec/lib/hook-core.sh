@@ -280,17 +280,37 @@ decision_block() {
 
 # read_setting <dotted key> <root> -> sets SETTING to the value as JSON and
 # SETTING_NOTES to the reader's notes (what it ignored, or why it failed),
-# through the one settings reader (lib/myspec-config.sh, beside this file).
-# Fails without the reader, or when it fails.
+# through the one settings reader beside this file: lib/myspec-config.sh,
+# which needs jq, or its Node twin lib/myspec-config.mjs when jq is absent,
+# so a lib script that otherwise runs without jq keeps doing so. Fails
+# without a reader that can run, or when it fails.
 read_setting() {
-  local err rc=0
+  local err rc=0 reader
   SETTING="" SETTING_NOTES=""
-  [ -f "$HOOK_LIB/myspec-config.sh" ] || return 1
+  if command -v jq >/dev/null 2>&1 && [ -f "$HOOK_LIB/myspec-config.sh" ]; then
+    reader=(bash "$HOOK_LIB/myspec-config.sh")
+  elif command -v node >/dev/null 2>&1 && [ -f "$HOOK_LIB/myspec-config.mjs" ]; then
+    reader=(node "$HOOK_LIB/myspec-config.mjs")
+  else
+    SETTING_NOTES="reading a setting needs jq with $HOOK_LIB/myspec-config.sh, or node with $HOOK_LIB/myspec-config.mjs"
+    return 1
+  fi
   err=$(mktemp "${TMPDIR:-/tmp}/.myspec-cfg.XXXXXX") || return 1
-  SETTING=$(bash "$HOOK_LIB/myspec-config.sh" get "$1" --root "$2" 2>"$err") || rc=$?
+  SETTING=$("${reader[@]}" get "$1" --root "$2" 2>"$err") || rc=$?
   SETTING_NOTES=$(sed 's/^myspec-config: //' "$err")
   rm -f "$err"
   return "$rc"
+}
+
+# json_string <json> -> the string a JSON string value holds; nothing for
+# any other value. jq when present; without it sed, which undoes only \" and
+# \\ (enough for a path setting read through the Node reader).
+json_string() {
+  if command -v jq >/dev/null 2>&1; then
+    printf '%s' "$1" | jq -r 'if type == "string" then . else empty end' 2>/dev/null || printf ''
+  else
+    printf '%s\n' "$1" | sed -n 's/^"\(.*\)"$/\1/p' | sed 's/\\"/"/g; s/\\\\/\\/g'
+  fi
 }
 
 # lock_paths_for <dir> <pattern>... -> the <dir>-relative regular files the

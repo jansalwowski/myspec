@@ -105,13 +105,13 @@ if [ -z "$BASE" ]; then
   BASE="${BASE:-main}"
 fi
 
-# Through the one settings reader (lib/myspec-config.sh), whose schema holds
-# the default.
+# Through the one settings reader (read_setting), whose schema holds the
+# default; without jq it is the Node reader.
 if read_setting isolation.worktreeRoot "$REPO_ROOT"; then
-  WORKTREE_ROOT=$(printf '%s' "$SETTING" | jq -r 'if type == "string" then . else empty end' 2>/dev/null || printf '')
+  WORKTREE_ROOT=$(json_string "$SETTING")
   [ -z "$SETTING_NOTES" ] || printf '%s\n' "$SETTING_NOTES" | sed 's/^/myspec-config: /' >&2
 else
-  echo "promote: cannot read isolation.worktreeRoot (lib/myspec-config.sh): ${SETTING_NOTES:-reader failed}" >&2
+  echo "promote: cannot read isolation.worktreeRoot: ${SETTING_NOTES:-reader failed}" >&2
   exit 1
 fi
 WORKTREE_ROOT="${WORKTREE_ROOT%/}"

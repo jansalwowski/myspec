@@ -120,5 +120,33 @@ printf '%s' "$OUT2" | grep -qF "not linking node_modules"; ok "provisioning says
 "$SCRIPT" --branch fix/empty --title "x" --only tracked.js --no-pr >/dev/null 2>&1
 [ $? -ne 0 ]; ok "nothing to promote is refused" $?
 
+# nojq_path -> a PATH holding every command on this one but jq, in a
+# directory of symlinks (jq can sit in /usr/bin, so dropping PATH entries is
+# not enough).
+nojq_path() {
+  local bin="$ROOT/nojq-bin" d f
+  if [ ! -d "$bin" ]; then
+    mkdir -p "$bin"
+    local IFS=:
+    for d in $PATH; do
+      for f in "$d"/*; do
+        [ -x "$f" ] && [ ! -d "$f" ] || continue
+        [ "${f##*/}" != jq ] || continue
+        [ -e "$bin/${f##*/}" ] || ln -s "$f" "$bin/${f##*/}"
+      done
+    done
+  fi
+  printf '%s' "$bin"
+}
+
+# --- without jq: the Node reader resolves worktreeRoot (#275 review) ----------
+if command -v node >/dev/null 2>&1; then
+  NOJQ=$(nojq_path)
+  echo "nojq" > nojq.js
+  OUT3=$(PATH="$NOJQ" "$SCRIPT" --branch fix/nojq --title "fix(x): nojq" --only nojq.js --no-pr 2>&1)
+  ok "promote without jq exits 0 (output: $OUT3)" $?
+  [ -d "$REPO/.claude/worktrees/nojq" ]; ok "promote without jq creates the worktree under the default root" $?
+fi
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
