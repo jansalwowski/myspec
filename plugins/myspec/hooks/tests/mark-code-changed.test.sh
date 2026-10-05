@@ -19,6 +19,8 @@
 set -uo pipefail
 
 HOOK="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../mark-code-changed.sh}"
+# The hooks find their lib through CLAUDE_PLUGIN_ROOT, as the harness exports it.
+export CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$HOOK")/.." && pwd)}"
 SESSION_EVENT="$(cd "$(dirname "$HOOK")" && pwd)/../lib/session-event.sh"
 
 if [ ! -x "$HOOK" ]; then
@@ -279,13 +281,13 @@ expect_in "$SID-47" '- `.claude/worktrees/wt-a/src/v.ts`' "a relative Bash write
 expect_in "$SID-47" 'worktree: "wt-a"' "and marks the worktree"
 ledger_has "$SID-47" code "$WT" src/v.ts && ok || fail "the ledger keys a worktree write by the worktree's root"
 
-# --- a 1.x log without the section gains it on the next edit ----------------
+# --- a log without the section is not backfilled (the 1.x shape, gone since 3.0) ----
 mkdir -p "$STATE"
 printf -- '---\nsession_id: %s-10\nstatus: active\n---\n\n# old\n\n## Outcome\n' "$SID" > "$STATE/$SID-10.md"
 write "$SID-10" "$REPO" "$REPO/src/f.ts"
-expect_in "$SID-10" '## Files touched' "an older log gains the section"
+grep -q '^## Files touched' "$STATE/$SID-10.md" && fail "a log without the section does not gain it (#266: no 1.x backfill)" || ok
 # shellcheck disable=SC2016 # literal text, not an expansion
-expect_in "$SID-10" '- `src/f.ts`' "and the path"
+expect_in "$SID-10" '- `src/f.ts`' "the path still lands at its end"
 
 # --- settings: extraCodeExtensions and ignorePaths (#231) ----------------------
 CFG="$ROOT/cfg"
@@ -458,6 +460,38 @@ for c in 'bash .claude/lib/session-event.sh implement start' \
 done
 bashcmd "$SID-99" "$REPO" 'bash -c "echo session-event.sh implement start"'
 [ -z "$(implement_events "$SID-99")" ] && ok || fail "bash -c with the words in its string is not a run of the script"
+
+# --- snapshots of a Bash write, for the Stop gate's content checks (R14) ------------
+# PreToolUse records the file's blob before the write ("" when absent), only
+# for a file the content checks cover; PostToolUse records the write with
+# via and the blob after. Neither records an implement event twice.
+events() { jq -r "$2" "$STATE/$1.jsonl" 2>/dev/null | tr '\n' ' '; }
+pre() {  # pre <sid> <cwd> <command>
+  jq -nc --arg s "$1" --arg c "$2" --arg cmd "$3" '{hook_event_name: "PreToolUse", session_id: $s, tool_name: "Bash", cwd: $c, tool_input: {command: $cmd}}' \
+    | bash "$HOOK" >/dev/null 2>&1
+}
+mkdir -p "$REPO/docs"
+printf 'before\n' > "$REPO/docs/snap.md"
+CMD="printf 'after\n' > docs/snap.md && printf 'x\n' > docs/new.md && printf 'y\n' > src/snap.ts"
+pre "$SID-sn" "$REPO" "$CMD"
+BEFORE=$(git -C "$REPO" hash-object docs/snap.md)
+[ "$(events "$SID-sn" 'select(.t == "pre") | [.rel, .blob] | join("=")')" = "docs/snap.md=$BEFORE docs/new.md= " ] && ok \
+  || fail "PreToolUse snapshots each covered target, \"\" for a new file, nothing for code (got: $(events "$SID-sn" 'select(.t == "pre")'))"
+[ -z "$(events "$SID-sn" 'select(.t == "write")')" ] && ok || fail "PreToolUse records no write"
+[ ! -f "$STATE/$SID-sn.md" ] && ok || fail "PreToolUse creates no session log"
+(cd "$REPO" && eval "$CMD")
+bashcmd "$SID-sn" "$REPO" "$CMD"
+AFTER=$(git -C "$REPO" hash-object docs/snap.md)
+[ "$(events "$SID-sn" 'select(.t == "write" and .rel == "docs/snap.md") | [.via, .blob] | join("=")')" = "bash=$AFTER " ] && ok \
+  || fail "PostToolUse records the Bash write with its blob after (got: $(events "$SID-sn" 'select(.t == "write")'))"
+git -C "$REPO" cat-file -e "$AFTER" && ok || fail "the blob after is in the object store"
+[ "$(events "$SID-sn" 'select(.t == "write" and .rel == "src/snap.ts") | (.via + "=" + (.blob // "none"))')" = "bash=none " ] && ok \
+  || fail "a code file gets no blob"
+write "$SID-sn" "$REPO" "$REPO/docs/snap.md"
+[ "$(events "$SID-sn" 'select(.t == "write" and .via == "tool") | .rel')" = 'docs/snap.md ' ] && ok || fail "a Write is recorded via tool"
+pre "$SID-sn2" "$REPO" 'bash .claude/lib/session-event.sh implement start'
+[ -z "$(implement_events "$SID-sn2")" ] && ok || fail "PreToolUse records no implement event"
+rm -rf "$REPO/docs" "$REPO/src/snap.ts"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

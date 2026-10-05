@@ -17,6 +17,8 @@ set -uo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 HOOK="${1:-$HERE/../verify-before-stop.sh}"
+# The hooks find their lib through CLAUDE_PLUGIN_ROOT, as the harness exports it.
+export CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$HOOK")/.." && pwd)}"
 MARK="$HERE/../mark-code-changed.sh"
 
 ROOT=$(cd "$(mktemp -d)" && pwd -P)
@@ -299,19 +301,18 @@ OUT=$(stop 38)
 ran && fail "the submodule write counts as verified after the run" || ok
 git -C "$REPO/mod" checkout -q -- m.ts
 
-# --- the /tmp ledger of the previous release is imported once ----------------------
-# One minor release of migration (docs/stop-gate.md "Session writes"). The
-# path is the old hook's, so this case writes to /tmp itself; the trap cleans up.
+# --- the /tmp ledger of 2.x is not imported (#266) --------------------------------
+# 2.12 imported it for one minor release; 3.0 ships without the shim, and
+# update tells the user to finish open sessions first. The path is the old
+# hook's, so this case writes to /tmp itself; the trap cleans up.
 set_checks "$LINT"
 printf 'BROKEN\n' >> "$REPO/app.ts"
 printf 'code\t%s\tapp.ts\n' "$REPO" > "/tmp/.myspec-session-writes-$SID-41"
 OUT=$(stop 41)
-expect_decision block "$OUT" "a session armed by the old /tmp ledger is still verified after the upgrade"
-expect_no_text "$OUT" 'did not write' "the imported writes count as the session's"
-[ -f "/tmp/.myspec-session-writes-$SID-41.imported" ] && [ ! -e "/tmp/.myspec-session-writes-$SID-41" ] \
-  && ok || fail "the old ledger is renamed .imported"
-OUT=$(stop 41)
-ran && fail "the imported session is verified, and not re-imported" || ok
+expect_decision approve "$OUT" "a session armed only by the 2.x /tmp ledger is not armed: nothing is imported"
+ran && fail "no check runs for a session the state file knows nothing about" || ok
+[ -f "/tmp/.myspec-session-writes-$SID-41" ] && [ ! -e "/tmp/.myspec-session-writes-$SID-41.imported" ] \
+  && ok || fail "the old ledger is left alone, not renamed .imported"
 reset_tree
 
 # --- TMPDIR does not move the state ---------------------------------------------------

@@ -58,7 +58,7 @@ new_repo() {
   git init -q -b main .
   git config user.email t@t
   git config user.name t
-  printf '{\n  "aiDir": "%s",\n  "frameworkVersion": "1.27.0"\n}\n' "${2:-.ai}" > .myspec.json
+  printf '{\n  "aiDir": "%s",\n  "frameworkVersion": "1.27.0"\n}\n' "${2-.ai}" > .myspec.json
   mkdir -p .ai/memory/procedural .ai/memory/semantic .ai/memory/episodic
   echo "# index" > .ai/memory/procedural/index.md
   git add -A
@@ -163,7 +163,7 @@ mem procedural P001-first.md "P001"
 mem semantic S001-fact.md "S001"
 mem semantic S003-fact.md "S003"
 mkdir -p .claude/state
-printf '{\n  "P": 20,\n  "S": 5,\n  "E": 7\n}\n' > .claude/state/memory-ids.json
+printf '{"P": 20, "S": 5, "E": 7}\n' > .claude/state/memory-ids.json
 got=$(claim)
 check "(e) registry P=20 ahead of disk -> P021" P021 "$got"
 check "(e) registry P becomes 21" 21 "$(reg P)"
@@ -180,20 +180,68 @@ else
   fail "(e) rewritten registry is not valid JSON: $(cat .claude/state/memory-ids.json)"
 fi
 
+# --- (e2) the pre-1.28 pretty-printed registry is not a floor (#266) ----------
+# Versions before 1.28 wrote the registry with jq, one key per line. Since
+# 3.0 only the one-line form this script writes is read: unnormalized, the
+# old file is no floor and the claim rewrites it with zeros — which is why
+# update runs --normalize first (e3).
+
+new_repo e2
+mem procedural P001-first.md "P001"
+mkdir -p .claude/state
+printf '{\n  "P": 20,\n  "S": 5,\n  "E": 7\n}\n' > .claude/state/memory-ids.json
+got=$(claim)
+check "(e2) an unnormalized pretty-printed registry is not read -> P002 from disk" P002 "$got"
+check "(e2) the claim rewrites it in the one-line form, floors lost" '{"P": 2, "S": 0, "E": 0}' "$(cat .claude/state/memory-ids.json)"
+
+# --- (e3) --normalize keeps the floors of a pre-1.28 registry -----------------
+# update's 3.0.0-memory-registry migration: the pretty-printed file becomes
+# one line with every floor intact, so the claim that follows honours them.
+
+new_repo e3
+mem procedural P001-first.md "P001"
+mkdir -p .claude/state
+printf '{\n  "P": 20,\n  "S": 5,\n  "E": 7\n}\n' > .claude/state/memory-ids.json
+got=$(MYSPEC_SKIP_MEMORY_DOCTOR='' "$SCRIPT" --normalize 2>"$ERR")
+check "(e3) --normalize reports the rewrite" 'memory-ids.json: normalized to one line: {"P": 20, "S": 5, "E": 7}' "$got"
+check "(e3) the registry is one line with every floor kept" '{"P": 20, "S": 5, "E": 7}' "$(cat .claude/state/memory-ids.json)"
+got=$("$SCRIPT" --normalize 2>"$ERR")
+check "(e3) --normalize is idempotent" 'memory-ids.json: already one line: {"P": 20, "S": 5, "E": 7}' "$got"
+got=$(claim)
+check "(e3) the claim after normalize honours the P floor -> P021" P021 "$got"
+check "(e3) S floor kept" 5 "$(reg S)"
+check "(e3) E floor kept" 7 "$(reg E)"
+rm .claude/state/memory-ids.json
+got=$("$SCRIPT" --normalize 2>"$ERR"); rc=$?
+check "(e3) no registry: nothing to do, exit 0" "0 memory-ids.json: no registry, nothing to normalize" "$rc $got"
+
 # --- (f) PATH without jq -----------------------------------------------------
 
 BIN="$ROOT/bin"
 mkdir -p "$BIN"
-for tool in bash git sed tail dirname mkdir stat date mv rmdir rm sleep find sort awk; do
+# node is on the restricted PATH: since schema v2 the script reads aiDir
+# through lib/myspec-config.mjs (it needs node for the doctor gate anyway);
+# the registry read and write below still run without jq. A second PATH
+# without node but with jq (case j) proves the shell reader takes over.
+BIN_NONODE="$ROOT/bin-nonode"
+mkdir -p "$BIN_NONODE"
+for tool in bash git sed tail dirname mkdir stat date mv rmdir rm sleep find sort awk mktemp; do
   src=$(command -v "$tool") || { fail "(f) fixture: $tool not found"; continue; }
   ln -s "$src" "$BIN/$tool"
+  ln -s "$src" "$BIN_NONODE/$tool"
 done
+ln -s "$(command -v node)" "$BIN/node"
+ln -s "$(command -v jq)" "$BIN_NONODE/jq"
 if PATH="$BIN" command -v jq >/dev/null 2>&1; then
   fail "(f) fixture: jq still reachable on the restricted PATH"
 fi
 
 new_repo f
 mem procedural P005-first.md "P005"
+mkdir -p .claude/state
+printf '{\n  "P": 2,\n  "S": 9,\n  "E": 4\n}\n' > .claude/state/memory-ids.json
+got=$(PATH="$BIN" "$SCRIPT" --normalize 2>"$ERR")
+check "(f) --normalize without jq keeps every floor" '{"P": 2, "S": 9, "E": 4}' "$(cat .claude/state/memory-ids.json)"
 got=$(PATH="$BIN" claim)
 check "(f) first claim without jq -> P006" P006 "$got"
 got=$(PATH="$BIN" claim)
@@ -274,6 +322,9 @@ GATE_BIN="$ROOT/gate-bin"
 mkdir -p "$GATE_BIN"
 cp "$SCRIPT" "$GATE_BIN/memory-claim-id.sh"
 chmod +x "$GATE_BIN/memory-claim-id.sh"
+# The settings readers sit beside the script in lib/; a copy needs them too.
+LIB_DIR=$(dirname "$SCRIPT")
+cp "$LIB_DIR/myspec-config.mjs" "$LIB_DIR/myspec-config.sh" "$LIB_DIR/myspec-config.schema.json" "$GATE_BIN/"
 cat > "$GATE_BIN/memory-doctor.mjs" <<'EOF'
 import { writeFileSync } from 'node:fs';
 writeFileSync(process.env.FAKE_DOCTOR_ARGV, process.argv.slice(2).join(' '));
@@ -316,8 +367,9 @@ if command -v node >/dev/null 2>&1; then
   rc=$?
   check "(j) MYSPEC_SKIP_MEMORY_DOCTOR=1 bypasses a failing doctor" "0 P003" "$rc $got"
 
-  # node absent from PATH: the gate is skipped with a warning, not a refusal.
-  got=$(PATH="$BIN" FAKE_DOCTOR_MODE=fail FAKE_DOCTOR_ARGV="$ROOT/argv" "$GATE_BIN/memory-claim-id.sh" procedural 2>"$ERR")
+  # node absent from PATH: the gate is skipped with a warning, not a refusal,
+  # and aiDir is read through the shell reader (jq) instead.
+  got=$(PATH="$BIN_NONODE" FAKE_DOCTOR_MODE=fail FAKE_DOCTOR_ARGV="$ROOT/argv" "$GATE_BIN/memory-claim-id.sh" procedural 2>"$ERR")
   rc=$?
   check "(j) no node on PATH -> warning and a claim" "0 P004" "$rc $got"
   check_contains "(j) no node on PATH -> skip warning" "conformance check skipped" "$(cat "$ERR")"
@@ -330,6 +382,7 @@ NODOC_BIN="$ROOT/nodoc-bin"
 mkdir -p "$NODOC_BIN"
 cp "$SCRIPT" "$NODOC_BIN/memory-claim-id.sh"
 chmod +x "$NODOC_BIN/memory-claim-id.sh"
+cp "$LIB_DIR/myspec-config.mjs" "$LIB_DIR/myspec-config.sh" "$LIB_DIR/myspec-config.schema.json" "$NODOC_BIN/"
 new_repo j2
 mem procedural P001-first.md "P001"
 got=$("$NODOC_BIN/memory-claim-id.sh" procedural 2>"$ERR")
@@ -348,6 +401,14 @@ mem procedural P012-branch.md "P012 on feat/slash"
 git checkout -q main
 got=$(claim)
 check "(k) aiDir .ai/ ref scan pathspec -> P013" P013 "$got"
+
+# An empty aiDir is unset, as hook-core's ai_dir and memory-files.mjs read
+# it: the schema default, not a refusal.
+new_repo k2 ""
+mem procedural P004-first.md "P004"
+got=$(claim)
+rc=$?
+check "(k) aiDir \"\" -> the .ai default, P005" "0 P005" "$rc $got"
 
 # --- (l) many refs: unique-tip scan stays fast --------------------------------
 

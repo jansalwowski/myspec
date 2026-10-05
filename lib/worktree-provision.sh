@@ -6,7 +6,7 @@
 # re-invented the same workaround inside its prompt).
 #
 # Usage:
-#   .claude/lib/worktree-provision.sh <worktree-path> [--base <ref>] [--main <path>] [--no-symlink] [--no-install]
+#   "${CLAUDE_PLUGIN_ROOT}"/lib/worktree-provision.sh <worktree-path> [--base <ref>] [--main <path>] [--no-symlink] [--no-install]
 #
 # Settings are .myspec.json `isolation.provision`, read through
 # myspec-config.sh: from the worktree when it has a .myspec.json (the

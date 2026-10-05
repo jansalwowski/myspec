@@ -35,7 +35,7 @@ The high-yield case: a store that has been written to for a year and never groom
 > Running memory optimization audit.
 
 ```bash
-node .claude/lib/memory-index.mjs --check
+node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs" --check
 # stale: ai/memory/procedural/index.md
 # 1 index file(s) out of date.
 ```
@@ -133,8 +133,8 @@ The generator prefers the row already in the index for the Anchor column, so edi
 #### 5. Verify
 
 ```bash
-node .claude/lib/memory-index.mjs
-node .claude/lib/memory-index.mjs --check   # exit 0
+node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs"
+node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs" --check   # exit 0
 grep -rn "S007\|P019\|E011" ai/ .claude/    # every retired ID still resolves to a file
 ```
 
@@ -299,7 +299,7 @@ A store groomed six weeks ago. 22 entries, all anchored, no episodes past 30 day
 > Running memory optimization audit.
 
 ```bash
-node .claude/lib/memory-index.mjs --check   # exit 0
+node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs" --check   # exit 0
 ```
 
 All 14 anchors resolve on the first check. No `triggers` pair shares two entries. No `related` id dangles or points one way. Every episode is inside 30 days or marked `persistent: true`.

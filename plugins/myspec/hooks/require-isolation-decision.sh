@@ -10,16 +10,19 @@
 #
 # Decision: the session's last `isolation` event in
 # .claude/state/sessions/<session_id>.jsonl (gitignored), written by
-# .claude/lib/set-isolation.sh and read through lib/session-event.sh.
+# lib/set-isolation.sh and read through lib/session-event.sh. The block
+# messages print the lib's resolved path: the model runs them through Bash,
+# where CLAUDE_PLUGIN_ROOT is not set.
 #
 # Subagents cannot call AskUserQuestion. They share their parent's session_id
 # (issue #225), so a subagent reads its parent's decision from the same file.
 # No session is handed another session's answer (issue #146): there is no
 # lookup across session files.
 #
-# Configuration (all optional, .myspec.json):
+# Configuration (all optional, .myspec.json, read through lib/myspec-config.sh;
+# the defaults are its schema's):
 #   aiDir                       doc tree; edits there never trigger the prompt
-#   isolation.worktreeRoot      where worktrees live (default .claude/worktrees)
+#   isolation.worktreeRoot      where worktrees live
 #
 # Output contract: a block prints the PreToolUse deny form (pretool_deny in
 # lib/hook-core.sh). An allowed edit prints NOTHING.
@@ -27,8 +30,19 @@
 set -euo pipefail
 
 command -v jq >/dev/null 2>&1 || exit 0
-HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
-[ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
+# The lib is the plugin's lib/, under CLAUDE_PLUGIN_ROOT, which the harness
+# exports to a hook the plugin's hooks.json declares. Without it the hook
+# cannot load hook-core.sh, and approving in silence would hide a gate that
+# is not running (a stale copy wired in .claude/settings.json, a harness that
+# did not export the variable). Say so, naming the variable and the repair.
+# The same preamble sits in every non-Stop hook: hook-core is what is missing.
+HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
+if [ ! -f "$HOOK_CORE" ]; then
+  LIB_MISSING="myspec lib missing: hook-core.sh not found under \${CLAUDE_PLUGIN_ROOT}/lib (CLAUDE_PLUGIN_ROOT is ${CLAUDE_PLUGIN_ROOT:-unset}). The hook did not run from the plugin's hooks.json; a copy wired in .claude/settings.json is retired by /myspec:update."
+  printf '%s\n' "$LIB_MISSING" >&2
+  jq -nc --arg r "$LIB_MISSING" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}}'
+  exit 0
+fi
 [ -f "$HOOK_CORE" ] && [ -f "$(dirname "$HOOK_CORE")/session-event.sh" ] || exit 0
 # shellcheck source=lib/hook-core.sh
 . "$HOOK_CORE"
@@ -56,9 +70,21 @@ REPO_ROOT="$CF_MAIN"
 # Only a myspec project carries the isolation contract.
 [ -f "$REPO_ROOT/.myspec.json" ] || exit 0
 
+# Both through the one settings reader (lib/myspec-config.sh), whose schema
+# holds the defaults.
 AI_DIR=$(ai_dir "$REPO_ROOT")
-WORKTREE_ROOT=$(jq -r '.isolation.worktreeRoot // ".claude/worktrees"' "$REPO_ROOT/.myspec.json" 2>/dev/null)
+WORKTREE_ROOT=""
+if read_setting isolation.worktreeRoot "$REPO_ROOT"; then
+  WORKTREE_ROOT=$(printf '%s' "$SETTING" | jq -r 'if type == "string" then . else empty end' 2>/dev/null || printf '')
+  [ -z "$SETTING_NOTES" ] || printf '%s\n' "$SETTING_NOTES" | sed 's/^/myspec-config: /' >&2
+fi
 WORKTREE_ROOT="${WORKTREE_ROOT%/}"
+# An empty value, or a reader that failed, never opens the gate: the value
+# only names where worktrees go, so the schema default stands in for it.
+if [ -z "$WORKTREE_ROOT" ]; then
+  WORKTREE_ROOT=$(jq -r '.keys["isolation.worktreeRoot"].default // empty' "$HOOK_LIB/myspec-config.schema.json" 2>/dev/null || printf '')
+  WORKTREE_ROOT="${WORKTREE_ROOT:-.claude/worktrees}"
+fi
 # Installed by init/update from the manifest `files` entry work-isolation.md.
 PROCEDURE="$AI_DIR/work-isolation.md"
 
@@ -158,7 +184,7 @@ WORKTREE_REASON="BLOCKED: this session chose WORKTREE isolation, but the edit ta
 
 Create the worktree if you have not already, then make every edit inside it:
   git worktree add -b <type>/<slug> \"\$(git rev-parse --show-toplevel)/$WORKTREE_ROOT/<slug>\" origin/$DEFAULT_BRANCH
-  .claude/lib/worktree-provision.sh \"\$(git rev-parse --show-toplevel)/$WORKTREE_ROOT/<slug>\" --base origin/$DEFAULT_BRANCH
+  \"$HOOK_LIB/worktree-provision.sh\" \"\$(git rev-parse --show-toplevel)/$WORKTREE_ROOT/<slug>\" --base origin/$DEFAULT_BRANCH
 
 Use absolute paths and \`git -C <worktree>\` for all git operations. Full procedure: $PROCEDURE
 
@@ -188,10 +214,13 @@ Before editing source files in the main checkout, ask where the work should happ
 Mark ONE option \"(Recommended)\" using the task-shape heuristic in $PROCEDURE, which holds the full procedure — do not present them as equals.
 
 Then record the answer (session id is already filled in):
-  .claude/lib/set-isolation.sh $SESSION_ID develop
-  .claude/lib/set-isolation.sh $SESSION_ID worktree
+  \"$HOOK_LIB/set-isolation.sh\" $SESSION_ID develop
+  \"$HOOK_LIB/set-isolation.sh\" $SESSION_ID worktree
+To see the recorded decisions, or force a re-ask after the user changed the answer:
+  \"$HOOK_LIB/set-isolation.sh\" --show
+  \"$HOOK_LIB/set-isolation.sh\" --reset $SESSION_ID
 
-Do NOT ask about a PR now — that question belongs at the end of the work.
+Do NOT ask about a PR now — that question belongs at the end of the work. In develop mode the answer yes runs \"$HOOK_LIB/promote-to-worktree.sh\" --branch <type>/<slug> --title <subject> --only <path>... (procedure in $PROCEDURE).
 
 If you are a SUBAGENT: do not prompt. Stop and report to your parent that no isolation decision exists.
 

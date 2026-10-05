@@ -46,6 +46,17 @@ A later layer wins key by key. Objects merge; lists merge by the rule in princip
 
 `verification.json` stays where the checks are. Settings about checks live on the check, so a check and its scope never sit in two files.
 
+## Schema version
+
+`lib/myspec-config.schema.json` carries a `version`, and that number is the versioned contract of `.myspec.json`. A key rename or removal bumps it and ships a one-shot migration in `framework-files/manifest.json` (run by `update`, recorded in `.myspec.json` `migrations`), so a project is never left holding a key nothing reads. An added key does not bump it: absent means today's behaviour (principle 2), so a project on the previous version reads the same under the new schema.
+
+| Version | Since | Removed (with its migration) | Added |
+|---|---|---|---|
+| 1 | 2.11.0 | — | the keys the catalogue below listed at 2.11 |
+| 2 | 3.0.0 | `project.description` (`3.0.0-schema-v2`, #265), `codeReview` (`3.0.0-code-review`, #258), `reuseAudit` (`3.0.0-reuse-audit`, #274) | `project.name` and `project.techStack` typed; `frameworkFiles[key].hash` and `.upstreamHash` (#160, backfilled by `3.0.0-schema-v2`); `mockups` (#265); `orchestration.featureImplement` (#247); `probes.portSource` (#196); `probes.scratchEnvScript` (#197) |
+
+A `*` segment in a schema key (`frameworkFiles.*.pinned`) types every value of the map above it, the way `name[]` types every item of a list; the readers look inside neither, doctor validates both.
+
 ## Catalogue
 
 Keys marked **new** are proposed; the rest exist and are listed so the schema starts complete.
@@ -106,6 +117,34 @@ The framework never names a container runtime: the command is the project's, and
 | `ignoreBlockInMain` | list of anchored ERE | `[]` | #250 | Default `blockInMain` entries, by their exact text, that the guard drops. Loosens the gate, so doctor lists it. |
 | `allowLinkedModules` | bool | `false` | exists | Read by `worktree-provision.sh` only (#239): link a dependency tree even when its lockfiles differ from the main checkout's, and record it without lockfile hashes, so the Stop gate does not compare them. Loosens the gate. |
 | `worktreeRoot` | repo-relative path | `.claude/worktrees` | exists | Where worktrees are created. |
+
+### Mockups: `.myspec.json` `mockups`
+
+Written by the `setup` skill's `mockup` blueprint (`blueprints/mockup.md`, Post-generation), read by `feature-mockup`, `feature-mockup-review` and `update`. Absent means no mockup configuration: the skills run their universal guards only. Each key is optional; the blueprint omits the ones answered "none".
+
+| Key | Type | Default | Issue | Effect |
+|---|---|---|---|---|
+| `extension` | string, dot included | none | exists, #265 | The file extension mockups are written with (`.vue`, `.html`, `.tsx`). |
+| `commands.verify` | command | none | exists, #265 | Type-check or lint run over the mockups after each build. |
+| `commands.preview` | command | none | exists, #265 | Dev server that serves the mockups for preview. |
+| `commands.compileCheck` | command | none | exists, #265 | Per-file compile check against the preview server; `{port}` and `{absPath}` are substituted. |
+| `commands.audit` | command | none | exists, #265 | Reuse audit listing shared mockup scaffolding, run before non-trivial chrome is authored. |
+| `siblingRoots` | list of path | none | exists, #265 | Repo-relative directories of production components the mockups may import from. |
+
+### Orchestration: `.myspec.json` `orchestration`
+
+| Key | Type | Default | Issue | Effect |
+|---|---|---|---|---|
+| `featureImplement` | `"controller"` or `"workflow"` | `"controller"` | #247 | How `feature-implement` runs the per-task loop. `controller` is today's behaviour; `workflow` opts in to the host's Workflow tool where it exists. The schema records the key since 3.0; the mode itself is #247. |
+
+### Probes: `.myspec.json` `probes`
+
+The probe runs `feature-plan` writes and `feature-implement` dispatches. Both keys are recorded by the schema since 3.0 so that a project can declare them once; reading them is #196 and #197.
+
+| Key | Type | Default | Issue | Effect |
+|---|---|---|---|---|
+| `portSource` | repo-relative path, or `$NAME` | none | #196 | Where a probe takes its dev-server ports from instead of literal ports in the plan: a file holding the per-checkout port slots, or the environment variable that holds them. |
+| `scratchEnvScript` | repo-relative path | none | #197 | A script that provisions the scratch environment a probe run needs (database, cache, buckets), reused across probe runs instead of rebuilt by each one. |
 
 ### Deferred
 

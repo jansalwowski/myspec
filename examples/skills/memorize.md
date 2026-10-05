@@ -71,7 +71,7 @@ old shape, so type errors only appear in test runs or production.
 updates.
 ```
 
-**Generated index row** (`node .claude/lib/memory-index.mjs` derives it from `hook:`):
+**Generated index row** (`node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs"` derives it from `hook:`):
 
 ```
 | [P014](P014-regenerate-prisma-client.md) | prisma, schema, db:generate — regenerate the client after schema edits | prisma/schema.prisma |
@@ -87,7 +87,7 @@ yes
 
 ### Result
 
-- Claimed `P014` via `.claude/lib/memory-claim-id.sh procedural` (after the consolidation check found no overlap).
+- Claimed `P014` via `"${CLAUDE_PLUGIN_ROOT}/lib/memory-claim-id.sh" procedural` (after the consolidation check found no overlap).
 - Wrote `${aiDir}/memory/procedural/P014-regenerate-prisma-client.md`.
 - Regenerated `${aiDir}/memory/procedural/index.md` (`--check` clean, `updated:` bumped to 2026-04-30).
 - No Layer 1 promotion offered — the rule is useful but not session-critical.

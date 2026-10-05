@@ -7,6 +7,7 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 # Feature Complete
 
 ## Prerequisites
+- `${aiDir}/features/{feature}/implementation-plan.md` exists — it is what step 7 archives and what records progress. Without one, stop: "no implementation-plan.md for {feature} — run /myspec:feature-plan and /myspec:feature-implement first; a feature already completed has its plans under `plans/`."
 - Implementation is complete (all planned tasks done)
 
 ## Workflow
@@ -48,24 +49,21 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
    **Note**: If this is a sub-feature, update the feature-level `${aiDir}/features/{parent}/index.yaml` instead of the main index.yaml.
 
 7. **Archive Implementation Plan**
-   - Check if `implementation-plan.md` exists in the feature directory
-   - If it exists:
-     - Read the plan's `title` frontmatter → convert to kebab-case for the archive filename
-     - Create `plans/` directory if it doesn't exist
-     - Move `implementation-plan.md` → `plans/{YYYY-MM-DD}-{kebab-title}.md` (use today's date)
-     - Add `archived: {date}` field to the archived plan's frontmatter
-     - If filename collision (same date + name already exists), append `-2`, `-3` suffix
-     - If `CHANGELOG.md` doesn't exist, create it:
-       ```markdown
-       # {Feature Name} Changelog
+   - Read the plan's `title` frontmatter → convert to kebab-case for the archive filename
+   - Create `plans/` directory if it doesn't exist
+   - Move `implementation-plan.md` → `plans/{YYYY-MM-DD}-{kebab-title}.md` (use today's date)
+   - Add `archived: {date}` field to the archived plan's frontmatter
+   - If filename collision (same date + name already exists), append `-2`, `-3` suffix
+   - If `CHANGELOG.md` doesn't exist, create it:
+     ```markdown
+     # {Feature Name} Changelog
 
-       | Date | Plan | Summary | Status |
-       |------|------|---------|--------|
-       ```
-     - Prepend a new row to `CHANGELOG.md`:
-       `| {date} | [{plan title}](plans/{filename}.md) | {one-sentence summary of what this plan implemented} | {complete|partial} |`
-     - Use `partial` status if any plan tasks were deferred or skipped
-   - If no `implementation-plan.md` exists: skip silently (backward compatible)
+     | Date | Plan | Summary | Status |
+     |------|------|---------|--------|
+     ```
+   - Prepend a new row to `CHANGELOG.md`:
+     `| {date} | [{plan title}](plans/{filename}.md) | {one-sentence summary of what this plan implemented} | {complete|partial} |`
+   - Use `partial` status if any plan tasks were deferred or skipped
 
 8. **Cross-Reference Check**
    - If dependencies changed, update `dependencies.md` bidirectionally
@@ -90,7 +88,7 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
     - Delete status banners the code has outrun (e.g. "not wired up yet" for a routed page)
     - File Inventory lists only files that exist: drop rows for deleted files, including create-then-delete pairs
     - Keep Architecture, Key Interfaces, contracts, decisions in force, Edge Cases
-    - If anything was removed, end the summary of the CHANGELOG row from step 7 with `Compacted tech-spec.md.` When step 7 archived no plan, prepend `| {date} | — | Compacted tech-spec.md: {what was removed} | complete |` instead, creating CHANGELOG.md with the step-7 header if missing
+    - If anything was removed, end the summary of the CHANGELOG row from step 7 with `Compacted tech-spec.md.`
 
 **Phase 1 checklist:**
 
@@ -99,14 +97,14 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 - [ ] File Inventory updated to match actual created/modified files
 - [ ] `status` in `${aiDir}/features/index.yaml` updated to `complete`
 - [ ] `last_updated` in tech-spec.md frontmatter updated to today
-- [ ] Implementation plan archived to `plans/` directory (if plan existed)
-- [ ] `CHANGELOG.md` updated with new entry (if plan was archived)
+- [ ] Implementation plan archived to `plans/` directory
+- [ ] `CHANGELOG.md` updated with new entry
 - [ ] Topology file updated if the feature added an app, package, or command (step 9)
 - [ ] Run project documentation audit command if configured
 
 ### Phase 2 — Verification
 
-1. Remove any leftover feature-implement orchestration marker (`.claude/lib/session-event.sh implement stop`) — while it is set the Stop hook only warns on failing checks. Then read `.claude/verification.json` and run each required check. Export a fresh `MYSPEC_CHECK_RUN_ID` per check. When a check is killed or times out, run its `cleanup` (if it declares one) with the same `MYSPEC_CHECK_RUN_ID` before running that check again: a kill stops only the local client, and work it started in a container or on another host keeps running
+1. Remove any leftover feature-implement orchestration marker (`"${CLAUDE_PLUGIN_ROOT}/lib/session-event.sh" implement stop`) — while it is set the Stop hook only warns on failing checks. Then read `.claude/verification.json` and run each required check. Export a fresh `MYSPEC_CHECK_RUN_ID` per check. When a check is killed or times out, run its `cleanup` (if it declares one) with the same `MYSPEC_CHECK_RUN_ID` before running that check again: a kill stops only the local client, and work it started in a container or on another host keeps running
 2. Run project documentation audit command if configured
 3. If all pass → continue to Phase 3
 
@@ -182,7 +180,7 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 
    **Option 5 — Promote develop-mode work:** the session answered `develop` (procedure: `${aiDir}/work-isolation.md`), so the work is an uncommitted diff in the main checkout and no feature branch exists yet. Scope it to the files this feature touched and let the script do the rest — it never changes the main checkout's branch:
    ```bash
-   .claude/lib/promote-to-worktree.sh --branch feat/<name> --title "<conventional commit subject>" \
+   "${CLAUDE_PLUGIN_ROOT}/lib/promote-to-worktree.sh" --branch feat/<name> --title "<conventional commit subject>" \
      --only <path> [--only <path>]... --body-file <pr-body> --session-url <url>
    ```
    It copies the diff into a fresh worktree, commits, provisions, pushes, opens the PR against the default branch, and restores the main checkout. It refuses when the local default branch is ahead of origin (commits made on it are not in the diff) — resolve that with the user, never by resetting silently.

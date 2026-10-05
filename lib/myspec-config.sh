@@ -6,7 +6,7 @@
 # parses .myspec.json its own way.
 #
 # Usage:
-#   .claude/lib/myspec-config.sh get <dotted.key> [--root <checkout>]
+#   "${CLAUDE_PLUGIN_ROOT}"/lib/myspec-config.sh get <dotted.key> [--root <checkout>]
 #
 # Prints the effective value as compact JSON on stdout (null when no layer
 # sets the key) and exits 0. Keys under `verification.` are read from
@@ -89,7 +89,9 @@ OUT=$(jq -nr --slurpfile schema "$SCHEMA" --arg req "$KEY" "${FILE_ARGS[@]}" '
       if .found and (.v | type) == "object" and (.v | has($s)) then .v = .v[$s] else {found: false} end);
     def relevant($k): $k == $req or ($k | startswith($req + ".")) or ($req | startswith($k + "."));
     def fileof($k): if ($k | split(".")[0]) == "verification" then "verification" else "project" end;
-    def plainkeys: $S.keys | to_entries[] | select(.key | contains("[]") | not);
+    # A `name[]` or `name.*` key types items or map values for doctor; the
+    # readers never look inside a list or a map.
+    def plainkeys: $S.keys | to_entries[] | select((.key | contains("[]")) or (.key | contains(".*")) | not);
 
     # parse(text; exists; name) -> {data, warnings}: an unreadable file is
     # ignored whole, named only when the requested key lives in it.

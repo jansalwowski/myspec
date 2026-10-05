@@ -8,8 +8,8 @@
 # the file lives (main checkout, submodule's superproject, no git), the
 # arming and attribution queries, TTL expiry of the isolation decision and the
 # implement state, per-session isolation (a subagent shares its parent's id;
-# another session's decision is never read), and the one-time import of the
-# legacy /tmp ledger.
+# another session's decision is never read), and that the 2.x /tmp ledger and
+# markers are not imported (#266).
 #
 # Usage: session-event.test.sh [path-to-session-event.sh]
 
@@ -26,9 +26,7 @@ command -v jq >/dev/null 2>&1 || { echo "FATAL: jq is required" >&2; exit 1; }
 
 ROOT=$(cd "$(mktemp -d)" && pwd -P)
 trap 'rm -rf "$ROOT"' EXIT
-# The legacy ledger directory, redirected so the test never touches /tmp.
-SESSION_LEGACY_LEDGER_DIR="$ROOT/legacy"
-mkdir -p "$SESSION_LEGACY_LEDGER_DIR"
+mkdir -p "$ROOT/legacy"
 
 PASS=0
 FAIL=0
@@ -139,9 +137,29 @@ session_append "$REPO" $S "$(jq -nc --arg r "$REPO" '{t:"write",root:$r,rel:"c.t
 eq "$(session_armed_roots "$REPO" $S | tr '\n' ' ')" "$REPO $WT $REPO/mod " "armed: a code write after the run re-arms, in first-written order"
 eq "$(session_written "$REPO" $S "$REPO" | tr '\n' ' ')" "README.md a.ts c.ts mod/m.ts tsconfig.json " "written: code and file, a nested checkout's under its path"
 eq "$(session_written "$REPO" $S "$WT")" "b.ts" "written: per checkout"
+eq "$(session_written "$REPO" $S | wc -l | tr -d ' ')" "6" "written: without a root, every file of every checkout"
+eq "$(session_written "$REPO" $S | grep -c "^$REPO/mod"$'\t'"m.ts$")" "1" "written: without a root, as <root>TAB<rel>"
 session_seen "$REPO" $S code "$REPO/mod" m.ts a1 && ok || fail "seen: the same write is recorded"
 session_seen "$REPO" $S code "$REPO/mod" m.ts "" && fail "seen: another agent's write is not the same" || ok
 session_seen "$REPO" $S code "$REPO" a.ts "" && fail "seen: a write before the root's verified event is not" || ok
+session_append "$REPO" $S "$(jq -nc --arg r "$REPO" '{t:"write",root:$r,rel:"c.ts",kind:"code",via:"tool"}')"
+session_seen "$REPO" $S code "$REPO" c.ts "" tool && ok || fail "seen: the same write by the same route"
+session_seen "$REPO" $S code "$REPO" c.ts "" bash && fail "seen: a Bash write is not the same as a tool write" || ok
+
+# --- Bash writes as before/after pairs (the Stop gate's content checks) ------------------
+S=s5b
+ev() { session_append "$REPO" $S "$(jq -nc --arg r "$REPO" --argjson e "$1" '$e + {root: $r}')"; }
+ev '{"t":"pre","rel":"d.md","blob":""}'
+ev '{"t":"write","rel":"d.md","kind":"file","via":"bash","blob":"b1"}'
+ev '{"t":"write","rel":"d.md","kind":"file","via":"bash","blob":"b2"}'
+ev '{"t":"pre","rel":"d.md","blob":"b2x"}'
+ev '{"t":"write","rel":"d.md","kind":"file","via":"bash","blob":"b3"}'
+ev '{"t":"write","rel":"d.md","kind":"file","via":"tool"}'
+ev '{"t":"write","rel":"d.md","kind":"file","via":"bash","blob":"b4"}'
+ev '{"t":"write","rel":"e.md","kind":"file","via":"bash","blob":""}'
+ev '{"t":"write","rel":"f.md","kind":"file"}'
+eq "$(session_bash_writes "$REPO" $S | cut -f2- | tr '\t\n' ' |')" "d.md - b1|d.md b1 b2|d.md b2x b3|d.md ? b4|" \
+  "bash writes: before is the pre snapshot, else the previous after, else unknown after a tool write; a gone file and a write without a blob are left out"
 
 # --- TTLs --------------------------------------------------------------------------------
 
@@ -179,47 +197,29 @@ raw imp4 '{"t":"implement","state":"start","at":"garbage"}'
 session_implement_active "$REPO" imp4 && fail "implement: an unreadable at is not active" || ok
 session_implement_active "$REPO" imp1-other && fail "implement: another session's run does not count" || ok
 
-# --- legacy /tmp ledger import --------------------------------------------------------------
-
-LEGACY="$SESSION_LEGACY_LEDGER_DIR/.myspec-session-writes-old1"
-printf 'code\t%s\ta.ts\nfile\t%s\tpkg.json\tagent-7\nverified\t%s\t-\ncode\t%s\tb.ts\n' "$REPO" "$REPO" "$REPO" "$WT" > "$LEGACY"
-eq "$(session_armed_roots "$REPO" old1 | tr '\n' ' ')" "$WT " "legacy: the ledger is imported on first read, verified lines included"
-[ ! -e "$LEGACY" ] && [ -f "$LEGACY.imported" ] && ok || fail "legacy: the old ledger is renamed .imported"
-eq "$(session_events "$REPO" old1 | jq -r 'select(.rel == "pkg.json") | .agent + " " + .kind')" "agent-7 file" "legacy: kind and agent are kept"
-printf 'code\t%s\tlate.ts\n' "$REPO" > "$LEGACY"
-session_append "$REPO" old1 "$(jq -nc --arg r "$REPO" '{t:"write",root:$r,rel:"new.ts",kind:"file"}')"
-eq "$(session_written "$REPO" old1 "$REPO" | tr '\n' ' ')" "a.ts new.ts pkg.json " "legacy: imported once, never again once the file exists"
-[ -f "$LEGACY" ] && ok || fail "legacy: a ledger met after the import is left alone"
-LEGACY2="$SESSION_LEGACY_LEDGER_DIR/.myspec-session-writes-old2"
-printf 'code\t%s\tw.ts\n' "$REPO" > "$LEGACY2"
-session_append "$REPO" old2 "$(jq -nc --arg r "$REPO" '{t:"verified",root:$r}')"
-eq "$(session_events "$REPO" old2 | jq -r .t | tr '\n' ' ')" "write verified " "legacy: an append imports first, so old writes come first"
-
-# --- legacy implement and isolation markers --------------------------------------------------
-# A session upgraded mid feature-implement keeps its run: a fresh
-# implement-in-progress.json becomes an implement start, and the session's
-# own isolation marker an isolation event, each imported once.
+# --- the 2.x state is not imported (#266) ---------------------------------------------------
+# 2.12 imported the /tmp write ledger and the implement and isolation
+# markers once per session, "for one minor release". 3.0 ships without the
+# shim: update tells the user to finish open sessions first. A state file
+# is created only by a 3.0 write, and the 2.x files are left where they are.
 MK="$ROOT/markers"
 new_repo "$MK"
 printf '{}\n' > "$MK/.myspec.json"
 mkdir -p "$MK/.claude/state/isolation"
+LEGACY="/tmp/.myspec-session-writes-myspec-test-$$-old1"
+trap 'rm -rf "$ROOT" "$LEGACY"' EXIT
+printf 'code\t%s\ta.ts\nverified\t%s\t-\ncode\t%s\tb.ts\n' "$MK" "$MK" "$MK" > "$LEGACY"
 printf '{"started_at":%d,"feature":"f"}\n' "$((NOW - 120))" > "$MK/.claude/state/implement-in-progress.json"
 printf '{"mode":"worktree","worktree_path":"/w/x","decided_at":%d}\n' "$((NOW - 60))" > "$MK/.claude/state/isolation/mk1.json"
-printf '{"mode":"develop","worktree_path":"","decided_at":%d}\n' "$((NOW - 60))" > "$MK/.claude/state/isolation/mk-other.json"
-session_implement_active "$MK" mk1 && ok || fail "markers: a fresh implement marker is imported as a start"
+eq "$(session_armed_roots "$MK" "myspec-test-$$-old1")" "" "no shim: the /tmp ledger arms nothing"
+[ -f "$LEGACY" ] && [ ! -e "$LEGACY.imported" ] && ok || fail "no shim: the /tmp ledger is left alone, not renamed .imported"
+session_implement_active "$MK" mk1 && fail "no shim: a fresh implement marker is not an implement start" || ok
 session_isolation "$MK" mk1
-eq "$ISO_MODE|$ISO_PATH" "worktree|/w/x" "markers: the session's isolation marker is imported"
-[ -f "$MK/.claude/state/implement-in-progress.json" ] && ok || fail "markers: the implement marker, the checkout's, stays for other sessions"
-[ -f "$MK/.claude/state/isolation/mk1.json.imported" ] && [ -f "$MK/.claude/state/isolation/mk-other.json" ] && ok || fail "markers: only the session's own isolation marker is taken"
-session_events "$MK" mk1 >/dev/null
-eq "$(session_events "$MK" mk1 | jq -r 'select(.t == "implement") | .state' | tr '\n' ' ')" "start " "markers: a session imports the implement marker once"
-eq "$(session_events "$MK" mk1 | jq -r 'select(.t == "notice") | .what')" "imported-implement" "markers: the import is recorded once as a notice"
-# A second session in the same checkout (the one actually running
-# feature-implement, or a parallel one) gets the run too: the first reader
-# does not consume the marker.
-session_implement_active "$MK" mk-second && ok || fail "markers: a second session also imports the implement marker"
-printf '{"started_at":%d,"feature":"f"}\n' "$((NOW - HOOK_DECISION_TTL - 10))" > "$MK/.claude/state/implement-in-progress.json"
-session_implement_active "$MK" mk2 && fail "markers: a stale implement marker is not imported" || ok
+eq "$ISO_MODE|$ISO_PATH" "|" "no shim: the session's isolation marker is not a decision"
+[ -f "$MK/.claude/state/isolation/mk1.json" ] && [ ! -e "$MK/.claude/state/isolation/mk1.json.imported" ] && ok || fail "no shim: the isolation marker is left alone"
+[ ! -e "$MK/.claude/state/sessions/mk1.jsonl" ] && ok || fail "no shim: a read creates no state file"
+session_append "$MK" mk1 "$(jq -nc --arg r "$MK" '{t:"write",root:$r,rel:"n.ts",kind:"code"}')"
+eq "$(session_events "$MK" mk1 | jq -r '.t' | tr '\n' ' ')" "write " "no shim: the first write is the file's first event; nothing was imported ahead of it"
 
 # session_tracked_at: the home or the checkout written to carries the config.
 mkdir -p "$ROOT/trk/home" "$ROOT/trk/wt/.claude" "$ROOT/trk/none"
@@ -228,13 +228,13 @@ session_tracked_at "$ROOT/trk/home" "$ROOT/trk/wt" && ok || fail "session_tracke
 session_tracked_at "$ROOT/trk/home" "$ROOT/trk/none" && fail "session_tracked_at: neither tracked" || ok
 session_tracked_at "$ROOT/trk/home" "" && fail "session_tracked_at: an empty checkout is not tracked" || ok
 
-# An import into a state file whose last line was cut short (a writer killed
-# mid-write) starts on a fresh line, as session_append does: glued to the
-# fragment, the imported event was skipped with it.
+# An append to a state file whose last line was cut short (a writer killed
+# mid-write) starts on a fresh line: glued to the fragment, the new event
+# would be skipped with it.
 printf '{"t":"write","root":"%s","rel":"a.ts","kind":"co' "$MK" > "$MK/.claude/state/sessions/mk3.jsonl"
-printf '{"mode":"develop","worktree_path":"","decided_at":%d}\n' "$((NOW - 60))" > "$MK/.claude/state/isolation/mk3.json"
+session_append "$MK" mk3 '{"t":"isolation","mode":"develop","path":"","note":""}'
 session_isolation "$MK" mk3
-eq "$ISO_MODE" "develop" "markers: an import after a truncated last line is read"
+eq "$ISO_MODE" "develop" "an append after a truncated last line is read"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

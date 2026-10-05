@@ -4,7 +4,11 @@ Specification-Driven Development framework for Claude Code and Codex. Provides s
 
 ## Installation
 
-Requirements: git 2.31 or later recommended (older git falls back: the hooks resolve what `git rev-parse --path-format=absolute` would print themselves, but `memory-claim-id.sh` and the memory and friction-scan scripts still need it) and jq 1.6 or later (the settings reader uses `jq --rawfile`).
+Requirements — the host floor (raising it is a major, RELEASING.md "Breaking changes"):
+
+- **Claude Code 2.0.12 or later.** The hooks run from the plugin's `hooks.json` with `${CLAUDE_PLUGIN_ROOT}` (2.0.12, "Plugin System Released" in the [changelog](https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md)), answer PreToolUse with `hookSpecificOutput.permissionDecision` alone (1.0.59, "Exposed PermissionDecision to hooks"; the top-level `decision`/`reason` pair is the deprecated PreToolUse spelling and is no longer printed) and read `stop_hook_active` from the Stop payload ([hooks reference](https://code.claude.com/docs/en/hooks); no changelog entry). 2.0.12 is the highest of these, so it is the floor. The behavioural eval suite is maintainer-only and needs `claude plugin eval` (2.1.269, `evals/README.md`); that is not a consumer requirement.
+- **git 2.31 or later** (`git rev-parse --path-format=absolute`, #253). Below it the hooks resolve those paths themselves and keep working, but `memory-claim-id.sh` and the memory and friction-scan scripts need it.
+- **jq 1.6 or later** (the settings reader uses `jq --rawfile`).
 
 ### Codex
 
@@ -21,11 +25,9 @@ Use the myspec bootstrap skill before making changes.
 Use the myspec feature-spec skill for the new authentication flow.
 ```
 
-Codex support includes native plugin hooks via `hooks.json`. Claude compatibility remains project-local through `.claude/hooks/`, `.claude/settings.json`, and `.claude/verification.json`.
+### How the hooks run
 
-The same hook scripts are now portable:
-- in Claude, `init` can copy them into `.claude/hooks/`
-- in Codex, the plugin runs them directly from this repository
+The framework hooks (the work-isolation guards, session tracking, frontmatter validation, the stop gate, field metrics) run from the plugin: `hooks.json` at the repository root is declared in `.claude-plugin/plugin.json`, Claude Code merges it with the project's own `.claude/settings.json` hooks while the plugin is enabled, and every hook finds its helpers under `${CLAUDE_PLUGIN_ROOT}/lib`. Nothing is copied into a project's `.claude/hooks/` or `.claude/lib/` (that was the 2.x layout; `/myspec:update` retires those copies to `.claude/state/retired-3.0/` and unwires them), so a hook fix ships with the plugin version and reaches every project at once. A teammate without the plugin gets no gates, as they already got no skills. `frameworkVersion` in `.myspec.json` now covers only the rules and the `${aiDir}` files `init` and `update` write. Codex runs the same `hooks.json`.
 
 Both runtimes share the same project-level verification config at `.claude/verification.json` when it exists. A repo whose lint or type-check is already red on the default branch gives that check a `diffCommand`: the gate runs it in place of `command`, with `$MYSPEC_BASE_REF` exported as the merge base with the default branch, so the check covers what the branch changed instead of blocking on pre-existing debt.
 
@@ -62,7 +64,7 @@ The exec'd shell leads its own process group in the container, so `kill -TERM -<
 /myspec:init
 ```
 
-This starts an interactive wizard that creates `.myspec.json`, scaffolds the AI documentation directory, and copies framework files.
+This starts an interactive wizard that creates `.myspec.json`, scaffolds the AI documentation directory, and writes the framework rules and the verification config. The hooks need no setup: the plugin runs them.
 
 ### Local development
 
@@ -146,14 +148,13 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref main
   "frameworkVersion": "<current plugin version>",
   "project": {
     "name": "Project Name",
-    "description": "One-line description",
     "techStack": "PHP 8.3, Laravel 11, PostgreSQL"
   },
   "migrations": ["2.0.0-schema", "2.0.0-doctor-rule"]
 }
 ```
 
-`init` copies `frameworkVersion` and `migrations` from `framework-files/manifest.json` at run time. `aiDir` is required, stored without a trailing slash, and defaults to `.ai`.
+`init` copies `frameworkVersion` and `migrations` from `framework-files/manifest.json` at run time. `aiDir` is required, stored without a trailing slash, and defaults to `.ai`. Every key the file may hold, with its type, default and the issue behind it, is in `lib/myspec-config.schema.json` (schema version 2 since 3.0; a key rename or removal bumps it and ships a migration, an added key does not — [docs/project-settings-design.md](docs/project-settings-design.md), Schema version); `/myspec:doctor` reports a key the schema does not list.
 
 A project that deliberately customizes a framework-owned file pins it, so `update` skips it instead of reverting the local edits:
 
@@ -165,7 +166,7 @@ A project that deliberately customizes a framework-owned file pins it, so `updat
 }
 ```
 
-The key is the manifest key, not the destination path. Pinning is the project's decision — `update` reports pinned files and never adds or clears a pin itself.
+The key is the manifest key, not the destination path. Pinning is the project's decision — `update` reports pinned files and never adds or clears a pin itself. After adding a pin, run `node "<plugin dir>/lib/pin-reconcile.mjs" --record "rules/auto-memory-style.md"` from the project root: it records `hash` (the file) and `upstreamHash` (the plugin copy) on the pin, and `update` then tells a pin the project still edits from one whose edit upstream absorbed (`drop`) or that upstream moved under (`review`). `update` backfills the hashes of a pin that has none.
 
 An optional `isolation` block configures the work-isolation hooks; every key has a default:
 
@@ -221,7 +222,7 @@ After updating the plugin (`/plugin marketplace update`), run in each project:
 /myspec:update
 ```
 
-This updates framework-owned files while preserving your project customizations. Since 2.0 it also runs the one-shot migrations listed in the manifest (recorded in `.myspec.json` `migrations`), deletes files the framework retired, and wires its own hooks in `.claude/settings.json`.
+This updates framework-owned files while preserving your project customizations. Since 2.0 it also runs the one-shot migrations listed in the manifest (recorded in `.myspec.json` `migrations`) and deletes files the framework retired. Since 3.0 it removes the framework hook entries a 2.x install wrote to `.claude/settings.json` and moves the `.claude/hooks/` and `.claude/lib/` copies to `.claude/state/retired-3.0/` (the `3.0.0-plugin-hooks` migration): the plugin runs the hooks itself.
 
 **Upgrading to 3.0 — code review:** the `code-review` skill and the `setup code-review` blueprint are gone; use Claude Code's built-in `/code-review` for bugs in a diff (`feature-implement` offers it after the holistic review). `/myspec:update` drops the `codeReview` block from `.myspec.json` and leaves `.claude/rules/code-review.md` in place as a project-owned file. What is lost: the project rules under its `## Standards` / `## Suppress` headings were read by the removed skill only; the built-in does not read them, so keep what still matters as ordinary always-loaded rules or delete the file.
 
@@ -248,7 +249,7 @@ The two memory rules cover different stores and do not overlap. `memory-system.m
 
 ```
 .myspec.json                    # Config file (aiDir, topologyFile, frameworkVersion, project, isolation)
-.claude/state/                  # Gitignored per-checkout state: sessions/ (live logs), isolation/ (decisions), memory-ids.json
+.claude/state/                  # Gitignored per-checkout state: sessions/ (live logs and state files), memory-ids.json, metrics/, retired-3.0/ (2.x hook and lib copies update moved aside)
 backbone.yml                    # Project topology file (generated by /myspec:setup backbone)
 ${aiDir}/                       # AI documentation directory (.ai or ai)
   features/index.yaml           # Feature manifest

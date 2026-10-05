@@ -22,7 +22,7 @@ It also keeps the capability off the bypass path: its git calls happen in a chil
 ### Step 1: Audit
 
 ```bash
-.claude/lib/branch-cleanup.sh            # lib/branch-cleanup.sh in the myspec repo
+"${CLAUDE_PLUGIN_ROOT}/lib/branch-cleanup.sh"            # lib/branch-cleanup.sh in the myspec repo
 ```
 
 Read-only. It fetches with `--prune` first (merged PRs leave stale `origin/<branch>` refs behind), classifies every local branch, and prints one line per branch with either the proof of containment or the reason it is held back.
@@ -40,7 +40,7 @@ Ask: "Remove the branches marked DELETE? (yes / no / selective)". Never skip thi
 ### Step 4: Apply
 
 ```bash
-.claude/lib/branch-cleanup.sh --apply --branch <name> [--branch <name>]...
+"${CLAUDE_PLUGIN_ROOT}/lib/branch-cleanup.sh" --apply --branch <name> [--branch <name>]...
 ```
 
 Every branch is named explicitly; there is no bulk mode. Each is re-verified at apply time, so a stale audit cannot authorise a deletion. The script removes the worktree first (never `--force`), then deletes the branch, then runs `git worktree prune`.
