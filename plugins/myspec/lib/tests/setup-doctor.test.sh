@@ -165,6 +165,7 @@ if [ "$REPORTED_COUNT" -eq 8 ]; then ok; else fail "every framework entry is rep
 for name in guard-worktree-context require-isolation-decision validate-frontmatter mark-code-changed no-absolute-paths verify-before-stop record-session-metrics; do
   expect_line "hook-wired-locally: .claude/settings.json: hook command \".*$name.sh\"* runs the framework hook $name.sh" "the entry for $name.sh is reported by its script name"
 done
+# shellcheck disable=SC2016 # literal text, not an expansion
 expect_line 'hook command "bash "\$CLAUDE_PROJECT_DIR/.claude/hooks/validate-frontmatter.sh"" runs the framework hook' "an interpreter-led framework entry is reported"
 expect_line 'hook command "./.claude/hooks/mark-code-changed.sh" runs the framework hook' "a bare relative framework entry is reported"
 expect_line 'hook command ""\$\{CLAUDE_PLUGIN_ROOT\}"/hooks/verify-before-stop.sh" runs the framework hook' "a plugin-root spelling in settings is still a second copy of the plugin's own entry"
@@ -255,6 +256,7 @@ chmod 644 "$REPO/.claude/hooks/own.sh"
 # shellcheck disable=SC2016 # literal text, not an expansion
 set_json .claude/settings.json 'd.hooks.Stop[0].hooks.push({type:"command",command:"\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/own.sh"})'
 set_json .claude/settings.json 'd.hooks.Stop[0].hooks.push({type:"command",command:".claude/hooks/ghost.sh"})'
+# shellcheck disable=SC2016 # literal text, not an expansion
 set_json .claude/settings.json 'd.hooks.PreToolUse = [{matcher:"Bash",hooks:[{type:"command",command:"\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-worktree-context.sh"}]}]'
 cp "$PLUGIN/lib/hook-core.sh" "$REPO/.claude/hooks/guard-worktree-context.sh"
 printf '#!/usr/bin/env bash\nif [ 1 =\n' > "$REPO/.claude/hooks/broken.sh"
