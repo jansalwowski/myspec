@@ -105,10 +105,10 @@ This is the only milestone, so the skill goes directly to Step 5 (no Milestone C
 >
 > - **feature-complete** → skip the reviews; sync docs, archive plan, merge (Recommended)
 > - **feature-implement-review** → REQ/AC traceability, test trace, scope drift on top of holistic-review.md; persists conformance-report.md
-> - **code-review** → quality, standards, and bug review of the changes
+> - **/code-review** → Claude Code's built-in bug review of the branch diff
 > - **Stop here** → leave the branch as-is; continue later
 
-`feature-complete` carries the recommendation because the holistic verdict is READY TO MERGE, every criterion came back ✅, no probe was waived, and the plan has fewer than 10 tasks — the conformance audit would re-walk criteria the holistic pass just checked. Any one of those failing moves the recommendation to `feature-implement-review`. The two review passes are **complementary, not exclusive** (conformance vs. code quality). After whichever the user picks finishes, the skill offers this same choice again so they can run the other or proceed to `feature-complete`.
+`feature-complete` carries the recommendation because the holistic verdict is READY TO MERGE, every criterion came back ✅, no probe was waived, and the plan has fewer than 10 tasks — the conformance audit would re-walk criteria the holistic pass just checked. Any one of those failing moves the recommendation to `feature-implement-review`. The two review passes are **complementary, not exclusive** (conformance vs. bugs). After whichever the user picks finishes, the skill offers this same choice again so they can run the other or proceed to `feature-complete`.
 
 User picks **feature-implement-review** anyway. The skill invokes `/myspec:feature-implement-review favorite-reports`, which finds `holistic-review.md` with no code changed since its `head_sha` and spends its pass on traceability and test proof only.
 
@@ -194,7 +194,7 @@ This plan has 12 tasks, so `fresh` carries the `(Recommended)` marker: one miles
 
 #### Step 5 — Completion
 
-Final Verification runs, then the controller builds the full-feature review package (one temp file: commit list + stat + `git diff -U10` over `BASE_SHA..HEAD`) and dispatches the holistic reviewer on the premium tier with the package path and the plan's Execution Log entries. Per-phase reviews saw one phase's diff each; this one sees the feature — no overlap, and it is never skipped. The completion report surfaces every `Ruling:` line from the Execution Log under **Rulings I made**, then offers the same 4-option choice (feature-implement-review / code-review / feature-complete / Stop here). With 12 tasks, `feature-implement-review` carries the recommendation even on a READY TO MERGE verdict.
+Final Verification runs, then the controller builds the full-feature review package (one temp file: commit list + stat + `git diff -U10` over `BASE_SHA..HEAD`) and dispatches the holistic reviewer on the premium tier with the package path and the plan's Execution Log entries. Per-phase reviews saw one phase's diff each; this one sees the feature — no overlap, and it is never skipped. The completion report surfaces every `Ruling:` line from the Execution Log under **Rulings I made**, then offers the same 4-option choice (feature-implement-review / /code-review / feature-complete / Stop here). With 12 tasks, `feature-implement-review` carries the recommendation even on a READY TO MERGE verdict.
 
 ### Result
 

@@ -1,6 +1,6 @@
 ---
-description: "Checking that the built code matches the spec and plan is feature-implement-review, not code-review (bugs) or feature-verify (doc health)."
-tags: [skill:feature-implement-review, skill:code-review, skill:feature-verify, trigger, near-miss, regression]
+description: "Checking that the built code matches the spec and plan is feature-implement-review, not the built-in /code-review (bugs) or feature-verify (doc health)."
+tags: [skill:feature-implement-review, skill:feature-verify, trigger, near-miss, regression]
 max_turns: 6
 timeout_seconds: 300
 allowed_tools: [Read, Glob, Grep, Skill]

@@ -33,6 +33,7 @@ import { join, resolve, dirname, basename } from 'node:path'
 import { homedir } from 'node:os'
 import { argv, cwd, env, exit, stdout, stderr } from 'node:process'
 import { execFileSync } from 'node:child_process'
+import { getSetting } from '../myspec-config.mjs'
 
 // ───────────────────────── rules (data) ─────────────────────────
 // A hook block is reported only when the same signature repeats. One
@@ -469,11 +470,11 @@ export function projectRoot() {
   }
 }
 
+// feedback.frictionReport through the one settings reader (lib/myspec-config.mjs),
+// which also applies the MYSPEC_DISABLE_FRICTION_REPORT session override its
+// schema lists. A missing or malformed .myspec.json reads as the default (on).
 function disabled(root) {
-  if (env.MYSPEC_DISABLE_FRICTION_REPORT === '1') { return true }
-  const cfgPath = join(root, '.myspec.json')
-  if (!existsSync(cfgPath)) { return false }
-  try { return JSON.parse(readFileSync(cfgPath, 'utf8'))?.feedback?.frictionReport === false } catch { return false }
+  return getSetting('feedback.frictionReport', { root, env }).value === false
 }
 
 export function findTranscript(projectsDir, sessionId) {

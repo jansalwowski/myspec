@@ -10,7 +10,7 @@ Evals run **locally only**, on the maintainer's Claude Code login. There is no C
 |---|---|---|---|
 | pre-commit | static skill lint (no model) | `.githooks/pre-commit` | yes |
 | pre-push | cases for the skills changed on the branch, 1 run each, Sonnet | `.githooks/pre-push` → `run.sh --mode changed` | no (report-only) |
-| release | every case, 3 runs, two agent models (Sonnet, Haiku), judge Sonnet, compared with the previous release | `scripts/evals/release-check.sh` (RELEASING.md) | report-only; the maintainer decides |
+| release | every case, 3 runs, two agent models (Sonnet, Haiku), judge Sonnet, compared with the previous release | `scripts/evals/release-check.sh` (RELEASING.md) | yes: a regressed verdict exits 1 (`quality/release-check.json` gate) |
 
 Enable the hooks once per clone with `scripts/install-git-hooks.sh`. That script and `.githooks/pre-commit` come from PR #137 (requires #137). Skip the pre-push evals with `MYSPEC_SKIP_EVALS=1 git push` or `git push --no-verify`. Make a below-threshold result block the push with `MYSPEC_EVALS_STRICT=1`.
 
@@ -70,33 +70,33 @@ Files changed between `--base` (default: `git merge-base origin/main HEAD`) and 
 
 Nothing else selects a case. Changes to `framework-files/`, `scaffolding/`, `hooks/` or `lib/` are left to the full suite, even though the scaffold copies `framework-files/` into every workspace. The exception is an always-loaded rule in `framework-files/rules/`: regenerating the [project instructions](#project-instructions) rewrites every `case.yaml`, which selects every case.
 
-Tag a case with **every** skill its graders name, siblings included. A description change in `code-review` can start stealing `skill-verify`'s prompts, so `nearmiss-skill-verify` carries `skill:code-review` too.
+Tag a case with **every** skill its graders name, siblings included. A description change in `feature-spec-review` can start stealing `skill-verify`'s prompts, so `nearmiss-skill-verify` carries `skill:feature-spec-review` too. The exception is a sibling that is only a Claude Code built-in (`code-review`): no file in this repo changes it, so a tag would select nothing.
 
 ## The cases
 
 | Case | Family | What it proves |
 |---|---|---|
 | `trigger-new-feature` | trigger | "start a new feature … write the requirements" → feature-spec, spec.md written |
-| `route-spec-review` | trigger, near-miss | "before the technical design, check the requirements doc" → feature-spec-review, not tech-spec-review or code-review |
+| `route-spec-review` | trigger, near-miss | "before the technical design, check the requirements doc" → feature-spec-review, not tech-spec-review or the built-in /code-review |
 | `trigger-memorize` | trigger | a named fact to keep → memorize, not memorify or session-complete |
 | `nearmiss-personal-preference` | near-miss | "remember that I prefer short answers" → auto-memory, not memorize or memorify |
 | `trigger-memorify` | trigger | "anything from this debugging worth keeping?" → memorify |
 | `trigger-memory-lookup` | trigger, near-miss | "have we run into this before?" → memory-lookup, not a capture skill |
 | `trigger-session-complete` | trigger | "that's it for today, wrap up the session" → session-complete, not memorify |
-| `trigger-implement-review` | trigger, near-miss | "does what we built match the spec and plan?" → feature-implement-review, not code-review or feature-verify |
-| `nearmiss-skill-verify` | trigger, near-miss | "check my SKILL.md for problems" → skill-verify, not code-review or feature-spec-review |
+| `trigger-implement-review` | trigger, near-miss | "does what we built match the spec and plan?" → feature-implement-review, not the built-in /code-review or feature-verify |
+| `nearmiss-skill-verify` | trigger, near-miss | "check my SKILL.md for problems" → skill-verify, not the built-in /code-review or feature-spec-review |
 | `trigger-doctor` | trigger | "health check of our myspec setup" → doctor, not the feature audits |
 | `trigger-feature-verify` | trigger | one feature's drift → feature-verify, not feature-status-audit or doctor |
 | `trigger-feature-status-audit` | trigger | "does index.yaml match the features folder?" → feature-status-audit |
+| `trigger-feature-spec-scenarios` | trigger, near-miss | "write the test scenarios in Gherkin for the approved spec" → feature-spec (its `scenarios` argument; feature-scenario is gone in 3.0), not feature-tech-spec, feature-spec-review or feature-plan; scenarios.md written beside the spec |
 | `spec-review-planted-flaws` | planted flaw | feature-spec-review fires and flags an untestable AC, a REQ-002/REQ-004 contradiction, and missing error states; does not pass the review |
 | `tech-spec-review-planted-flaws` | planted flaw | feature-tech-spec-review flags a requirement with no step (REQ-004) and an ignored shared CSV writer the conventions mandate; reports a Critical and does not pass |
-| `code-review-planted-bug` | planted flaw | code-review (Python fixture) finds an off-by-one that drops the first line item and does not approve |
 | `feature-spec-contract` | artifact contract | feature-spec writes spec.md with every section and frontmatter key feature-spec-review checks, plus dependencies.md and a manifest entry |
 | `feature-plan-coverage` | artifact contract | feature-plan (Python fixture) writes implementation-plan.md whose Spec Coverage table maps every REQ ID to a task, including two no AC restates (837f68d), plus the Execution Order table feature-implement parses |
 | `feature-plan-gate` | procedure | spec and tech-spec still `status: draft` → feature-plan stops at its gate: no plan written, the reply says they are not approved (a3562ed) |
 | `feature-implement-dispatch` | orchestration | approved 2-task plan → feature-implement dispatches the Task 1 implementer Agent (matched on its prompt, not any Agent) before any `app/` or `tests/` Write (9ed2ed9); graded on the start of the run |
 
-`nearmiss-personal-preference` is a `capability` case until it has been run across releases. So are the three feature-plan and feature-implement cases (Sonnet, 2026-09-29):
+`nearmiss-personal-preference` is a `capability` case until it has been run across releases, and so is `trigger-feature-spec-scenarios` (added with #264, not yet run). So are the three feature-plan and feature-implement cases (Sonnet, 2026-09-29):
 
 - `feature-plan-coverage` passed 6 of 6.
 - `feature-plan-gate` wrote a plan from draft documents in 4 of 4 (#173).
@@ -104,9 +104,8 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 - None of the three is graded on more than read-only git. Listing `Bash` in `allowed_tools` grants only what `run.sh --allow-tools` grants every case: the git read verbs, including `git merge-base`, plus read-only shell commands. Prototypes, `pytest`, commits and the orchestration marker are denied.
 - feature-plan's base check (`git merge-base --is-ancestor`) is therefore not graded. 5 of 6 coverage runs skipped it; the sixth ran it inside a compound command that was denied, then planned anyway.
 
-Two cases started in `capability` and moved to `regression` once a description fix made them fire:
+One case started in `capability` and moved to `regression` once a description fix made it fire:
 - `trigger-memorize`: Claude Code's built-in auto-memory took "remember this" prompts (0 of 7 runs fired). Once memorize's description claimed project facts over auto-memory, it fired in 10 of 10.
-- `code-review-planted-bug`: Sonnet ran `git diff` and reviewed the change itself (0 of 5). Once the code-review description quoted natural review phrasing and said to use the skill instead of reading the diff, it fired in 5 of 5.
 
 ## Project instructions
 
@@ -206,7 +205,7 @@ arm: both
 ---
 ```
 
-For `code-review`, `doctor` and `init` write `"myspec:<name>"` without the optional group: Claude Code ships built-in skills with those names, and the bare call is not ours.
+For `doctor` and `init` write `"myspec:<name>"` without the optional group: Claude Code ships built-in skills with those names, and the bare call is not ours. `code-review` is the built-in alone since 3.0 (`feature-implement` hands off to it): a sibling grader guarding against it matches the bare `"code-review"`, and since it names nothing the repo ships, the case carries no `skill:code-review` tag.
 
 `evals/_fixtures/lib.sh` provides `myspec_init [name] [description] [stack]`, `add_feature <fixture-dir> <feature> <status> [phase] [priority]`, `register_feature <feature> <status>`, `copy_tree <fixture-dir>` and `git_commit_all <message>`. `project-instructions.sh` beside it generates each case's project instructions from the finished workspace. Shared fixture trees live beside it (`project-billing/`: a Python billing app with three features, a stale manifest and an orphan folder; `project-due-dates/`: a Python app with an approved invoice-due-dates spec and tech-spec). A fixture used by one case lives in that case's directory (`tech-spec-review-planted-flaws/workspace/`).
 

@@ -1,0 +1,30 @@
+# Upstream sources tracked by the repo-local .claude/skills/upstream-sync skill.
+#
+# Each source is an external repo we draw inspiration from. For each source,
+# `last_checked_sha` is updated automatically after a successful sync run;
+# `divergences` are intentional differences from upstream that must not be
+# re-proposed on the next sync.
+#
+# To add a new source, append an entry with `last_checked_sha: ""` — the next
+# sync run will treat it as a first-time pull and show full history.
+
+sources:
+  - name: superpowers
+    repo: obra/superpowers
+    branch: main
+    last_checked_sha: "b36e0829"
+    last_checked_date: "2026-08-21"
+    mappings:
+      - upstream: skills/brainstorming
+        local: skills/brainstorm
+        divergences:
+          - "Output is optional (A/B/C wrap-up) — upstream mandates spec doc + writing-plans handoff."
+          - "We keep SCAMPER / Six Hats / reverse-brainstorm / first-principles techniques table; upstream removed it."
+          - "No HARD-GATE block — our skill is a thinking tool, not a pipeline kickoff."
+          - "Frontmatter description stays exploratory; upstream uses 'You MUST use this before any creative work' trigger language."
+          - "Visual-companion server ported from upstream scripts/ to lib/brainstorm-server/ (invoked via ${CLAUDE_PLUGIN_ROOT}/lib/...). Mirrored into plugins/myspec/lib/brainstorm-server/ so it resolves under the Codex plugin root too (where ${CLAUDE_PLUGIN_ROOT} → plugins/myspec/)."
+          - "Server session dir + frame branding rebranded .superpowers/ → .myspec/ and 'Superpowers Brainstorming' → 'myspec Brainstorming'."
+          - "Three-path router (spike/bounded/architectural), reworked HARD-GATE, Red Flags table, per-path checklists, dot graph (v6.3.0) not adopted — machinery for scaling a mandatory spec pipeline we do not have; only the one-way depth ratchet was folded into Before-diving-in."
+          - "spec-document-reviewer-prompt.md deleted locally — unreferenced dead file in both trees (upstream flow switched to inline self-review; ours always was)."
+          - "visual-companion.md platform-launch matrix trimmed to Claude Code + Codex + Windows + generic fallback; Gemini/Copilot CLI sections not mirrored."
+          - "Prime Radiant branding, telemetry env vars, remote logo, and version readout stripped from server.cjs; the BRANDING slot renders a static myspec link. Upstream start-server.sh kill-any-existing-server block stays removed (dead code — SESSION_DIR is unique per run)."

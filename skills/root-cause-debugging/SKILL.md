@@ -1,6 +1,6 @@
 ---
 name: root-cause-debugging
-description: "Use when a bug, test failure, build error, or unexpected behavior needs its root cause found before any fix. Keywords: why is this failing, diagnose, hypothesis test. Do NOT use for feature planning, code review (code-review), or performance tuning."
+description: "Use when a bug, test failure, build error, or unexpected behavior needs its root cause found before any fix. Keywords: why is this failing, diagnose, hypothesis test. Do NOT use for feature planning, code review (built-in /code-review), or performance tuning."
 ---
 
 # Root Cause Debugging

@@ -1,7 +1,7 @@
 ---
 title: "AI-First Development Workflow"
 purpose: "Feature development process and code generation policy"
-updated: 2026-09-03
+updated: 2026-10-05
 see_also:
   - ${aiDir}/features/index.yaml
 ---
@@ -18,7 +18,7 @@ Any source-code change — new files, modifications, components/functions/module
 
 - **New feature:** `feature-spec` → `feature-spec-review` → `feature-tech-spec` → `feature-tech-spec-review` → `feature-plan` → `feature-implement` → `feature-complete`
 - **Modification:** `feature-update` → `feature-plan` → `feature-implement` → `feature-complete`
-- **Optional:** `feature-decompose` (feature too large for one tech-spec), `cross-spec-validation` (after spec approval or updates), `feature-mockup` → `feature-mockup-review` (visual spec validation between spec approval and tech design; configure with `/myspec:setup mockup`), `feature-scenario`, `feature-seed-data`
+- **Optional:** `feature-decompose` (feature too large for one tech-spec), `cross-spec-validation` (after spec approval or updates), `feature-mockup` → `feature-mockup-review` (visual spec validation before tech design; `/myspec:setup mockup` configures), `feature-spec {feature} scenarios|seed-data`
 
 All are `/myspec:*` skills; each skill's own description covers when to invoke it.
 
@@ -29,9 +29,9 @@ All are `/myspec:*` skills; each skill's own description covers when to invoke i
 | `spec.md` | 1 | Product specification (what & why) — REQUIRED |
 | `dependencies.md` | 1 | Cross-feature dependency map — REQUIRED |
 | `tech-spec.md` | 2 | Implementation specification (how) |
-| `scenarios.md` | 3 | Test scenarios in Gherkin format |
-| `seed.json` | 3 | Test seed data |
-| `plans/` | 5 | Archived implementation plans (dated, moved here on feature-complete) |
+| `scenarios.md` | 1 | Test scenarios in Gherkin format (optional) |
+| `seed.json` | 1 | Test seed data (optional) |
+| `plans/` | 5 | Archived implementation plans (moved here on feature-complete) |
 | `CHANGELOG.md` | 5 | Feature evolution history — one entry per archived plan |
 
 ## Status State Machine
@@ -46,8 +46,8 @@ Completion percentage comes from **implementation-plan.md checkboxes**, never fr
 
 ## Sub-Feature Convention
 
-The top-level manifest holds main features only. A feature flagged `subfeatures: true` there has a dedicated `{feature}/index.yaml` whose list key is `sub-features:` — these are the only two spellings; do not introduce others.
+The top-level manifest holds main features only. A feature flagged `subfeatures: true` there has a dedicated `{feature}/index.yaml` whose list key is `sub-features:` — the only two spellings.
 
 ## Documentation Requirements
 
-New feature → `${aiDir}/features/{feature}/`; feature changes → update the same directory; architecture decisions → `${aiDir}/decisions/`; a new app, package, or top-level command → the topology file named in `.myspec.json` (`/myspec:backbone-sync` audits it). Every markdown file under `${aiDir}/` carries YAML frontmatter — enforced by the `validate-frontmatter.sh` PostToolUse hook (`${aiDir}/ideas/` exempt).
+New feature → `${aiDir}/features/{feature}/`; feature changes → update the same directory; architecture decisions → `${aiDir}/decisions/`; a new app, package, or top-level command → the topology file named in `.myspec.json` (`/myspec:backbone-sync` audits it). Every markdown file under `${aiDir}/` carries YAML frontmatter — enforced by the `validate-frontmatter.sh` PreToolUse hook (`${aiDir}/ideas/` exempt).

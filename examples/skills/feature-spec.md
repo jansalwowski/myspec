@@ -1,6 +1,6 @@
 # `/myspec:feature-spec` — examples
 
-Creates `spec.md` + `dependencies.md` for a new feature, and adds a manifest entry. The skill asks clarifying questions, drafts the documents, and waits for approval before writing.
+Creates `spec.md` + `dependencies.md` for a new feature, and adds a manifest entry. The skill asks clarifying questions, drafts the documents, and waits for approval before writing. After approval it offers the optional `scenarios.md` + `seed.json` step (`/myspec:feature-spec {feature} scenarios` or `seed-data` runs that step alone on an existing spec).
 
 **Contents**
 
@@ -70,15 +70,25 @@ Manifest row added:
 yes, looks good
 ```
 
+### Optional step: scenarios and seed data
+
+With the spec approved, the skill offers the two optional files:
+
+> Want test scenarios (`scenarios.md`, Gherkin: happy path, edge cases, error states) and seed data (`seed.json`, matching the data model and those scenarios) now? Either can wait — `/myspec:feature-spec favorite-reports scenarios` or `seed-data` adds it later.
+
+**User**: scenarios yes, seed data later.
+
+The skill writes `scenarios.md` from the three user stories: star (happy path), unstar, favorites pin to top, an edge case for the user with no favorites, and an error state for starring a report the user can no longer see. Each has a Given/When/Then plus an E2E block. No `seed.json`.
+
 ### Result
 
-Files written, manifest updated. The skill ends with a hand-off line:
+Three files written, manifest updated. The commit prompt stages `scenarios.md` alongside the spec. The skill ends with a hand-off line:
 
 > **Next:** `/myspec:feature-spec-review favorite-reports` — validate the spec before tech-spec.
 
 ### Why this example matters
 
-The simplest path: 4 questions, 1 draft, 1 approval. No back-and-forth, no decomposition signal. Most small features look like this.
+The simplest path: 4 questions, 1 draft, 1 approval. No back-and-forth, no decomposition signal. Most small features look like this. The scenarios step is an offer, not a gate: declining seed data costs nothing, and the `seed-data` argument picks it up later without redoing the spec.
 
 ---
 

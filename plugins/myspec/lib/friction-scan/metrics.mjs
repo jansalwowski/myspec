@@ -29,6 +29,7 @@ import { homedir } from 'node:os'
 import { execFileSync } from 'node:child_process'
 import { env, stdout, stderr } from 'node:process'
 import { extractEvents, blockName, activeMs, projectRoot, findTranscript, promptCount, lastAssistantText } from './scan.mjs'
+import { getSetting, loadSchema } from '../myspec-config.mjs'
 
 export const SCHEMA = 1
 
@@ -50,23 +51,23 @@ const DISPATCH_TOOLS = new Set(['Agent', 'Task'])
 
 // ───────────────────────── opt-out and location ─────────────────────────
 
-// null: no file. An unparseable file is marked, so recording can treat it as
-// opted out: a hand-written "metrics": false with a trailing comma must not
-// record anyway.
-function readConfig(root) {
-  const p = join(root, '.myspec.json')
-  if (!existsSync(p)) { return null }
-  try { return JSON.parse(readFileSync(p, 'utf8')) ?? {} } catch { return { unparseable: true } }
-}
+// Whether the checkout has a .myspec.json at all; its contents are read through
+// the one settings reader (lib/myspec-config.mjs).
+const hasConfig = (root) => existsSync(join(root, '.myspec.json'))
 
-// Returns the reason recording is off, or null.
+// Returns the reason recording is off, or null. The session variables are the
+// reader's schema env block (MYSPEC_DISABLE_METRICS, DO_NOT_TRACK), named
+// here for the reason line. An unparseable file is an opt-out: a hand-written
+// "metrics": false with a trailing comma must not record anyway; the reader
+// names such a file in its warnings.
 export function metricsDisabled(root, e = env) {
   if (e.MYSPEC_DISABLE_METRICS === '1') { return 'MYSPEC_DISABLE_METRICS=1' }
   const dnt = String(e.DO_NOT_TRACK ?? '').trim()
   if (dnt !== '' && dnt !== '0' && dnt.toLowerCase() !== 'false') { return 'DO_NOT_TRACK' }
-  const config = readConfig(root)
-  if (config?.unparseable) { return '.myspec.json does not parse' }
-  if (config?.feedback?.metrics === false) { return '"feedback.metrics": false in .myspec.json' }
+  if (!hasConfig(root)) { return null }
+  const { value, warnings } = getSetting('feedback.metrics', { root, env: {} })
+  if (warnings.some((w) => /is not a JSON object/.test(w))) { return '.myspec.json does not parse' }
+  if (value === false) { return '"feedback.metrics": false in .myspec.json' }
   return null
 }
 
@@ -635,7 +636,7 @@ export async function emitCli(args) {
   if (off) { return done({ disabled: true, reason: off, written: 0 }) }
 
   const explicit = typeof args.emit === 'string' && args.emit !== ''
-  const config = readConfig(root) ?? readConfig(here)
+  const config = hasConfig(root) || hasConfig(here)
   // The default location is only written in a myspec project, so a scan run
   // elsewhere does not grow a stray state tree.
   if (!explicit && !config) { note('no .myspec.json at the checkout root'); return done({ written: 0, reason: 'not a myspec project' }) }
@@ -662,11 +663,16 @@ export async function emitCli(args) {
     note('transcript format not recognized'); return done({ written: 0, reason: 'format' })
   }
   const subagents = await readSubagentsSlim(join(dirname(transcript), sessionId, 'subagents'))
-  const aiDir = String(config?.aiDir || '.ai').replace(/\/+$/, '')
+  // aiDir and frameworkVersion through the settings reader, from the checkout
+  // that has the file (the main checkout first, as the opt-out above).
+  const settingsRoot = hasConfig(root) ? root : here
+  const aiDirValue = getSetting('aiDir', { root: settingsRoot }).value
+  const aiDir = String(aiDirValue || loadSchema().keys.aiDir.default).replace(/\/+$/, '')
+  const frameworkVersion = getSetting('frameworkVersion', { root: settingsRoot }).value
   const records = buildRecords(sessionId, entries, subagents, {
     roots: config ? [here, root] : [],
     aiDir,
-    myspec: typeof config?.frameworkVersion === 'string' ? config.frameworkVersion : null,
+    myspec: typeof frameworkVersion === 'string' ? frameworkVersion : null,
     reason: typeof args.reason === 'string' && /^[a-z_]{1,32}$/.test(args.reason) ? args.reason : null,
   })
   const result = appendRecords(target, sessionId, records)

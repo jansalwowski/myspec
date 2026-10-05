@@ -77,6 +77,21 @@ read_both "$D" isolation.worktreeRoot; expect "default worktreeRoot" '".claude/w
 read_both "$D" verification.checks; expect "no verification.json" 'null'
 read_both "$D" no.such.key; expect "unknown key" 'null'
 
+# Schema v2 (#265): the version is the contract, declared in the design doc.
+[ "$(jq -r '.version' "$SCHEMA")" = 2 ] && ok || fail "the schema is version 2"
+grep -qE '^\| 2 \| 3\.0\.0 \|' "$DOC" && ok || fail "the design doc's Schema version table lists version 2"
+read_both "$D" orchestration.featureImplement; expect "default featureImplement" '"controller"'
+read_both "$D" probes.portSource; expect "portSource has no default" 'null'
+read_both "$D" mockups; expect "mockups has no default" 'null'
+read_both "$D" project.description; expect "project.description is no key" 'null'
+
+# A map typed through a `*` entry (frameworkFiles.*.pinned) comes back whole:
+# the readers never look inside a map, as they never look inside a list.
+D=$(fixture pins '{"frameworkFiles":{"rules/ideas.md":{"pinned":"gated","hash":"abc"},"pre-flight.md":{"pinned":7}},"mockups":{"extension":".vue","siblingRoots":["src"]}}')
+read_both "$D" frameworkFiles; expect "pins pass through the readers whole" '{"rules/ideas.md":{"pinned":"gated","hash":"abc"},"pre-flight.md":{"pinned":7}}'
+[ -z "$ERR" ] && ok || fail "a mistyped pin field is doctor's finding, not the readers' (got: $ERR)"
+read_both "$D" mockups.siblingRoots; expect "mockups.siblingRoots is read" '["src"]'
+
 # The guard's default list (#250), as the schema holds it.
 BLOCK_DEFAULT=$(jq -c '.keys["isolation.blockInMain"].default' "$SCHEMA")
 [ "$(jq 'length' <<< "$BLOCK_DEFAULT")" -gt 0 ] && ok || fail "blockInMain has a non-empty default"
@@ -306,6 +321,19 @@ for (const f of files) {
   // $MYSPEC_X, ${MYSPEC_X...}, env.MYSPEC_X, or an assignment MYSPEC_X=...
   for (const m of text.matchAll(/(?:\$\{?|env\.|\b(?=MYSPEC_[A-Z_]+=))(MYSPEC_[A-Z][A-Z_]*)/g)) {
     if (!schema.env[m[1]]) { problems.push(`${rel}: reads or sets ${m[1]}, which has no schema env entry`); }
+  }
+  // Principle 4, one reader: since schema v2 (#265) no script parses
+  // .myspec.json itself. A shell script that runs jq or sed over it, or a lib
+  // module that reads and parses it, is a reader of its own with a default of
+  // its own. The readers themselves are the exception, and setup-doctor.mjs,
+  // which validates the raw file, and pin-reconcile.mjs, which writes it.
+  const own = ['lib/myspec-config.sh', 'lib/myspec-config.mjs', 'lib/setup-doctor.mjs', 'lib/pin-reconcile.mjs'];
+  if (!own.includes(rel)) {
+    for (const line of text.split('\n')) {
+      if (/^\s*(#|\/\/)/.test(line) || !line.includes('.myspec.json')) { continue; }
+      if (f.endsWith('.sh') && /\b(jq|sed)\s+-/.test(line)) { problems.push(`${rel}: parses .myspec.json itself (${line.trim()}); read it through lib/myspec-config.sh`); }
+      if (f.endsWith('.mjs') && /readFileSync|JSON\.parse|readJson/.test(line)) { problems.push(`${rel}: parses .myspec.json itself (${line.trim()}); read it through lib/myspec-config.mjs`); }
+    }
   }
   if (!f.endsWith('.sh')) { continue; }
   for (const m of text.matchAll(/jq\s+(?:-[a-zA-Z]+\s+)*(['"])\(?\.([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)[^'"]*\1[^\n]*\.myspec\.json/g)) {

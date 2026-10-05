@@ -2,8 +2,11 @@
   "frameworkVersion": "2.12.0",
   "upgradeFrom": "2.12.0",
   "migrations": [
+    "3.0.0-code-review",
     "3.0.0-plugin-hooks",
-    "3.0.0-memory-registry"
+    "3.0.0-reuse-audit",
+    "3.0.0-memory-registry",
+    "3.0.0-schema-v2"
   ],
   "files": {
     "anti-patterns.md": {
