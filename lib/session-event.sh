@@ -20,7 +20,8 @@
 #       hook's payload carries it)
 #   {"t":"notice","what":<key>}
 #       a one-time step was taken: "imported-implement" (this session read
-#       the 2.x implement marker)
+#       the 2.x implement marker), "guard-settings" (guard-worktree-context.sh
+#       denied once because the settings reader failed)
 #
 # Subagents share their parent's session_id (#225), so a subagent's events
 # land in, and its reads come from, the parent's file. There is no

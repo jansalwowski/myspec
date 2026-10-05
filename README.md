@@ -29,7 +29,7 @@ The same hook scripts are now portable:
 
 Both runtimes share the same project-level verification config at `.claude/verification.json` when it exists. A repo whose lint or type-check is already red on the default branch gives that check a `diffCommand`: the gate runs it in place of `command`, with `$MYSPEC_BASE_REF` exported as the merge base with the default branch, so the check covers what the branch changed instead of blocking on pre-existing debt.
 
-The gate runs only after the session wrote code, and it verifies each checkout of the repository the session wrote in, so a linked worktree edited from the main checkout gets verified. Reading, grepping or running a file doesn't count, and neither does a write in another repository. When several sessions share one checkout, the checks can fail on another session's uncommitted work. A failure that names only files this session didn't write becomes a warning. Any other failure still blocks, and the block lists the uncommitted changes that aren't the session's. Each check also gets `$MYSPEC_SESSION_FILES`, one repo-relative path per line, for a per-file linter that should cover only the files this session wrote. Rules and known limits: [`docs/stop-gate.md`](docs/stop-gate.md).
+The gate runs only after the session wrote code, and it verifies each checkout of the repository the session wrote in, so a linked worktree edited from the main checkout gets verified. Reading, grepping or running a file doesn't count, and neither does a write in another repository. When several sessions share one checkout, the checks can fail on another session's uncommitted work. A failure that names only files this session didn't write becomes a warning. Any other failure still blocks, and the block lists the uncommitted changes that aren't the session's. Each check also gets `$MYSPEC_SESSION_FILES`, one path per line relative to the directory the check runs from (the root, or its `cwd`), for a per-file linter that should cover only the files this session wrote. Rules and known limits: [`docs/stop-gate.md`](docs/stop-gate.md).
 
 Each check runs under a 120 s cap. At the cap the gate kills the check's process group on this machine, and nothing else. Work a check runs in a container or on another host (`docker exec`, `docker compose exec`, `kubectl exec`, `ssh`) keeps running after its client dies, and the next stop starts another run on top of it (issue #147). Give such a check a `cleanup` command. The gate runs it after a timeout, under its own 30 s cap, with the same `$MYSPEC_CHECK_RUN_ID` the check saw:
 
@@ -178,11 +178,12 @@ An optional `isolation` block configures the work-isolation hooks; every key has
   "worktreeRoot": ".claude/worktrees",
   "allowLinkedModules": false,
   "blockInMain": [],
+  "ignoreBlockInMain": [],
   "provision": { "symlink": ["node_modules"], "copy": [".eslintcache"] }
 }
 ```
 
-`allowLinkedModules` lets the Stop hook verify a worktree whose dependency directory is a symlink even when the lockfiles that pin it differ from the linked checkout (a link with identical lockfiles is accepted without it); `blockInMain` adds command patterns the Bash guard blocks in the main checkout while a session works in a worktree; `provision` is what `worktree-provision.sh` links and copies into a new worktree.
+`allowLinkedModules` lets the Stop hook verify a worktree whose dependency directory is a symlink even when the lockfiles that pin it differ from the linked checkout (a link with identical lockfiles is accepted without it); `blockInMain` adds command patterns (anchored EREs) to the ones the Bash guard blocks in the main checkout while a session works in a worktree, whose default list in `lib/myspec-config.schema.json` covers builds and installs across the common stacks, and `ignoreBlockInMain` drops a default pattern by its exact text; `provision` is what `worktree-provision.sh` links and copies into a new worktree.
 
 A `symlink` entry is a path string or an object naming the lockfiles that pin it; `"lockfiles": []` marks an entry unguarded:
 

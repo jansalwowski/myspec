@@ -263,7 +263,7 @@ expect approve "$(stop 102 "$WT_B2")" "vendor-bin/tool/vendor link with identica
 printf 'v2\n' > "$WT_B2/vendor-bin/tool/composer.lock"
 expect block "$(stop 103 "$WT_B2")" "vendor-bin/tool/vendor link with a changed composer.lock blocks"
 
-# --- docker compose exec without -w is unverifiable in a linked worktree (#220)
+# --- a container exec without runIn is unverifiable in a linked worktree (#220)
 # A fake docker on PATH: a check that runs reports what it ran and passes.
 BIN="$ROOT/bin"
 mkdir -p "$BIN"
@@ -283,61 +283,55 @@ compose_stop() {
     | PATH="$BIN:$PATH" bash "$HOOK" 2>/dev/null | jq -r '[.decision, (.reason // "")] | @tsv'
 }
 r=$(compose_stop 110 "$WT_X" "docker compose exec svc make lint")
-expect block "${r%%$'\t'*}" "worktree: docker compose exec without -w blocks"
+expect block "${r%%$'\t'*}" "worktree: docker compose exec without runIn blocks"
 case "$r" in *unverifiable*) ok ;; *) fail "worktree: the reason says the check is unverifiable" ;; esac
-r=$(compose_stop 111 "$WT_X" "docker-compose -f compose.yaml exec -e APP_ENV=test svc make test")
-expect block "${r%%$'\t'*}" "worktree: docker-compose exec with options but no -w blocks"
-r=$(compose_stop 112 "$WT_X" "true && docker compose exec -T svc make -w lint")
-expect block "${r%%$'\t'*}" "worktree: a -w after the service name does not count"
-case "$r" in *unverifiable*) ok ;; *) fail "worktree: a later simple command is refused as unverifiable" ;; esac
-r=$(compose_stop 113 "$WT_X" "docker compose exec -w /srv/wt svc make lint")
-expect approve "${r%%$'\t'*}" "worktree: docker compose exec -w runs and passes"
-r=$(compose_stop 114 "$WT_X" "docker compose exec --workdir=/srv/wt svc make lint")
-expect approve "${r%%$'\t'*}" "worktree: docker compose exec --workdir= runs and passes"
+case "$r" in *runIn*) ok ;; *) fail "worktree: the reason names runIn" ;; esac
+r=$(compose_stop 112 "$WT_X" "true && docker compose exec -T svc make lint")
+expect block "${r%%$'\t'*}" "worktree: an exec in a later simple command blocks"
 r=$(compose_stop 115 "$WT_X" "docker compose run --rm svc make lint")
 expect approve "${r%%$'\t'*}" "worktree: docker compose run is not refused"
 r=$(compose_stop 116 "$MAIN_X" "docker compose exec svc make lint")
-expect approve "${r%%$'\t'*}" "main checkout: docker compose exec without -w runs as before"
+expect approve "${r%%$'\t'*}" "main checkout: docker compose exec without runIn runs as before"
 
-# Combined short flags: a w in a cluster takes the next word as the workdir;
-# after an option that takes a value, the rest of the cluster is that value.
-r=$(compose_stop 117 "$WT_X" "docker compose exec -Tw /srv/wt svc make lint")
-expect approve "${r%%$'\t'*}" "worktree: docker compose exec -Tw <dir> runs and passes"
-r=$(compose_stop 118 "$WT_X" "docker exec -itw/srv/wt app make lint")
-expect approve "${r%%$'\t'*}" "worktree: docker exec -itw<dir> runs and passes"
-r=$(compose_stop 119 "$WT_X" "docker compose exec -ew svc make lint")
-expect block "${r%%$'\t'*}" "worktree: -ew is -e w, not a workdir"
+# A -w is not read any more: only runIn says where the work runs (R8a).
+r=$(compose_stop 113 "$WT_X" "docker compose exec -w /srv/wt svc make lint")
+expect block "${r%%$'\t'*}" "worktree: docker compose exec -w without runIn blocks"
+r=$(compose_stop 114 "$WT_X" "docker exec --workdir=/srv/wt app make lint")
+expect block "${r%%$'\t'*}" "worktree: docker exec --workdir= without runIn blocks"
 
-# Every exec form in CONTAINER_EXEC_FORMS, not only compose (#220 review).
+# Every exec form in CONTAINER_EXEC_FORMS, not only compose (#220 review),
+# whatever the spacing or the path the program is called by.
 printf '#!/bin/sh\nexit 0\n' > "$BIN/podman"
 cp "$BIN/podman" "$BIN/podman-compose"
 chmod +x "$BIN/podman" "$BIN/podman-compose"
 sid=120
 for c in "docker exec app make lint" \
-         "docker exec -it -e A=1 app make lint" \
-         "docker --context ci container exec app make lint" \
+         "docker container exec app make lint" \
+         "docker-compose -f compose.yaml exec svc make lint" \
          "podman exec app make lint" \
          "podman container exec app make lint" \
+         "podman compose exec svc make lint" \
          "podman-compose exec svc make lint" \
-         "env $BIN/docker exec app make -w lint"; do
+         "docker  compose   exec svc make lint" \
+         "docker --context ci compose -p app exec svc make lint" \
+         "sh -c 'docker exec app make lint'" \
+         "env $BIN/docker exec app make lint"; do
   r=$(compose_stop "$sid" "$WT_X" "$c")
-  expect block "${r%%$'\t'*}" "worktree: '$c' without -w blocks"
+  expect block "${r%%$'\t'*}" "worktree: '$c' without runIn blocks"
   case "$r" in *unverifiable*) ok ;; *) fail "worktree: '$c' is refused as unverifiable" ;; esac
   sid=$((sid + 1))
 done
-for c in "docker exec -w /srv/wt app make lint" \
-         "podman exec --workdir /srv/wt app make lint" \
-         "docker run --rm -v .:/srv img make lint" \
+for c in "docker run --rm -v .:/srv img make lint" \
          "docker container ls" \
-         "docker compose ps"; do
+         "docker compose ps" \
+         "docker compose run svc sh -c exec" \
+         "echo mydocker exec"; do
   r=$(compose_stop "$sid" "$WT_X" "$c")
   expect approve "${r%%$'\t'*}" "worktree: '$c' runs"
   sid=$((sid + 1))
 done
-r=$(compose_stop 140 "$WT_X" "docker exec app make lint")
-case "$r" in *"trusts a -w/--workdir without verifying it"*) ok ;; *) fail "worktree: the refusal says -w is trusted, not verified" ;; esac
 r=$(compose_stop 141 "$MAIN_X" "docker exec app make lint")
-expect approve "${r%%$'\t'*}" "main checkout: docker exec without -w runs as before"
+expect approve "${r%%$'\t'*}" "main checkout: docker exec without runIn runs as before"
 
 # A submodule inside a linked worktree is in that worktree: its git dir is
 # its own common dir, so the superproject decides (#220 review).
@@ -354,9 +348,9 @@ git -C "$MAIN_X" worktree add -q -b feat-sub "$WT_XS" main
 git -C "$WT_XS" -c protocol.file.allow=always submodule update -q --init >/dev/null 2>&1
 [ -f "$WT_XS/sub/.claude/verification.json" ] && ok || fail "fixture: the linked worktree has its submodule checked out"
 r=$(compose_stop 142 "$WT_XS/sub" "docker compose exec svc make lint")
-expect block "${r%%$'\t'*}" "submodule of a linked worktree: docker compose exec without -w blocks"
+expect block "${r%%$'\t'*}" "submodule of a linked worktree: docker compose exec without runIn blocks"
 r=$(compose_stop 143 "$MAIN_X/sub" "docker compose exec svc make lint")
-expect approve "${r%%$'\t'*}" "submodule of the main checkout: docker compose exec without -w runs"
+expect approve "${r%%$'\t'*}" "submodule of the main checkout: docker compose exec without runIn runs"
 
 # A find without -lname (BusyBox) still blocks the #229 repro (#229 review).
 REAL_FIND=$(command -v find)

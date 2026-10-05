@@ -8,7 +8,8 @@
 # session's last isolation event from its state file (session_isolation in
 # lib/session-event.sh); its cases prove the mode lookup, the 8 h expiry, a
 # subagent following its parent's session id and no other session's, the
-# recorded-path naming, and the project-level blockInMain extension.
+# recorded-path naming, the blockInMain setting (its default, a project
+# extension) and ignoreBlockInMain.
 #
 # Runs against a synthetic checkout with a real linked worktree, so the
 # worktree-targeting cases exercise the actual `git worktree list` lookup.
@@ -239,6 +240,69 @@ check_in "$REPO" block "worktree prune"       wt-sess 'git worktree prune'
 check_in "$REPO" block "after && (cd inside main)" wt-sess 'cd .claude && yarn build'
 check_in "$REPO" block "project blockInMain"  wt-sess 'make deploy'
 
+# The list is the setting isolation.blockInMain (#250): its schema default
+# covers the JVM, .NET and Make stacks too, and a project trims it.
+check_in "$REPO" block "gradle wrapper build"  wt-sess './gradlew build'
+check_in "$REPO" block "gradle task path"      wt-sess 'gradle :app:assemble'
+check_in "$REPO" block "maven package"         wt-sess 'mvn -q -pl api package'
+check_in "$REPO" block "maven wrapper install" wt-sess './mvnw clean install'
+check_in "$REPO" block "dotnet build"          wt-sess 'dotnet build'
+check_in "$REPO" block "bare make"             wt-sess 'make'
+check_in "$REPO" block "make install"          wt-sess 'make -j 4 install'
+check_in "$REPO" allow "gradle test"           wt-sess './gradlew test'
+check_in "$REPO" allow "dotnet test"           wt-sess 'dotnet test'
+check_in "$REPO" allow "make lint"             wt-sess 'make lint'
+# The directory flags of make, maven and gradle say where the build runs, like
+# `cd` and `git -C`; a make dry run (-n, -q) only reports.
+check_in "$REPO" allow "make -C worktree"      wt-sess 'make -C .claude/worktrees/wt-a build'
+check_in "$REPO" allow "make --directory="     wt-sess 'make --directory=.claude/worktrees/wt-a install'
+check_in "$REPO" allow "make -C after target"  wt-sess 'make build -C .claude/worktrees/wt-a'
+check_in "$REPO" allow "mvn -f worktree pom"   wt-sess 'mvn -f .claude/worktrees/wt-a/pom.xml package'
+check_in "$REPO" allow "mvnw --file worktree"  wt-sess './mvnw --file .claude/worktrees/wt-a clean install'
+check_in "$REPO" allow "gradlew -p worktree"   wt-sess './gradlew -p .claude/worktrees/wt-a build'
+check_in "$REPO" allow "gradle --project-dir"  wt-sess 'gradle --project-dir=.claude/worktrees/wt-a assemble'
+check_in "$REPO" allow "make -n"               wt-sess 'make -n'
+check_in "$REPO" allow "make --dry-run build"  wt-sess 'make --dry-run build'
+check_in "$REPO" allow "make -q install"       wt-sess 'make -q install'
+check_in "$REPO" block "make build in main"    wt-sess 'make build'
+check_in "$REPO" block "make -C inside main"   wt-sess 'make -C .claude build'
+check_in "$REPO" block "mvn -f main pom"       wt-sess 'mvn -f pom.xml package'
+check_in "$REPO" block "gradlew -p main"       wt-sess './gradlew -p . build'
+check_in "$REPO" block "make -j value not -n"  wt-sess 'make -j4 build'
+# -C inside a short-option cluster names the directory too.
+check_in "$REPO" allow "make -kC worktree"     wt-sess 'make -kC .claude/worktrees/wt-a build'
+check_in "$REPO" allow "make -sC attached"     wt-sess 'make -sC.claude/worktrees/wt-a build'
+check_in "$REPO" block "make -kC main dir"     wt-sess 'make -kC .claude build'
+check_in "$WT"   block "make -kC main from wt" wt-sess "make -kC $REPO build"
+# Only the options that take a value consume the next word; a target after
+# any other flag is a target, not a value (`make -s test` is a test run).
+check_in "$REPO" allow "make -s test"          wt-sess 'make -s test'
+check_in "$REPO" allow "make -j4 lint"         wt-sess 'make -j4 lint'
+check_in "$REPO" allow "make -k check"         wt-sess 'make -k check'
+check_in "$REPO" allow "make -f file test"     wt-sess 'make -f Makefile.ci test'
+check_in "$REPO" allow "make -j 4 lint"        wt-sess 'make -j 4 lint'
+check_in "$REPO" block "make -s, default goal" wt-sess 'make -s'
+check_in "$REPO" block "make -f file, default" wt-sess 'make -f Makefile.ci'
+check_in "$REPO" block "make --file f all"     wt-sess 'make --file Makefile.ci all'
+MYSPEC_JSON=$(cat "$REPO/.myspec.json")
+jq '.isolation.ignoreBlockInMain = ["^git[[:space:]]+push([[:space:]]|$)"]' <<< "$MYSPEC_JSON" > "$REPO/.myspec.json"
+check_in "$REPO" allow "ignoreBlockInMain drops a default entry" wt-sess 'git push origin HEAD'
+check_in "$REPO" block "ignoreBlockInMain keeps the others"      wt-sess 'yarn build'
+check_in "$REPO" block "ignoreBlockInMain keeps project entries" wt-sess 'make deploy'
+printf '%s\n' "$MYSPEC_JSON" > "$REPO/.myspec.json"
+# An ignore entry that names no blockInMain entry drops nothing: say so on
+# stderr, once per entry, and still block.
+jq '.isolation.ignoreBlockInMain = ["^git[[:space:]]+push", "^git[[:space:]]+worktree[[:space:]]+prune([[:space:]]|$)"]' <<< "$MYSPEC_JSON" > "$REPO/.myspec.json"
+check_in "$REPO" block "a near-miss ignore entry drops nothing" wt-sess 'git push origin HEAD'
+err=$(run_hook "$REPO" wt-sess 'git push origin HEAD' 2>&1 >/dev/null)
+if [ "$(grep -c 'ignoreBlockInMain entry matches no isolation.blockInMain entry' <<< "$err")" = 1 ] \
+    && grep -qF 'drops nothing: ^git[[:space:]]+push' <<< "$err"; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); echo "FAIL  an unmatched ignoreBlockInMain entry is named on stderr, the matched one is not (got: $err)" >&2
+fi
+printf '%s\n' "$MYSPEC_JSON" > "$REPO/.myspec.json"
+
 # Issue #164: build targets and container execs run against the main tree too.
 check_in "$REPO" block "yarn build:<target>"          wt-sess 'yarn build:web'
 check_in "$REPO" block "npm run build:<target>"       wt-sess 'npm run build:prod'
@@ -262,6 +326,14 @@ check_in "$REPO" allow "worktree prune -v --dry-run"  wt-sess 'git worktree prun
 check_in "$REPO" block "worktree prune -v"            wt-sess 'git worktree prune -v'
 check_in "$REPO" block "worktree prune --expire"      wt-sess 'git worktree prune --expire now'
 check_in "$REPO" block "dry run, then a real prune"   wt-sess 'git worktree prune -n && git worktree prune'
+# The carve-out loosens the default entries only: a project entry that
+# matches the dry run blocks it.
+MYSPEC_JSON=$(cat "$REPO/.myspec.json")
+jq '.isolation.blockInMain += ["^git[[:space:]]+worktree[[:space:]]+prune"]' <<< "$MYSPEC_JSON" > "$REPO/.myspec.json"
+check_in "$REPO" block "project prune entry blocks --dry-run" wt-sess 'git worktree prune --dry-run'
+check_in "$REPO" block "project prune entry blocks -n"        wt-sess 'git worktree prune -n'
+printf '%s\n' "$MYSPEC_JSON" > "$REPO/.myspec.json"
+check_in "$REPO" allow "default entry keeps the carve-out"     wt-sess 'git worktree prune --dry-run'
 
 # --- gate B, worktree mode: these stay allowed on purpose --------------------
 check_in "$REPO" allow "read-only lint"       wt-sess 'yarn lint'
@@ -347,6 +419,37 @@ cp "$REPO/.myspec.json" "$REPO/.myspec.json.bak"
 printf '{"aiDir":"docs/ai/","frameworkVersion":"2.0.0"}\n' > "$REPO/.myspec.json"
 cites 'docs/ai/work-isolation.md' "gate A block under a custom aiDir" none-sess 'git checkout develop'
 mv "$REPO/.myspec.json.bak" "$REPO/.myspec.json"
+
+# --- a settings reader that fails is not silent ---------------------------------
+# A partial install (the schema missing) used to leave gate B with no list and
+# no word. The guard denies the first main-checkout command of a worktree-mode
+# session once, naming the reader's error, then fails open.
+BROKEN=$(dirname "$REPO")/broken-install
+mkdir -p "$BROKEN/hooks"
+cp "$HOOK" "$BROKEN/hooks/"
+cp -R "$(dirname "$HOOK")/../lib" "$BROKEN/lib"
+rm -f "$BROKEN/lib/myspec-config.schema.json"
+mark broken-sess worktree 60 "$WT"
+out=$(printf '{"tool_input":{"command":"npm run build"},"cwd":%s,"session_id":"broken-sess"}' "$(printf '%s' "$REPO" | jq -Rs .)" \
+  | "$BROKEN/hooks/guard-worktree-context.sh" 2>"$BROKEN/err")
+if printf '%s' "$out" | grep -q '"block"' && printf '%s' "$out" | grep -q 'run /myspec:update' \
+    && printf '%s' "$out" | grep -q 'schema not found'; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); printf 'FAIL  a failed settings reader denies once, naming its error (stdout: %s)\n' "$out" >&2
+fi
+if grep -q 'schema not found' "$BROKEN/err"; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); printf 'FAIL  the reader error goes to stderr (stderr: %s)\n' "$(cat "$BROKEN/err")" >&2
+fi
+out=$(printf '{"tool_input":{"command":"npm run build"},"cwd":%s,"session_id":"broken-sess"}' "$(printf '%s' "$REPO" | jq -Rs .)" \
+  | "$BROKEN/hooks/guard-worktree-context.sh" 2>/dev/null)
+if [ -z "$out" ]; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); printf 'FAIL  the deny is once per session (stdout: %s)\n' "$out" >&2
+fi
 
 # --- the branch-guard reason never advertises its bypass ----------------------
 if run_hook "$REPO" none-sess 'git checkout develop' | grep -q "MYSPEC_ALLOW_BRANCH_OPS"; then

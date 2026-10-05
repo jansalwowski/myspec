@@ -947,6 +947,91 @@ for f in '\.myspec\.json' '\.claude/verification\.json'; do
   if [ "$N" -eq 1 ]; then ok; else fail "settings: a non-object $f is one finding, got $N"; fi
 done
 
+# --- container checks (#220, #221): what the stop gate no longer parses -------
+# exec_checks <json array of [command, runIn or ""]> -> verification.json
+# with one required check per pair, named C0, C1, ... and one container "app".
+exec_checks() {
+  set_json .claude/verification.json "d.containers={app:{mountSource:'.', mountTarget:'/srv/app'}}; d.checks=$1.map(([c, r], i) => Object.assign({name: 'C' + i, command: c, required: true}, r ? {runIn: r} : {}));"
+}
+build_fixture
+# shellcheck disable=SC2016 # literal $MYSPEC_CHECK_WORKDIR in the commands
+exec_checks '[
+  ["docker compose exec app make lint", ""],
+  ["docker compose -p x exec -w /srv/app app make lint", ""],
+  ["docker compose exec app make lint", "app"],
+  ["docker compose exec -Tw /srv/app/wt app make lint", "app"],
+  ["docker exec -ew app make lint", "app"],
+  ["docker exec --workdir=/srv/app app make lint", "app"],
+  ["docker compose exec -w \"$MYSPEC_CHECK_WORKDIR\" app make lint", "app"],
+  ["docker compose exec app sh -c \"cd $MYSPEC_CHECK_WORKDIR && make\"", "app"],
+  ["docker compose exec -T app make -w lint", "app"],
+  ["docker compose run --rm app make lint", ""],
+  ["npm run lint", ""]
+]'
+run_doctor_env -- schema
+expect_exit 0 "containers: the container findings are warnings, not errors"
+expect_line '^WARN +verification-exec-no-runin: .*check C0 runs a container exec without runIn — in a linked worktree this check will be refused' "containers: an exec without runIn is warned about"
+expect_line '^WARN +verification-exec-no-runin: .*check C1 ' "containers: a -w does not stand in for runIn"
+expect_line 'declare runIn and a containers entry' "containers: the fix names runIn and containers"
+# shellcheck disable=SC2016 # a literal $ in the pattern
+# shellcheck disable=SC2016 # a literal $ in the pattern
+expect_line '^WARN +verification-runin-no-workdir: .*check C2 has runIn but its container exec passes neither -w/--workdir nor \$MYSPEC_CHECK_WORKDIR' "containers: a runIn exec without the workdir is warned about"
+expect_no_line 'check C3 ' "containers: a -Tw <dir> cluster sets the workdir"
+expect_line '^WARN +verification-runin-no-workdir: .*check C4 ' "containers: -ew is -e w, not a workdir"
+expect_no_line 'check C5 ' "containers: --workdir= sets the workdir"
+expect_no_line 'check C6 ' "containers: -w \"\$MYSPEC_CHECK_WORKDIR\" is the workdir"
+expect_no_line 'check C7 ' "containers: a command that names MYSPEC_CHECK_WORKDIR is trusted"
+expect_line '^WARN +verification-runin-no-workdir: .*check C8 ' "containers: a -w after the service name belongs to the inner command"
+expect_no_line 'check C9 |check C10 ' "containers: a compose run and a host command raise nothing"
+
+# Every form the hook declares is found the way the hook finds it.
+FORMS=$(sed -n 's/^CONTAINER_EXEC_FORMS=(\(.*\))$/\1/p' "$PLUGIN/hooks/verify-before-stop.sh" | grep -o '"[^"]*"' | tr -d '"')
+[ "$(printf '%s\n' "$FORMS" | grep -c .)" -ge 8 ] && ok || fail "containers: the hook's CONTAINER_EXEC_FORMS were read (got: $FORMS)"
+build_fixture
+exec_checks "$(printf '%s\n' "$FORMS" | jq -Rnc '[inputs | [. + " app make lint", ""]]')"
+run_doctor_env -- verification-exec-no-runin
+N=$(printf '%s\n' "$OUTPUT" | grep -cE '^WARN +verification-exec-no-runin')
+[ "$N" -eq "$(printf '%s\n' "$FORMS" | grep -c .)" ] && ok || fail "containers: every hook exec form is warned about without runIn (got $N)"
+
+# runIn naming an undefined container: an error before a stop refuses it.
+build_fixture
+exec_checks '[["docker compose exec -w /x app make lint", "nope"]]'
+run_doctor_env -- schema
+expect_exit 1 "containers: runIn naming an undefined container is an error"
+expect_line '^ERROR setting-unknown-ref: .*checks\[0\]\.runIn names "nope"' "containers: the error names the container"
+
+# A check's cwd is a repo-relative directory that must exist.
+build_fixture
+mkdir -p "$REPO/api"
+set_json .claude/verification.json 'd.checks[0].cwd="api"; d.checks[1].cwd="nope"; d.checks[2].cwd="/abs"; d.checks.push({name:"root",command:"true",required:true,cwd:""}, {name:"slashes",command:"true",required:true,cwd:".//api"});'
+run_doctor_env -- schema
+expect_no_line 'checks\[3\]\.cwd' "cwd: an empty cwd is the root, as the hook reads it (#255 review)"
+expect_line '^WARN +setting-dir-missing: \.claude/verification\.json: checks\[4\]\.cwd is "\.//api"' "cwd: .//api, which the hook ignores, is reported"
+expect_no_line 'checks\[0\]\.cwd' "cwd: an existing directory raises nothing"
+expect_line '^WARN +setting-dir-missing: \.claude/verification\.json: checks\[1\]\.cwd is "nope"' "cwd: a missing directory is reported"
+expect_line '^WARN +setting-dir-missing: \.claude/verification\.json: checks\[2\]\.cwd is "/abs"' "cwd: an absolute cwd is reported"
+run_doctor_env -- settings
+expect_line '^SET +checks\[0\]\.cwd = "api" \(\.claude/verification\.json\)$' "cwd: a check's cwd is listed"
+
+# An ignoreBlockInMain entry that is no blockInMain entry removes nothing:
+# warned, while a default's or a project entry's exact text is not (#255 review).
+build_fixture
+set_json .myspec.json 'd.isolation={blockInMain:["^make[[:space:]]+deploy"], ignoreBlockInMain:["^git[[:space:]]+push([[:space:]]|$)", "^make[[:space:]]+deploy", "^git[[:space:]]+push"]};'
+run_doctor_env -- schema
+expect_line '^WARN +setting-unmatched-item: \.myspec\.json: isolation\.ignoreBlockInMain\[2\] is "\^git\[\[:space:\]\]\+push", which is not an entry of isolation\.blockInMain' "ignoreBlockInMain: a near-miss of a default is reported"
+expect_no_line 'ignoreBlockInMain\[0\]|ignoreBlockInMain\[1\]' "ignoreBlockInMain: a default's or a project entry's exact text is not reported"
+expect_exit 0 "ignoreBlockInMain: the finding is a warning"
+
+# The worktree guard's list is a setting: a project's entries and its
+# ignoreBlockInMain are listed in force, the trim marked as loosening.
+build_fixture
+set_json .myspec.json 'd.isolation={blockInMain:["^make[[:space:]]+deploy"], ignoreBlockInMain:["^git[[:space:]]+push([[:space:]]|$)"]};'
+run_doctor_env -- settings
+expect_line '^SET +isolation\.blockInMain = default \+ \["\^make\[\[:space:\]\]\+deploy"\] \(\.myspec\.json\)$' "blockInMain: the list in force, default plus the project entry, is listed"
+expect_line '^SET +isolation\.ignoreBlockInMain = \["\^git.*push.*"\] \(\.myspec\.json\) — loosens a gate$' "blockInMain: ignoreBlockInMain is listed as loosening"
+run_doctor_env -- schema
+expect_no_line 'setting-' "blockInMain: both keys are known settings of the right type"
+
 # --- pass 4: argument handling ------------------------------------------------
 
 OUTPUT=$(node "$SCRIPT" --list-checks 2>&1); STATUS=$?
