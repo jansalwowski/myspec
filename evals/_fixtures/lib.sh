@@ -89,7 +89,14 @@ Global anchors loaded every session. Layer 2 indexes: procedural/, semantic/, ep
 |----|------|--------|
 MD
   for kind in procedural semantic episodic; do
-    _copy_doc "$t/index-$kind.md" "$ai/memory/$kind/index.md"
+    # Since 3.0 the index headers are scaffolding (init copies them once;
+    # lib/memory-index.mjs keeps the tables). release-check re-runs an older
+    # tag with HEAD's evals/ copied in, and 2.x kept them under templates/.
+    if [ -f "$PLUGIN_ROOT/scaffolding/memory/$kind/index.md" ]; then
+      _copy_doc "$PLUGIN_ROOT/scaffolding/memory/$kind/index.md" "$ai/memory/$kind/index.md"
+    else
+      _copy_doc "$t/index-$kind.md" "$ai/memory/$kind/index.md"
+    fi
     _copy_doc "$t/memory-$kind.md" "$ai/.templates/memory-$kind.md"
   done
   _copy_doc "$t/session-log.md" "$ai/.templates/session-log.md"

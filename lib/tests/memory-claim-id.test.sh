@@ -163,7 +163,7 @@ mem procedural P001-first.md "P001"
 mem semantic S001-fact.md "S001"
 mem semantic S003-fact.md "S003"
 mkdir -p .claude/state
-printf '{\n  "P": 20,\n  "S": 5,\n  "E": 7\n}\n' > .claude/state/memory-ids.json
+printf '{"P": 20, "S": 5, "E": 7}\n' > .claude/state/memory-ids.json
 got=$(claim)
 check "(e) registry P=20 ahead of disk -> P021" P021 "$got"
 check "(e) registry P becomes 21" 21 "$(reg P)"
@@ -179,6 +179,41 @@ if json_ok .claude/state/memory-ids.json; then
 else
   fail "(e) rewritten registry is not valid JSON: $(cat .claude/state/memory-ids.json)"
 fi
+
+# --- (e2) the pre-1.28 pretty-printed registry is not a floor (#266) ----------
+# Versions before 1.28 wrote the registry with jq, one key per line. Since
+# 3.0 only the one-line form this script writes is read: unnormalized, the
+# old file is no floor and the claim rewrites it with zeros — which is why
+# update runs --normalize first (e3).
+
+new_repo e2
+mem procedural P001-first.md "P001"
+mkdir -p .claude/state
+printf '{\n  "P": 20,\n  "S": 5,\n  "E": 7\n}\n' > .claude/state/memory-ids.json
+got=$(claim)
+check "(e2) an unnormalized pretty-printed registry is not read -> P002 from disk" P002 "$got"
+check "(e2) the claim rewrites it in the one-line form, floors lost" '{"P": 2, "S": 0, "E": 0}' "$(cat .claude/state/memory-ids.json)"
+
+# --- (e3) --normalize keeps the floors of a pre-1.28 registry -----------------
+# update's 3.0.0-memory-registry migration: the pretty-printed file becomes
+# one line with every floor intact, so the claim that follows honours them.
+
+new_repo e3
+mem procedural P001-first.md "P001"
+mkdir -p .claude/state
+printf '{\n  "P": 20,\n  "S": 5,\n  "E": 7\n}\n' > .claude/state/memory-ids.json
+got=$(MYSPEC_SKIP_MEMORY_DOCTOR='' "$SCRIPT" --normalize 2>"$ERR")
+check "(e3) --normalize reports the rewrite" 'memory-ids.json: normalized to one line: {"P": 20, "S": 5, "E": 7}' "$got"
+check "(e3) the registry is one line with every floor kept" '{"P": 20, "S": 5, "E": 7}' "$(cat .claude/state/memory-ids.json)"
+got=$("$SCRIPT" --normalize 2>"$ERR")
+check "(e3) --normalize is idempotent" 'memory-ids.json: already one line: {"P": 20, "S": 5, "E": 7}' "$got"
+got=$(claim)
+check "(e3) the claim after normalize honours the P floor -> P021" P021 "$got"
+check "(e3) S floor kept" 5 "$(reg S)"
+check "(e3) E floor kept" 7 "$(reg E)"
+rm .claude/state/memory-ids.json
+got=$("$SCRIPT" --normalize 2>"$ERR"); rc=$?
+check "(e3) no registry: nothing to do, exit 0" "0 memory-ids.json: no registry, nothing to normalize" "$rc $got"
 
 # --- (f) PATH without jq -----------------------------------------------------
 
@@ -203,6 +238,10 @@ fi
 
 new_repo f
 mem procedural P005-first.md "P005"
+mkdir -p .claude/state
+printf '{\n  "P": 2,\n  "S": 9,\n  "E": 4\n}\n' > .claude/state/memory-ids.json
+got=$(PATH="$BIN" "$SCRIPT" --normalize 2>"$ERR")
+check "(f) --normalize without jq keeps every floor" '{"P": 2, "S": 9, "E": 4}' "$(cat .claude/state/memory-ids.json)"
 got=$(PATH="$BIN" claim)
 check "(f) first claim without jq -> P006" P006 "$got"
 got=$(PATH="$BIN" claim)

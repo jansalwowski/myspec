@@ -68,10 +68,10 @@ write() {  # write <file> <content> -> OUT, RC
 edit() {  # edit <file> <old> <new> -> OUT, RC
   OUT=$(jq -nc --arg c "$REPO" --arg f "$1" --arg o "$2" --arg n "$3" '{cwd: $c, tool_name: "Edit", tool_input: {file_path: $f, old_string: $o, new_string: $n}}' | bash "$HOOK" 2>/dev/null); RC=$?
 }
-reason() { printf '%s' "$OUT" | jq -r '.reason // ""' 2>/dev/null; }
-expect_deny() {
+reason() { printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecisionReason // ""' 2>/dev/null; }
+expect_deny() {  # the PreToolUse deny alone: no legacy decision/reason pair since the 3.0 host floor
   if [ "$RC" -eq 0 ] && [ "$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = deny ] \
-      && [ "$(printf '%s' "$OUT" | jq -r '.decision' 2>/dev/null)" = block ]; then ok; else fail "$1 (exit $RC, output: ${OUT:0:200})"; fi
+      && [ "$(printf '%s' "$OUT" | jq -r 'has("decision") or has("reason")' 2>/dev/null)" = false ]; then ok; else fail "$1 (exit $RC, output: ${OUT:0:200})"; fi
 }
 expect_quiet() {
   if [ "$RC" -eq 0 ] && [ -z "$OUT" ]; then ok; else fail "$1 (exit $RC, output: ${OUT:0:200})"; fi

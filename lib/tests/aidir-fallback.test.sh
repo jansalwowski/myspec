@@ -122,7 +122,7 @@ isolation() {  # isolation <repo-relative file> -> block|allow
   out=$(printf '{"cwd":%s,"session_id":"aidir-sess","tool_input":{"file_path":%s}}' \
     "$(printf '%s' "$REPO" | jq -Rs .)" "$(printf '%s/%s' "$REPO" "$1" | jq -Rs .)" \
     | bash "$PLUGIN/hooks/require-isolation-decision.sh" 2>/dev/null)
-  case "$out" in *'"block"'*) printf 'block' ;; *) printf 'allow' ;; esac
+  case "$out" in *'"permissionDecision": "deny"'*) printf 'block' ;; *) printf 'allow' ;; esac
   ISOLATION_OUT="$out"
 }
 expect_eq "$(isolation knowledge/features/x/spec.md)" "allow" "require-isolation-decision.sh exempts the configured aiDir"

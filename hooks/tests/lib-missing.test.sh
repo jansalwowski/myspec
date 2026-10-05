@@ -38,9 +38,14 @@ payload() {  # payload <hook> -> a payload that reaches the lib lookup
   esac
 }
 
+# Payloads go in from a file, not a pipe: a hook that exits before reading
+# stdin (mark-code-changed without its lib) closes the pipe under the writer,
+# and on Linux the writer's SIGPIPE (141) became the pipeline's status under
+# pipefail. The hook's own exit status is unaffected.
 # run_without <hook>: sets OUT, ERR and STATUS from a run with the variable unset.
 run_without() {
-  OUT=$(payload "$1" | env -u CLAUDE_PLUGIN_ROOT bash "$PLUGIN/hooks/$1.sh" 2>"$ROOT/err"); STATUS=$?
+  payload "$1" > "$ROOT/payload.json"
+  OUT=$(env -u CLAUDE_PLUGIN_ROOT bash "$PLUGIN/hooks/$1.sh" < "$ROOT/payload.json" 2>"$ROOT/err"); STATUS=$?
   ERR=$(cat "$ROOT/err")
 }
 
@@ -48,8 +53,8 @@ for hook in guard-worktree-context require-isolation-decision validate-frontmatt
   run_without "$hook"
   [ "$STATUS" -eq 0 ] && ok || fail "$hook: exits 0 without the variable (got $STATUS)"
   [ "$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = deny ] && ok || fail "$hook: denies without the variable (got: ${OUT:0:160})"
-  [ "$(printf '%s' "$OUT" | jq -r '.decision' 2>/dev/null)" = block ] && ok || fail "$hook: carries the legacy block field too"
-  R=$(printf '%s' "$OUT" | jq -r '.reason' 2>/dev/null)
+  [ "$(printf '%s' "$OUT" | jq -r 'has("decision") or has("reason")' 2>/dev/null)" = false ] && ok || fail "$hook: carries no legacy decision/reason pair (dropped with the 3.0 host floor)"
+  R=$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecisionReason' 2>/dev/null)
   printf '%s' "$R" | grep -qF 'CLAUDE_PLUGIN_ROOT' && ok || fail "$hook: the reason names the variable"
   printf '%s' "$R" | grep -qF 'unset' && ok || fail "$hook: the reason says the variable is unset"
   printf '%s' "$R" | grep -qF '/myspec:update' && ok || fail "$hook: the reason names the repair"
@@ -74,9 +79,10 @@ printf '%s' "$ERR" | grep -qF '/myspec:update' && ok || fail "record-session-met
 # A set variable whose lib/ lacks hook-core.sh is the same condition, and the
 # reason names the root that was looked under.
 mkdir -p "$ROOT/empty-plugin/lib"
-OUT=$(payload require-isolation-decision | CLAUDE_PLUGIN_ROOT="$ROOT/empty-plugin" bash "$PLUGIN/hooks/require-isolation-decision.sh" 2>/dev/null)
+payload require-isolation-decision > "$ROOT/payload.json"
+OUT=$(CLAUDE_PLUGIN_ROOT="$ROOT/empty-plugin" bash "$PLUGIN/hooks/require-isolation-decision.sh" < "$ROOT/payload.json" 2>/dev/null)
 [ "$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = deny ] && ok || fail "a plugin root without lib/hook-core.sh denies"
-printf '%s' "$OUT" | jq -r '.reason' | grep -qF "$ROOT/empty-plugin" && ok || fail "the reason names the root it looked under"
+printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -qF "$ROOT/empty-plugin" && ok || fail "the reason names the root it looked under"
 
 # hook-core.sh present but the content checks' own libs missing (PR #274
 # review): the three content gates deny and name each missing file, rather
@@ -84,10 +90,10 @@ printf '%s' "$OUT" | jq -r '.reason' | grep -qF "$ROOT/empty-plugin" && ok || fa
 mkdir -p "$ROOT/partial-plugin/lib"
 cp "$PLUGIN/lib/hook-core.sh" "$PLUGIN/lib/glob-regex.sh" "$ROOT/partial-plugin/lib/"
 for hook in validate-frontmatter no-absolute-paths require-reuse-audit; do
-  OUT=$(jq -cn --arg f "$REPO/.ai/features/x/tech-spec.md" --arg c "$REPO" '{tool_name: "Write", tool_input: {file_path: $f, content: "/Users/alice/x"}, cwd: $c}' \
-    | CLAUDE_PLUGIN_ROOT="$ROOT/partial-plugin" bash "$PLUGIN/hooks/$hook.sh" 2>"$ROOT/err")
+  jq -cn --arg f "$REPO/.ai/features/x/tech-spec.md" --arg c "$REPO" '{tool_name: "Write", tool_input: {file_path: $f, content: "/Users/alice/x"}, cwd: $c}' > "$ROOT/payload.json"
+  OUT=$(CLAUDE_PLUGIN_ROOT="$ROOT/partial-plugin" bash "$PLUGIN/hooks/$hook.sh" < "$ROOT/payload.json" 2>"$ROOT/err")
   [ "$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = deny ] && ok || fail "$hook: denies when content-checks.sh is missing (got: ${OUT:0:160})"
-  R=$(printf '%s' "$OUT" | jq -r '.reason' 2>/dev/null)
+  R=$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecisionReason' 2>/dev/null)
   printf '%s' "$R" | grep -qF 'content-checks.sh, markdown-section-check.sh' && ok || fail "$hook: the reason names each missing file (got: ${R:0:160})"
   printf '%s' "$R" | grep -qF '/myspec:update' && ok || fail "$hook: the reason names the repair"
   grep -qF 'myspec lib missing' "$ROOT/err" && ok || fail "$hook: the line also goes to stderr"
@@ -95,7 +101,8 @@ done
 
 # With the variable set to the plugin, the same payloads reach the hook's own
 # logic: the isolation gate asks, the Bash guard allows a push with no decision.
-OUT=$(payload require-isolation-decision | CLAUDE_PLUGIN_ROOT="$PLUGIN" bash "$PLUGIN/hooks/require-isolation-decision.sh" 2>/dev/null)
+payload require-isolation-decision > "$ROOT/payload.json"
+OUT=$(CLAUDE_PLUGIN_ROOT="$PLUGIN" bash "$PLUGIN/hooks/require-isolation-decision.sh" < "$ROOT/payload.json" 2>/dev/null)
 printf '%s' "$OUT" | grep -qF 'no work-isolation decision' && ok || fail "with the variable set the isolation hook runs its own gate (got: ${OUT:0:160})"
 printf '%s' "$OUT" | grep -qF 'myspec lib missing' && fail "with the variable set no lib-missing reason is printed" || ok
 

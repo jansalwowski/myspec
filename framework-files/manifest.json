@@ -7,6 +7,7 @@
     "2.0.0-base-agents",
     "3.0.0-plugin-hooks",
     "3.0.0-reuse-audit",
+    "3.0.0-memory-registry",
     "3.0.0-schema-v2"
   ],
   "files": {
@@ -27,15 +28,6 @@
       "type": "overwrite"
     },
     "templates/memory-episodic.md": {
-      "type": "overwrite"
-    },
-    "templates/index-procedural.md": {
-      "type": "overwrite"
-    },
-    "templates/index-semantic.md": {
-      "type": "overwrite"
-    },
-    "templates/index-episodic.md": {
       "type": "overwrite"
     },
     "templates/session-log.md": {
@@ -219,6 +211,18 @@
     },
     "lib/dependency-map.sh": {
       "dest": ".claude/lib/dependency-map.sh",
+      "since": "3.0.0"
+    },
+    "templates/index-procedural.md": {
+      "dest": "${aiDir}/.templates/index-procedural.md",
+      "since": "3.0.0"
+    },
+    "templates/index-semantic.md": {
+      "dest": "${aiDir}/.templates/index-semantic.md",
+      "since": "3.0.0"
+    },
+    "templates/index-episodic.md": {
+      "dest": "${aiDir}/.templates/index-episodic.md",
       "since": "3.0.0"
     },
     "hooks/guard-git-branch.sh": {

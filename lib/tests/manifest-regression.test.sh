@@ -46,6 +46,9 @@ fail() { FAIL=$((FAIL + 1)); printf 'FAIL  %s\n' "$1" >&2; }
 # --- 1. the manifest copies no hook or lib; each is retired ------------------
 if [ "$(jq -r 'has("hooks") or has("lib")' "$MANIFEST")" = false ]; then ok; else fail "the manifest still has a hooks or lib group: 3.0 copies neither"; fi
 if jq -e '.migrations | index("3.0.0-plugin-hooks")' "$MANIFEST" >/dev/null; then ok; else fail "the manifest lists the 3.0.0-plugin-hooks migration"; fi
+# The registry normalisation (#266 review): memory-claim-id.sh reads only the
+# one-line registry since 3.0, so update must rewrite a pre-1.28 one first.
+if jq -e '.migrations | index("3.0.0-memory-registry")' "$MANIFEST" >/dev/null; then ok; else fail "the manifest lists the 3.0.0-memory-registry migration"; fi
 
 RETIRED=$(jq -r '.removed | to_entries[] | select(.value.since == "3.0.0") | select(.key | startswith("hooks/") or startswith("lib/")) | "\(.key)\t\(.value.dest)"' "$MANIFEST")
 for h in "$PLUGIN"/hooks/*.sh; do
@@ -58,6 +61,19 @@ for key in path-normalize.sh markdown-section-check.sh command-scan.sh glob-rege
     set-isolation.sh worktree-provision.sh promote-to-worktree.sh task-worktree.sh myspec-config.sh myspec-config.mjs \
     myspec-config.schema.json plan-checkbox.sh friction-scan/scan.mjs friction-scan/metrics.mjs; do
   if printf '%s\n' "$RETIRED" | grep -qxF -- "lib/$key"$'\t'".claude/lib/$key"; then ok; else fail "lib/$key (copied by 2.x) has no removed entry since 3.0.0 with dest .claude/lib/$key"; fi
+done
+
+# --- 1b. the memory index headers are scaffolding, not framework files -------
+# 2.x installed templates/index-{procedural,semantic,episodic}.md to
+# ${aiDir}/.templates/ and nothing read them: init copies the header once
+# (scaffolding/memory/<type>/index.md) and lib/memory-index.mjs keeps the
+# table. 3.0 retires the copies (#266).
+for kind in procedural semantic episodic; do
+  key="templates/index-$kind.md"
+  if [ "$(jq -r --arg k "$key" '.files | has($k)' "$MANIFEST")" = false ]; then ok; else fail "$key is still a files entry: update would keep installing it"; fi
+  # shellcheck disable=SC2016 # the dest holds a literal ${aiDir} placeholder
+  if [ "$(jq -r --arg k "$key" '.removed[$k] | "\(.since) \(.dest)"' "$MANIFEST")" = "3.0.0 \${aiDir}/.templates/index-$kind.md" ]; then ok; else fail "$key has no removed entry since 3.0.0 with dest \${aiDir}/.templates/index-$kind.md"; fi
+  if [ ! -e "$PLUGIN/framework-files/$key" ] && [ -f "$PLUGIN/scaffolding/memory/$kind/index.md" ]; then ok; else fail "$key did not move to scaffolding/memory/$kind/index.md"; fi
 done
 
 # --- 2. hooks.json runs every shipped hook, and nothing else -----------------

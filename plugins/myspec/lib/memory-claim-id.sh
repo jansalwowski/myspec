@@ -44,9 +44,18 @@
 # serialise against a session running elsewhere.
 #
 # Usage: memory-claim-id.sh <procedural|semantic|episodic>
+#        memory-claim-id.sh --normalize
 #
 # Prints exactly one line on success — the claimed ID (P053). Everything else
 # goes to stderr.
+#
+# --normalize rewrites .claude/state/memory-ids.json in the one-line form the
+# claim reads, from either form: versions before 1.28 wrote it jq
+# pretty-printed, one key per line, which the strict reader (section 3) sees
+# as zeros, and a claim would then rewrite the floors away. update's
+# 3.0.0-memory-registry migration runs it once; it takes the lock, keeps
+# every floor, is idempotent, prints one line, and does nothing without a
+# registry.
 #
 # Exit codes
 #   0  claimed
@@ -61,13 +70,15 @@
 set -euo pipefail
 
 TYPE="${1:-}"
+MODE=claim
 
 case "$TYPE" in
   procedural) PREFIX=P; PREFIX_RE='[Pp]' ;;
   semantic)   PREFIX=S; PREFIX_RE='[Ss]' ;;
   episodic)   PREFIX=E; PREFIX_RE='[Ee]' ;;
+  --normalize) MODE=normalize; PREFIX=""; PREFIX_RE="" ;;
   *)
-    echo "usage: memory-claim-id.sh <procedural|semantic|episodic>" >&2
+    echo "usage: memory-claim-id.sh <procedural|semantic|episodic> | --normalize" >&2
     exit 2
     ;;
 esac
@@ -131,7 +142,9 @@ LOCK="$STATE_DIR/memory-id.lock"
 # a sibling claim. Contract: the doctor prints `ERROR …` lines plus a summary
 # and exits 1 on errors, 0 otherwise.
 DOCTOR="$(dirname "$0")/memory-doctor.mjs"
-if [ "${MYSPEC_SKIP_MEMORY_DOCTOR:-}" = "1" ]; then
+if [ "${MYSPEC_SKIP_MEMORY_DOCTOR:-}" = "1" ] || [ "$MODE" = normalize ]; then
+  # --normalize is what update runs before the health checks; it allocates
+  # nothing, so the doctor has nothing to gate.
   :
 elif command -v node >/dev/null 2>&1 && [ -f "$DOCTOR" ]; then
   if ! DOCTOR_OUT=$(node "$DOCTOR" --quiet --root "$MAIN_ROOT" 2>&1); then
@@ -193,6 +206,40 @@ until mkdir "$LOCK" 2>/dev/null; do
 done
 LOCKED=1
 
+# --- 1b. --normalize ----------------------------------------------------------
+# Under the lock, so a concurrent claim never reads half a rewrite. Each
+# value is read with jq when it is on PATH, else with the tolerant pattern
+# (the integer after `"<key>":` anywhere in the file), so both the one-line
+# and the pre-1.28 pretty-printed form give their floors.
+if [ "$MODE" = normalize ]; then
+  if [ ! -f "$REGISTRY" ]; then
+    echo "memory-ids.json: no registry, nothing to normalize"
+    exit 0
+  fi
+  normalize_value() {
+    local v=""
+    if command -v jq >/dev/null 2>&1; then
+      v=$(jq -r --arg k "$1" '.[$k] // 0 | numbers | floor' "$REGISTRY" 2>/dev/null || printf '')
+    fi
+    if [ -z "$v" ]; then
+      v=$(sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p" "$REGISTRY" | tail -1)
+    fi
+    case "$v" in
+      ''|*[!0-9]*) v=0 ;;
+    esac
+    printf '%s' "$v"
+  }
+  NORMALIZED=$(printf '{"P": %d, "S": %d, "E": %d}' "$(normalize_value P)" "$(normalize_value S)" "$(normalize_value E)")
+  if [ "$(<"$REGISTRY")" = "$NORMALIZED" ]; then
+    echo "memory-ids.json: already one line: $NORMALIZED"
+    exit 0
+  fi
+  printf '%s\n' "$NORMALIZED" > "$REGISTRY.tmp.$$"
+  mv "$REGISTRY.tmp.$$" "$REGISTRY"
+  echo "memory-ids.json: normalized to one line: $NORMALIZED"
+  exit 0
+fi
+
 # --- 2. High-water ----------------------------------------------------------
 # Each collector emits candidate basenames, one per line; max_from_names keeps
 # the highest number among those that parse as <prefix><digits>[-slug].md,
@@ -244,12 +291,13 @@ case "$HIGH" in
 esac
 
 # --- 3. Registry ------------------------------------------------------------
-# One line per key, or jq-style pretty-printed from older versions; either way
-# the value for a key is the first integer after `"<key>":`.
+# One line, `{"P": n, "S": n, "E": n}`, as this script writes it (below): the
+# value for a key is the integer after `"<key>":` on that line. The jq
+# pretty-printed registry of versions before 1.28 is not read (#266).
 registry_value() {
   local v=""
   if [ -f "$REGISTRY" ]; then
-    v=$(sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p" "$REGISTRY" | tail -1)
+    v=$(sed -n "1s/^{.*\"$1\"[[:space:]]*:[[:space:]]*\([0-9][0-9]*\).*/\1/p" "$REGISTRY")
   fi
   case "$v" in
     ''|*[!0-9]*) v=0 ;;

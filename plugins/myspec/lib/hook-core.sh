@@ -256,14 +256,16 @@ ai_dir() {
   printf '%s\n' "$ai"
 }
 
-# pretool_deny <reason> -> prints the PreToolUse deny (plus the legacy fields
-# older hosts read) and exits 0. An allowed call prints nothing: for
-# PreToolUse {"decision": "approve"} is the deprecated spelling of
-# permissionDecision "allow", which would skip the user's permission prompt.
+# pretool_deny <reason> -> prints the PreToolUse deny and exits 0. Only the
+# hookSpecificOutput form: the top-level decision/reason pair is the
+# deprecated PreToolUse spelling, and the host floor (README) reads this one.
+# An allowed call prints nothing: {"decision": "approve"} is the deprecated
+# spelling of permissionDecision "allow", which would skip the user's
+# permission prompt.
 pretool_deny() {
   local reason
   reason=$(printf '%s' "$1" | jq -Rs .)
-  printf '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": %s}, "decision": "block", "reason": %s}\n' "$reason" "$reason"
+  printf '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": %s}}\n' "$reason"
   exit 0
 }
 
