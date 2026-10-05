@@ -135,6 +135,38 @@ session_file() {
   printf '%s/%s.jsonl\n' "$dir" "$2"
 }
 
+# session_keep <home> <session id> <root> <rel> -> "kept:<id>": copies the
+# file as it is now to <session file without .jsonl>.blobs/<id>, <id> being
+# the blob id of its bytes (computed, not written to the object store). The
+# Bash-write snapshot when the object store is read-only (mark-code-changed.sh
+# snapshot_blob); session-clean removes the directory with the file. Fails
+# when the copy cannot be written.
+session_keep() {
+  local f dir id
+  f=$(session_file "$1" "$2") || return 1
+  dir="${f%.jsonl}.blobs"
+  id=$(git -C "$3" hash-object --no-filters -- "$4" 2>/dev/null) || return 1
+  case "$id" in ''|*[!0-9a-f]*) return 1 ;; esac
+  if [ ! -f "$dir/$id" ]; then
+    mkdir -p "$dir" 2>/dev/null || return 1
+    if ! { cp -- "$3/$4" "$dir/$id.$$" 2>/dev/null && mv -f -- "$dir/$id.$$" "$dir/$id"; }; then
+      rm -f -- "$dir/$id.$$"
+      return 1
+    fi
+  fi
+  printf 'kept:%s\n' "$id"
+}
+
+# session_kept <home> <session id> <id> -> the path of the copy session_keep
+# made; fails when <id> is not one or the copy is gone.
+session_kept() {
+  local f
+  case "$3" in ''|*[!0-9a-f]*) return 1 ;; esac
+  f=$(session_file "$1" "$2") || return 1
+  [ -f "${f%.jsonl}.blobs/$3" ] || return 1
+  printf '%s\n' "${f%.jsonl}.blobs/$3"
+}
+
 # _session_write <file> <line>: appends one line, starting on a fresh line
 # when the file ends in a truncated one (a writer killed mid-write), which
 # would otherwise swallow this line too. Every append goes through it.

@@ -431,9 +431,9 @@ bash_write_targets() {
 # can add a stop gate the main checkout does not have yet.
 #
 # A Bash write (VIA=bash) to a file the content checks cover also carries
-# the file's blob after the write (snapshot_blob), or "@" when the file is
-# judged but could not be hashed, and is recorded every time, since each one
-# is a new before/after pair for the Stop gate.
+# the file's snapshot after the write (snapshot_blob), or "@" when the file
+# is judged but could be neither hashed nor kept, and is recorded every time,
+# since each one is a new before/after pair for the Stop gate.
 ledger_add() {
   local home blob="" rc=1
   home=$(ledger_home "$2") || return 0
@@ -476,9 +476,12 @@ ledger_home() {
 # has no `+` lines to judge). Only those two skip the object store: a file
 # the checks judge needs a before/after pair whatever its size, or its
 # baseline falls back to HEAD (which a commit moves) and its after side to
-# the file at Stop (which holds other sessions' lines). Returns 2 when the
-# file is judged but git cannot write the blob (a read-only object store).
+# the file at Stop (which holds other sessions' lines). When git cannot write
+# the blob (a read-only object store), a copy beside the session file stands
+# in for it, as "kept:<id>" (session_keep). Returns 2 when neither could be
+# written.
 snapshot_blob() {
+  local home
   [ "$SNAPSHOTS" = 1 ] || return 1
   absolute_paths_scope "$1" "$2" || return 1
   if [ ! -f "$1/$2" ]; then
@@ -488,7 +491,9 @@ snapshot_blob() {
   if [ "$(head -c 8000 "$1/$2" 2>/dev/null | LC_ALL=C tr -dc '\000' | wc -c)" -gt 0 ]; then
     return 1
   fi
-  git -C "$1" hash-object -w -- "$2" 2>/dev/null || return 2
+  git -C "$1" hash-object -w -- "$2" 2>/dev/null && return 0
+  home=$(ledger_home "$1") || return 2
+  session_keep "$home" "$SESSION_ID" "$1" "$2" || return 2
 }
 
 # snapshot_pre <root> <rel>: records the file's content before a Bash write

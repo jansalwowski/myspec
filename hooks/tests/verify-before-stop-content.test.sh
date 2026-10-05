@@ -289,15 +289,48 @@ OUT=$(stop 47)
 rm -f "$REPO/docs/crlf.md" "$REPO/.gitattributes"
 
 # --- a write git cannot snapshot is still judged (PR #274 review) ------------------
-# A read-only object store: hash-object -w fails at PostToolUse. The write is
-# judged on the file as it is now, not dropped. Root writes through the mode
-# bits, so the case only means something as another user.
+# A read-only object store: hash-object -w fails. The write is still judged,
+# not dropped. Root writes through the mode bits, so the case only means
+# something as another user.
 if [ "$(id -u)" != 0 ]; then
   chmod -R a-w "$REPO/.git/objects"
   bashcmd 48 "printf 'read-only store $LEAK\n' >> docs/ro.md"
   chmod -R u+w "$REPO/.git/objects"
   OUT=$(stop 48)
   [ "$(decision "$OUT")" = block ] && ok || fail "a write with no after-blob (read-only object store) still blocks (got: ${OUT:0:200})"
+  rm -f "$REPO/docs/ro.md"
+  # The snapshots are kept beside the session file instead, so the pair is
+  # still this write's own: another writer's leak in the file is not this
+  # session's, and a commit after the write hides nothing. The file's content
+  # before the write comes from outside the hooks, so the store does not hold
+  # it already.
+  printf 'other %s\n' "$LEAK" >> "$REPO/docs/ro.md"
+  chmod -R a-w "$REPO/.git/objects"
+  bashcmd 57 "printf 'clean line\n' >> docs/ro.md"
+  chmod -R u+w "$REPO/.git/objects"
+  OUT=$(stop 57)
+  [ "$(decision "$OUT")" = approve ] && ok || fail "under a read-only object store another writer's leak in the file does not block this session (got: ${OUT:0:300})"
+  rm -f "$REPO/docs/ro.md"
+  printf 'uncommitted line\n' >> "$REPO/docs/notes.md"
+  chmod -R a-w "$REPO/.git/objects"
+  bashcmd 58 "printf 'see $LEAK\n' >> docs/notes.md"
+  chmod -R u+w "$REPO/.git/objects"
+  git -C "$REPO" commit -qam leak
+  OUT=$(stop 58)
+  [ "$(decision "$OUT")" = block ] && ok || fail "a leak written under a read-only object store still blocks once committed (got: ${OUT:0:200})"
+  expect_in "line 8: /Users/alice" "$(reason "$OUT")" "the committed leak's line is named"
+  git -C "$REPO" reset -q --hard HEAD~1
+  ls "$REPO/.claude/state/sessions/$SID-58.blobs/" >/dev/null 2>&1 && ok || fail "the copies are kept beside the session file"
+  # No copy either (here: a file where the copies' directory would go): "@",
+  # and the write is still judged on the file as it is at Stop.
+  : > "$REPO/.claude/state/sessions/$SID-59.blobs"
+  chmod -R a-w "$REPO/.git/objects"
+  bashcmd 59 "printf 'nowhere to keep $LEAK\n' >> docs/ro.md"
+  chmod -R u+w "$REPO/.git/objects"
+  jq -e -s 'any(.[]; .t == "write" and .blob == "@")' "$REPO/.claude/state/sessions/$SID-59.jsonl" >/dev/null \
+    && ok || fail "a write neither hashed nor kept records blob \"@\""
+  OUT=$(stop 59)
+  [ "$(decision "$OUT")" = block ] && ok || fail "a write neither hashed nor kept still blocks (got: ${OUT:0:200})"
   rm -f "$REPO/docs/ro.md"
 fi
 

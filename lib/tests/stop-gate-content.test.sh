@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Function tests for lib/stop-gate/content.sh (R14, #263): which lines a Bash
 # write added (numbered from the hunk headers), which of them the file still
-# holds, the content before a write (a snapshot blob, no file, or HEAD's
-# version when no snapshot was taken), and which roots the content gates own.
+# holds, the content before a write (a snapshot blob, a copy kept outside a
+# read-only object store, no file, or HEAD's version when no snapshot was
+# taken), and which roots the content gates own.
 # The gate end to end: hooks/tests/verify-before-stop-content.test.sh.
 #
 # Usage: stop-gate-content.test.sh
@@ -92,6 +93,24 @@ content_before "$REPO" docs/a.md "$BLOB" "$OUT"
 expect "0 uncommitted" "$CONTENT_NEW $(cat "$OUT")" "a blob: its content"
 content_before "$REPO" docs/a.md 0000000000000000000000000000000000000000 "$OUT" && fail "a blob git does not have fails" || ok
 git -C "$REPO" checkout -q -- docs/a.md
+
+# --- content_snapshot: a blob, or a copy kept outside a read-only store ----------
+STATE_HOME="$REPO" SESSION_ID="sgc-kept"
+printf 'kept\r\n' > "$REPO/docs/k.md"
+KEPT=$(session_keep "$STATE_HOME" "$SESSION_ID" "$REPO" docs/k.md)
+case "$KEPT" in kept:*) ok ;; *) fail "session_keep names the copy (got: $KEPT)" ;; esac
+rm -f "$REPO/docs/k.md"
+CONTENT_KEPT=0
+content_snapshot "$REPO" "$KEPT" "$OUT"
+expect "1 kept" "$CONTENT_KEPT $(tr -d '\r' < "$OUT")" "kept:<id>: the copy, flagged as kept"
+CONTENT_KEPT=0
+content_before "$REPO" docs/k.md "$KEPT" "$OUT"
+expect "0 1" "$CONTENT_NEW $CONTENT_KEPT" "content_before reads a kept copy"
+content_snapshot "$REPO" kept:def456 "$OUT" && fail "a kept copy that is gone fails" || ok
+content_snapshot "$REPO" "kept:../${KEPT#kept:}" "$OUT" && fail "a kept id that is not hex fails" || ok
+CONTENT_KEPT=0
+content_snapshot "$REPO" "$BLOB" "$OUT"
+expect "0 uncommitted" "$CONTENT_KEPT $(cat "$OUT")" "a blob is not flagged as kept"
 
 # --- content_root_ok -----------------------------------------------------------
 arm_init "$REPO"

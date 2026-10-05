@@ -42,11 +42,28 @@ content_root_ok() {
   return 1
 }
 
+# content_snapshot <root> <snapshot> <out file> -> writes a snapshot's
+# content: a blob in <root>'s object store, or for "kept:<id>" the copy
+# mark-code-changed.sh kept beside the session file when the store was
+# read-only (session_keep). Sets CONTENT_KEPT=1 for a copy: its bytes skipped
+# git's line-ending conversion. Reads STATE_HOME, SESSION_ID.
+content_snapshot() {
+  local copy
+  case "$2" in
+    kept:*)
+      copy=$(session_kept "$STATE_HOME" "$SESSION_ID" "${2#kept:}") || return 1
+      CONTENT_KEPT=1
+      cat -- "$copy" > "$3" 2>/dev/null
+      ;;
+    *) git -C "$1" cat-file blob "$2" > "$3" 2>/dev/null ;;
+  esac
+}
+
 # content_before <root> <rel> <before> <out file> -> writes the file's content
-# before a Bash write: the blob <before>; nothing for "-" (there was no
-# file); for "?" (no snapshot) or "@" (the previous write was not hashed)
-# HEAD's version, or nothing when HEAD has none. Sets CONTENT_NEW=1 when
-# there was no file.
+# before a Bash write: the snapshot <before> (content_snapshot); nothing for
+# "-" (there was no file); for "?" (no snapshot) or "@" (the previous write
+# was neither hashed nor kept) HEAD's version, or nothing when HEAD has none.
+# Sets CONTENT_NEW=1 when there was no file.
 content_before() {
   CONTENT_NEW=0
   case "$3" in
@@ -57,7 +74,7 @@ content_before() {
         CONTENT_NEW=1
       fi
       ;;
-    *) git -C "$1" cat-file blob "$3" > "$4" 2>/dev/null || return 1 ;;
+    *) content_snapshot "$1" "$3" "$4" || return 1 ;;
   esac
 }
 
@@ -111,15 +128,20 @@ content_gates() {
     created=0 fm_changed=0
     : > "$tmp/added"
     while IFS=$'\t' read -r _ _ before after; do
+      CONTENT_KEPT=0
       content_before "$root" "$rel" "$before" "$tmp/before" || continue
       if [ "$after" = "@" ]; then
-        # Not hashed (a read-only object store): the file as
-        # it is now. Its CRs are dropped on both sides, as git's line-ending
-        # conversion may have dropped them from the blob.
-        LC_ALL=C awk '{ sub(/\r$/, "") } 1' "$abs" > "$tmp/after" 2>/dev/null || continue
-        LC_ALL=C awk '{ sub(/\r$/, "") } 1' "$tmp/before" > "$tmp/before.lf" && mv "$tmp/before.lf" "$tmp/before"
+        # Neither hashed nor kept: the file as it is now.
+        cat -- "$abs" > "$tmp/after" 2>/dev/null || continue
+        CONTENT_KEPT=1
       else
-        git -C "$root" cat-file blob "$after" > "$tmp/after" 2>/dev/null || continue
+        content_snapshot "$root" "$after" "$tmp/after" || continue
+      fi
+      if [ "$CONTENT_KEPT" -eq 1 ]; then
+        # A side that skipped git's line-ending conversion: CRs are dropped
+        # on both, as the conversion may have dropped them from a blob.
+        LC_ALL=C awk '{ sub(/\r$/, "") } 1' "$tmp/after" > "$tmp/lf" && mv "$tmp/lf" "$tmp/after"
+        LC_ALL=C awk '{ sub(/\r$/, "") } 1' "$tmp/before" > "$tmp/lf" && mv "$tmp/lf" "$tmp/before"
       fi
       [ "$CONTENT_NEW" -eq 0 ] || created=1
       added_lines "$tmp/before" "$tmp/after" "$tmp/pair"
