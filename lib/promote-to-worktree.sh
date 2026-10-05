@@ -105,11 +105,17 @@ if [ -z "$BASE" ]; then
   BASE="${BASE:-main}"
 fi
 
-WORKTREE_ROOT=".claude/worktrees"
-if [ -f "$REPO_ROOT/.myspec.json" ] && command -v jq >/dev/null 2>&1; then
-  WORKTREE_ROOT=$(jq -r '.isolation.worktreeRoot // ".claude/worktrees"' "$REPO_ROOT/.myspec.json" 2>/dev/null)
-  WORKTREE_ROOT="${WORKTREE_ROOT%/}"
+# Through the one settings reader (lib/myspec-config.sh), whose schema holds
+# the default.
+if read_setting isolation.worktreeRoot "$REPO_ROOT"; then
+  WORKTREE_ROOT=$(printf '%s' "$SETTING" | jq -r 'if type == "string" then . else empty end' 2>/dev/null || printf '')
+  [ -z "$SETTING_NOTES" ] || printf '%s\n' "$SETTING_NOTES" | sed 's/^/myspec-config: /' >&2
+else
+  echo "promote: cannot read isolation.worktreeRoot (lib/myspec-config.sh): ${SETTING_NOTES:-reader failed}" >&2
+  exit 1
 fi
+WORKTREE_ROOT="${WORKTREE_ROOT%/}"
+[ -n "$WORKTREE_ROOT" ] || { echo "promote: isolation.worktreeRoot is empty" >&2; exit 1; }
 
 if git -C "$REPO_ROOT" show-ref --verify --quiet "refs/heads/$BRANCH"; then
   echo "promote: branch '$BRANCH' already exists" >&2

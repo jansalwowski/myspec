@@ -80,19 +80,34 @@ COMMON_DIR=$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null) 
 }
 MAIN_ROOT=$(dirname "$COMMON_DIR")
 
-# aiDir comes from .myspec.json. Only the one string is needed, so a sed
-# extraction does it without a jq dependency; `.ai/` (trailing slash) occurs in
-# the wild and is normalised here.
-AI_DIR=""
-if [ -f "$MAIN_ROOT/.myspec.json" ]; then
-  AI_DIR=$(sed -n 's/.*"aiDir"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$MAIN_ROOT/.myspec.json" | tail -1)
-  AI_DIR=$(printf '%s' "$AI_DIR" | sed 's#^\./##; s#/*$##')
+# aiDir comes from .myspec.json through the one settings reader beside this
+# script: the Node one (lib/myspec-config.mjs) first, since the conformance
+# gate below needs node anyway and this script keeps jq optional; the shell
+# one (lib/myspec-config.sh, jq) when node is absent. The reader's schema
+# holds the default, so no value here is a guess from disk; `.ai/` (trailing
+# slash) occurs in the wild and is normalised here as memory-files.mjs does.
+LIB_DIR=$(dirname "$0")
+READER=()
+if command -v node >/dev/null 2>&1 && [ -f "$LIB_DIR/myspec-config.mjs" ]; then
+  READER=(node "$LIB_DIR/myspec-config.mjs")
+elif command -v jq >/dev/null 2>&1 && [ -f "$LIB_DIR/myspec-config.sh" ]; then
+  READER=(bash "$LIB_DIR/myspec-config.sh")
+else
+  echo "memory-claim-id: reading aiDir from .myspec.json needs node with $LIB_DIR/myspec-config.mjs, or jq with $LIB_DIR/myspec-config.sh" >&2
+  exit 2
 fi
-# No configured value: the documented default, never a guess from disk. aiDir
-# is required since 2.0; the setup doctor reports its absence and `update`
-# writes it. memory-files.mjs resolves the same way.
+READER_ERR=$(mktemp "${TMPDIR:-/tmp}/.myspec-claim.XXXXXX")
+AI_DIR=$("${READER[@]}" get aiDir --root "$MAIN_ROOT" 2>"$READER_ERR") || {
+  echo "memory-claim-id: cannot read aiDir: $(cat "$READER_ERR")" >&2
+  rm -f "$READER_ERR"
+  exit 2
+}
+[ ! -s "$READER_ERR" ] || sed 's/^/memory-claim-id: /' "$READER_ERR" >&2
+rm -f "$READER_ERR"
+AI_DIR=$(printf '%s' "$AI_DIR" | sed -n 's/^"\(.*\)"$/\1/p' | sed 's#^\./##; s#/*$##')
 if [ -z "$AI_DIR" ]; then
-  AI_DIR=".ai"
+  echo "memory-claim-id: aiDir in .myspec.json is empty or not a string" >&2
+  exit 2
 fi
 
 # Repo-relative path of this type's memory dir; doubles as the ls-tree pathspec.

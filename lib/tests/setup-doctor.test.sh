@@ -973,6 +973,7 @@ done
 # consumer. The keys v2 removed (project.description, codeReview) are reported
 # as unknown until their migrations drop them.
 build_fixture
+# shellcheck disable=SC2016 # literal text, not an expansion
 set_json .myspec.json 'd.project={name:"lockin", description:"GeoGuessr Meta Guides Platform", techStack:"Vue 3"}; d.mockups={extension:".vue", commands:{verify:"pnpm --filter @lockin/mockups typecheck", preview:"pnpm dev:mockups", compileCheck:"curl -s \"$PREVIEW_URL/@fs{absPath}\"", audit:"pnpm mockups:audit"}, siblingRoots:["apps/web/src/components", "packages/uikit/src/components"]}; d.frameworkFiles={"rules/ideas.md":{pinned:"gated with paths", hash:"0".repeat(64), upstreamHash:"1".repeat(64)}}; d.orchestration={featureImplement:"workflow"}; d.probes={portSource:"$DEV_PORTS", scratchEnvScript:"scripts/scratch-env.sh"}; d.codeReview={verbosity:"standard"};'
 run_doctor_env -- schema
 expect_no_line 'setting-unknown-key: \.myspec\.json: mockups' "schema v2: the mockups block is a setting, not an unknown key"

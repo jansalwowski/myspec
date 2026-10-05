@@ -234,15 +234,26 @@ hook_repo_root() {
 }
 
 # ai_dir <root> -> the doc tree configured in <root>/.myspec.json, without a
-# leading ./ or trailing /; .ai, the documented default, when unset.
+# leading ./ or trailing /, read through the one settings reader (read_setting
+# below), whose schema holds the default: no hook carries one of its own. A
+# value the reader rejects (not a string, a file that is not JSON) is named on
+# stderr and replaced by the schema default inside the reader; an empty
+# string is unset and takes the same default here, read from the schema. A
+# caller that asks per file (the content checks) resolves once per root and
+# passes the value on.
 ai_dir() {
-  local ai=""
-  if [ -f "$1/.myspec.json" ]; then
-    ai=$(jq -r '.aiDir // empty' "$1/.myspec.json" 2>/dev/null || printf '')
+  local ai="" dflt
+  if read_setting aiDir "$1"; then
+    ai=$(printf '%s' "$SETTING" | jq -r 'if type == "string" then . else empty end' 2>/dev/null || printf '')
+    [ -z "$SETTING_NOTES" ] || printf '%s\n' "$SETTING_NOTES" | sed 's/^/myspec-config: /' >&2
   fi
   ai="${ai#./}"
   while [ "${ai%/}" != "$ai" ]; do ai="${ai%/}"; done
-  printf '%s\n' "${ai:-.ai}"
+  if [ -z "$ai" ]; then
+    dflt=$(jq -r '.keys.aiDir.default' "$HOOK_LIB/myspec-config.schema.json" 2>/dev/null || printf '')
+    ai="${dflt:-.ai}"
+  fi
+  printf '%s\n' "$ai"
 }
 
 # pretool_deny <reason> -> prints the PreToolUse deny (plus the legacy fields

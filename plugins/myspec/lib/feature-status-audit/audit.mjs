@@ -6,13 +6,14 @@
 //   node audit.mjs [--ai-dir=<path>] [--json] [--only=<feature>] [--severity=<min>]
 //
 // Defaults:
-//   --ai-dir       reads .myspec.json { "aiDir": "..." } or falls back to "ai"
+//   --ai-dir       default: aiDir from .myspec.json (lib/myspec-config.mjs, schema default .ai)
 //   --severity     critical|high|medium|low (default: low — show all)
 
 import { readFileSync, existsSync, statSync, readdirSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
 import { join, resolve, relative } from 'node:path'
 import { argv, cwd, exit, stdout } from 'node:process'
+import { getSetting } from '../myspec-config.mjs'
 
 // ───────────────────────── args ─────────────────────────
 
@@ -117,15 +118,10 @@ function parseScalar(raw) {
 
 // ───────────────────────── core ─────────────────────────
 
+// aiDir through the one settings reader (lib/myspec-config.mjs), whose schema
+// holds the default; a missing or malformed .myspec.json reads as that default.
 function detectAiDir(root) {
-  const cfg = join(root, '.myspec.json')
-  if (existsSync(cfg)) {
-    try {
-      const parsed = JSON.parse(readFileSync(cfg, 'utf8'))
-      if (typeof parsed.aiDir === 'string') { return parsed.aiDir }
-    } catch { /* ignore */ }
-  }
-  return 'ai'
+  return getSetting('aiDir', { root }).value
 }
 
 function fileExists(p) {

@@ -151,7 +151,7 @@ content_gates() {
     session_lines "$abs" "$tmp/added" "$tmp/numbered"
 
     # Absolute homedir paths, on the lines the session added.
-    if absolute_paths_scope "$root" "$rel" && [ -s "$tmp/numbered" ]; then
+    if absolute_paths_scope "$root" "$rel" "$ai" && [ -s "$tmp/numbered" ]; then
       cut -f2- "$tmp/numbered" > "$tmp/text"
       matches=$(absolute_path_findings "$tmp/text")
       if [ -n "$matches" ]; then

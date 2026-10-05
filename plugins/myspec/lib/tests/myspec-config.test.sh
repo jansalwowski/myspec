@@ -322,6 +322,19 @@ for (const f of files) {
   for (const m of text.matchAll(/(?:\$\{?|env\.|\b(?=MYSPEC_[A-Z_]+=))(MYSPEC_[A-Z][A-Z_]*)/g)) {
     if (!schema.env[m[1]]) { problems.push(`${rel}: reads or sets ${m[1]}, which has no schema env entry`); }
   }
+  // Principle 4, one reader: since schema v2 (#265) no script parses
+  // .myspec.json itself. A shell script that runs jq or sed over it, or a lib
+  // module that reads and parses it, is a reader of its own with a default of
+  // its own. The readers themselves are the exception, and setup-doctor.mjs,
+  // which validates the raw file, and pin-reconcile.mjs, which writes it.
+  const own = ['lib/myspec-config.sh', 'lib/myspec-config.mjs', 'lib/setup-doctor.mjs', 'lib/pin-reconcile.mjs'];
+  if (!own.includes(rel)) {
+    for (const line of text.split('\n')) {
+      if (/^\s*(#|\/\/)/.test(line) || !line.includes('.myspec.json')) { continue; }
+      if (f.endsWith('.sh') && /\b(jq|sed)\s+-/.test(line)) { problems.push(`${rel}: parses .myspec.json itself (${line.trim()}); read it through lib/myspec-config.sh`); }
+      if (f.endsWith('.mjs') && /readFileSync|JSON\.parse|readJson/.test(line)) { problems.push(`${rel}: parses .myspec.json itself (${line.trim()}); read it through lib/myspec-config.mjs`); }
+    }
+  }
   if (!f.endsWith('.sh')) { continue; }
   for (const m of text.matchAll(/jq\s+(?:-[a-zA-Z]+\s+)*(['"])\(?\.([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)[^'"]*\1[^\n]*\.myspec\.json/g)) {
     if (!keyCovered(m[2])) { problems.push(`${rel}: reads .myspec.json key ${m[2]}, which has no schema entry`); }

@@ -19,9 +19,10 @@
 # No session is handed another session's answer (issue #146): there is no
 # lookup across session files.
 #
-# Configuration (all optional, .myspec.json):
+# Configuration (all optional, .myspec.json, read through lib/myspec-config.sh;
+# the defaults are its schema's):
 #   aiDir                       doc tree; edits there never trigger the prompt
-#   isolation.worktreeRoot      where worktrees live (default .claude/worktrees)
+#   isolation.worktreeRoot      where worktrees live
 #
 # Output contract: a block prints the PreToolUse deny form (pretool_deny in
 # lib/hook-core.sh). An allowed edit prints NOTHING.
@@ -69,9 +70,16 @@ REPO_ROOT="$CF_MAIN"
 # Only a myspec project carries the isolation contract.
 [ -f "$REPO_ROOT/.myspec.json" ] || exit 0
 
+# Both through the one settings reader (lib/myspec-config.sh), whose schema
+# holds the defaults.
 AI_DIR=$(ai_dir "$REPO_ROOT")
-WORKTREE_ROOT=$(jq -r '.isolation.worktreeRoot // ".claude/worktrees"' "$REPO_ROOT/.myspec.json" 2>/dev/null)
+WORKTREE_ROOT=""
+if read_setting isolation.worktreeRoot "$REPO_ROOT"; then
+  WORKTREE_ROOT=$(printf '%s' "$SETTING" | jq -r 'if type == "string" then . else empty end' 2>/dev/null || printf '')
+  [ -z "$SETTING_NOTES" ] || printf '%s\n' "$SETTING_NOTES" | sed 's/^/myspec-config: /' >&2
+fi
 WORKTREE_ROOT="${WORKTREE_ROOT%/}"
+[ -n "$WORKTREE_ROOT" ] || exit 0
 # Installed by init/update from the manifest `files` entry work-isolation.md.
 PROCEDURE="$AI_DIR/work-isolation.md"
 
