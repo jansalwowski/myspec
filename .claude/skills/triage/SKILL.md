@@ -24,7 +24,7 @@ Triage and fix are separate turns. This skill reads, reproduces and labels. It n
 | Path the fix touches | Area |
 |---|---|
 | `skills/` | `area:skills` |
-| `hooks/` | `area:hooks` |
+| `hooks/`, `hooks.json` | `area:hooks` |
 | `lib/` | `area:lib` |
 | `framework-files/`, `blueprints/`, `templates/`, the manifest | `area:framework-files` |
 | `.claude-plugin/` | `area:plugin` |

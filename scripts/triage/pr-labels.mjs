@@ -41,7 +41,7 @@ const TYPES = { feat: 'type:enhancement', refine: 'type:enhancement', perf: 'typ
 // First match wins. Order is the output order.
 const AREAS = [
   ['area:skills', /^skills\//],
-  ['area:hooks', /^hooks\//],
+  ['area:hooks', /^(hooks\/|hooks\.json$)/],
   ['area:lib', /^lib\//],
   ['area:framework-files', /^(framework-files|blueprints|templates)\//],
   ['area:plugin', /^\.claude-plugin\//],
