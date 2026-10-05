@@ -68,8 +68,8 @@ Creates `ai/features/keyboard-shortcut-help/`:
 
 - `spec.md` — populated from the answers. Frontmatter `status: draft, spec_version: 1, priority: P1`. Required sections present.
 - `dependencies.md` — names the shortcut registry as an internal dependency, no external libs.
-- `scenarios.md` — Gherkin scenarios for the main flows: open with `?`, close with `?`, close with Escape, click outside (no-op for non-modal but stays open), shortcut list shows current page's category first.
-- `seed.json` — sample registry entries with the new `description` field. Useful for testing.
+- `scenarios.md` — Gherkin scenarios for the main flows, written the way `feature-spec`'s optional step writes them: open with `?`, close with `?`, close with Escape, click outside (no-op for non-modal but stays open), shortcut list shows current page's category first.
+- `seed.json` — sample registry entries with the new `description` field, matching those scenarios. Useful for testing.
 
 #### 5. Update manifest + queue
 
@@ -99,7 +99,7 @@ Marks the idea `[x]` in `PRIORITY-LISTING.md`:
 ### Why this example matters
 
 - **Mandatory clarifying questions are the point.** Even an idea that *looks* complete has gaps the file doesn't cover (sort order, descriptions field, mobile scope). The skill makes the user answer them before the spec lands.
-- **Four files, not one.** `scenarios.md` and `seed.json` are easy to forget if you're writing the spec by hand — `idea-process` always emits them so the next stages of the pipeline have what they need.
+- **Four files, not one.** `scenarios.md` and `seed.json` are optional in `/myspec:feature-spec` and easy to forget if you're writing the spec by hand — `idea-process` always runs that step so the next stages of the pipeline have what they need.
 - **Marking `[~]` early** is the concurrency fix — without it, two agents/users running this in parallel would both pick the same idea.
 
 ---

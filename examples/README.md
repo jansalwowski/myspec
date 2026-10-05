@@ -16,7 +16,7 @@ The eight skills you'll use to take a feature from idea to shipped:
 | Skill | Scenarios covered |
 |-------|-------------------|
 | [skills/feature-discover.md](skills/feature-discover.md) | Discovery only (capture tribal knowledge) · Full feature docs (pull existing code into pipeline) · Complex feature routes to decomposition |
-| [skills/feature-spec.md](skills/feature-spec.md) | Greenfield small feature · Cross-feature dependencies · Skill recommends decomposing first |
+| [skills/feature-spec.md](skills/feature-spec.md) | Greenfield small feature (with the optional scenarios + seed data step) · Cross-feature dependencies · Skill recommends decomposing first |
 | [skills/feature-decompose.md](skills/feature-decompose.md) | Mixed-priority split with deferred sub-features · Skill refuses to decompose |
 | [skills/feature-mockup.md](skills/feature-mockup.md) | First mockups for an approved spec · Unconfigured project (graceful degradation) · Scope-creep flag + schema handoff |
 | [skills/feature-mockup-review.md](skills/feature-mockup-review.md) | Full review with mixed findings · Focus prompt narrows to loose ends · Unconfigured project (Group E skipped, gap handed off) |
@@ -110,10 +110,9 @@ Skills not yet covered by per-skill examples:
 
 - **Spec quality** — `feature-spec-review`, `feature-tech-spec-review` (mostly gating; visible in flows)
 - **Drift fixers** — `feature-spec-sync`, `feature-spec-cleanup` (covered in [flows/spec-drift-recovery.md](flows/spec-drift-recovery.md))
-- **Auxiliary** — `feature-scenario`, `feature-seed-data`
 - **Batch audits** — `feature-status-audit`
 - **Project setup** — `init`, `update`, `setup`
 - **Memory + sessions** — `memory-preflight`, `memory-create`, `session-start`
-- **Utilities** — `skill-verify`, `worktree-clean`, `upstream-sync`
+- **Utilities** — `skill-verify`, `worktree-clean`
 
 If you'd find walk-throughs useful for any of these in isolation, open an issue or send a PR — examples are easy to add: each skill gets one file in `skills/{skill-name}.md` with H2 sections per scenario.

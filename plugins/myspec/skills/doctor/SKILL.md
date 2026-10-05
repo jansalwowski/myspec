@@ -1,6 +1,6 @@
 ---
 name: doctor
-description: "Use when the project's myspec setup needs a health check — CLAUDE.md, rules, skills, agents, hooks, ${aiDir} docs, memory tree, feature manifest. An optional surface (A-F) checks one. Keywords: healthcheck, setup broken, context bloat, rules drift. Do NOT use for project code (built-in /code-review), one skill (skill-verify), or one feature (feature-verify)."
+description: "Use when the project's myspec setup needs a health check — CLAUDE.md, rules, skills, agents, hooks, ${aiDir} docs, memory tree, feature manifest. A surface letter (A-F) checks one. Keywords: healthcheck, setup broken, context bloat, rules drift. Do NOT use for project code (/code-review), one skill (skill-verify), or one feature (feature-verify)."
 tags: [audit, maintenance, hooks, context-budget, drift]
 ---
 

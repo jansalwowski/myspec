@@ -98,7 +98,7 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref main
 | `/myspec:bootstrap` | Load project context, memory indexes, and active session at session start |
 | **Feature Workflow** | |
 | `/myspec:feature-discover` | Reverse-engineer an undocumented feature from existing code into discovery.md (+ optional spec.md / tech-spec.md) ([examples](examples/skills/feature-discover.md)) |
-| `/myspec:feature-spec` | Create feature specification (spec.md + dependencies.md) |
+| `/myspec:feature-spec` | Create feature specification (spec.md + dependencies.md); optional step adds scenarios.md + seed.json |
 | `/myspec:feature-decompose` | Split large feature into sub-features |
 | `/myspec:feature-spec-review` | Validate spec for completeness and consistency |
 | `/myspec:cross-spec-validation` | Check spec against related specs for contradictions and broken contracts |
@@ -115,8 +115,6 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref main
 | `/myspec:feature-complete` | Mark feature done, update docs |
 | `/myspec:feature-spec-cleanup` | Move technical content from spec to tech-spec |
 | `/myspec:feature-spec-sync` | Detect and fix documentation drift |
-| `/myspec:feature-scenario` | Generate Gherkin test scenarios |
-| `/myspec:feature-seed-data` | Generate test seed data for a feature |
 | **Memory System** | |
 | `/myspec:memory-preflight` | Pre-work checks across all memory types |
 | `/myspec:memory-create` | Create typed memory (procedural/semantic/episodic) |
@@ -137,7 +135,6 @@ codex marketplace add git@github.com:jansalwowski/myspec.git --ref main
 | `/myspec:backbone-sync` | Audit the project topology file against the repo in both directions — stale entries, undocumented workspace members and commands, git-backed liveness signals (`lib/backbone-audit/audit.mjs`) — then fix it. Refuses to run rather than half-read unsupported YAML, and names every check that could not run instead of reporting clean |
 | `/myspec:worktree-clean` | Clean up git worktrees after feature branches |
 | `/myspec:doctor` | Health check of every agent-facing surface, in three tiers: `lib/setup-doctor.mjs` for the mechanical checks (~1s, no model), one surface on request, or the full six-surface audit (CLAUDE.md + rules, skills/agents, `${aiDir}` docs, memory tree, hooks + harness config, feature manifest) with approval-gated fixes as grouped PRs |
-| `/myspec:upstream-sync` | Check tracked upstream repos (e.g. obra/superpowers) for changes worth porting into local skills |
 
 ## Configuration
 

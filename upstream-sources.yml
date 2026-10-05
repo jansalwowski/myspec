@@ -1,4 +1,4 @@
-# Upstream sources tracked by skills/upstream-sync.
+# Upstream sources tracked by the repo-local .claude/skills/upstream-sync skill.
 #
 # Each source is an external repo we draw inspiration from. For each source,
 # `last_checked_sha` is updated automatically after a successful sync run;
@@ -16,7 +16,7 @@ sources:
     last_checked_date: "2026-08-21"
     mappings:
       - upstream: skills/brainstorming
-        local: plugins/myspec/skills/brainstorm
+        local: skills/brainstorm
         divergences:
           - "Output is optional (A/B/C wrap-up) — upstream mandates spec doc + writing-plans handoff."
           - "We keep SCAMPER / Six Hats / reverse-brainstorm / first-principles techniques table; upstream removed it."
