@@ -8,12 +8,12 @@
 # title/name/topic/id/type; temporal is any of updated/last_updated/created/
 # started/date. ${aiDir}/ideas/ is exempt (its seed docs ship frontmatter-less).
 #
-# What is judged (#263, lib/content-checks.sh): a Write by its whole content;
-# an Edit or MultiEdit by the content it would leave, and only when that
-# changes the frontmatter region (line 1 through the closing `---`, or line 1
-# alone when there is no fence). An edit to the body of a doc whose
-# frontmatter is already wrong is not blocked for it: the file is never
-# rescanned for what was there before. A Bash write (a heredoc) never
+# What is judged (#263, lib/content-checks.sh): a Write that creates the doc
+# by its whole content; any other Write, Edit or MultiEdit by the content it
+# would leave, and only when that changes the frontmatter region (line 1
+# through the closing `---`, or line 1 alone when there is no fence). A body
+# edit or a body rewrite of a doc whose frontmatter is already wrong is not
+# blocked for it: the file is never rescanned for what was there before. A Bash write (a heredoc) never
 # reaches this hook: the Stop gate validates a doc it created or whose
 # frontmatter region it changed (lib/stop-gate/content.sh).
 #
@@ -78,11 +78,13 @@ TMP=$(mktemp "${TMPDIR:-/tmp}/.myspec-fm.XXXXXX")
 trap 'rm -f "$TMP"' EXIT
 proposed_content "$TOOL_INPUT" "$FILE_PATH" "$TMP" || exit 0
 
-# An edit is judged only when it changes the frontmatter region; a Write
-# proposes the whole file.
-if [ "$PROPOSED_KIND" != write ]; then
-  [ -f "$FILE_PATH" ] || exit 0
+# A call to an existing doc, a Write included, is judged only when it changes
+# the frontmatter region: a Write that keeps an already-broken header and
+# rewrites the body adds no defect. A Write that creates the doc always is.
+if [ -f "$FILE_PATH" ]; then
   [ "$(frontmatter_region "$FILE_PATH")" != "$(frontmatter_region "$TMP")" ] || exit 0
+elif [ "$PROPOSED_KIND" != write ]; then
+  exit 0
 fi
 
 ISSUES=$(frontmatter_issues "$TMP")

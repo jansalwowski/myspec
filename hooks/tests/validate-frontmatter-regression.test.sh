@@ -19,7 +19,8 @@
 #   #263     The hook rescanned the whole file after every edit, so a body
 #            edit to a doc with broken frontmatter was blocked for a defect
 #            it did not make. It now runs at PreToolUse on the proposed
-#            content: a Write by its content, an Edit only when it changes
+#            content: a Write that creates the doc by its content, any
+#            other Write or Edit only when it changes
 #            the frontmatter region.
 #
 # Usage: validate-frontmatter-regression.test.sh [path-to-hook]
@@ -52,10 +53,21 @@ printf '{"aiDir":".ai"}\n' > "$REPO/.myspec.json"
 git -C "$REPO" add -A
 git -C "$REPO" commit -q -m init
 
-# run <cwd> <file> -> hook stdout for a Write of the file's content (the
-# fixture on disk stands in for the proposed content); exit status in $RC
+# run <cwd> <file> -> hook stdout for a Write that creates the file with its
+# content (the fixture on disk stands in for the proposed content, and is
+# moved aside while the hook runs); exit status in $RC
 run() {
-  OUT=$(jq -nc --arg c "$1" --arg f "$2" --rawfile body "$2" '{cwd: $c, tool_name: "Write", tool_input: {file_path: $f, content: $body}}' \
+  local payload
+  payload=$(jq -nc --arg c "$1" --arg f "$2" --rawfile body "$2" '{cwd: $c, tool_name: "Write", tool_input: {file_path: $f, content: $body}}')
+  mv "$2" "$2.fixture"
+  OUT=$(printf '%s' "$payload" | bash "$HOOK" 2>/dev/null)
+  RC=$?
+  mv "$2.fixture" "$2"
+}
+
+# rewrite <cwd> <file> <content> -> hook stdout for a Write over the file on disk
+rewrite() {
+  OUT=$(jq -nc --arg c "$1" --arg f "$2" --arg b "$3" '{cwd: $c, tool_name: "Write", tool_input: {file_path: $f, content: $b}}' \
     | bash "$HOOK" 2>/dev/null)
   RC=$?
 }
@@ -205,6 +217,17 @@ expect_block "an edit that adds incomplete frontmatter is denied"
 OUT=$(jq -nc --arg c "$REPO" --arg f "$F" '{cwd: $c, tool_name: "MultiEdit", tool_input: {file_path: $f, edits: [{old_string: "old body", new_string: "body 2"}, {old_string: "# Title", new_string: "---\ntitle: Multi\n---\n# Title"}]}}' | bash "$HOOK" 2>/dev/null); RC=$?
 expect_block "a MultiEdit is judged by the content all its edits leave"
 reason | grep -q 'missing temporal field' && ok || fail "the MultiEdit deny names the missing field"
+
+# A Write over an existing doc is compared like an edit (PR #274 review): a
+# body rewrite that keeps an already-broken header adds no defect.
+F="$REPO/.ai/features/x/broken.md"
+printf -- '---\ntitle: X\n---\nbody\n' > "$F"
+rewrite "$REPO" "$F" $'---\ntitle: X\n---\nbody 2\n'
+expect_quiet "a Write that keeps a broken header and rewrites the body passes"
+rewrite "$REPO" "$F" $'---\ntitel: X\n---\nbody 2\n'
+expect_block "a Write that changes the broken header and leaves it broken is denied"
+rewrite "$REPO" "$F" $'---\ntitle: X\nupdated: 2026-01-01\n---\nbody 2\n'
+expect_quiet "a Write that fixes the header passes"
 
 # --- 4eb8ccb: ideas/ seed docs are exempt --------------------------------------
 mkdir -p "$REPO/.ai/ideas"
