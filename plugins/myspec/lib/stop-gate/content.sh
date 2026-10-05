@@ -75,9 +75,13 @@ added_lines() {
 # session_lines <file> <added> <out file> -> writes `<line>\t<text>` for each
 # line of <file> whose text is one of the <added> lines (`<n>\t<text>`, as
 # added_lines writes them): what the session added that the file still holds.
+# A trailing CR is dropped on both sides: the blobs went through git's
+# line-ending conversion (core.autocrlf, `text eol=crlf`), the working file
+# did not, so a CRLF line would otherwise never match its added text.
 session_lines() {
-  LC_ALL=C awk 'NR == FNR { seen[substr($0, index($0, "\t") + 1)] = 1; next }
-    ($0 in seen) { printf "%d\t%s\n", FNR, $0 }' "$2" "$1" > "$3" 2>/dev/null || : > "$3"
+  LC_ALL=C awk 'NR == FNR { t = substr($0, index($0, "\t") + 1); sub(/\r$/, "", t); seen[t] = 1; next }
+    { t = $0; sub(/\r$/, "", t) }
+    (t in seen) { printf "%d\t%s\n", FNR, t }' "$2" "$1" > "$3" 2>/dev/null || : > "$3"
 }
 
 # content_gates -> runs the checks above over the session's Bash writes and

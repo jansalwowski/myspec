@@ -275,6 +275,19 @@ OUT=$(stop 45)
 [ "$(decision "$OUT")" = block ] && ok || fail "an arithmetic shift does not hide the redirects after it (got: ${OUT:0:200})"
 rm -f "$REPO/docs/r.md"
 
+# --- a CRLF line is judged when git normalises line endings (PR #274 review) ------
+git -C "$REPO" config core.autocrlf input
+bashcmd 46 "printf 'see $LEAK\r\n' >> docs/crlf.md"
+OUT=$(stop 46)
+[ "$(decision "$OUT")" = block ] && ok || fail "a CRLF leak blocks under core.autocrlf=input (got: ${OUT:0:200})"
+rm -f "$REPO/docs/crlf.md"
+git -C "$REPO" config --unset core.autocrlf
+printf '*.md text eol=crlf\n' > "$REPO/.gitattributes"
+bashcmd 47 "printf 'see $LEAK\r\n' >> docs/crlf.md"
+OUT=$(stop 47)
+[ "$(decision "$OUT")" = block ] && ok || fail "a CRLF leak blocks under 'text eol=crlf' (got: ${OUT:0:200})"
+rm -f "$REPO/docs/crlf.md" "$REPO/.gitattributes"
+
 # --- the continuation after a block is approved (R10) -----------------------------
 bashcmd 15 "printf 'see $LEAK\n' > docs/again.md"
 OUT=$(jq -nc --arg s "$SID-15" --arg c "$REPO" '{session_id: $s, cwd: $c, stop_hook_active: true}' | bash "$HOOK" 2>/dev/null)
