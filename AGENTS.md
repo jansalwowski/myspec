@@ -79,7 +79,7 @@ Everything in `skills/`, `blueprints/`, `framework-files/`, and `templates/` is 
 - Use `${aiDir}/...` for any framework-managed doc — `init` substitutes per-project.
 - Use repo-relative paths (`src/foo.ts`) for codebase file references in examples and tables.
 - Use `<repo_root>` / `<encoded_cwd>` placeholders when an example genuinely needs to show an absolute path.
-- The `no-absolute-paths.sh` PostToolUse hook flags a write that violates this after it lands, and asks for a fix. It checks doc files anywhere and every file under `.claude/`, `docs/` and the aiDir, so a `.sh` or `.mjs` in `lib/` or `hooks/` is not covered; check those by hand. The rule it enforces is also shipped to downstream projects as `framework-files/rules/paths.md`.
+- The `no-absolute-paths.sh` PreToolUse hook denies a Write or Edit whose proposed content violates this, reading only what the call adds (never the file on disk), and the Stop gate checks the lines a Bash write added (`lib/stop-gate/content.sh`). It checks doc files anywhere and every file under `.claude/`, `docs/` and the aiDir, so a `.sh` or `.mjs` in `lib/` or `hooks/` is not covered; check those by hand. The rule it enforces is also shipped to downstream projects as `framework-files/rules/paths.md`.
 
 ## Config contracts between blueprints and skills
 

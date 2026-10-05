@@ -149,5 +149,5 @@ execution:
 
     ## Documentation Requirements
 
-    New feature → `.ai/features/{feature}/`; feature changes → update the same directory; architecture decisions → `.ai/decisions/`; a new app, package, or top-level command → the topology file named in `.myspec.json` (`/myspec:backbone-sync` audits it). Every markdown file under `.ai/` carries YAML frontmatter — enforced by the `validate-frontmatter.sh` PostToolUse hook (`.ai/ideas/` exempt).
+    New feature → `.ai/features/{feature}/`; feature changes → update the same directory; architecture decisions → `.ai/decisions/`; a new app, package, or top-level command → the topology file named in `.myspec.json` (`/myspec:backbone-sync` audits it). Every markdown file under `.ai/` carries YAML frontmatter — enforced by the `validate-frontmatter.sh` PreToolUse hook (`.ai/ideas/` exempt).
 # END project-instructions
