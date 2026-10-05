@@ -5,7 +5,8 @@
 #
 # No model calls: `claude` is a stub (MYSPEC_EVAL_CLAUDE). `plugin eval` writes
 # an aggregate-result.json with one case per <plugin-dir>/evals/*/prompt.md
-# (filtered by --case), every run scoring the number in <plugin-dir>/STUB_SCORE,
+# (filtered by --case), every run scoring the number in
+# <plugin-dir>/STUB_SCORE_<model> if present, else <plugin-dir>/STUB_SCORE,
 # and logs "EVAL HEAD|PREV <dir> <model> <case glob>". `-p` answers the
 # model-id probe with stub-<model>-$STUB_MODEL_REV_<model> (default a), or
 # fails when STUB_PROBE_FAIL is set.
@@ -54,7 +55,8 @@ if (a[0] === 'plugin' && a[1] === 'eval') {
   const nap = isHead ? env.STUB_SLEEP_HEAD : env.STUB_SLEEP_PREV;
   if (nap) { fs.writeFileSync(env.STUB_LOG + '.started', `${process.pid} ${dir}`); sleep(nap); }
   if ((isHead && env.STUB_FAIL_HEAD) || (!isHead && env.STUB_FAIL_PREV)) { console.error('boom'); process.exit(2); }
-  const q = Number(fs.readFileSync(path.join(dir, 'STUB_SCORE'), 'utf8'));
+  const perModel = path.join(dir, `STUB_SCORE_${opt('--model')}`);
+  const q = Number(fs.readFileSync(fs.existsSync(perModel) ? perModel : path.join(dir, 'STUB_SCORE'), 'utf8'));
   const runs = Number(opt('--runs'));
   const cases = fs.readdirSync(path.join(dir, 'evals')).filter((c) => fs.existsSync(path.join(dir, 'evals', c, 'prompt.md')))
     .filter((c) => !glob || new RegExp('^' + glob.replace(/\*/g, '.*').replace(/\[!/g, '[^') + '$').test(c)).sort();
@@ -89,8 +91,20 @@ git config user.name t
 git config commit.gpgsign false
 mkdir -p scripts/evals quality evals/_fixtures
 cp "$SRC_ROOT"/scripts/evals/{run.sh,summary.mjs,compare.mjs,baseline.mjs,results.mjs,release-check.sh} scripts/evals/
+# set_config <gate> [gateModels JSON]: the repo's release-check.json with gate
+# set and gateModels replaced, or dropped when no second argument is given.
+set_config() {
+  node -e '
+    const fs = require("fs");
+    const c = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
+    c.gate = process.argv[2] === "true";
+    delete c.gateModels;
+    if (process.argv[3]) c.gateModels = JSON.parse(process.argv[3]);
+    fs.writeFileSync(process.argv[4], JSON.stringify(c, null, 2) + "\n");
+  ' "$SRC_ROOT/quality/release-check.json" "$1" "${2:-}" "$REPO/quality/release-check.json"
+}
 # The fixture starts report-only whatever the repo sets (gate on since #267); "gate on" below flips it.
-sed 's/"gate": true/"gate": false/' "$SRC_ROOT/quality/release-check.json" > quality/release-check.json
+set_config false
 echo "lib" > evals/_fixtures/lib.sh
 for c in a b c d e; do mkdir -p "evals/case-$c" && echo "prompt $c" > "evals/case-$c/prompt.md"; done
 echo 1 > STUB_SCORE
@@ -206,12 +220,60 @@ expect_eq "MYSPEC_EVAL_RESOLVE_MODELS=0: no probe, and the previous tag re-runs"
 
 echo "# gate on"
 record twomodels
-sed -i.bak 's/"gate": false/"gate": true/' "$REPO/quality/release-check.json"
+set_config true
 before=$(quality_state)
 rc_run gate --version 1.2.0 --models sonnet,haiku --runs 2
 expect_eq "regressed with the gate on: exit 1" "$RC" 1
-expect_has "blocking message" "$OUTPUT" "REGRESSED and the gate is on"
+expect_has "blocking message" "$OUTPUT" "REGRESSED on sonnet,haiku and the gate is on"
 expect_eq "quality/ untouched on a blocked release" "$(quality_state)" "$before"
+
+echo "# gateModels: only the listed models block"
+echo 1 > "$REPO/STUB_SCORE_sonnet"
+rc_run gate-nokey-haiku --version 1.2.0 --models sonnet,haiku --runs 2
+expect_eq "no gateModels key, Haiku-only regression: every model gates, exit 1" \
+  "$RC $(jf "$TMP/out-gate-nokey-haiku/compare.json" '[d.models.sonnet.verdict, d.models.haiku.verdict]')" '1 ["no-change","regressed"]'
+expect_has "no key: blocks on haiku" "$OUTPUT" "REGRESSED on haiku and the gate is on"
+set_config true '["sonnet"]'
+rc_run gate-sonnet-haiku --version 1.2.0 --models sonnet,haiku --runs 2
+expect_eq "gateModels [sonnet], Haiku-only regression: exit 0" "$RC" 0
+expect_has "the header names the gating models" "$OUTPUT" "gate=on (sonnet)"
+expect_has "the Haiku regression is a report-only warning" "$OUTPUT" "WARNING: REGRESSED on haiku; report-only (not in gateModels"
+expect_has "and the release is not blocked" "$OUTPUT" "no gating model regressed; not blocking"
+expect_eq "both models still ran and are staged" \
+  "$(jf "$TMP/out-gate-sonnet-haiku/staged/baselines/v1.2.0.json" 'Object.keys(d.models).sort()')" '["haiku","sonnet"]'
+rm "$REPO/STUB_SCORE_sonnet"
+echo 1 > "$REPO/STUB_SCORE_haiku"
+rc_run gate-sonnet-sonnet --version 1.2.0 --models sonnet,haiku --runs 2
+expect_eq "gateModels [sonnet], Sonnet regression: exit 1" "$RC" 1
+expect_has "blocks on sonnet" "$OUTPUT" "REGRESSED on sonnet and the gate is on"
+rm "$REPO/STUB_SCORE_haiku"
+rc_run gate-sonnet-both --version 1.2.0 --models sonnet,haiku --runs 2
+expect_eq "gateModels [sonnet], both regressed: exit 1 and Haiku still warned" "$RC" 1
+expect_has "Haiku warned alongside the block" "$OUTPUT" "WARNING: REGRESSED on haiku"
+set_config true '"sonnet"'
+rc_run gate-badkey --version 1.2.0 --models sonnet --runs 2
+expect_eq "gateModels not an array: exit 2 before any eval" "$RC $(grep -c '^EVAL' "$STUB_LOG")" "2 0"
+echo "# gateModels that would gate nothing: exit 2 before any eval"
+set_config true '["sonnet"]'
+rc_run gate-notrun --version 1.2.0 --models haiku --runs 2
+expect_eq "gateModels [sonnet] with --models haiku: exit 2, no eval" "$RC $(grep -c '^EVAL' "$STUB_LOG")" "2 0"
+expect_has "names the model that would not run" "$OUTPUT" "gateModels lists sonnet, which --models (haiku) does not run"
+set_config true '["Sonnet"]'
+rc_run gate-case --version 1.2.0 --models sonnet,haiku --runs 2
+expect_eq "gateModels [Sonnet] (case typo): exit 2, no eval" "$RC $(grep -c '^EVAL' "$STUB_LOG")" "2 0"
+expect_has "names the typo" "$OUTPUT" "gateModels lists Sonnet, which --models (sonnet,haiku) does not run"
+set_config true '[]'
+rc_run gate-empty --version 1.2.0 --models sonnet,haiku --runs 2
+expect_eq "gateModels []: exit 2, no eval" "$RC $(grep -c '^EVAL' "$STUB_LOG")" "2 0"
+expect_has "says the list is empty" "$OUTPUT" "gateModels is empty"
+set_config false
+rc_run haiku-only --version 1.2.0 --models haiku --runs 2
+set_config true '["sonnet"]'
+rc_run gate-notcompared --version 1.2.0 --models sonnet,haiku --runs 2 --head-results "$TMP/out-haiku-only/head"
+expect_eq "gateModels [sonnet] but the results hold no sonnet: exit 2 after the comparison" \
+  "$RC $(jf "$TMP/out-gate-notcompared/compare.json" 'Object.keys(d.models)')" '2 ["haiku"]'
+expect_has "names the model missing from the comparison" "$OUTPUT" "gateModels lists sonnet, which the comparison (haiku) does not hold"
+set_config true
 rc_run gate-partial --version 1.2.0 --models sonnet,haiku --runs 2 --case 'case-[a-e]'
 expect_eq "a --case run never exits 1, even regressed with the gate on" "$RC" 0
 expect_has "and says so" "$OUTPUT" "REGRESSED on a partial run (--case); never a gate"
@@ -224,7 +286,7 @@ rc_run gate-ok --version 1.2.0 --models sonnet,haiku --runs 2
 expect_eq "not regressed with the gate on: exit 0" "$RC" 0
 expect_has "verdict printed" "$OUTPUT" "verdict no-change"
 echo 0.5 > "$REPO/STUB_SCORE"
-mv "$REPO/quality/release-check.json.bak" "$REPO/quality/release-check.json"
+set_config false
 
 echo "# failures: exit 2, worktree removed"
 rm -rf "$REPO/quality/baselines" "$TREND"
