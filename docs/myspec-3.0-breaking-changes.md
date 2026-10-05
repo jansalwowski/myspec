@@ -152,9 +152,9 @@ Any session can continue from here; every artefact is on GitHub. Review loop per
 | #256 provision record | #255 | approved |
 | #257 stop-gate split | #256 | approved |
 | #272 hooks run from the plugin (#262) | #257 | approved — retarget to v3 after #257 merges |
-| #273 2.x shim sweep (#266) | #272 | fix round in progress (3 Medium: registry normalize, removed-entry classes, spec-sync `complete`); floor set to Claude Code ≥ 2.0.12 |
-| #274 diff-scoped gates (#263) | #272 | review in progress |
-| (#265 schema v2) | #274 | implementation in progress |
+| #273 2.x shim sweep (#266) | #272 | approved (head d4f48ce); consumer floor Claude Code ≥ 2.0.12, git ≥ 2.31; adds `3.0.0-memory-registry` |
+| #274 diff-scoped gates (#263) | #272 | **fix round needed** — 2 High on the Stop gate: baseline must be session start (not HEAD) and compare only this session's added lines (`lib/stop-gate/content.sh`); the Edit splice in `lib/content-checks.sh` is quadratic under bash 3.2 (60 s at 200 KB) — rewrite as one awk/node pass. 3 Medium (committed-in-session escape; whole-file Write judged on untouched frontmatter; `content-checks.sh` missing → silent approve), 4 Low. Also adds three legacy `decision: block` emitters that #273 removes — rebase whichever merges second |
+| #275 schema v2 (#265, #160) | #274 | **review pending**; keys: `frameworkFiles.*.{pinned,hash,upstreamHash}`, `mockups.*`, `orchestration.featureImplement` (`controller`\|`workflow`), `probes.{portSource,scratchEnvScript}`; `lib/pin-reconcile.mjs`; `3.0.0-schema-v2` migration |
 | #258 drop code-review (#150) | v3 | approved |
 | #269 RELEASING surfaces, stub gate, eval gate on (#267) | v3 | approved |
 | #270 scenario/seed-data fold, upstream-sync move (#264) | v3 | approved |
