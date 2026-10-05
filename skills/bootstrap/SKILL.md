@@ -69,49 +69,49 @@ read and returning nothing. Suggest promoting the handful of genuinely critical 
 
 ### 3b. Memory Health
 
-If `.claude/lib/memory-doctor.mjs` exists and `node` is available:
+If `node` is available (the doctor ships with the plugin):
 
 ```bash
-node .claude/lib/memory-doctor.mjs --quiet
+node "${CLAUDE_PLUGIN_ROOT}/lib/memory-doctor.mjs" --quiet
 ```
 
 It prints `ERROR` lines and a summary (`memory doctor: clean` or `N error(s), M warning(s)`)
 in about a second. Report the summary in step 7; do not fix anything here. Errors mean the
 tooling cannot read the project as it is — memories without `hook:`,
 duplicate IDs across branches — and `/myspec:memory-create` will refuse to allocate an ID
-until they are fixed. `memory-index.mjs --backfill` derives the first; the rest are per-file. If the
-script is missing, the project predates it: report `memory health: not checked — run
-/myspec:update`.
+until they are fixed. `memory-index.mjs --backfill` derives the first; the rest are per-file. Without `node`,
+report `memory health: not checked — node not found`.
 
 ### 3c. Setup Health
 
-If `.claude/lib/setup-doctor.mjs` exists and `node` is available:
+If `node` is available (the doctor ships with the plugin):
 
 ```bash
-node .claude/lib/setup-doctor.mjs --quiet
+node "${CLAUDE_PLUGIN_ROOT}/lib/setup-doctor.mjs" --quiet
 ```
 
 The deterministic install check, about a second. It covers framework files whose content
-no longer matches the plugin copy (not just the version scalar step 6 compares), hooks
-registered but missing or not executable, hook scripts on disk that no settings file
-wires, `bash -n` failures under `.claude/hooks/` and `.claude/lib/`, schema breaks in
-`.myspec.json` and `.claude/verification.json`, and entries in `${aiDir}/features/index.yaml`
-that the manifest parser cannot read. Every finding carries a literal `run:` command or a
-one-line `fix:`.
+no longer matches the plugin copy (not just the version scalar step 6 compares), a
+framework hook still wired in `.claude/settings.json` or still copied under `.claude/`
+(since 3.0 the plugin runs its own), the project's own hooks registered but missing, not
+executable or failing `bash -n`, schema breaks in `.myspec.json` and
+`.claude/verification.json`, and entries in `${aiDir}/features/index.yaml` that the
+manifest parser cannot read. Every finding carries a literal `run:` command or a one-line
+`fix:`.
 
 Report the summary in step 7 and fix nothing here. An `ERROR` means part of the harness is
 inert — a hook that never fires, a gate that approves without running anything — which is
 invisible from the outside; that is the reason for the check. Drop `--quiet` when the count
 is non-zero and the user wants the detail; add `--json` when another skill consumes it.
 
-`$CLAUDE_PLUGIN_ROOT` unset means the framework-drift checks have no reference copy: the
-run says so in a `NOTE` and the rest still applies. Pass `--plugin-root <dir>` (resolved
-the way step 6 does) to include them. If the script itself is missing, the project predates
-it: report `setup health: not checked — run /myspec:update`.
+The doctor runs from the plugin's own `lib/`, so it finds the plugin as its reference copy
+by itself; a `NOTE` about an unresolved plugin root means it was run from somewhere else,
+and `--plugin-root <dir>` (resolved the way step 6 does) fixes that. Without `node`,
+report `setup health: not checked — node not found`.
 
 ### 4. Check for Active Sessions
 
-List `.claude/state/sessions/*.md` — the primary checkout's, gitignored. Your own session, if one exists yet, is the file whose `## Files touched` lists a path you edited. These files belong to every session in the checkout, so never take a session id from one for `.claude/lib/set-isolation.sh`: that id comes only from the isolation hook's block message.
+List `.claude/state/sessions/*.md` — the primary checkout's, gitignored. Your own session, if one exists yet, is the file whose `## Files touched` lists a path you edited. These files belong to every session in the checkout, so never take a session id from one for `"${CLAUDE_PLUGIN_ROOT}/lib/set-isolation.sh"`: that id comes only from the isolation hook's block message.
 
 For each file, compare its mtime to the current epoch.
 
@@ -200,8 +200,8 @@ Output a brief structured summary so the user can confirm the agent is properly 
 **Key paths**: [2-3 most relevant paths from project structure]
 **Memory**: Layer 1 [N entries] | Layer 2 [P procedural, S semantic, E episodic rows] — [scanned against "{task}" / not scanned, no task yet: run /myspec:memory-preflight when the task is known]
 **Matches**: [entries that matched the task / "none" / omit this line entirely when no task was given]
-**Memory health**: [clean / N errors, M warnings — run `node .claude/lib/memory-doctor.mjs` for details / not checked — run /myspec:update]
-**Setup health**: [clean / N errors, M warnings — run `node .claude/lib/setup-doctor.mjs` for details / not checked — run /myspec:update]
+**Memory health**: [clean / N errors, M warnings — run `node "${CLAUDE_PLUGIN_ROOT}/lib/memory-doctor.mjs"` for details / not checked — node not found]
+**Setup health**: [clean / N errors, M warnings — run `node "${CLAUDE_PLUGIN_ROOT}/lib/setup-doctor.mjs"` for details / not checked — node not found]
 **Topology**: [{filename} loaded / not configured — use the `setup` skill with `backbone` to create one]
 **Active sessions**: [N (list of session_id prefixes + topics) / 0]
 **Auto-archived**: [M orphaned sessions / 0 (omit line if 0)]

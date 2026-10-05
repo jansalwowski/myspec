@@ -220,7 +220,7 @@ A grader that cannot fail is worthless, and a case that passes whether or not th
 
 ## Known gotchas
 
-- **Hooks don't load.** The eval sandbox never loads myspec's hooks (the plugin's root `hooks.json` isn't on Claude Code's plugin-hook path, and projects get hooks from `init`). The scaffold therefore installs no `.claude/hooks/` or `.claude/settings.json`. Hook behaviour stays with `hooks/tests/`.
+- **Hooks don't load.** The eval sandbox has not loaded myspec's hooks (observed with the 2.x layout, where the root `hooks.json` was not declared to Claude Code and projects got hooks from `init`). Since 3.0 `plugin.json` declares `hooks.json` and the plugin runs the hooks itself, so re-check this before relying on it; the scaffold still installs no `.claude/hooks/` or `.claude/settings.json`, and hook behaviour stays with `hooks/tests/`.
 - **Project instructions don't load on their own.** The harness disables `CLAUDE.md` loading and project settings, so a scaffolded `CLAUDE.md` and `.claude/rules/` are invisible (canary, 2026-09-29). Each case gets them through a generated `append_system_prompt` instead; see [Project instructions](#project-instructions). Path-scoped rules are still never loaded.
 - **Two-arm mode hides the skill signal.** Under `--ablation with-without`, `tool_used: Skill` graders become unscored "plugin-fired indicators", so a case can score 1.0 while its skill never fired. `run.sh` defaults to `--ablation none`, where they count, and its `FIRED` column reads them either way. Sibling graders carry `arm: both` so they are scored in both modes.
 - **Haiku as judge gives false negatives.** The judge is pinned to Sonnet. Prefer a regex for long outputs.

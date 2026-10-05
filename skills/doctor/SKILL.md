@@ -16,7 +16,7 @@ Runs without configuration. An optional per-repo extension file `.claude/rules/d
 
 | Tier | Invocation | Cost | Answers |
 |---|---|---|---|
-| 0 | `node .claude/lib/setup-doctor.mjs` | ~1s, no model | Is anything mechanically broken or drifted? |
+| 0 | `node "${CLAUDE_PLUGIN_ROOT}/lib/setup-doctor.mjs"` | ~1s, no model | Is anything mechanically broken or drifted? |
 | 1 | `/myspec:doctor <surface>` | one subagent | Is surface X coherent? |
 | 2 | `/myspec:doctor` | six subagents + PRs | Full pass over everything |
 
@@ -43,7 +43,7 @@ due for a pass; reach for tier 1 when the user named a surface or tier 0 pointed
 4. Run the deterministic checks and keep the result — it is the ground truth every later phase quotes:
 
    ```bash
-   node .claude/lib/setup-doctor.mjs --json --plugin-root "${CLAUDE_PLUGIN_ROOT}"
+   node "${CLAUDE_PLUGIN_ROOT}/lib/setup-doctor.mjs" --json --plugin-root "${CLAUDE_PLUGIN_ROOT}"
    ```
 
    Each record is `{ id, group, path, detail, remediation: { commands, text } }`. Group them by
@@ -99,8 +99,8 @@ is left is judgment:
 **D. Memory tree** — `${aiDir}/memory/` against `.claude/rules/memory-system.md` (triggers, session lifecycle, layer budgets, 30-day consolidation) and `.claude/rules/auto-memory-style.md`:
 - Layer-1 index at its ~200-token budget; entry anchors still grep-match their targets; episodic entries > 30 days old with `persistent: false` and never consolidated; entries over the length caps; ID collisions across namespaces; `.claude/state/sessions/` empty of terminal-status files, nothing left under the pre-2.0 `${aiDir}/memory/sessions/active/` (tier 0 `sessions-unmigrated`); user-level auto-memory `MEMORY.md` overlap with project memory
 
-**E. Hooks + harness config** — `.claude/settings.json`, every `.claude/hooks/*.sh`, `.claude/lib/*.sh`, `.claude/verification.json`, `.myspec.json`. Tier 0 owns existence, registration, executability, `bash -n`, framework and hook content drift, and schema validity; its `install`, `wiring`, and `schema` records are in the brief and are not to be re-derived. This surface is behavior, which no script can settle:
-- Execute each hook with synthetic stdin JSON (`printf '{"tool_input":{...},"cwd":"..."}' | bash <hook>`) for both the should-block and the should-pass case, and check the decision against what the hook claims to do. A hook can exist, be wired, be executable, parse cleanly — and still approve everything
+**E. Hooks + harness config** — `.claude/settings.json`, the project's own hook scripts, the framework hooks the plugin runs from `${CLAUDE_PLUGIN_ROOT}/hooks/` (nothing of them is copied into the project since 3.0), `.claude/verification.json`, `.myspec.json`. Tier 0 owns existence, registration, executability, `bash -n`, framework drift, a framework hook still wired or copied locally (`hook-wired-locally`, `hook-copy-retired`), and schema validity; its `install`, `wiring`, and `schema` records are in the brief and are not to be re-derived. This surface is behavior, which no script can settle:
+- Execute each hook with synthetic stdin JSON (`printf '{"tool_input":{...},"cwd":"..."}' | CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}" bash <hook>` — the framework hooks find their lib through that variable, as the harness sets it) for both the should-block and the should-pass case, and check the decision against what the hook claims to do. A hook can exist, be wired, be executable, parse cleanly — and still approve everything
 - Environment assumptions: commands run where the convention says (host vs container); the worktree case degrades gracefully; a `tooling-absent` record from tier 0 means some gate is currently passing without running
 - A required `verification.json` check that runs its work in a container or on another host (`docker exec`, `kubectl exec`, `ssh`), directly or through a script it calls, declares a `cleanup` that stops that work. The Stop hook's cap kills only the local client, so without one every capped stop leaves another run going there
 - `verification.json` commands actually exercise this project (right package manager, right workspace) — tier 0 only knows whether a command string is present
@@ -146,7 +146,8 @@ mechanical can see them.
 | Mixed status vocabularies | frontmatter statuses outside the manifest's allowed enum | `audit.mjs` (surface F) |
 | ID collision across namespaces | framework P001 vs project P001 in one index | `memory-doctor.mjs` `duplicate-id` |
 | Framework file silently forked | a rule hand-edited at a matching version; an update that half-applied | tier 0 `framework-drift` |
-| Hook copied but never wired | the file is there, no settings entry, nothing ever runs it | tier 0 `hook-unregistered` / `wiring-incomplete` |
+| Framework hook still wired or copied locally | a 2.x `settings.json` entry runs a stale copy beside the plugin's own; a copy sits under `.claude/hooks/` or `.claude/lib/` that nothing runs | tier 0 `hook-wired-locally` / `hook-copy-retired` |
+| Project hook copied but never wired | the file is there, no settings entry, nothing ever runs it | tier 0 `hook-unregistered` |
 | Tool/server name drift | agent declares `mcp__db__*`; the real server registers under a different prefix | judgment (surface B) |
 | Phantom contract vocabulary | a consumer branches on labels its producer is forbidden from emitting | judgment (surface B) |
 | Defaults that don't exist | a documented default flag value names a project/target that was never defined | judgment (surface B) |
@@ -189,4 +190,4 @@ Additional per-surface checklist items, tagged [A]–[F].
 ## Integration
 
 **Routes to** [OPTIONAL]: `/myspec:skill-verify` — deep audit of a flagged skill. `/myspec:feature-verify` — deep audit of a flagged feature. `/myspec:session-clean` — dangling session files found in surface D. `/myspec:memory-sanitize` — user-level auto-memory findings.
-**See also:** `/myspec:feature-status-audit` — surface F runs its engine; invoke it standalone for a manifest-only check. `/myspec:backbone-sync` — surface C runs its engine; invoke it standalone to fix topology drift. `node .claude/lib/setup-doctor.mjs` — tier 0 standalone; `bootstrap` reports its summary every session and `update` verifies itself with it.
+**See also:** `/myspec:feature-status-audit` — surface F runs its engine; invoke it standalone for a manifest-only check. `/myspec:backbone-sync` — surface C runs its engine; invoke it standalone to fix topology drift. `node "${CLAUDE_PLUGIN_ROOT}/lib/setup-doctor.mjs"` — tier 0 standalone; `bootstrap` reports its summary every session and `update` verifies itself with it.

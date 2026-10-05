@@ -12,9 +12,11 @@
 # Everything below writes relative to that directory.
 #
 # myspec_init mirrors what the `init` skill writes for a project that answered
-# "yes" to hooks, minus the hook scripts, .claude/lib/ and .claude/settings.json:
-# the eval sandbox never loads plugin hooks (see evals/README.md), and project
-# hooks would run outside the sandbox and make runs slower and less repeatable.
+# "yes" to the harness config (since 3.0 init copies no hook, lib or
+# settings.json: the plugin runs its hooks itself). It writes no
+# .claude/settings.json hooks either: the eval sandbox has not loaded plugin
+# hooks (see evals/README.md), and project hooks would run outside the sandbox
+# and make runs slower and less repeatable.
 # Framework files are copied from the plugin under test, so a change to
 # framework-files/ is exercised by every case.
 #

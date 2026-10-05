@@ -22,9 +22,9 @@ Governs the project-level memory under `${aiDir}/memory/`. User-level auto-memor
 | Work complete | `/myspec:session-complete` — extraction plus archive of your own session file only |
 | User says "remember / note / keep in mind …" | Project fact (environment, gotcha, decision, convention) → `/myspec:memorize`, not auto-memory. Personal preference (style, role) → auto-memory. `/memorize` always wins |
 | User approves a memory | `/myspec:memory-create` |
-| Allocating a memory ID | `.claude/lib/memory-claim-id.sh <procedural\|semantic\|episodic>` — never read the index and pick a number; parallel sessions pick the same one. Exit 3 → fix the conformance errors it printed |
-| After adding, removing, or superseding a memory | `node .claude/lib/memory-index.mjs` — the tables are generated from the files. On an `index.md` merge conflict keep either side and re-run |
-| Memory drift suspected | `node .claude/lib/memory-doctor.mjs` — reports each disagreement and its fix |
+| Allocating a memory ID | `memory-claim-id.sh <procedural\|semantic\|episodic>` from the myspec plugin's `lib/` (`/myspec:memory-create` runs it; the plugin path is `${CLAUDE_PLUGIN_ROOT}` inside a skill) — never read the index and pick a number; parallel sessions pick the same one. Exit 3 → fix the conformance errors it printed |
+| After adding, removing, or superseding a memory | `node <plugin>/lib/memory-index.mjs` — the tables are generated from the files. On an `index.md` merge conflict keep either side and re-run |
+| Memory drift suspected | `node <plugin>/lib/memory-doctor.mjs` — reports each disagreement and its fix |
 | Before reporting anything as done | Run the check and read the output first; "should work" is not a result |
 
 ## Budgets

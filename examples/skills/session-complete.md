@@ -89,7 +89,7 @@ User: `all`.
 
 User: *"Yes — regular session cookies stay Lax, this rule is specifically for OAuth state cookies that need to survive provider round-trips."*
 
-Skill claims `P020` via `.claude/lib/memory-claim-id.sh procedural` and drafts `P020-oauth-state-cookie-samesite.md` with explicit `not_for: [regular session cookies, cookies not used in OAuth flow]`.
+Skill claims `P020` via `"${CLAUDE_PLUGIN_ROOT}/lib/memory-claim-id.sh" procedural` and drafts `P020-oauth-state-cookie-samesite.md` with explicit `not_for: [regular session cookies, cookies not used in OAuth flow]`.
 
 **Memory 2 (semantic)**:
 
