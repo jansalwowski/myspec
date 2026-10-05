@@ -53,15 +53,6 @@
       "catalogue": false,
       "description": "Repo-relative path of the project topology file (setup backbone)."
     },
-    "reuseAudit.enabled": {
-      "file": "project",
-      "type": ["boolean"],
-      "default": true,
-      "issue": ["exists"],
-      "loosens": true,
-      "catalogue": false,
-      "description": "false turns off the reuse-audit gate on tech specs."
-    },
     "feedback.metrics": {
       "file": "project",
       "type": ["boolean"],

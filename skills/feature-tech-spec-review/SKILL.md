@@ -21,7 +21,7 @@ tags: [feature, tech-spec, validation, critical-thinking, review]
 2. **Analyze Structure**
    - Verify required sections exist: Architecture, Reuse audit, Implementation Steps, Edge Cases, File Inventory
    - Check optional sections present if relevant: Key Interfaces/Types, Database Changes, API Schema, API Endpoints, Decisions
-   - **Reuse-audit gate** (skip only if `.myspec.json` has `reuseAudit.enabled: false`). Flag and **refuse approval** (do not recommend `/myspec:feature-plan`) when the `### Reuse audit` section is:
+   - **Reuse-audit gate** (skip only when the tech-spec carries `<!-- myspec:reuse-audit skip: <reason> -->` with a reason; a marker without one is a High finding). Flag and **refuse approval** (do not recommend `/myspec:feature-plan`) when the `### Reuse audit` section is:
      - missing, OR
      - an empty table (header + separator only, zero data rows), OR
      - a blanket-skip audit (every row `skip`) with one or more rows lacking a `Reason`, OR
@@ -183,7 +183,7 @@ When flagging:
 //   non-dash Reason (this also covers a blanket-skip table with any Reason-less row).
 // High finding (not a refusal): every row is `skip` but each has a substantive Reason —
 //   ask the author to re-confirm nothing is reusable.
-// Skip this check entirely if .myspec.json has reuseAudit.enabled === false
+// Skip this check entirely when the tech-spec holds <!-- myspec:reuse-audit skip: <reason> --> with a reason
 
 // Missing edge cases (Completeness)
 // Check: Edge Cases section exists and has at least one item
@@ -246,7 +246,7 @@ After running the skill:
 
 - [ ] All 10 review dimensions checked against tech-spec.md
 - [ ] Each implementation step is task-extractable (concrete enough for a plan task without interpretation)
-- [ ] Reuse-audit gate applied: section present, >= 1 row, valid Decision/Reason (or `reuseAudit.enabled: false`)
+- [ ] Reuse-audit gate applied: section present, >= 1 row, valid Decision/Reason (or a `<!-- myspec:reuse-audit skip: <reason> -->` marker with a reason)
 - [ ] `based_on_spec_version` matches spec.md `spec_version`
 - [ ] Verification-surface gate applied when `verification_mode` is set and not `none`: `### Test Hooks` has Target, Contract surface, and Scratch environment for `visual` / `mixed`, *Real inputs*, or data-mutating flows; no unstable references
 - [ ] Requirement Coverage table built from spec.md, one row per requirement ID; every empty Steps cell reported as Critical; every `narrows` / `contradicts` Fidelity cell reported as High / Critical

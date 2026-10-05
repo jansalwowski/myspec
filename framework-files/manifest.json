@@ -5,7 +5,8 @@
     "2.0.0-doctor-rule",
     "2.0.0-sessions",
     "2.0.0-base-agents",
-    "3.0.0-plugin-hooks"
+    "3.0.0-plugin-hooks",
+    "3.0.0-reuse-audit"
   ],
   "files": {
     "anti-patterns.md": {

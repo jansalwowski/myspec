@@ -883,13 +883,12 @@ expect_line '^SET +every setting is at its default$' "settings: defaults only sa
 expect_no_line '^SET +[a-zA-Z]+.* = ' "settings: defaults only lists no key"
 
 # A project file plus a session override.
-set_json .myspec.json 'd.isolation={worktreeRoot:"wt", allowLinkedModules:false}; d.hooks={markCodeChanged:{ignorePaths:["gen/**"]}}; d.reuseAudit={enabled:false};'
+set_json .myspec.json 'd.isolation={worktreeRoot:"wt", allowLinkedModules:false}; d.hooks={markCodeChanged:{ignorePaths:["gen/**"]}};'
 set_json .claude/verification.json 'd.containers={api:{mountSource:".", mountTarget:"/srv/app"}}; d.checks[0].paths=["api/**"]; d.checks[0].runIn="api";'
 run_doctor_env MYSPEC_ALLOW_LINKED_MODULES=1 MYSPEC_CHECK_CAP_SECONDS=30 MYSPEC_GATE_BUDGET_SECONDS=120 -- settings
 expect_line '^SET +isolation\.worktreeRoot = "wt" \(\.myspec\.json\)$' "settings: a project value is listed with its file and is not marked"
 expect_line '^SET +isolation\.allowLinkedModules = true \(session: MYSPEC_ALLOW_LINKED_MODULES=1\) — loosens a gate$' "settings: a session override wins over the project file, names its variable, and is marked"
 expect_line '^SET +hooks\.markCodeChanged\.ignorePaths = \["gen/\*\*"\] \(\.myspec\.json\) — loosens a gate$' "settings: ignorePaths is marked as loosening"
-expect_line '^SET +reuseAudit\.enabled = false \(\.myspec\.json\) — loosens a gate$' "settings: a gate turned off is marked as loosening"
 expect_line '^SET +checks\[0\]\.paths = \["api/\*\*"\] \(\.claude/verification\.json\) — loosens a gate$' "settings: a check's paths is marked as loosening"
 expect_line '^SET +checks\[0\]\.runIn = "api" \(\.claude/verification\.json\)$' "settings: runIn is listed, unmarked"
 expect_line '^SET +MYSPEC_CHECK_CAP_SECONDS = "30" \(session\)$' "settings: a standalone session variable is listed"
@@ -940,7 +939,7 @@ expect_no_line 'setting-wrong-type|setting-unknown-key' "settings: selecting one
 # near miss; a non-object settings file is one finding; a list setting of the
 # wrong type is not also read as a glob.
 build_fixture
-set_json .myspec.json 'd.isolation={provision:{symlink:[], copy:[]}}; d.isolaton={}; d.reuseAudt={}; d.hooks={markCodeChanged:{ignorePaths:7}};'
+set_json .myspec.json 'd.isolation={provision:{symlink:[], copy:[]}}; d.isolaton={}; d.feedbak={}; d.reuseAudit={enabled:false}; d.hooks={markCodeChanged:{ignorePaths:7}};'
 set_json .claude/verification.json 'd.checks=[];'
 run_doctor_env -- settings
 expect_line '^SET +isolation\.provision\.symlink = \[\] \(\.myspec\.json\)$' "settings: an emptied symlink list is listed"
@@ -949,7 +948,11 @@ expect_line '^SET +checks = \[\] \(\.claude/verification\.json\)$' "settings: an
 
 run_doctor_env -- schema
 expect_line '^WARN +setting-unknown-key: \.myspec\.json: isolaton is not a myspec setting \(did you mean isolation\?\)' "settings: a top-level typo gets its near miss"
-expect_line '^WARN +setting-unknown-key: \.myspec\.json: reuseAudt is not a myspec setting \(did you mean reuseAudit\?\)' "settings: a second top-level typo gets its near miss"
+expect_line '^WARN +setting-unknown-key: \.myspec\.json: feedbak is not a myspec setting \(did you mean feedback\?\)' "settings: a second top-level typo gets its near miss"
+# The 2.x reuseAudit switch is no setting since 3.0 (#263): the key is
+# reported as unknown, and never listed as a gate turned off.
+expect_line '^WARN +setting-unknown-key: \.myspec\.json: reuseAudit is not a myspec setting' "settings: the retired reuseAudit key is reported as unknown"
+expect_no_line 'reuseAudit\.enabled' "settings: the retired reuseAudit.enabled is not a catalogued setting"
 GLOB_LINES=$(printf '%s\n' "$OUTPUT" | grep -c 'ignorePaths')
 if [ "$GLOB_LINES" -eq 1 ]; then ok; else fail "settings: a non-array ignorePaths is one finding, got $GLOB_LINES"; fi
 expect_line '^ERROR setting-wrong-type: \.myspec\.json: hooks\.markCodeChanged\.ignorePaths is ignored — expected array, got number' "settings: a non-array ignorePaths is a wrong type"
