@@ -27,7 +27,7 @@
 //
 // Usage:
 //   node "${CLAUDE_PLUGIN_ROOT}/lib/pin-reconcile.mjs" [--root <checkout>] [--plugin-root <dir>] [--json]
-//   node "${CLAUDE_PLUGIN_ROOT}/lib/pin-reconcile.mjs" --backfill        record hashes for every unrecorded pin
+//   node "${CLAUDE_PLUGIN_ROOT}/lib/pin-reconcile.mjs" --backfill        record hashes for every pin that has none
 //   node "${CLAUDE_PLUGIN_ROOT}/lib/pin-reconcile.mjs" --record <key>    (re)record one pin's hashes
 //   node "${CLAUDE_PLUGIN_ROOT}/lib/pin-reconcile.mjs" --help             the table format and the verdicts
 //
@@ -77,7 +77,9 @@ copy) as of the moment it was recorded. drop compares the file with the plugin c
 now; review and keep compare each side with its recorded hash. A marker-merge file
 is compared on its framework-owned region (line 1 through ${END_MARKER}).
 --backfill and --record write those two fields and nothing else; the verdict
-after a backfill is keep, since both sides were recorded as they are now.
+after a backfill is keep, since both sides were recorded as they are now, or
+drop for a pin that still equals the plugin copy. --backfill records a drop pin
+too, so one the user keeps reports review when upstream next moves under it.
 `;
 
 const sha256 = (text) => createHash('sha256').update(text).digest('hex');
@@ -209,7 +211,11 @@ function cli(argv) {
   }
 
   let rows = reconcile({ root, pluginRoot, manifest, pins, aiDir });
-  const toRecord = rows.filter((r) => r.hashes.file && (opts.record.includes(r.key) || (opts.backfill && r.verdict === 'unrecorded')));
+  // --backfill takes every pin without a hash, a drop one included: a drop
+  // the user declines would otherwise stay hashless, show unrecorded when
+  // upstream next moves, and be backfilled as keep, hiding the move.
+  const hashless = (key) => typeof pins[key]?.hash !== 'string';
+  const toRecord = rows.filter((r) => r.hashes.file && (opts.record.includes(r.key) || (opts.backfill && hashless(r.key))));
   if (toRecord.length > 0) {
     writePins(configPath, (ff) => {
       for (const r of toRecord) {

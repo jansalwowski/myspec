@@ -156,6 +156,20 @@ printf '%s\n' "$OUT" | grep -q 'no upstreamHash' && ok || fail "the detail says 
 # shellcheck disable=SC2016
 printf -- '---\ntitle: Workflow\n---\n# Workflow\n\nSpecs live in ${aiDir}/features/.\n' > "$PLUGIN/framework-files/rules/workflow.md"
 
+# A drop the user declines keeps a pin that equals the plugin copy. --backfill
+# records it too, so the next upstream move under it reports review rather
+# than unrecorded, which a later --backfill would record as keep (#275 review).
+project .ai
+pin rules/workflow.md "kept on purpose"
+run --backfill
+expect_verdict rules/workflow.md drop "a pin equal to the plugin copy is drop after --backfill too"
+[ "$(field rules/workflow.md hash)" = "$(sha "$REPO/.claude/rules/workflow.md")" ] && ok || fail "--backfill records the hashes of a drop pin"
+cp "$PLUGIN/framework-files/rules/workflow.md" "$ROOT/workflow.orig"
+printf '\nupstream v2\n' >> "$PLUGIN/framework-files/rules/workflow.md"
+run
+expect_verdict rules/workflow.md review "upstream moved under a kept drop pin: review, not unrecorded"
+cp "$ROOT/workflow.orig" "$PLUGIN/framework-files/rules/workflow.md"
+
 # --- missing, retired, unknown, and a non-default aiDir -----------------------
 project docs/ai
 pin templates/session-log.md "trimmed"
