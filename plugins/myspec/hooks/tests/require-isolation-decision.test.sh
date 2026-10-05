@@ -108,7 +108,7 @@ check block "no decision, config file"     new-sess "$REPO/vite.config.js"
 # path under the plugin's lib/: the model runs the line through Bash, where
 # CLAUDE_PLUGIN_ROOT is not set, so a variable or a project path would fail.
 OUT=$(run_hook "$REPO" new-sess "$REPO/components/Foo.vue" | jq -r '.reason')
-for needle in "\"$CLAUDE_PLUGIN_ROOT/lib/set-isolation.sh\" new-sess develop" '.claude/worktrees/' '.ai/work-isolation.md'; do
+for needle in "\"$CLAUDE_PLUGIN_ROOT/lib/set-isolation.sh\" new-sess develop" "\"$CLAUDE_PLUGIN_ROOT/lib/set-isolation.sh\" --show" "\"$CLAUDE_PLUGIN_ROOT/lib/set-isolation.sh\" --reset new-sess" "\"$CLAUDE_PLUGIN_ROOT/lib/promote-to-worktree.sh\" --branch" '.claude/worktrees/' '.ai/work-isolation.md'; do
   if printf '%s' "$OUT" | grep -qF -- "$needle"; then PASS=$((PASS + 1)); else FAIL=$((FAIL + 1)); echo "FAIL  ask does not mention: $needle" >&2; fi
 done
 if printf '%s' "$OUT" | grep -qF -- '.claude/lib/'; then FAIL=$((FAIL + 1)); echo "FAIL  the ask names a project-local lib copy" >&2; else PASS=$((PASS + 1)); fi
