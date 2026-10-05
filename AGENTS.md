@@ -27,9 +27,9 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) — `<type>(<sc
 - Single-skill changes: use the skill name as the scope (e.g. `fix(feature-plan): ...`).
 - Body explains the *why* — the *what* should be visible from the diff.
 
-## Mirrored trees: changes touch both
+## One plugin tree
 
-The repo keeps parallel trees under `plugins/myspec/` (the Codex local-source plugin root): `skills/`, `hooks/`, `hooks.json`, `lib/`, and `.codex-plugin/` are byte-for-byte mirrors of the top-level trees. When you edit any of them, mirror the change in the same commit — CI (`.github/workflows/sync-check.yml`) diffs all five surfaces. The `chore(plugin): reconcile skill drift` commit and the once-missing `lib/feature-status-audit/` mirror both exist because this slipped.
+Since 3.0 the repo is a Claude Code plugin only: the Codex `plugins/myspec/` mirror and `.codex-plugin/` are gone (#143), so every tree has one copy. The root `hooks.json` stays: `.claude-plugin/plugin.json` declares it as the plugin hook manifest.
 
 ## Examples track skills
 
@@ -60,8 +60,8 @@ Each check sits in the cheapest layer that can catch its failure. The reasoning 
 | Layer | What | Where it runs |
 |-------|------|---------------|
 | Static lint | `node scripts/lint-skills.mjs`: frontmatter, "Use when" + "Do NOT" description rules, dead links and anchors, step pointers, size budget | pre-commit (staged content), CI |
-| JS lint | `scripts/lint-js.sh`: pinned `eslint:recommended` on `lib/` and its mirror, because `update` copies `lib/` into projects whose own lint then runs on it | pre-commit (staged lib JS, skipped when eslint can't run), CI |
-| Shell lint | `scripts/lint-sh.sh`: ShellCheck at default severity on `hooks/` and `lib/` (tests included) and their mirrors. Suppress with an inline `# shellcheck disable=SCxxxx # reason`; the `tests/.shellcheckrc` files cover only the assertion idioms | pre-commit (staged scripts, skipped when shellcheck is absent), CI (pinned version) |
+| JS lint | `scripts/lint-js.sh`: pinned `eslint:recommended` on `lib/`, because `update` copies `lib/` into projects whose own lint then runs on it | pre-commit (staged lib JS, skipped when eslint can't run), CI |
+| Shell lint | `scripts/lint-sh.sh`: ShellCheck at default severity on `hooks/` and `lib/` (tests included). Suppress with an inline `# shellcheck disable=SCxxxx # reason`; the `tests/.shellcheckrc` files cover only the assertion idioms | pre-commit (staged scripts, skipped when shellcheck is absent), CI (pinned version) |
 | Deterministic tests | `lib/tests`, `hooks/tests`, `scripts/tests` | CI; run locally with `TZ=UTC` |
 | Behavioural evals | `evals/` via `scripts/evals/run.sh` (`claude plugin eval`) | pre-push (changed skills only, 1 run, Sonnet, report-only), `/release` (full suite) |
 | Release comparison | `scripts/evals/release-check.sh`: paired delta, bootstrap CI and pass^k against the previous release's baseline in `quality/baselines/` | `/release`, report-only until `quality/release-check.json` sets `"gate": true` |
@@ -93,7 +93,7 @@ RELEASING.md "Breaking changes" defines what counts. When a change you are makin
 
 ## Issues
 
-File one problem per issue, and start the title with the component it concerns, named as it is in the repo (`feature-plan: …`, `verify-before-stop: …`). `.github/ISSUE_TEMPLATE/report.md` gives the body sections. The `issue-triage` workflow reads that prefix to add `area:*` labels plus `status:needs-triage`. It runs `scripts/triage/area-labels.mjs` and makes no model call. The repo-local `/triage` skill (`.claude/skills/triage/`) then reproduces each issue on `origin/main`, dedupes it, splits bundled issues, sets type and priority, and groups ready issues into work batches by the files they touch. When an issue closes, the same workflow checks its parent tracker. If every sub-issue is closed, it puts the parent back to `status:needs-triage` (`scripts/triage/tracker-check.sh`) and never closes it itself. PRs say `Fixes #N` for each issue they close. The `pr-labels` workflow labels every PR without a model call (`scripts/triage/pr-labels.mjs`): `type:*` from the Conventional Commit type, `area:*` from the changed files (mirror files under `plugins/myspec/` add nothing), and the highest `P*` of the issues it closes. It only adds labels, so fix a wrong one by hand. It also warns, without failing, when a skill change has no `examples/` change and the template's Examples box is unticked, or when a `SKILL.md` description changes with no `evals/` change (`scripts/triage/pr-companions.mjs`). `.github/labels.json` defines the labels; apply changes to it with `scripts/triage/sync-labels.sh`.
+File one problem per issue, and start the title with the component it concerns, named as it is in the repo (`feature-plan: …`, `verify-before-stop: …`). `.github/ISSUE_TEMPLATE/report.md` gives the body sections. The `issue-triage` workflow reads that prefix to add `area:*` labels plus `status:needs-triage`. It runs `scripts/triage/area-labels.mjs` and makes no model call. The repo-local `/triage` skill (`.claude/skills/triage/`) then reproduces each issue on `origin/main`, dedupes it, splits bundled issues, sets type and priority, and groups ready issues into work batches by the files they touch. When an issue closes, the same workflow checks its parent tracker. If every sub-issue is closed, it puts the parent back to `status:needs-triage` (`scripts/triage/tracker-check.sh`) and never closes it itself. PRs say `Fixes #N` for each issue they close. The `pr-labels` workflow labels every PR without a model call (`scripts/triage/pr-labels.mjs`): `type:*` from the Conventional Commit type, `area:*` from the changed files, and the highest `P*` of the issues it closes. It only adds labels, so fix a wrong one by hand. It also warns, without failing, when a skill change has no `examples/` change and the template's Examples box is unticked, or when a `SKILL.md` description changes with no `evals/` change (`scripts/triage/pr-companions.mjs`). `.github/labels.json` defines the labels; apply changes to it with `scripts/triage/sync-labels.sh`.
 
 ## Stacked PRs
 

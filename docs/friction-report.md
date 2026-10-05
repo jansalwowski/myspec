@@ -104,7 +104,7 @@ The report shortens home-directory paths to `~` (only at a path boundary), but D
 
 ## Limits
 
-- **Claude Code only.** Codex keeps its transcripts elsewhere in another format, so on Codex the step prints one "skipped" line.
+- **Claude Code only.** A session with no transcript prints one "skipped" line.
 - **The transcript format is internal to Claude Code**, not a documented API. A shape the scanner does not recognize exits 3 instead of giving a wrong answer.
 - **Transcripts are pruned** after Claude Code's `cleanupPeriodDays` (30 by default), so a session older than that cannot be scanned.
 - **Fix rounds are a heuristic.** They count plain prompts a subagent received after its first one, skipping Claude Code's own injected messages (isMeta entries such as a forked skill's body, and the auto-compaction summary). A controller's SendMessage continuation counts. Resumed and background subagents have not been checked against this.

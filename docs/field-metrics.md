@@ -87,7 +87,7 @@ node "${CLAUDE_PLUGIN_ROOT}/lib/friction-scan/scan.mjs" --transcript=<path/to/se
 
 ## Limits
 
-- **Claude Code only.** The transcript format is internal to Claude Code and is not a documented API. An unrecognized transcript is skipped rather than guessed at. Codex keeps its transcripts elsewhere in another format, so the plugin's Codex `hooks.json` does not register the hook.
+- **Claude Code only.** The transcript format is internal to Claude Code and is not a documented API. An unrecognized transcript is skipped rather than guessed at.
 - **Window boundaries are a heuristic.** See *Skill windows* above.
 - **A transcript over 256 MB is skipped.** Smaller ones are streamed line by line, and each entry is cut down to the fields a record needs, so memory does not grow with the size of file contents in the transcript.
 - **Transcripts are pruned** after Claude Code's `cleanupPeriodDays`, so a session older than that cannot be recorded later by hand.

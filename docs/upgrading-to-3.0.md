@@ -204,10 +204,16 @@ or failing settings reader blocks the stop instead of guessing.
 
 ## Codex support removed
 
-3.0 is a Claude Code plugin only: the Codex manifest, the Codex marketplace entry
-and the `plugins/myspec/` mirror are gone. A project that uses myspec from Codex
-stays on 2.12. `update` removes nothing downstream for this; Codex just stops
-receiving new versions.
+3.0 is a Claude Code plugin only (#143). The Codex plugin manifest
+(`.codex-plugin/plugin.json`), the Codex marketplace
+(`.agents/plugins/marketplace.json`) and the `plugins/myspec/` local-source
+root they pointed at are gone, so adding this repository as a Codex marketplace
+or local plugin no longer installs anything. The root `hooks.json` stays: it is
+the Claude Code plugin's hook manifest, declared in `.claude-plugin/plugin.json`.
+
+There is no migration path; stay on 2.12 to keep using myspec from Codex.
+Nothing `init` or `update` installs in a project is Codex-specific, so `update`
+removes nothing for this.
 
 ## What 3.0 no longer carries
 
