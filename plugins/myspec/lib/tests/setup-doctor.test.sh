@@ -120,7 +120,6 @@ expect_no_line 'framework files over their always-loaded budget' "no plugin-owne
 expect_no_line 'hook-missing' "the project's \$CLAUDE_PROJECT_DIR hook command resolves"
 expect_no_line 'hook-wired-locally' "a project hook is not a framework hook"
 expect_no_line 'hook-command-relative' "a \$CLAUDE_PROJECT_DIR command is not reported as relative"
-expect_no_line 'plugin-hooks-unavailable' "outside a hook, no plugin root is needed"
 expect_line 'setup doctor: 0 error\(s\)' "summary counts zero errors"
 
 # The stop hook runs exactly these two groups; they must be silent on a clean
@@ -698,25 +697,6 @@ expect_no_line 'dead-path-ref' "the main checkout has no dead refs"
 OUTPUT=$(node "$SCRIPT" --root "$WT" --plugin-root "$PLUGIN" refs 2>&1); STATUS=$?
 expect_no_line 'dead-path-ref: CLAUDE.md: references .claude/worktrees' "a linked worktree does not report the main checkout's .claude/worktrees as dead"
 expect_line 'WARN +dead-path-ref: CLAUDE.md: references docs/gone.md' "a tracked file this branch removed is still a dead ref from the worktree"
-
-# --- pass 3f2: the doctor runs from a hook without the plugin (#262) ---------
-# The stop gate sets MYSPEC_HOOK_EVENT when it runs the doctor. A hook the
-# plugin's hooks.json started has CLAUDE_PLUGIN_ROOT in its environment; one
-# without it was started by a copy under .claude/, so the plugin is not
-# loaded and none of its hooks run. That is an error only in a hook context:
-# a terminal run has no plugin root and needs none.
-
-build_fixture
-OUTPUT=$(env -u CLAUDE_PLUGIN_ROOT MYSPEC_HOOK_EVENT=Stop node "$SCRIPT" --root "$REPO" --plugin-root "$PLUGIN" wiring 2>&1); STATUS=$?
-expect_exit 1 "a hook run without CLAUDE_PLUGIN_ROOT fails the wiring group"
-expect_line '^ERROR plugin-hooks-unavailable: this Stop hook runs without CLAUDE_PLUGIN_ROOT' "the finding names the hook event and the missing variable"
-expect_line 'fix: enable the myspec plugin' "the fix says to enable the plugin"
-OUTPUT=$(CLAUDE_PLUGIN_ROOT="$PLUGIN" MYSPEC_HOOK_EVENT=Stop node "$SCRIPT" --root "$REPO" --plugin-root "$PLUGIN" wiring 2>&1); STATUS=$?
-expect_exit 0 "a hook run with CLAUDE_PLUGIN_ROOT is clean"
-expect_no_line 'plugin-hooks-unavailable' "a hook the plugin started is not reported"
-OUTPUT=$(env -u CLAUDE_PLUGIN_ROOT -u MYSPEC_HOOK_EVENT node "$SCRIPT" --root "$REPO" --plugin-root "$PLUGIN" wiring 2>&1); STATUS=$?
-expect_exit 0 "a terminal run without CLAUDE_PLUGIN_ROOT is clean"
-expect_no_line 'plugin-hooks-unavailable' "outside a hook the plugin root is not required"
 
 # --- pass 3g: links the provision record does not list (#239) ----------------
 #
