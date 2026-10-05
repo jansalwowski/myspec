@@ -540,6 +540,21 @@ set_json .myspec.json 'd.frameworkFiles = {"templates/example-usage.md": {pinned
 OUTPUT=$(node "$SCRIPT" --root "$REPO" --plugin-root "$FAKE" install 2>&1); STATUS=$?
 expect_no_line 'framework-removed' "a pinned retired file is a deliberate keep and is not reported"
 
+# The real manifest's own 3.0 retirement (#266): the memory index headers a
+# 2.x update installed to ${aiDir}/.templates/, read by nothing. An aiDir
+# dest is a deletion, not a retired hook or lib copy, whatever its `since`.
+build_fixture
+mkdir -p "$REPO/ai/.templates"
+for kind in procedural semantic episodic; do
+  printf -- '---\ntype: %s\n---\n' "$kind" > "$REPO/ai/.templates/index-$kind.md"
+done
+run_doctor install
+expect_exit 0 "a 2.x install's index templates do not fail the run"
+expect_line 'WARN +framework-removed: ai/.templates/index-procedural.md: retired by the framework in v3.0.0' "a 2.x index template left in .templates/ is reported as retired in 3.0"
+expect_line 'WARN +framework-removed: ai/.templates/index-semantic.md' "the semantic one too"
+expect_line 'WARN +framework-removed: ai/.templates/index-episodic.md' "and the episodic one"
+expect_no_line 'hook-copy-retired: ai/' "an aiDir retirement is not a retired hook copy"
+
 # --- pass 3d: the migrations list is the schema marker ----------------------
 
 build_fixture

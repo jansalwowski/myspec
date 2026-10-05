@@ -37,7 +37,7 @@ HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
 if [ ! -f "$HOOK_CORE" ]; then
   LIB_MISSING="myspec lib missing: hook-core.sh not found under \${CLAUDE_PLUGIN_ROOT}/lib (CLAUDE_PLUGIN_ROOT is ${CLAUDE_PLUGIN_ROOT:-unset}). The hook did not run from the plugin's hooks.json; a copy wired in .claude/settings.json is retired by /myspec:update."
   printf '%s\n' "$LIB_MISSING" >&2
-  jq -nc --arg r "$LIB_MISSING" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}, decision: "block", reason: $r}'
+  jq -nc --arg r "$LIB_MISSING" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}}'
   exit 0
 fi
 # hook-core.sh alone is not enough: the checks live in content-checks.sh,
@@ -50,7 +50,7 @@ done
 if [ -n "$LIB_MISSING" ]; then
   LIB_MISSING="myspec lib missing: $LIB_MISSING not found under \${CLAUDE_PLUGIN_ROOT}/lib (${CLAUDE_PLUGIN_ROOT}), so no-absolute-paths.sh checked nothing. The hook runs from the plugin's hooks.json since 3.0; a copy wired in .claude/settings.json is retired by /myspec:update."
   printf '%s\n' "$LIB_MISSING" >&2
-  jq -nc --arg r "$LIB_MISSING" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}, decision: "block", reason: $r}'
+  jq -nc --arg r "$LIB_MISSING" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}}'
   exit 0
 fi
 # shellcheck source=lib/hook-core.sh

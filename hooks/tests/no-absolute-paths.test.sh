@@ -62,16 +62,16 @@ edit_call() {  # edit_call <path> <new_string>: the file holds its current conte
 }
 
 expect_deny() {
-  if printf '%s' "$OUT" | jq -e '.hookSpecificOutput.permissionDecision == "deny" and .decision == "block"' >/dev/null 2>&1; then ok; else fail "$1 (not denied: $(printf '%s' "$OUT" | head -c 160))"; fi
+  if printf '%s' "$OUT" | jq -e '.hookSpecificOutput.permissionDecision == "deny" and (has("decision") or has("reason") | not)' >/dev/null 2>&1; then ok; else fail "$1 (not denied: $(printf '%s' "$OUT" | head -c 160))"; fi
 }
 expect_quiet() {
   if [ -z "$OUT" ]; then ok; else fail "$1 (denied: $(printf '%s' "$OUT" | head -c 160))"; fi
 }
 expect_reason() {  # expect_reason <fixed-string> <desc>
-  if printf '%s' "$OUT" | jq -r '.reason' 2>/dev/null | grep -qF -- "$1"; then ok; else fail "$2 (reason lacks: $1)"; fi
+  if printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecisionReason' 2>/dev/null | grep -qF -- "$1"; then ok; else fail "$2 (reason lacks: $1)"; fi
 }
 expect_no_reason() {
-  if printf '%s' "$OUT" | jq -r '.reason' 2>/dev/null | grep -qF -- "$1"; then fail "$2 (reason has: $1)"; else ok; fi
+  if printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecisionReason' 2>/dev/null | grep -qF -- "$1"; then fail "$2 (reason has: $1)"; else ok; fi
 }
 
 # --- denied: the leaks the hook exists for ----------------------------------
@@ -89,7 +89,6 @@ expect_no_reason ".claude/lib/" "message does not point at a project-local lib c
 expect_no_reason "add its repo-relative path to the allowlist" "message does not ask adopters to edit a framework-owned hook"
 expect_reason "BLOCKED" "a PreToolUse deny says the write was blocked"
 expect_no_reason "was written" "a PreToolUse deny does not claim the file was written"
-[ "$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecisionReason == .reason')" = true ] && ok || fail "the deny reason and the legacy reason are the same text"
 
 write_call "$REPO/README.md" "Run from /home/bob/checkout."
 expect_deny "root README with a /home path"

@@ -141,7 +141,7 @@ execution:
     - **Manifest status** (per-feature `status:` in `.ai/features/index.yaml` — the single source of truth for progress): `planned | draft | in-progress | complete | deprecated`. `feature-spec` and `idea-process` create `draft`; `feature-implement` flips `draft → in-progress` at execution start; `feature-complete` flips `in-progress → complete` only when the plan's checkboxes are all `[x]` or remaining tasks are explicitly deferred; `planned` and `deprecated` are set by hand.
     - **Manifest `note:`**: one line, ≤150 chars, current state only (e.g. a deferral pointer). Replace, never append. History goes to `CHANGELOG.md`; never PR state or SHAs.
 
-    Completion percentage comes from **implementation-plan.md checkboxes** whenever a plan exists (tech-spec checkboxes are a fallback when no plan exists; code inspection never is). Per-status doc expectations are codified in `/myspec:feature-status-audit` — treat its matrix as authoritative.
+    Completion percentage comes from **implementation-plan.md checkboxes**, never from tech-spec checkboxes or code inspection. Per-status doc expectations are codified in `/myspec:feature-status-audit` — treat its matrix as authoritative.
 
     ## Sub-Feature Convention
 

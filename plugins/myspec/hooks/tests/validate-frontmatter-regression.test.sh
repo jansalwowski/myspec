@@ -79,11 +79,10 @@ edit() {
   RC=$?
 }
 
-decision() { printf '%s' "$OUT" | jq -r '.decision // "none"' 2>/dev/null || printf 'not-json'; }
-reason()   { printf '%s' "$OUT" | jq -r '.reason // ""' 2>/dev/null; }
+reason()   { printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecisionReason // ""' 2>/dev/null; }
 
-expect_block() {  # expect_block <desc>: the PreToolUse deny, with the legacy block field
-  if [ "$RC" -eq 0 ] && [ "$(decision)" = block ] \
+expect_block() {  # expect_block <desc>: the PreToolUse deny alone, no legacy decision/reason pair (3.0 host floor)
+  if [ "$RC" -eq 0 ] && [ "$(printf '%s' "$OUT" | jq -r 'has("decision") or has("reason")' 2>/dev/null)" = false ] \
       && [ "$(printf '%s' "$OUT" | jq -r '.hookSpecificOutput.permissionDecision' 2>/dev/null)" = deny ]; then ok; else fail "$1 (exit $RC, output: ${OUT:0:200})"; fi
 }
 expect_quiet() {  # expect_quiet <desc>: exit 0 and no output

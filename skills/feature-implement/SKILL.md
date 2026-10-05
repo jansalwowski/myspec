@@ -132,11 +132,11 @@ options:
 
 Read the implementation plan. **Check front-matter first.**
 
-**Legacy front-matter.** A plan carrying `orchestration: agent-chain` was authored for the orchestrator agent-chain mode, retired in 2.0. Run it as a normal plan and print one line: "Plan carries retired `orchestration: agent-chain` front-matter — running in normal mode." Ignore the `roles:` block and any `**Step N (Worker|Reviewer|Controller):**` role annotations — the step text itself still applies. No run-mode prompt exists.
+**Retired front-matter.** A plan carrying `orchestration: agent-chain` was authored for the orchestrator agent-chain mode, retired in 2.0 and no longer run. Stop with one line: "Plan carries retired `orchestration: agent-chain` front-matter — re-plan with /myspec:feature-plan." No run-mode prompt exists.
 
 Parse milestones first, then build a DAG within each:
 
-1. **Identify milestones:** Each `### Milestone N:` heading scopes a milestone. If no milestone headings exist, treat the entire plan as a single implicit milestone (backward compatibility).
+1. **Identify milestones:** Each `### Milestone N:` heading scopes a milestone. A plan with no milestone heading is a single-milestone plan (the `feature-plan` template omits the heading then): the whole plan is its one milestone.
 2. **For each milestone**, extract the Execution Order table and build a DAG:
    - Nodes = tasks + barriers. Edges = `Depends On` column.
    - Identify phases (task groups separated by barriers).
