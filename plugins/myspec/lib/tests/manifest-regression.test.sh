@@ -60,6 +60,19 @@ for key in path-normalize.sh markdown-section-check.sh command-scan.sh glob-rege
   if printf '%s\n' "$RETIRED" | grep -qxF -- "lib/$key"$'\t'".claude/lib/$key"; then ok; else fail "lib/$key (copied by 2.x) has no removed entry since 3.0.0 with dest .claude/lib/$key"; fi
 done
 
+# --- 1b. the memory index headers are scaffolding, not framework files -------
+# 2.x installed templates/index-{procedural,semantic,episodic}.md to
+# ${aiDir}/.templates/ and nothing read them: init copies the header once
+# (scaffolding/memory/<type>/index.md) and lib/memory-index.mjs keeps the
+# table. 3.0 retires the copies (#266).
+for kind in procedural semantic episodic; do
+  key="templates/index-$kind.md"
+  if [ "$(jq -r --arg k "$key" '.files | has($k)' "$MANIFEST")" = false ]; then ok; else fail "$key is still a files entry: update would keep installing it"; fi
+  # shellcheck disable=SC2016 # the dest holds a literal ${aiDir} placeholder
+  if [ "$(jq -r --arg k "$key" '.removed[$k] | "\(.since) \(.dest)"' "$MANIFEST")" = "3.0.0 \${aiDir}/.templates/index-$kind.md" ]; then ok; else fail "$key has no removed entry since 3.0.0 with dest \${aiDir}/.templates/index-$kind.md"; fi
+  if [ ! -e "$PLUGIN/framework-files/$key" ] && [ -f "$PLUGIN/scaffolding/memory/$kind/index.md" ]; then ok; else fail "$key did not move to scaffolding/memory/$kind/index.md"; fi
+done
+
 # --- 2. hooks.json runs every shipped hook, and nothing else -----------------
 if [ -f "$HOOKS_JSON" ]; then ok; else fail "hooks.json is missing: the plugin declares its hooks there"; fi
 WIRED=$(jq -r '.. | objects | select(has("command")) | .command' "$HOOKS_JSON" 2>/dev/null | sed -E 's#.*/hooks/##; s/"//g' | sort -u)
