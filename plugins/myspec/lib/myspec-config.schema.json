@@ -1,6 +1,6 @@
 {
-  "$comment": "Every myspec setting: its file, type, default and the issue that introduced it (docs/project-settings-design.md, principle 7). lib/myspec-config.sh and lib/myspec-config.mjs read it to build the framework-default layer and to type-check the project layer; doctor validates against it. Keys under 'verification.' live in .claude/verification.json, every other key in .myspec.json. 'type' lists the JSON types a value may have. 'merge' says how a list combines across layers: 'extend' appends a later layer's entries (principle 3), 'replace' lets the later layer win, which existing lists keep so that no project's behaviour changes (principle 2). A key with no 'default' is absent unless a layer sets it. 'loosens' marks a setting that weakens a gate, which doctor's settings listing marks. 'bookkeeping': true marks a key that records state or free text rather than policy, which that listing leaves out. A key ending in '[]' types each item of the list above it, and 'X[].field' a field of such an item; the readers ignore both, and doctor validates them. 'format' asks doctor for more than the type: 'glob' is a repo-relative glob the readers accept (not empty, not absolute, no .. segment), 'dir' a repo-relative directory that exists in the checkout. 'refersTo' names the map setting the value must be a key of. 'itemOf' names the list setting each item must be an entry of, by exact text, in its effective value (defaults plus the project's entries). 'catalogue': false marks a key the design's catalogue tables do not list; lib/tests/myspec-config.test.sh checks every other key against those tables. 'env' is the session layer: an 'override' sets 'key' to 'value' when the variable matches 'match'; the other kinds are read or exported by one script and set no key.",
-  "version": 1,
+  "$comment": "Every myspec setting: its file, type, default and the issue that introduced it (docs/project-settings-design.md, principle 7). lib/myspec-config.sh and lib/myspec-config.mjs read it to build the framework-default layer and to type-check the project layer; doctor validates against it. Keys under 'verification.' live in .claude/verification.json, every other key in .myspec.json. 'type' lists the JSON types a value may have. 'merge' says how a list combines across layers: 'extend' appends a later layer's entries (principle 3), 'replace' lets the later layer win, which existing lists keep so that no project's behaviour changes (principle 2). A key with no 'default' is absent unless a layer sets it. 'loosens' marks a setting that weakens a gate, which doctor's settings listing marks. 'bookkeeping': true marks a key that records state or free text rather than policy, which that listing leaves out. A key ending in '[]' types each item of the list above it, and 'X[].field' a field of such an item; a '*' segment stands for every key of the map above it ('frameworkFiles.*.pinned' types the pinned field of each pin); the readers ignore all three, and doctor validates them. 'format' asks doctor for more than the type: 'glob' is a repo-relative glob the readers accept (not empty, not absolute, no .. segment), 'dir' a repo-relative directory that exists in the checkout. 'refersTo' names the map setting the value must be a key of. 'itemOf' names the list setting each item must be an entry of, by exact text, in its effective value (defaults plus the project's entries). 'catalogue': false marks a key the design's catalogue tables do not list; lib/tests/myspec-config.test.sh checks every other key against those tables. 'version' is the schema version, the versioned contract of .myspec.json (docs/project-settings-design.md, Schema version): a key rename or removal bumps it and ships a one-shot migration in framework-files/manifest.json; an added key does not. 'env' is the session layer: an 'override' sets 'key' to 'value' when the variable matches 'match'; the other kinds are read or exported by one script and set no key.",
+  "version": 2,
   "files": {
     "project": ".myspec.json",
     "verification": ".claude/verification.json"
@@ -27,7 +27,23 @@
       "type": ["object"],
       "issue": ["exists"],
       "catalogue": false,
-      "description": "Bookkeeping: name, description and techStack recorded by init.",
+      "description": "Bookkeeping: name and techStack recorded by init.",
+      "bookkeeping": true
+    },
+    "project.name": {
+      "file": "project",
+      "type": ["string"],
+      "issue": ["exists"],
+      "catalogue": false,
+      "description": "Bookkeeping: the project name init recorded.",
+      "bookkeeping": true
+    },
+    "project.techStack": {
+      "file": "project",
+      "type": ["string"],
+      "issue": ["exists"],
+      "catalogue": false,
+      "description": "Bookkeeping: the tech stack init recorded.",
       "bookkeeping": true
     },
     "migrations": {
@@ -44,7 +60,37 @@
       "type": ["object"],
       "issue": ["exists"],
       "catalogue": false,
-      "description": "Pins: framework files update must not overwrite."
+      "description": "Pins: framework files update must not overwrite, keyed by manifest key (rules/workflow.md, pre-flight.md, templates/session-log.md); each a {pinned, hash, upstreamHash} object."
+    },
+    "frameworkFiles.*": {
+      "file": "project",
+      "type": ["object"],
+      "issue": ["exists"],
+      "catalogue": false,
+      "description": "One pin: {pinned, hash, upstreamHash}."
+    },
+    "frameworkFiles.*.pinned": {
+      "file": "project",
+      "type": ["string"],
+      "issue": ["exists"],
+      "catalogue": false,
+      "description": "The reason the file is pinned; update skips the file while it is set."
+    },
+    "frameworkFiles.*.hash": {
+      "file": "project",
+      "type": ["string"],
+      "issue": ["#160"],
+      "catalogue": false,
+      "description": "SHA-256 (hex) of the project's file when the pin was taken or last reconciled; lib/pin-reconcile.mjs compares the file against it to tell a pin the project still edits from one it does not.",
+      "bookkeeping": true
+    },
+    "frameworkFiles.*.upstreamHash": {
+      "file": "project",
+      "type": ["string"],
+      "issue": ["#160"],
+      "catalogue": false,
+      "description": "SHA-256 (hex) of the plugin's rendered copy at the same moment; a plugin copy that no longer matches it moved under the pin, which lib/pin-reconcile.mjs reports as review.",
+      "bookkeeping": true
     },
     "topologyFile": {
       "file": "project",
@@ -52,6 +98,76 @@
       "issue": ["exists"],
       "catalogue": false,
       "description": "Repo-relative path of the project topology file (setup backbone)."
+    },
+    "mockups": {
+      "file": "project",
+      "type": ["object"],
+      "issue": ["exists", "#265"],
+      "catalogue": false,
+      "description": "The mockup surface, written by the setup mockup blueprint and read by feature-mockup, feature-mockup-review and update: {extension, commands, siblingRoots}."
+    },
+    "mockups.extension": {
+      "file": "project",
+      "type": ["string"],
+      "issue": ["exists", "#265"],
+      "description": "File extension mockups are written with, dot included (\".vue\", \".html\", \".tsx\")."
+    },
+    "mockups.commands": {
+      "file": "project",
+      "type": ["object"],
+      "issue": ["exists", "#265"],
+      "catalogue": false,
+      "description": "The commands feature-mockup and feature-mockup-review run: {verify, preview, compileCheck, audit}, each optional."
+    },
+    "mockups.commands.verify": {
+      "file": "project",
+      "type": ["string"],
+      "issue": ["exists", "#265"],
+      "description": "Type-check or lint command run over the mockups after each build."
+    },
+    "mockups.commands.preview": {
+      "file": "project",
+      "type": ["string"],
+      "issue": ["exists", "#265"],
+      "description": "Dev-server command that serves the mockups for preview."
+    },
+    "mockups.commands.compileCheck": {
+      "file": "project",
+      "type": ["string"],
+      "issue": ["exists", "#265"],
+      "description": "Per-file compile check run against the preview server; {port} and {absPath} are substituted."
+    },
+    "mockups.commands.audit": {
+      "file": "project",
+      "type": ["string"],
+      "issue": ["exists", "#265"],
+      "description": "Reuse-audit command listing shared mockup scaffolding, run before non-trivial chrome is authored."
+    },
+    "mockups.siblingRoots": {
+      "file": "project",
+      "type": ["array"],
+      "merge": "replace",
+      "issue": ["exists", "#265"],
+      "description": "Repo-relative directories of production components the mockups may import from, searched by the reuse audit."
+    },
+    "orchestration.featureImplement": {
+      "file": "project",
+      "type": ["string"],
+      "default": "controller",
+      "issue": ["#247"],
+      "description": "\"controller\" (the default: feature-implement runs every per-task step itself, as it does today) or \"workflow\" (opt in to the per-task loop run by the host's Workflow tool, where present). Recorded by the schema since 3.0; the workflow mode itself is #247."
+    },
+    "probes.portSource": {
+      "file": "project",
+      "type": ["string"],
+      "issue": ["#196"],
+      "description": "Where a probe takes its dev-server ports from instead of literal ports in the plan: a repo-relative file holding the per-checkout port slots, or $NAME for an environment variable that holds them. Recorded by the schema since 3.0; reading it in feature-plan and the probe executor is #196."
+    },
+    "probes.scratchEnvScript": {
+      "file": "project",
+      "type": ["string"],
+      "issue": ["#197"],
+      "description": "Repo-relative script that provisions the scratch environment a probe run needs (database, cache, buckets), reused across probe runs instead of rebuilt by each one. Recorded by the schema since 3.0; running it from feature-implement is #197."
     },
     "feedback.metrics": {
       "file": "project",

@@ -77,6 +77,21 @@ read_both "$D" isolation.worktreeRoot; expect "default worktreeRoot" '".claude/w
 read_both "$D" verification.checks; expect "no verification.json" 'null'
 read_both "$D" no.such.key; expect "unknown key" 'null'
 
+# Schema v2 (#265): the version is the contract, declared in the design doc.
+[ "$(jq -r '.version' "$SCHEMA")" = 2 ] && ok || fail "the schema is version 2"
+grep -qE '^\| 2 \| 3\.0\.0 \|' "$DOC" && ok || fail "the design doc's Schema version table lists version 2"
+read_both "$D" orchestration.featureImplement; expect "default featureImplement" '"controller"'
+read_both "$D" probes.portSource; expect "portSource has no default" 'null'
+read_both "$D" mockups; expect "mockups has no default" 'null'
+read_both "$D" project.description; expect "project.description is no key" 'null'
+
+# A map typed through a `*` entry (frameworkFiles.*.pinned) comes back whole:
+# the readers never look inside a map, as they never look inside a list.
+D=$(fixture pins '{"frameworkFiles":{"rules/ideas.md":{"pinned":"gated","hash":"abc"},"pre-flight.md":{"pinned":7}},"mockups":{"extension":".vue","siblingRoots":["src"]}}')
+read_both "$D" frameworkFiles; expect "pins pass through the readers whole" '{"rules/ideas.md":{"pinned":"gated","hash":"abc"},"pre-flight.md":{"pinned":7}}'
+[ -z "$ERR" ] && ok || fail "a mistyped pin field is doctor's finding, not the readers' (got: $ERR)"
+read_both "$D" mockups.siblingRoots; expect "mockups.siblingRoots is read" '["src"]'
+
 # The guard's default list (#250), as the schema holds it.
 BLOCK_DEFAULT=$(jq -c '.keys["isolation.blockInMain"].default' "$SCHEMA")
 [ "$(jq 'length' <<< "$BLOCK_DEFAULT")" -gt 0 ] && ok || fail "blockInMain has a non-empty default"
