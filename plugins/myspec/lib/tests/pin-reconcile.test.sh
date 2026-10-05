@@ -198,6 +198,16 @@ run --bogus
 run --help
 [ "$RC" -eq 0 ] && printf '%s\n' "$OUT" | grep -q '^  review ' && printf '%s\n' "$OUT" | grep -q 'Table:' && ok \
   || fail "--help prints the table format and the verdicts"
+# A .myspec.json that is not a JSON object cannot say what is pinned: an
+# error, not "no pins", or the 3.0.0-schema-v2 migration would record a
+# backfill that recorded nothing.
+printf '{\n  "aiDir": ".ai",\n  "frameworkFiles": {"rules/ideas.md": {"pinned": "x"}},\n}\n' > "$REPO/.myspec.json"
+run --backfill
+[ "$RC" -eq 2 ] && ok || fail "an unparseable .myspec.json exits 2 (rc=$RC: $OUT)"
+[ -z "$OUT" ] && ok || fail "an unparseable .myspec.json prints no table (got: $OUT)"
+printf '[]\n' > "$REPO/.myspec.json"
+run
+[ "$RC" -eq 2 ] && ok || fail "a .myspec.json that is an array exits 2 (rc=$RC)"
 rm "$REPO/.myspec.json"
 run
 [ "$RC" -eq 2 ] && ok || fail "no .myspec.json is an error (rc=$RC)"
