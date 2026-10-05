@@ -64,9 +64,13 @@ for hook in validate-frontmatter mark-code-changed no-absolute-paths require-reu
   printf '%s' "$ERR" | grep -qF '/myspec:update' && ok || fail "$hook: stderr names the repair"
 done
 
+# SessionEnd closes its own streams before doing anything, so the line has to
+# come first or it could never be seen.
 run_without record-session-metrics
 [ "$STATUS" -eq 0 ] && ok || fail "record-session-metrics: exits 0 without the variable"
-[ -z "$OUT" ] && ok || fail "record-session-metrics: prints nothing without the variable"
+[ -z "$OUT" ] && ok || fail "record-session-metrics: prints nothing to stdout without the variable"
+printf '%s' "$ERR" | grep -qF 'CLAUDE_PLUGIN_ROOT is unset' && ok || fail "record-session-metrics: stderr names the unset variable before the streams close (got: ${ERR:0:160})"
+printf '%s' "$ERR" | grep -qF '/myspec:update' && ok || fail "record-session-metrics: stderr names the repair"
 
 # A set variable whose lib/ lacks hook-core.sh is the same condition, and the
 # reason names the root that was looked under.
