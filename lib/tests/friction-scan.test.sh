@@ -264,6 +264,14 @@ OUTPUT=$(node --input-type=module -e "
 expect_empty "every signature is a literal substring of its hook"
 OUTPUT=$(cd "$HOOKS_DIR" && for h in *.sh; do grep -q "'$h'" "$SCRIPT" || echo "not in MYSPEC_HOOKS: $h"; done)
 expect_empty "every shipped hook is in MYSPEC_HOOKS"
+# The user-facing part of docs/friction-report.md shows real rows, so every
+# hook it names is one the scanner knows. The maintainer section may name
+# retired hooks as history. The plugin mirror ships no docs/.
+DOC="$HERE/../../docs/friction-report.md"
+if [ -f "$DOC" ]; then
+  OUTPUT=$(sed '/^## For maintainers/,$d' "$DOC" | grep -oE '[a-z0-9-]+\.sh' | sort -u | while read -r h; do grep -q "'$h'" "$SCRIPT" || echo "friction-report.md names a hook not in MYSPEC_HOOKS: $h"; done)
+  expect_empty "friction-report.md example rows name only known hooks"
+fi
 
 printf 'friction-scan: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

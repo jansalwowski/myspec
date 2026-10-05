@@ -127,7 +127,13 @@ See [evals/README.md](evals/README.md) and the Quality gates section of [AGENTS.
     "name": "Project Name",
     "techStack": "PHP 8.3, Laravel 11, PostgreSQL"
   },
-  "migrations": []
+  "migrations": [
+    "3.0.0-code-review",
+    "3.0.0-plugin-hooks",
+    "3.0.0-reuse-audit",
+    "3.0.0-memory-registry",
+    "3.0.0-schema-v2"
+  ]
 }
 ```
 
