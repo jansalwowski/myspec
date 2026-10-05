@@ -170,6 +170,32 @@ run
 expect_verdict rules/workflow.md review "upstream moved under a kept drop pin: review, not unrecorded"
 cp "$ROOT/workflow.orig" "$PLUGIN/framework-files/rules/workflow.md"
 
+# A marker-merge pin is hashed on its framework-owned region, as drop compares
+# it: the project section below the end marker is the project's to edit, so an
+# edit there must not hide an upstream move in the region, and a change to the
+# plugin's project-section template must not raise review (#275 review).
+project .ai
+cp "$PLUGIN/framework-files/pre-flight.md" "$ROOT/pre-flight.orig"
+sed -i.bak 's#memory/index.md#memory/index.md and the local tiering#' "$REPO/.ai/pre-flight.md" && rm -f "$REPO/.ai/pre-flight.md.bak"
+pin pre-flight.md "local tiering line"
+run --backfill
+expect_verdict pre-flight.md keep "a marker-merge pin with a local framework-region edit backfills to keep"
+printf '\n- project check added later\n' >> "$REPO/.ai/pre-flight.md"
+run
+expect_verdict pre-flight.md keep "an edit to the project section alone moves nothing"
+sed -i.bak 's#memory/index.md#memory/index.md first#' "$PLUGIN/framework-files/pre-flight.md" && rm -f "$PLUGIN/framework-files/pre-flight.md.bak"
+run
+expect_verdict pre-flight.md review "upstream moved the framework region under a pin whose project section changed: review"
+cp "$ROOT/pre-flight.orig" "$PLUGIN/framework-files/pre-flight.md"
+project .ai
+sed -i.bak 's#memory/index.md#memory/index.md and the local tiering#' "$REPO/.ai/pre-flight.md" && rm -f "$REPO/.ai/pre-flight.md.bak"
+pin pre-flight.md "local tiering line"
+run --backfill
+printf '\n- template project check\n' >> "$PLUGIN/framework-files/pre-flight.md"
+run
+expect_verdict pre-flight.md keep "a change to the plugin's project-section template alone is not review"
+cp "$ROOT/pre-flight.orig" "$PLUGIN/framework-files/pre-flight.md"
+
 # --- missing, retired, unknown, and a non-default aiDir -----------------------
 project docs/ai
 pin templates/session-log.md "trimmed"

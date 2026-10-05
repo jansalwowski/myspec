@@ -10,7 +10,10 @@
 // Each pin records two SHA-256 hashes when it is taken or last reconciled
 // (schema v2, lib/myspec-config.schema.json): `hash`, the project's file, and
 // `upstreamHash`, the plugin's rendered copy (`${aiDir}` substituted) at the
-// same moment. Against the file and the plugin copy as they are now:
+// same moment. For a marker-merge file both cover only the framework-owned
+// region (line 1 through the end marker), which is all drop compares: the
+// project section below it is the project's to edit. Against the file and the
+// plugin copy as they are now:
 //
 //   drop        the project's file equals the plugin's rendered copy (for a
 //               marker-merge file: its framework-owned region, line 1 through
@@ -75,7 +78,7 @@ ${Object.entries(VERDICTS).map(([v, text]) => `  ${v.padEnd(11)} ${text}`).join(
 Each pin carries hash (the project's file) and upstreamHash (the plugin's rendered
 copy) as of the moment it was recorded. drop compares the file with the plugin copy
 now; review and keep compare each side with its recorded hash. A marker-merge file
-is compared on its framework-owned region (line 1 through ${END_MARKER}).
+is compared and hashed on its framework-owned region (line 1 through ${END_MARKER}).
 --backfill and --record write those two fields and nothing else; the verdict
 after a backfill is keep, since both sides were recorded as they are now, or
 drop for a pin that still equals the plugin copy. --backfill records a drop pin
@@ -126,12 +129,16 @@ export function reconcile({ root, pluginRoot, manifest, pins, aiDir }) {
     if (!existsSync(entry.source)) { return row('unknown', `plugin copy ${entry.source} does not exist`); }
     const project = readFileSync(dest, 'utf8');
     const plugin = readFileSync(entry.source, 'utf8').split('${aiDir}').join(aiDir);
-    const hashes = { file: sha256(project), upstream: sha256(plugin) };
-    const same = entry.type === 'marker-merge' && frameworkRegion(project) !== null && frameworkRegion(plugin) !== null
-      ? frameworkRegion(project) === frameworkRegion(plugin)
-      : project === plugin;
+    // A marker-merge file is compared and hashed on its framework-owned
+    // region: the project section is the project's to edit, so neither an
+    // edit there nor a change to the plugin's template for it moves a pin.
+    const regions = entry.type === 'marker-merge' && frameworkRegion(project) !== null && frameworkRegion(plugin) !== null;
+    const ours = regions ? frameworkRegion(project) : project;
+    const theirs = regions ? frameworkRegion(plugin) : plugin;
+    const hashes = { file: sha256(ours), upstream: sha256(theirs) };
+    const same = ours === theirs;
     if (same) {
-      return row('drop', entry.type === 'marker-merge' ? 'the framework-owned region equals the plugin copy' : 'the file equals the plugin copy', hashes);
+      return row('drop', regions ? 'the framework-owned region equals the plugin copy' : 'the file equals the plugin copy', hashes);
     }
     const recorded = typeof pin?.hash === 'string' ? pin.hash : null;
     const recordedUpstream = typeof pin?.upstreamHash === 'string' ? pin.upstreamHash : null;

@@ -81,7 +81,7 @@
       "type": ["string"],
       "issue": ["#160"],
       "catalogue": false,
-      "description": "SHA-256 (hex) of the project's file when the pin was taken or last reconciled; lib/pin-reconcile.mjs compares the file against it to tell a pin the project still edits from one it does not.",
+      "description": "SHA-256 (hex) of the project's file (of a marker-merge file, its framework-owned region) when the pin was taken or last reconciled; lib/pin-reconcile.mjs compares the file against it to tell a pin the project still edits from one it does not.",
       "bookkeeping": true
     },
     "frameworkFiles.*.upstreamHash": {
@@ -89,7 +89,7 @@
       "type": ["string"],
       "issue": ["#160"],
       "catalogue": false,
-      "description": "SHA-256 (hex) of the plugin's rendered copy at the same moment; a plugin copy that no longer matches it moved under the pin, which lib/pin-reconcile.mjs reports as review.",
+      "description": "SHA-256 (hex) of the plugin's rendered copy (or its framework-owned region) at the same moment; a plugin copy that no longer matches it moved under the pin, which lib/pin-reconcile.mjs reports as review.",
       "bookkeeping": true
     },
     "topologyFile": {
