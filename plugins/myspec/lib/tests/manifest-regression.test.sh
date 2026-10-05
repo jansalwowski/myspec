@@ -46,6 +46,9 @@ fail() { FAIL=$((FAIL + 1)); printf 'FAIL  %s\n' "$1" >&2; }
 # --- 1. the manifest copies no hook or lib; each is retired ------------------
 if [ "$(jq -r 'has("hooks") or has("lib")' "$MANIFEST")" = false ]; then ok; else fail "the manifest still has a hooks or lib group: 3.0 copies neither"; fi
 if jq -e '.migrations | index("3.0.0-plugin-hooks")' "$MANIFEST" >/dev/null; then ok; else fail "the manifest lists the 3.0.0-plugin-hooks migration"; fi
+# The registry normalisation (#266 review): memory-claim-id.sh reads only the
+# one-line registry since 3.0, so update must rewrite a pre-1.28 one first.
+if jq -e '.migrations | index("3.0.0-memory-registry")' "$MANIFEST" >/dev/null; then ok; else fail "the manifest lists the 3.0.0-memory-registry migration"; fi
 
 RETIRED=$(jq -r '.removed | to_entries[] | select(.value.since == "3.0.0") | select(.key | startswith("hooks/") or startswith("lib/")) | "\(.key)\t\(.value.dest)"' "$MANIFEST")
 for h in "$PLUGIN"/hooks/*.sh; do
