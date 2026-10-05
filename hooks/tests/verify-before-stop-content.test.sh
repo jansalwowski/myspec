@@ -310,14 +310,38 @@ OUT=$(stop 49)
 [ "$(decision "$OUT")" = approve ] && ok || fail "a binary Bash write approves (got: ${OUT:0:200})"
 rm -f "$REPO/docs/blob.png"
 
-# A text file above the snapshot cap is not hashed either, and is still judged.
-before_objects=$(objects)
-bashcmd 50 "awk 'BEGIN { for (i = 0; i < 15000; i++) print \"filler line \" i \" of a large generated doc, padded out to about ninety bytes\" }' > docs/big.md && printf 'see $LEAK\n' >> docs/big.md"
-[ "$(wc -c < "$REPO/docs/big.md")" -gt 1048576 ] && ok || fail "fixture: docs/big.md is above the 1 MiB cap"
-[ "$(objects)" = "$before_objects" ] && ok || fail "a text file above the cap adds no loose object ($before_objects -> $(objects))"
+# A large text file the checks judge gets a real before/after pair whatever
+# its size (PR #274 review): no fallback to HEAD, nor to the file as it is at
+# Stop. A large file outside the checks' scope is not hashed.
+big_lines() {  # big_lines <prefix>: 15000 lines, about 1.3 MB
+  awk -v p="$1" 'BEGIN { for (i = 0; i < 15000; i++) print p " line " i " of a large generated file, padded out to about ninety bytes" }'
+}
+big_lines filler > "$REPO/docs/big.md"
+git -C "$REPO" add docs/big.md
+git -C "$REPO" commit -qm big
+[ "$(wc -c < "$REPO/docs/big.md")" -gt 1048576 ] && ok || fail "fixture: docs/big.md is above 1 MiB"
+# A leak committed in the session still blocks: its baseline is the blob taken
+# before the write, not HEAD.
+bashcmd 50 "printf 'see $LEAK\n' >> docs/big.md && git commit -qam leak"
 OUT=$(stop 50)
-[ "$(decision "$OUT")" = block ] && ok || fail "a leak in a text file above the cap still blocks (got: ${OUT:0:200})"
-rm -f "$REPO/docs/big.md"
+[ "$(decision "$OUT")" = block ] && ok || fail "a leak in a doc above 1 MiB committed in the session still blocks (got: ${OUT:0:200})"
+expect_in "line 15001: /Users/alice" "$(reason "$OUT")" "the large doc's leak line is named"
+git -C "$REPO" reset -q --hard HEAD~1
+# Another session's uncommitted leak in a shared large file is not this
+# session's, written before or after this session's line.
+bashcmd 52 "printf 'other $LEAK\n' >> docs/big.md"
+bashcmd 53 "printf 'clean line\n' >> docs/big.md"
+bashcmd 54 "printf 'later $LEAK\n' >> docs/big.md"
+OUT=$(stop 53)
+[ "$(decision "$OUT")" = approve ] && ok || fail "another session's leak in a shared doc above 1 MiB does not block this session (got: ${OUT:0:300})"
+OUT=$(stop 52)
+[ "$(decision "$OUT")" = block ] && ok || fail "the session that leaked into the shared large doc is blocked (got: ${OUT:0:200})"
+git -C "$REPO" checkout -q -- docs/big.md
+before_objects=$(objects)
+bashcmd 55 "awk 'BEGIN { for (i = 0; i < 15000; i++) print \"RUN echo line \" i \" of a large generated file, padded out to about ninety bytes\" }' > Dockerfile"
+[ "$(wc -c < "$REPO/Dockerfile")" -gt 1048576 ] && ok || fail "fixture: Dockerfile is above 1 MiB"
+[ "$(objects)" = "$before_objects" ] && ok || fail "a large file outside the checks' scope adds no loose object ($before_objects -> $(objects))"
+rm -f "$REPO/Dockerfile"
 
 # --- a write in a command that exits non-zero (PR #274 review) ---------------------
 # The harness sends a Bash call that exits non-zero to PostToolUseFailure, not

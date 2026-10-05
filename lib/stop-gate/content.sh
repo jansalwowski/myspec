@@ -113,7 +113,7 @@ content_gates() {
     while IFS=$'\t' read -r _ _ before after; do
       content_before "$root" "$rel" "$before" "$tmp/before" || continue
       if [ "$after" = "@" ]; then
-        # Not hashed (too large, or a read-only object store): the file as
+        # Not hashed (a read-only object store): the file as
         # it is now. Its CRs are dropped on both sides, as git's line-ending
         # conversion may have dropped them from the blob.
         LC_ALL=C awk '{ sub(/\r$/, "") } 1' "$abs" > "$tmp/after" 2>/dev/null || continue

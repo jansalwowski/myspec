@@ -473,13 +473,12 @@ ledger_home() {
 # and returns 1 for a file the content checks never judge: one they do not
 # cover (absolute_paths_scope: the frontmatter and reuse-audit files are docs
 # too), or a binary (a NUL in its first 8000 bytes, git's own test: its diff
-# has no `+` lines to judge). Returns 2 when the file is judged but not
-# hashed: above SNAPSHOT_MAX_BYTES (hashing a large file on every write
-# fills the object store with loose objects), or git cannot write the blob
-# (a read-only object store).
-SNAPSHOT_MAX_BYTES=1048576
+# has no `+` lines to judge). Only those two skip the object store: a file
+# the checks judge needs a before/after pair whatever its size, or its
+# baseline falls back to HEAD (which a commit moves) and its after side to
+# the file at Stop (which holds other sessions' lines). Returns 2 when the
+# file is judged but git cannot write the blob (a read-only object store).
 snapshot_blob() {
-  local size
   [ "$SNAPSHOTS" = 1 ] || return 1
   absolute_paths_scope "$1" "$2" || return 1
   if [ ! -f "$1/$2" ]; then
@@ -489,8 +488,6 @@ snapshot_blob() {
   if [ "$(head -c 8000 "$1/$2" 2>/dev/null | LC_ALL=C tr -dc '\000' | wc -c)" -gt 0 ]; then
     return 1
   fi
-  size=$(wc -c < "$1/$2" 2>/dev/null) || return 2
-  [ "$size" -le "$SNAPSHOT_MAX_BYTES" ] || return 2
   git -C "$1" hash-object -w -- "$2" 2>/dev/null || return 2
 }
 
