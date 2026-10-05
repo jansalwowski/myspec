@@ -56,10 +56,10 @@ A PR is always opened when the work is done — the user cannot inspect a worktr
 
 ## At the end (develop mode only)
 
-Ask whether to open a PR. If yes:
+Ask whether to open a PR. If yes, run the plugin's `promote-to-worktree.sh` — `/myspec:feature-complete` does, and the isolation hook's block message prints its resolved path:
 
 ```
-<plugin>/lib/promote-to-worktree.sh --branch <type>/<slug> --title "<conventional commit subject>" \
+promote-to-worktree.sh --branch <type>/<slug> --title "<conventional commit subject>" \
   --only <path> [--only <path>]... [--body-file <path>] [--trailer "<Key: value>"]... [--session-url <url>]
 ```
 

@@ -204,7 +204,7 @@ Then record the answer (session id is already filled in):
   \"$HOOK_LIB/set-isolation.sh\" $SESSION_ID develop
   \"$HOOK_LIB/set-isolation.sh\" $SESSION_ID worktree
 
-Do NOT ask about a PR now — that question belongs at the end of the work.
+Do NOT ask about a PR now — that question belongs at the end of the work. In develop mode the answer yes runs \"$HOOK_LIB/promote-to-worktree.sh\" --branch <type>/<slug> --title <subject> --only <path>... (procedure in $PROCEDURE).
 
 If you are a SUBAGENT: do not prompt. Stop and report to your parent that no isolation decision exists.
 
