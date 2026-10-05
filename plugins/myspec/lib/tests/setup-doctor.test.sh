@@ -589,6 +589,19 @@ expect_no_line 'hook-unregistered: .claude/hooks/verify-before-stop.sh' "a retir
 expect_line 'WARN +hook-unregistered: .claude/hooks/own.sh' "a project hook beside the copies is still checked"
 expect_no_line 'hook-copy-retired: .claude/hooks/own.sh' "a project hook is not a retired copy"
 
+# A 2.0 retirement under .claude/hooks/ (guard-git-branch.sh, since 2.0.0) is a
+# plain deletion update already performs, not a plugin-run copy: it keeps its
+# framework-removed finding and is never reported as hook-copy-retired, nor
+# routed to a move the migration would then compare with a file the plugin
+# does not ship.
+build_fixture
+mkdir -p "$REPO/.claude/hooks"
+printf '#!/bin/sh\nexit 0\n' > "$REPO/.claude/hooks/guard-git-branch.sh"
+chmod 755 "$REPO/.claude/hooks/guard-git-branch.sh"
+run_doctor
+expect_line 'WARN +framework-removed: .claude/hooks/guard-git-branch.sh: retired by the framework in v2.0.0' "a 2.0-retired hook copy keeps its framework-removed finding"
+expect_no_line 'hook-copy-retired: .claude/hooks/guard-git-branch.sh' "a 2.0-retired hook is not a plugin-run copy"
+
 # --- pass 3b: a pinned framework rule over budget ------------------------------
 # The 2.0 rules diet shrank the always-loaded rules, but two consumer repos pin
 # workflow.md with the reason "trimmed for always-loaded context budget". update
