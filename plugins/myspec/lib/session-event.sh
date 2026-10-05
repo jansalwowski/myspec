@@ -254,24 +254,20 @@ session_armed_roots() {
     | . as $s | $s.order[] | select($s.armed[.])'
 }
 
-# session_written <home> <session id> <root> -> the repo-relative paths the
-# session wrote in <root>, code or not, those in a checkout nested inside it
-# (a submodule) included, sorted and unique.
-session_written() {
-  session_query "$1" "$2" '
-    $ev[] | select(.t == "write" and (.root | type) == "string" and (.rel | type) == "string")
-    | if .root == $r then .rel
-      elif (.root | startswith($r + "/")) then .root[($r | length) + 1:] + "/" + .rel
-      else empty end' --arg r "$3" | LC_ALL=C sort -u
-}
+# jq: the session's write events, from $ev: a `write` with a string root and
+# rel. Every query over the files a session wrote starts from it.
+SESSION_WRITES_JQ='$ev[] | select(.t == "write" and (.root | type) == "string" and (.rel | type) == "string")'
 
-# session_writes <home> <session id> -> every file the session wrote, code or
-# not, as `<root>\t<rel>` lines, sorted and unique: the input of the Stop
-# gate's content checks (lib/stop-gate/content.sh).
-session_writes() {
-  session_query "$1" "$2" '
-    $ev[] | select(.t == "write" and (.root | type) == "string" and (.rel | type) == "string")
-    | .root + "\t" + .rel' | LC_ALL=C sort -u
+# session_written <home> <session id> [root] -> the files the session wrote,
+# code or not, sorted and unique. With <root>: the repo-relative paths in
+# <root>, those in a checkout nested inside it (a submodule) included.
+# Without: every file, as `<root>\t<rel>` lines.
+session_written() {
+  session_query "$1" "$2" "$SESSION_WRITES_JQ"'
+    | if $r == "" then .root + "\t" + .rel
+      elif .root == $r then .rel
+      elif (.root | startswith($r + "/")) then .root[($r | length) + 1:] + "/" + .rel
+      else empty end' --arg r "${3:-}" | LC_ALL=C sort -u
 }
 
 # session_seen <home> <session id> <kind> <root> <rel> <agent> -> 0 when the

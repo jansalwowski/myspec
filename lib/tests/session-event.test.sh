@@ -139,6 +139,8 @@ session_append "$REPO" $S "$(jq -nc --arg r "$REPO" '{t:"write",root:$r,rel:"c.t
 eq "$(session_armed_roots "$REPO" $S | tr '\n' ' ')" "$REPO $WT $REPO/mod " "armed: a code write after the run re-arms, in first-written order"
 eq "$(session_written "$REPO" $S "$REPO" | tr '\n' ' ')" "README.md a.ts c.ts mod/m.ts tsconfig.json " "written: code and file, a nested checkout's under its path"
 eq "$(session_written "$REPO" $S "$WT")" "b.ts" "written: per checkout"
+eq "$(session_written "$REPO" $S | wc -l | tr -d ' ')" "6" "written: without a root, every file of every checkout"
+eq "$(session_written "$REPO" $S | grep -c "^$REPO/mod"$'\t'"m.ts$")" "1" "written: without a root, as <root>TAB<rel>"
 session_seen "$REPO" $S code "$REPO/mod" m.ts a1 && ok || fail "seen: the same write is recorded"
 session_seen "$REPO" $S code "$REPO/mod" m.ts "" && fail "seen: another agent's write is not the same" || ok
 session_seen "$REPO" $S code "$REPO" a.ts "" && fail "seen: a write before the root's verified event is not" || ok

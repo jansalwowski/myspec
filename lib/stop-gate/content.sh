@@ -155,7 +155,7 @@ content_gates() {
       lines=$(reuse_audit_issues "$abs")
       [ -z "$lines" ] || reasons+=("$(reuse_audit_reason "$rel" "$lines")")
     fi
-  done < <(session_writes "$STATE_HOME" "$SESSION_ID")
+  done < <(session_written "$STATE_HOME" "$SESSION_ID")
   rm -f "$numbered" "$text" "$cmp"
   [ "${#reasons[@]}" -gt 0 ] || return 0
   text=""
