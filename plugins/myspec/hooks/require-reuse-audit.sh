@@ -82,6 +82,10 @@ proposed_content "$TOOL_INPUT" "$FILE_PATH" "$TMP" || exit 0
 # the marker; a new one always is.
 if [ -f "$FILE_PATH" ]; then
   [ "$(reuse_audit_state "$FILE_PATH")" != "$(reuse_audit_state "$TMP")" ] || exit 0
+elif [ "$PROPOSED_KIND" != write ] && [ ! -s "$TMP" ]; then
+  # An edit to a path that does not exist (a typo) creates nothing: the
+  # tool reports the missing file, which is the right message.
+  exit 0
 fi
 
 DIAG=$(reuse_audit_issues "$TMP")

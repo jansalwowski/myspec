@@ -113,6 +113,11 @@ write "$SPEC" "${HEADER}"'### Reuse audit
 '"${FOOTER}"
 expect_deny "creating a tech-spec with an empty table is denied"
 
+edit "$REPO/.ai/features/typo/tech-spec.md" "### Architecture" "### Architecture v2"
+expect_quiet "an Edit to a tech-spec path that does not exist is left to the tool's own error (PR #274 review)"
+edit "$REPO/.ai/features/typo/tech-spec.md" "" "${HEADER}${FOOTER}"
+expect_deny "an Edit with an empty old_string that creates a tech-spec without the section is denied"
+
 write "$REPO/.ai/features/pay/spec.md" "${HEADER}${FOOTER}"
 expect_quiet "a spec.md is not a tech-spec"
 
