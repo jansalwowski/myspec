@@ -1,5 +1,7 @@
-// ESLint config for the JS this plugin ships (lib/). Downstream projects commonly lint with eslint:recommended, and
-// /myspec:update copies lib/ into them, so shipped code must pass it (#208).
+// ESLint config for the JS this plugin ships (lib/), held to eslint:recommended
+// (#208). The hooks and skills run lib/ from the plugin in every consumer's
+// sessions (since 3.0 it is no longer copied into projects, #272), so a defect
+// here ships everywhere.
 //
 // The repo has no package.json: CI and pre-commit run a pinned
 // `npx -p eslint -p @eslint/js -p globals eslint`. A bare `import '@eslint/js'`
