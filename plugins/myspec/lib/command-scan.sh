@@ -52,6 +52,16 @@ sanitize_command() {
       if (ch == "`") return "\030"
       return ch
     }
+    # has_term(s, from, term): a line after <from> is <term>, trimmed.
+    function has_term(s, from, term,    rest, ln, m, q) {
+      rest = substr(s, from)
+      m = split(rest, ln, "\n")
+      for (q = 2; q <= m; q++) {
+        gsub(/^[ \t]+|[ \t]+$/, "", ln[q])
+        if (ln[q] == term) return 1
+      }
+      return 0
+    }
     { buf = buf $0 "\n" }
     END {
       n = length(buf)
@@ -84,9 +94,18 @@ sanitize_command() {
           continue
         }
 
+        # A here-string (`<<<word`) has no body.
+        if (substr(buf, i, 3) == "<<<") { out = out "<<<"; i += 3; continue }
+
+        # A heredoc marker becomes Q and the rest of its line is scanned like
+        # any other text, so a redirect or pipe after the marker (`cat <<EOF
+        # > f`, `cat <<EOF | tee f`) is still seen. The body is skipped at
+        # the end of the line, one per pending marker, in order.
         if (substr(buf, i, 2) == "<<") {
           j = i + 2
           if (substr(buf, j, 1) == "-") { j++ }
+          spaced = 0
+          while (substr(buf, j, 1) == " " || substr(buf, j, 1) == "\t") { j++; spaced = 1 }
           delim = substr(buf, j, 1)
           term = ""
           if (delim == "'"'"'" || delim == "\"") {
@@ -94,25 +113,34 @@ sanitize_command() {
             while (j <= n && substr(buf, j, 1) != delim) { term = term substr(buf, j, 1); j++ }
             j++
           } else {
+            if (delim == "\\") { j++ }
             while (j <= n && substr(buf, j, 1) ~ /[A-Za-z0-9_]/) { term = term substr(buf, j, 1); j++ }
           }
 
-          # A bare `<<` with no word is a shift operator, not a heredoc.
-          if (term == "") { out = out c; i++; continue }
+          # A bare `<<` with no word is a shift operator, not a heredoc; so
+          # is `a << b` in arithmetic when no line ends the body.
+          if (term == "" || (spaced && !has_term(buf, j, term))) { out = out c; i++; continue }
 
-          while (j <= n && substr(buf, j, 1) != "\n") { j++ }
-          j++
-
-          while (j <= n) {
-            line = ""
-            k = j
-            while (k <= n && substr(buf, k, 1) != "\n") { line = line substr(buf, k, 1); k++ }
-            gsub(/^[ \t]+|[ \t]+$/, "", line)
-            j = k + 1
-            if (line == term) { break }
-          }
-
+          pend[++npend] = term
           out = out " Q "
+          i = j
+          continue
+        }
+
+        if (c == "\n" && npend > 0) {
+          out = out "\n"
+          j = i + 1
+          for (p = 1; p <= npend; p++) {
+            while (j <= n) {
+              line = ""
+              k = j
+              while (k <= n && substr(buf, k, 1) != "\n") { line = line substr(buf, k, 1); k++ }
+              gsub(/^[ \t]+|[ \t]+$/, "", line)
+              j = k + 1
+              if (line == pend[p]) { break }
+            }
+          }
+          npend = 0
           i = j
           continue
         }

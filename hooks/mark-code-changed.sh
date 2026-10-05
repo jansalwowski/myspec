@@ -305,6 +305,21 @@ bash_write_targets() {
     if [ "${#kwords[@]}" -ne "${#words[@]}" ]; then
       kwords=("${words[@]}")
     fi
+    # A redirect before the command name, or after a brace group or subshell
+    # (`{ ...; } >> f` leaves `>> f` as a segment of its own): its target is
+    # written whatever runs, and the word after it is the command name.
+    while [ "${#words[@]}" -gt 0 ] && [[ "${words[0]}" =~ ^[0-9]*\>{1,2} ]]; do
+      if [[ "${words[0]}" =~ ^[0-9]*\>{1,2}$ ]]; then
+        [ "${#words[@]}" -lt 2 ] || emit_target "$(decode_word "${kwords[1]}")"
+        words=("${words[@]:2}")
+        kwords=("${kwords[@]:2}")
+      else
+        emit_target "$(decode_word "$(printf '%s' "${kwords[0]}" | sed -E 's/^[0-9]*>{1,2}//')")"
+        words=("${words[@]:1}")
+        kwords=("${kwords[@]:1}")
+      fi
+    done
+    [ "${#words[@]}" -gt 0 ] || continue
     if [ "${words[0]}" = cd ]; then
       if [ "${#words[@]}" -ge 2 ] && next=$(cd "$BASE_DIR" 2>/dev/null && cd "$(decode_word "${kwords[1]}")" 2>/dev/null && pwd -P); then
         BASE_DIR="$next"

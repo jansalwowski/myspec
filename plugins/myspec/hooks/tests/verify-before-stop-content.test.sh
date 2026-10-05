@@ -231,6 +231,50 @@ OUT=$(stop 21)
 [ "$(decision "$OUT")" = approve ] && ok || fail "a leak removed by a later Bash write approves (got: ${OUT:0:300})"
 rm -f "$REPO/docs/fixed.md"
 
+# --- redirect forms the command scanner must see (PR #274 review) -----------------
+# A redirect after the heredoc marker, a pipe after it, a brace group's or
+# subshell's redirect, and a redirect before the command name.
+n=30
+for cmd in \
+  "cat <<'EOF' > docs/r.md
+see $LEAK
+EOF" \
+  "cat <<EOF >>docs/r.md
+see $LEAK
+EOF" \
+  "cat <<-EOF > docs/r.md
+	see $LEAK
+	EOF" \
+  "cat << EOF > docs/r.md
+see $LEAK
+EOF" \
+  "cat <<\\EOF > docs/r.md
+see $LEAK
+EOF" \
+  "cat <<'EOF' | tee docs/r.md
+see $LEAK
+EOF" \
+  "cat <<A <<B > docs/r.md
+a
+A
+see $LEAK
+B" \
+  "{ printf 'see $LEAK\n'; } >> docs/r.md" \
+  "( printf 'see $LEAK\n' ) > docs/r.md" \
+  ">docs/r.md printf 'see $LEAK\n'"; do
+  bashcmd "$n" "$cmd"
+  OUT=$(stop "$n")
+  [ "$(decision "$OUT")" = block ] && ok || fail "a leak written by '${cmd%%$'\n'*}' blocks (got: ${OUT:0:200})"
+  rm -f "$REPO/docs/r.md"
+  n=$((n + 1))
+done
+
+# An arithmetic shift is not a heredoc: the redirect after it still counts.
+bashcmd 45 "echo \$(( 1 << 2 )) > docs/r.md && printf 'see $LEAK\n' >> docs/r.md"
+OUT=$(stop 45)
+[ "$(decision "$OUT")" = block ] && ok || fail "an arithmetic shift does not hide the redirects after it (got: ${OUT:0:200})"
+rm -f "$REPO/docs/r.md"
+
 # --- the continuation after a block is approved (R10) -----------------------------
 bashcmd 15 "printf 'see $LEAK\n' > docs/again.md"
 OUT=$(jq -nc --arg s "$SID-15" --arg c "$REPO" '{session_id: $s, cwd: $c, stop_hook_active: true}' | bash "$HOOK" 2>/dev/null)
