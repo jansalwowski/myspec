@@ -267,7 +267,7 @@ The skill reads the tech-spec and finds three parallel-safe seams:
 - D1 [demo]: open `/settings/schedules`; create a weekly schedule; open its run history — screenshot each step
 ```
 
-The tech-spec sets `verification_mode: mixed`, so every milestone gets a `**Checkpoint probes:**` block — Milestone 1's carries only `[api]` probes, since nothing renders yet. Each probe is a literal assertion against a `### Test Hooks` handle with its expected value, written now, before the code exists. Milestone 2 spells out its own Scratch setup rather than "as Milestone 1": the executor starts from whatever the scratch database holds, and P2's count of 1 holds only on a freshly seeded empty table.
+The tech-spec sets `verification_mode: mixed`, so every milestone gets a `**Checkpoint probes:**` block — Milestone 1's carries only `[api]` probes, since nothing renders yet. Each probe is a literal assertion against a `### Test Hooks` handle with its expected value, written now, before the code exists. Milestone 2 spells out its own Scratch setup rather than "as Milestone 1": the executor starts from whatever the scratch database holds, and P2's count of 1 holds only on a freshly seeded empty table. The project sets no `probes.portSource`, so there is no Ports line and the Target keeps its `$SCRATCH_API_URL` / `$SCRATCH_WEB_URL` addresses. Had it set one (say `.dev-ports`, holding this checkout's `API_PORT` and `WEB_PORT` slots), the block would add `- Ports: .dev-ports → API_PORT, WEB_PORT` and write each address with `$API_PORT` / `$WEB_PORT`, which the executor resolves in its own checkout.
 
 A task in a parallel group carries an isolation note, because its implementer runs in its own worktree and cannot see a sibling's files:
 
