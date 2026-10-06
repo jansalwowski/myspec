@@ -103,7 +103,7 @@ See [evals/README.md](evals/README.md) and the Quality gates section of [AGENTS.
 | `/myspec:session-start` | Start tracked work session |
 | `/myspec:session-complete` | Archive session, extract memories, report repeated friction and whose side it is on ([docs/friction-report.md](docs/friction-report.md)) |
 | `/myspec:session-clean` | Sweep dangling auto-created sessions in `.claude/state/sessions/` — deletes empty, archives substantive, never touches the running agent's own session ([examples](examples/skills/session-clean.md)) |
-| `/myspec:memory-sanitize` | Audit the user-level auto-memory store in `~/.claude-personal/projects/`: triage entries (keep/drop/promote/merge/compress/conflict), grep for live citations before any delete, compress bloated bodies against the length budget in `.claude/rules/auto-memory-style.md`, supersede contradictions non-destructively, never auto-promote or auto-rewrite ([examples](examples/skills/memory-sanitize.md)) |
+| `/myspec:memory-sanitize` | Audit the user-level auto-memory store in `<config_dir>/projects/` (`$CLAUDE_CONFIG_DIR`, default `~/.claude`): triage entries (keep/drop/promote/merge/compress/conflict), grep for live citations before any delete, compress bloated bodies against the length budget in `.claude/rules/auto-memory-style.md`, supersede contradictions non-destructively, never auto-promote or auto-rewrite ([examples](examples/skills/memory-sanitize.md)) |
 | **Ideas Pipeline** | |
 | `/myspec:idea-intake` | Process new idea into priority queue |
 | `/myspec:idea-process` | Convert idea to feature specification |
@@ -217,7 +217,7 @@ This updates framework-owned files while preserving your project customizations.
 |------|---------|
 | `workflow.md` | Feature workflow phases, the status state machine, when to invoke which skill |
 | `memory-system.md` | Project-level memory (`${aiDir}/memory/` — sessions, procedural/semantic/episodic). Triggers, layer budgets, session lifecycle. |
-| `auto-memory-style.md` | Harness-managed **user-level** auto-memory at `~/.claude-personal/projects/<encoded_cwd>/memory/`. Length budget per type, cut list, pre-write ADD/UPDATE/NO-OP consolidation, conflict resolution. |
+| `auto-memory-style.md` | Harness-managed **user-level** auto-memory at `<config_dir>/projects/<encoded_cwd>/memory/`. Length budget per type, cut list, pre-write ADD/UPDATE/NO-OP consolidation, conflict resolution. |
 | `ideas.md` | Ideas pipeline (intake → priority → processing) |
 | `skill-optimization.md` | Skill-authoring meta-rules (frontmatter, naming, token efficiency) |
 | `paths.md` | Path portability — `${aiDir}` placeholder, `<repo_root>`/`<encoded_cwd>` forms, no absolute paths in shared artifacts |

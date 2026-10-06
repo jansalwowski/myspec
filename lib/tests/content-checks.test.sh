@@ -195,7 +195,11 @@ printf 'clean\n' > "$CUR"
 expect "" "$(absolute_path_findings "$CUR")" "a clean file has no findings"
 expect "replace with <repo_root>/src/a.ts" "$(absolute_path_hint /r/src/a.ts /r)" "a repo-internal path suggests <repo_root>"
 expect "replace with <repo_root>" "$(absolute_path_hint /r /r)" "the root itself suggests <repo_root>"
-expect "replace with ~/.claude-personal/projects/<encoded_cwd>/memory" "$(HOME=/Users/h absolute_path_hint /Users/h/.claude-personal/projects/-Users-h-proj/memory /r)" "a harness memory path suggests <encoded_cwd>"
+expect "replace with <config_dir>/projects/<encoded_cwd>/memory" "$(HOME=/Users/h absolute_path_hint /Users/h/.claude-personal/projects/-Users-h-proj/memory /r)" "a ~/.claude-personal memory path suggests <config_dir>"
+# #161: the default store is ~/.claude/projects, and CLAUDE_CONFIG_DIR moves it.
+expect "replace with <config_dir>/projects/<encoded_cwd>/memory/a.md" "$(HOME=/Users/h CLAUDE_CONFIG_DIR= absolute_path_hint /Users/h/.claude/projects/-Users-h-proj/memory/a.md /r)" "a ~/.claude memory path suggests <config_dir>"
+expect "replace with <config_dir>/projects/<encoded_cwd>/memory" "$(HOME=/Users/h CLAUDE_CONFIG_DIR=/opt/cc/ absolute_path_hint /opt/cc/projects/-Users-h-proj/memory /r)" "a CLAUDE_CONFIG_DIR memory path suggests <config_dir>"
+case "$(HOME=/Users/h CLAUDE_CONFIG_DIR= absolute_path_hint /Users/h/.claudex/projects/p /r)" in "use <repo_root>"*) ok ;; *) fail "a look-alike config dir gets the generic hint" ;; esac
 R=$(absolute_paths_reason "the content proposed for" docs/a.md /r "line 2	/r/src/a.ts
 ")
 expect_in "BLOCKED: the content proposed for docs/a.md contains absolute homedir paths" "$R" "the reason opens with the subject and the signature"

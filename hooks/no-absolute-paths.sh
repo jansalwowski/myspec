@@ -7,8 +7,8 @@
 #
 # Policy (framework-files/rules/paths.md): committed docs and framework files
 # must be portable across machines and users. Use the placeholders
-# `<repo_root>` and `<encoded_cwd>` (and the harness-fixed
-# `~/.claude-personal/...` prefix). The plugin's `lib/path-normalize.sh`
+# `<repo_root>` and `<encoded_cwd>` (and `<config_dir>`, the Claude config
+# dir: $CLAUDE_CONFIG_DIR, default ~/.claude). The plugin's `lib/path-normalize.sh`
 # exposes `normalize_path` and `encode_cwd`, which produce these forms.
 #
 # Scope (#163, lib/content-checks.sh): only what can leak into a shared
