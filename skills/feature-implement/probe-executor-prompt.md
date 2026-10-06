@@ -17,7 +17,8 @@ Task tool (general-purpose):
     ## Probes
 
     [The milestone's Checkpoint probes block, copied verbatim from the plan
-    — Target line, Scratch env line, and every probe line]
+    — Target line, Scratch env line, Scratch setup line if any, and every
+    probe line]
 
     ## Working directory
 
@@ -52,7 +53,12 @@ Task tool (general-purpose):
        Scratch env line's variables exported, and report the command, its
        exit status and the tail of its output; it provisions the scratch
        systems, and the checklist still verifies them. A script that is
-       missing or exits non-zero makes the writing probes BLOCKED. A check you cannot complete makes those
+       missing or exits non-zero makes the writing probes BLOCKED. When
+       the block has a Scratch setup line, run its commands after checks
+       1-4 pass and before the first probe — they write, so only on the
+       verified scratch systems — and report each command and exit
+       status; a non-zero exit makes every probe BLOCKED. No Scratch
+       setup line: run nothing extra. A check you cannot complete makes those
        probes BLOCKED. After the run, do the post-run checks; a real system
        that changed is a FAIL of the whole run, reported first.
     4. `[real-input]` probes compare against the stated expectation. When

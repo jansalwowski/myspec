@@ -162,7 +162,7 @@ The feature has an API and a settings screen, so the frontmatter sets `verificat
 
 - **Target:** `bin/serve-scratch` → API at `$SCRATCH_API_URL`, settings page at `$SCRATCH_WEB_URL/settings/schedules` (an address the everyday dev server does not use, so it cannot answer the probes)
 - **Contract surface:** `visual` — `data-testid="schedule-row"`, `data-testid="schedule-form"`, `data-state="saving|saved|error"` on the form; `api` — `GET /api/schedules` → `{ items: Schedule[] }`, `POST /api/schedules` → `201 Schedule`
-- **Scratch environment:** `DATABASE_URL` → the `reports_scratch` database; `REDIS_URL` → a second Redis instance, not a changed DB index on the real one (queue libraries can hardcode the DB index); `SMTP_HOST`/`SMTP_PORT` → a local mail catcher
+- **Scratch environment:** `DATABASE_URL` → the `reports_scratch` database; `REDIS_URL` → a second Redis instance, not a changed DB index on the real one (queue libraries can hardcode the DB index); `SMTP_HOST`/`SMTP_PORT` → a local mail catcher; migrate with `bin/migrate`, seed with `bin/seed <fixture>`
 ```
 
 Because ADR-1 puts scheduling on the Redis the app already uses, the scratch queue is a separate port, not a different DB index — the shared checklist in `_shared/scratch-isolation.md` exists because the index alone once kept feeding the real worker.
