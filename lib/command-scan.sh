@@ -195,16 +195,18 @@ decode_word() {
 # per word cost seconds on a 200-statement one (#277).
 decode_word_to() {
   local _dw_w="$2"
-  _dw_w=${_dw_w//$'\037'/ }
+  # Every replacement is quoted: from bash 5.2 an unquoted & in it stands
+  # for the matched text (patsub_replacement), and a backslash escapes.
+  _dw_w=${_dw_w//$'\037'/' '}
   _dw_w=${_dw_w//$'\036'/$'\n'}
-  _dw_w=${_dw_w//$'\021'/|}
-  _dw_w=${_dw_w//$'\022'/&}
-  _dw_w=${_dw_w//$'\023'/;}
-  _dw_w=${_dw_w//$'\024'/(}
-  _dw_w=${_dw_w//$'\025'/)}
-  _dw_w=${_dw_w//$'\026'/\{}
-  _dw_w=${_dw_w//$'\027'/\}}
-  _dw_w=${_dw_w//$'\030'/\`}
+  _dw_w=${_dw_w//$'\021'/'|'}
+  _dw_w=${_dw_w//$'\022'/'&'}
+  _dw_w=${_dw_w//$'\023'/';'}
+  _dw_w=${_dw_w//$'\024'/'('}
+  _dw_w=${_dw_w//$'\025'/')'}
+  _dw_w=${_dw_w//$'\026'/'{'}
+  _dw_w=${_dw_w//$'\027'/'}'}
+  _dw_w=${_dw_w//$'\030'/'`'}
   _dw_w=${_dw_w//$'\035'/}
   printf -v "$1" '%s' "$_dw_w"
 }
