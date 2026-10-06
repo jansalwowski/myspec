@@ -152,4 +152,11 @@ Decisions taken 2026-10-05:
 
 `scripts/evals/release-check.sh --version 3.0.0` on `v3` at b237e99, report-only, returned **no-change** for both models against v2.12.0. The first attempt hit 300 s timeouts on the v2.12.0 side and gave no verdict; the re-run reused HEAD's results.
 
+Added 2026-10-06, after a backlog triage, all merged into `v3`:
+
+- **#171 shipped in 3.0** (#306): the probe executor is the plugin agent `myspec:probe-executor` with `disallowedTools: Edit, Write, NotebookEdit, Agent` and `omitClaudeMd: true`. **The Claude Code host floor rises from 2.0.12 to 2.1.288**, the release in which a plugin agent spawned by name runs with its own `disallowedTools` in agent teams too (Agent-tool dispatch has honoured it since 2.1.78; `omitClaudeMd` is 2.1.271). Stated in README "Installation", `docs/upgrading-to-3.0.md` and `skills/update` Step 0.
+- **#277 fixed** (#299): one hook call on a 200-statement Bash command went from ~28 s to under 0.5 s, so the cost accepted above no longer applies. #276 follows in 3.1 (#305).
+- Non-breaking fixes that rode along: #159, #161, #165, #170, #183, #184, #282 (lib and hooks); #166, #167, #168, #174, #191 (feature-implement); #169, #173, #188 (feature-plan); `memory-system.md` trimmed back under the always-loaded budget (#283; #185 declined).
+- Deferred to 3.1, not breaking: #276, #239's Stop-gate half, and the probe-setup stack #194–#197.
+
 Remaining: dogfood `/myspec:update` on the 1.x consumers (v1.28 → v2.12 → v3, `--plugin-dir`, on throwaway clones); merge this `v3` → `main` PR; `/release` 3.0.0 from `main`, the first gated release, which records the baseline.
