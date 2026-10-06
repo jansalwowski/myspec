@@ -97,6 +97,7 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 | `feature-implement-dispatch` | orchestration | approved 2-task plan → feature-implement dispatches the Task 1 implementer Agent (matched on its prompt, not any Agent) before any `app/` or `tests/` Write (9ed2ed9); graded on the start of the run |
 | `feature-implement-attribution` | orchestration | a CLAUDE.md rule names a commit trailer → the Task 1 implementer dispatch carries it verbatim, since subagents never see CLAUDE.md (#191) |
 | `feature-implement-fix-round` | orchestration | Phase 1 committed, one Important finding about a rule the phase states in four places → the fix dispatch asks for every place the rule is stated, not only the cited line (#168) |
+| `feature-implement-phase-review` | orchestration | Phase 1 committed, both tasks `[~]` and uncommitted → the phase reviewer dispatch says plan checkboxes are controller-managed (#167) |
 
 `nearmiss-personal-preference` is a `capability` case until it has been run across releases, and so is `trigger-feature-spec-scenarios` (added with #264, not yet run). So are the three feature-plan and feature-implement cases (Sonnet, 2026-09-29):
 

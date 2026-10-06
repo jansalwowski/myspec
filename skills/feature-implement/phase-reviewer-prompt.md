@@ -29,6 +29,12 @@ Task tool (general-purpose):
 
     [FULL TEXT of all tasks in this phase from the plan — paste inline]
 
+    Plan checkboxes are controller-managed: the controller flips each task
+    to `[~]` in implementation-plan.md before dispatching it, and flips the
+    phase's tasks to `[x]` after your approval. Those plan edits stay
+    uncommitted until the controller commits them. A resumed run re-executes every
+    `[~]` task from scratch.
+
     ## Spec and Acceptance Criteria
 
     [Relevant acceptance criteria from spec.md for the work done in this phase]
