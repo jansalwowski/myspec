@@ -12,6 +12,8 @@ Execute a feature implementation plan by dispatching subagents per task and revi
 
 **Autopilot:** when the user opted in, answer this skill's gates — Step 0's "always ask" included — per [`_shared/autopilot.md`](../_shared/autopilot.md).
 
+**You never write task code.** Every file a plan task creates or modifies is written by that task's implementer subagent, whatever goes wrong. When the environment gets in the way — a denied command, a missing dependency, a tool that will not run — record the task as BLOCKED or NEEDS_CONTEXT, leave it `[~]`, and ask the user what would unblock it. Code you write yourself skips the phase review, and nothing reports that it did.
+
 ## Execution Model
 
 **Milestone** = a vertical slice of the feature (BE → FE → tests). Top-level execution unit. Agent checkpoints occur at milestone boundaries.
@@ -49,6 +51,9 @@ Durable decisions live in the plan file, next to the checkboxes — the plan is 
 - `Parked (Phase N): <finding> — Ruling: <why the code stands>`
 - `Probe (Milestone N): <P|D><n> <verdict> — observed: <value> — artifact: <path>` (copied from the probe executor's report)
 - `Waiver (Milestone N): <P|D><n> — <the user's reason, in their words>`
+- `Base (feature): <sha>`, `Base (Phase N): <sha>`, `Fix base (Phase N, round R): <sha>` — the `BASE_SHA`, `PHASE_BASE` and `FIX_BASE` a review diffs from, logged when recorded (Steps 2, 3, 4d) so a restarted session can recover them. A plan from before these entries has none; resume then records the base afresh, as it always did
+
+Everything else a restarted session needs — review packages, verification logs — goes in the run's state directory, `$STATE` (Step 2), under a fixed name. Never `mktemp` and never a session scratchpad: a restart starts a new session with a new temp directory, and an implementer or reviewer dispatched with a path that no longer exists comes back NEEDS_CONTEXT.
 
 The holistic reviewer (Step 5) reads this section to triage deferred minors, and the completion report surfaces every ruling. An entry that exists only in session context is a decision made in secret.
 
@@ -62,6 +67,7 @@ A running plan does not wait on the user for every wrinkle. Non-catastrophic con
 - A security-sensitive change (auth, secrets, permissions)
 - A plan ↔ spec contradiction the code cannot bridge
 - Scope explosion — the fix requires work no plan task covers
+- Environment friction a dispatch cannot get past (a denied command, a missing dependency) — the task is BLOCKED until the user unblocks it; doing it yourself is never the fallback
 - A checkpoint probe that came back FAIL or BLOCKED — a failing probe often means the spec was misread, which a fix loop cannot see
 
 At Step 5, list every ruling in the completion report under **"Rulings I made"**, in the order made, each with its cost-if-wrong. The list is exhaustive: if the Execution Log holds a ruling, the report holds it.
@@ -149,6 +155,7 @@ Parse milestones first, then build a DAG within each:
 - `[x]` = already done — skip entirely
 - `[~]` = was in progress when previous agent stopped — re-execute this task from scratch. For a parallel task, first clear its stale worktree with `"${CLAUDE_PLUGIN_ROOT}/lib/task-worktree.sh" discard <feature>-t<N>` (a no-op when none exists) — `create` refuses an existing slug, and the partial work never passed review
 - `[ ]` = todo — execute normally
+- Recover the run's state: `BASE_SHA` from the `Base (feature)` entry (none in an older plan: `git merge-base HEAD <integration branch>`), and for the phase being resumed, `PHASE_BASE` from its `Base (Phase N)` entry, so the phase review still spans the commits made before the restart. Packages and logs from before the restart are in the state directory Step 2 sets
 - Find the first milestone containing any non-`[x]` task. Resume from there — unless an earlier milestone, or any milestone when every task is `[x]`, carries `**Checkpoint probes:**` without a passing entry per probe; resume at the first such milestone's probe gate (Step 4b) instead. A passing entry is a `Probe` line with PASS (SERVED for a `D<n>` demo) or a `Waiver` line.
 
 **Validate before starting:**
@@ -171,7 +178,14 @@ It warns rather than blocks: implementers already work from the current code and
 ### Step 2: Setup
 
 1. Verify Step 0's chosen branch/worktree is active (`git rev-parse --abbrev-ref HEAD` matches the chosen target). If not, bail out and re-run Step 0.
-2. Record `BASE_SHA`: `git rev-parse HEAD`
+2. Record `BASE_SHA`: `git rev-parse HEAD`, and log `Base (feature): <sha>` — unless resume recovered it.
+   Set the run's state directory, which survives a restarted session and is never committed:
+
+   ```bash
+   STATE="$(git rev-parse --show-toplevel)/.claude/state/implement/{feature}"
+   mkdir -p "$STATE"
+   git check-ignore -q "$STATE" || echo '.claude/state/' >> "$(git rev-parse --git-path info/exclude)"
+   ```
 3. Set the feature's `status: in-progress` in `${aiDir}/features/index.yaml` (owner of the `draft → in-progress` transition; `feature-complete` later flips it to `complete`).
 4. Create task tracking with all tasks.
 5. Set the orchestration marker. Mid-run the tree is red by design (an accepted barrier failure, a fix round in flight, a test the next phase owns), and the Stop hook would otherwise block every controller turn end on it. While the marker is set it reports failing checks as a warning instead; it ignores a marker older than 8h, so a crashed run cannot disable the gate for good.
@@ -186,7 +200,7 @@ It warns rather than blocks: implementers already work from the current code and
 
 Walk milestones in order. For each milestone, walk its DAG topologically. For each phase:
 
-**Before the phase's first dispatch:** refresh the orchestration marker (Step 2.5) and record `PHASE_BASE=$(git rev-parse HEAD)`. The phase review package (Step 4b) diffs `PHASE_BASE..HEAD`. Never substitute `HEAD~1` — it silently drops all but the last commit of a multi-commit phase.
+**Before the phase's first dispatch:** refresh the orchestration marker (Step 2.5) and record `PHASE_BASE=$(git rev-parse HEAD)`, logging `Base (Phase N): <sha>` (a resumed phase keeps the base its entry holds). The phase review package (Step 4b) diffs `PHASE_BASE..HEAD`. Never substitute `HEAD~1` — it silently drops all but the last commit of a multi-commit phase.
 
 **Verification tiers.** Each check runs at the narrowest scope that catches what it targets:
 
@@ -198,6 +212,8 @@ Walk milestones in order. For each milestone, walk its DAG topologically. For ea
 | Re-reviewer | only the checks the finding touches | each fix round |
 
 Fill each implementer dispatch with its Verify command and the file-scoped lint/typecheck commands ("none" when a tool cannot take a file list). Scoped runs catch in seconds the slips that otherwise each cost a review round; the risk they add — weakening a test until it passes — is what the phase reviewer's test-weakening audit catches.
+
+**Commit trailers.** Fill each implementer dispatch's `[Commit trailers]` with the lines your own instructions say end a commit message — a harness attribution reminder, a CLAUDE.md or project commit rule — copied verbatim, never one tool's trailer from memory. A subagent never sees those instructions, so a trailer you leave out is missing from every commit it and each fix round make. Every commit you make yourself (Step 5's `holistic-review.md`, a stop or fresh at a checkpoint) carries the same lines.
 
 **Sequential tasks** — dispatch one subagent at a time:
 
@@ -227,14 +243,14 @@ After all tasks in a phase complete:
 
 **a) Barrier merge and verification:**
 - Parallel tasks only: merge worktrees back to the feature branch **one at a time** (`task-worktree.sh merge <feature>-t<N>`). On conflict: attempt resolution (auto-generated files like lockfiles, codegen output → take union). Escalate to user if truly stuck.
-- Every phase: run the full suite once — the plan's barrier commands plus each required `.claude/verification.json` check (its `diffCommand` when non-empty, with `MYSPEC_BASE_REF=$(git merge-base HEAD <default branch>)`) — and capture everything to one file, each check headed by its command and exit code: `VERIFY_LOG=$(mktemp "${TMPDIR:-/tmp}/phase-verify.XXXXXX")`. A red run still goes to review, where each failure is attributed. Never two suites at once in one worktree (Constraints). Export a fresh `MYSPEC_CHECK_RUN_ID` per check. A check that is killed or times out keeps running wherever its client sent it (a container, another host), so run its `cleanup` with the same `MYSPEC_CHECK_RUN_ID` before the next run.
+- Every phase: run the full suite once — the plan's barrier commands plus each required `.claude/verification.json` check (its `diffCommand` when non-empty, with `MYSPEC_BASE_REF=$(git merge-base HEAD <default branch>)`) — and capture everything to one file, each check headed by its command and exit code: `VERIFY_LOG="$STATE/phase-N-verify.log"`. A red run still goes to review, where each failure is attributed. Never two suites at once in one worktree (Constraints). Export a fresh `MYSPEC_CHECK_RUN_ID` per check. A check that is killed or times out keeps running wherever its client sent it (a container, another host), so run its `cleanup` with the same `MYSPEC_CHECK_RUN_ID` before the next run.
 
 **b) Build the review package, then dispatch the phase reviewer** (`./phase-reviewer-prompt.md`):
 
 Write the phase diff to one file and hand the reviewer the path. A pasted diff parks itself permanently in the most expensive context, and a reviewer without one rebuilds it by hand — the single biggest reviewer cost:
 
 ```bash
-PKG=$(mktemp "${TMPDIR:-/tmp}/phase-review.XXXXXX")
+PKG="$STATE/phase-N-review.diff"
 { git log --oneline "$PHASE_BASE"..HEAD; echo; git diff --stat "$PHASE_BASE"..HEAD; echo; git diff -U10 "$PHASE_BASE"..HEAD; } > "$PKG"
 ```
 
@@ -254,8 +270,9 @@ PKG=$(mktemp "${TMPDIR:-/tmp}/phase-review.XXXXXX")
 
 - **Round 1 — resume the implementer that owns the finding.** Its context is intact: it knows the task, the code, and its own choices. Send the open findings verbatim, scoped to its task. If the harness cannot resume a completed subagent, dispatch fresh as in round 2.
 - **Rounds 2–5 — fresh implementer.** A resumed context grows by a whole transcript per round and carries the last round's stale hypotheses, while each round usually chases a different root cause (one run's implementer grew from 194k to 430k tokens over three resumed rounds). Dispatch with the task text, the open findings verbatim, and the rounds summary below; it reads the current code itself. Frame it: "A prior implementer attempted this fix N times; you own it now." Rounds 4–5 go one tier up: a loop that survives three rounds usually needs more capability, not more context.
+- **A finding about a rule** — an invariant, a boundary, a format, a requirement's wording — is fixed everywhere the rule is stated or applied, not only at the cited line: say so in the fix dispatch, next to the finding. A rule fixed in the code but still stated the old way in a test, a doc or the tech-spec comes back NOT ADDRESSED and costs a whole extra round.
 - A parallel task's worktree was merged and removed at 4a: every fix implementer works from your checkout, since fixes are sequential.
-- **Every round ends with a scoped re-review** (`./re-review-prompt.md`) — a fresh dispatch every round, never a resumed re-reviewer and never a full phase re-review. Record `FIX_BASE` (the HEAD the previous review saw), build a fix-diff package over `FIX_BASE..HEAD` the same way as 4b, and dispatch with the open findings list and the rounds summary: one paragraph naming each earlier round's findings closed, your rulings on them, and approaches already rejected ("none" in round 1). The re-reviewer verdicts each finding ADDRESSED / NOT ADDRESSED against the fix diff only, running just the checks each finding touches; the next barrier or milestone checkpoint runs the full suite over the fix. New Critical/Important breakage in the fix diff joins the open findings; out-of-scope observations go to the Execution Log as deferred minors — they never extend the loop.
+- **Every round ends with a scoped re-review** (`./re-review-prompt.md`) — a fresh dispatch every round, never a resumed re-reviewer and never a full phase re-review. Record `FIX_BASE` (the HEAD the previous review saw) and log `Fix base (Phase N, round R): <sha>`, build a fix-diff package over `FIX_BASE..HEAD` the same way as 4b, as `$STATE/phase-N-fix-R.diff`, and dispatch with the open findings list and the rounds summary: one paragraph naming each earlier round's findings closed, your rulings on them, and approaches already rejected ("none" in round 1). The re-reviewer verdicts each finding ADDRESSED / NOT ADDRESSED against the fix diff only, running just the checks each finding touches; the next barrier or milestone checkpoint runs the full suite over the fix. New Critical/Important breakage in the fix diff joins the open findings; out-of-scope observations go to the Execution Log as deferred minors — they never extend the loop.
 - Never fix findings yourself in the controller session — your context stays clean for coordination, and controller fixes skip review.
 
 **The breaker.** When round 5's re-review still leaves findings open, stop dispatching and adjudicate each open finding yourself — you hold the plan and cross-phase context the reviewer lacks:
@@ -319,7 +336,7 @@ milestones.
 ### Step 5: Completion
 
 1. Remove the orchestration marker (Step 2.5) so the Stop hook blocks again, then run the Final Verification section from the plan.
-2. Build the full-feature review package (same commands as Step 4b, over `BASE_SHA..HEAD`) and dispatch the holistic reviewer (`./holistic-reviewer-prompt.md`) on the `premium` tier with the package path plus the plan's Execution Log entries (deferred minors and parked findings) so it can triage which must be fixed before merge. This pass is mandatory — never skipped, never downgraded to a cheaper tier. Write its report to `${aiDir}/features/{feature}/holistic-review.md` (frontmatter in the prompt file) and commit it: `/myspec:feature-implement-review` reads it and skips what it already covers.
+2. Build the full-feature review package (same commands as Step 4b, over `BASE_SHA..HEAD`, as `$STATE/feature-review.diff`) and dispatch the holistic reviewer (`./holistic-reviewer-prompt.md`) on the `premium` tier with the package path plus the plan's Execution Log entries (deferred minors and parked findings) so it can triage which must be fixed before merge. This pass is mandatory — never skipped, never downgraded to a cheaper tier. Write its report to `${aiDir}/features/{feature}/holistic-review.md` (frontmatter in the prompt file) and commit it with the commit trailers (Step 3): `/myspec:feature-implement-review` reads it and skips what it already covers.
 3. Print the completion report. It contains, in order: the milestone summary, with probe results and any live demo URL; the holistic verdict; **"Rulings I made"** — every `Ruling:` line from the Execution Log, in the order made, each with its cost-if-wrong ("none" if the log holds no rulings); every `Waiver:` line; and the deferred-minors triage outcome. This report is the only place the decisions taken on the user's behalf reach them.
 4. **Ask the user what to do next** via `AskUserQuestion` — do not auto-hand-off:
 
@@ -356,7 +373,7 @@ Skill text uses **tier names** (`cheap` / `mid` / `premium`). Controller (main t
 
 | Situation | Action |
 |-----------|--------|
-| BLOCKED | More context → re-dispatch; better model; break down; or ask user |
+| BLOCKED | More context → re-dispatch; better model; break down; or ask user — never implement it yourself |
 | NEEDS_CONTEXT | Provide info, re-dispatch |
 | One parallel task fails | Keep other worktrees, fix failed, then barrier |
 | Merge conflict at barrier | Attempt resolution; escalate if stuck |
@@ -374,6 +391,7 @@ Skill text uses **tier names** (`cheap` / `mid` / `premium`). Controller (main t
 - Proceed past 3 failed attempts without escalating — the issue won't fix itself on attempt 4
 - Tell a reviewer what not to flag — a suppressed finding never reaches the user; adjudicate it in triage instead
 - Diff a review with `HEAD~1` — use the recorded `PHASE_BASE` / `FIX_BASE` / `BASE_SHA`
+- Write or edit a file a plan task owns — not after a denied command or a missing dependency, not to save a dispatch; mark the task BLOCKED or NEEDS_CONTEXT and ask the user. Controller-written code skips every review
 - Fix review findings in the controller session — resume or dispatch an implementer; controller fixes skip review
 - `cd` into a task worktree — reach it with `git -C <path>` and absolute paths; implementers do the `cd`. Why: [`_shared/worktree-provisioning.md`](../_shared/worktree-provisioning.md) (Controller stays out)
 - Let an implementer run the full suite, a build, or an install — its checks are its task's Verify command and file-scoped static checks; the suite is the barrier's

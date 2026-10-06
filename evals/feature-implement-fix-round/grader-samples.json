@@ -1,0 +1,20 @@
+{
+  "fix-everywhere-in-dispatch": {
+    "pass": [
+      [
+        { "tool": "Agent", "input": { "description": "Fix Phase 1 finding: overdue boundary", "subagent_type": "general-purpose", "prompt": "## Open Findings\n- Important: is_overdue treats an invoice as overdue on its due date (app/invoices/due_dates.py:15).\n\nThis finding is about a rule: fix it everywhere the rule is stated or applied (code, docstring, tests, docs), not only the cited line, and list each place." } }
+      ],
+      [
+        { "tool": "Agent", "input": { "description": "Fix overdue boundary", "subagent_type": "general-purpose", "prompt": "Fix: is_overdue uses >= (due_dates.py:15).\n\nA finding about a rule (an invariant, a boundary, a format, a requirement's wording) names every place that states or applies the rule, not only the cited line." } }
+      ]
+    ],
+    "fail": [
+      [
+        { "tool": "Agent", "input": { "description": "Fix Phase 1 finding: overdue boundary", "subagent_type": "general-purpose", "prompt": "## Open Findings\n- Important: is_overdue treats an invoice as overdue on its due date (app/invoices/due_dates.py:15).\n\nFix exactly what the findings name; do not expand scope while fixing. End every commit message with: Refs: BILL-142" } }
+      ],
+      [
+        { "tool": "Agent", "input": { "description": "Explore", "subagent_type": "Explore", "prompt": "Find every place the overdue rule is stated." } }
+      ]
+    ]
+  }
+}

@@ -124,6 +124,22 @@ expect_quiet "a spec.md is not a tech-spec"
 write "$REPO/.ai/features/pay/tech-spec.md.bak" "x"
 expect_quiet "only tech-spec.md is in scope"
 
+# #165: only a file named tech-spec.md under ${aiDir}/features/, outside plans/.
+for p in .ai/features/pay/old-tech-spec.md .ai/features/pay/draft-tech-spec.md \
+    .ai/features/pay/plans/2026-01-01-tech-spec.md src/features/login/tech-spec.md \
+    src/features/login/a-tech-spec.md; do
+  write "$REPO/$p" "${HEADER}${FOOTER}"
+  expect_quiet "$p is not a feature tech-spec"
+done
+write "$REPO/.ai/features/pay/sub/tech-spec.md" "${HEADER}${FOOTER}"
+expect_deny "a sub-feature tech-spec is still judged"
+printf '{"aiDir":"docs/ai","frameworkVersion":"3.0.0"}\n' > "$REPO/.myspec.json"
+write "$REPO/docs/ai/features/pay/tech-spec.md" "${HEADER}${FOOTER}"
+expect_deny "a tech-spec under a configured aiDir is judged"
+write "$SPEC" "${HEADER}${FOOTER}"
+expect_quiet "a tech-spec outside the configured aiDir is not"
+printf '{"aiDir":".ai","frameworkVersion":"3.0.0"}\n' > "$REPO/.myspec.json"
+
 # --- the marker ------------------------------------------------------------------
 write "$SPEC" "${HEADER}"'<!-- myspec:reuse-audit skip: greenfield service, no shared surfaces yet -->
 '"${FOOTER}"

@@ -80,6 +80,7 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 | `route-spec-review` | trigger, near-miss | "before the technical design, check the requirements doc" → feature-spec-review, not tech-spec-review or the built-in /code-review |
 | `trigger-memorize` | trigger | a named fact to keep → memorize, not memorify or session-complete |
 | `nearmiss-personal-preference` | near-miss | "remember that I prefer short answers" → auto-memory, not memorize or memorify |
+| `trigger-memory-sanitize` | trigger, near-miss | "clean up the auto-memory under ~/.claude/projects" (the default config dir, #161) → memory-sanitize, not memory-optimize |
 | `trigger-memorify` | trigger | "anything from this debugging worth keeping?" → memorify |
 | `trigger-memory-lookup` | trigger, near-miss | "have we run into this before?" → memory-lookup, not a capture skill |
 | `trigger-session-complete` | trigger | "that's it for today, wrap up the session" → session-complete, not memorify |
@@ -90,21 +91,27 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 | `trigger-feature-status-audit` | trigger | "does index.yaml match the features folder?" → feature-status-audit |
 | `trigger-feature-spec-scenarios` | trigger, near-miss | "write the test scenarios in Gherkin for the approved spec" → feature-spec (its `scenarios` argument; feature-scenario is gone in 3.0), not feature-tech-spec, feature-spec-review or feature-plan; scenarios.md written beside the spec |
 | `spec-review-planted-flaws` | planted flaw | feature-spec-review fires and flags an untestable AC, a REQ-002/REQ-004 contradiction, and missing error states; does not pass the review |
-| `tech-spec-review-planted-flaws` | planted flaw | feature-tech-spec-review flags a requirement with no step (REQ-004) and an ignored shared CSV writer the conventions mandate; reports a Critical and does not pass |
+| `tech-spec-review-planted-flaws` | planted flaw | feature-tech-spec-review flags a requirement with no step (REQ-004) and an ignored shared CSV writer the conventions mandate; reports a Critical and does not pass; flags the data-deriving export's missing `verification_mode` as Medium (#169) |
 | `feature-spec-contract` | artifact contract | feature-spec writes spec.md with every section and frontmatter key feature-spec-review checks, plus dependencies.md and a manifest entry |
-| `feature-plan-coverage` | artifact contract | feature-plan (Python fixture) writes implementation-plan.md whose Spec Coverage table maps every REQ ID to a task, including two no AC restates (837f68d), plus the Execution Order table feature-implement parses |
+| `feature-plan-coverage` | artifact contract | feature-plan (Python fixture) writes implementation-plan.md whose Spec Coverage table maps every REQ ID to a task, including two no AC restates (837f68d), plus the Execution Order table feature-implement parses, and closes with the Step 4.6 `## Plan Self-Check` (#188) |
 | `feature-plan-gate` | procedure | spec and tech-spec still `status: draft` → feature-plan stops at its gate: no plan written, the reply says they are not approved (a3562ed) |
 | `feature-implement-dispatch` | orchestration | approved 2-task plan → feature-implement dispatches the Task 1 implementer Agent (matched on its prompt, not any Agent) before any `app/` or `tests/` Write (9ed2ed9); graded on the start of the run |
+| `feature-implement-attribution` | orchestration | a CLAUDE.md rule names a commit trailer → the Task 1 implementer dispatch carries it verbatim, since subagents never see CLAUDE.md (#191) |
+| `feature-implement-fix-round` | orchestration | Phase 1 committed, one Important finding about a rule the phase states in four places → the fix dispatch asks for every place the rule is stated, not only the cited line (#168) |
+| `feature-implement-phase-review` | orchestration | Phase 1 committed, both tasks `[~]` and uncommitted → the phase reviewer dispatch says plan checkboxes are controller-managed (#167) |
+| `feature-implement-restart-state` | orchestration | approved 2-task plan → before Phase 1's first dispatch the plan's Execution Log gets a `Base (Phase 1): <sha>` entry a restarted session can recover (#166) |
 
-`nearmiss-personal-preference` is a `capability` case until it has been run across releases, and so is `trigger-feature-spec-scenarios` (added with #264, not yet run). So are the three feature-plan and feature-implement cases (Sonnet, 2026-09-29):
+`nearmiss-personal-preference` is a `capability` case until it has been run across releases, and so are `trigger-feature-spec-scenarios` (added with #264, not yet run) and `trigger-memory-sanitize` (added with #161, not yet run). So are two of the three feature-plan and feature-implement cases (Sonnet, 2026-09-29):
 
 - `feature-plan-coverage` passed 6 of 6.
-- `feature-plan-gate` wrote a plan from draft documents in 4 of 4 (#173).
 - `feature-implement-dispatch` dispatched the implementer in 5 of 6. In the sixth, the controller wrote both tasks itself (#174). `dispatch-before-source-write` also fails when the implementer writes no file at all: in 1 of 3 runs its Bash heredoc was denied and it reported BLOCKED.
+- After the controller-never-implements rule (#174, Sonnet, 2026-10-06) it dispatched in 7 of 10 runs, and the case stays `capability`. The one kept failing trace stopped at Step 2 after a denied Bash call and reported BLOCKED: that is what the rule asks for, but it fails both dispatch graders, which cannot tell a correct stop from a skipped dispatch. On the branch before the rule, one of 6 kept runs wrote `tests/invoices/test_due_dates.py` in the controller without dispatching; the work-isolation hook stopped it.
+- `feature-implement-restart-state` (#166, Sonnet, 2026-10-06) logged `Base (Phase 1)` in 3 of 8 runs, against 0 of 3 before the change. Every failing run that was kept stopped at Step 2 on a denied Bash call, before any plan edit, so the case measures sandbox friction as much as the entry. It is `capability`.
 - None of the three is graded on more than read-only git. Listing `Bash` in `allowed_tools` grants only what `run.sh --allow-tools` grants every case: the git read verbs, including `git merge-base`, plus read-only shell commands. Prototypes, `pytest`, commits and the orchestration marker are denied.
 - feature-plan's base check (`git merge-base --is-ancestor`) is therefore not graded. 5 of 6 coverage runs skipped it; the sixth ran it inside a compound command that was denied, then planned anyway.
 
-One case started in `capability` and moved to `regression` once a description fix made it fire:
+Two cases started in `capability` and moved to `regression` once a skill fix made them pass:
+- `feature-plan-gate`: feature-plan wrote a plan from draft documents in 4 of 4 runs on v3 (#173). Once its gates refused a draft spec and asked about a draft tech-spec with no recommended option, it stopped in 6 of 6.
 - `trigger-memorize`: Claude Code's built-in auto-memory took "remember this" prompts (0 of 7 runs fired). Once memorize's description claimed project facts over auto-memory, it fired in 10 of 10.
 
 ## Project instructions

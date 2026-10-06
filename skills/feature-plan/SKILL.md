@@ -12,18 +12,19 @@ description: "Use when a feature has an approved spec.md and tech-spec.md and ne
 
 ## When to Use
 
-Check these gates in order:
+Check these gates in order. Read each document's `status:` frontmatter before writing anything; a gate that says Stop means no plan file is written and nothing is handed off.
 
-1. **Have `tech-spec.md`?** → No: run `/myspec:feature-tech-spec` first. Stop.
-2. **Tech-spec approved (or user confirms draft)?** → No: get approval first. Stop.
-3. **Feature in `${aiDir}/features/`?** → No: create a spec first with `/myspec:feature-spec`. Stop.
+1. **Feature in `${aiDir}/features/`?** → No: create a spec first with `/myspec:feature-spec`. Stop.
+2. **Have `tech-spec.md`?** → No: run `/myspec:feature-tech-spec` first. Stop.
+3. **`spec.md` is `status: approved`?** → No: say the spec is not approved, route to `/myspec:feature-spec-review` (it sets the status), and stop. There is no override: the tech-spec and the plan both build on the approved requirements.
+4. **`tech-spec.md` is `status: approved`?** → `draft`: ask with `AskUserQuestion` whether to plan from the draft, with two options and neither marked `(Recommended)`: "Plan from the draft tech-spec" and "Stop — review it first (`/myspec:feature-tech-spec-review`)". Proceed only on an explicit "Plan from the draft" answer given in this session. The request to write a plan is not that answer. With no answer, or no way to ask (non-interactive run), say the tech-spec is not approved and stop. Autopilot does not answer this gate ([`_shared/autopilot.md`](../_shared/autopilot.md): no recommended option).
 
 All gates pass → proceed to Workflow Step 1.
 
 ## Prerequisites
 
 - `${aiDir}/features/{feature}/spec.md` exists with `status: approved`
-- `${aiDir}/features/{feature}/tech-spec.md` exists with `status: approved` or `status: draft` (user confirms ready)
+- `${aiDir}/features/{feature}/tech-spec.md` exists with `status: approved`, or `status: draft` that the user explicitly confirmed at gate 4
 - For sub-features: `${aiDir}/features/{parent}/{subfeature}/tech-spec.md`
 
 ## Workflow
@@ -79,6 +80,9 @@ A task is the smallest unit that carries its own test cycle and is worth a fresh
 **Prototype before prescribing (REQUIRED for algorithms and relied-on library calls):**
 A call the plan never ran reaches implementers as a mandate, and its defect surfaces a fix loop later. When a task's Step 2 holds an algorithm or a third-party call whose behavior it relies on, run that code first in a scratch directory outside the tree on realistic inputs (the spec's edge cases, real data shapes), and put the command and observed result on the task's `**Prototype:**` line. For a new module, run the planned test against the planned code once: it fails without Step 2 and passes with it. A result that contradicts the tech-spec is a tech-spec defect: say so and stop.
 
+**Dry run on the named real inputs (REQUIRED when Test Hooks names *Real inputs*):**
+Realistic inputs are not the inputs the feature must handle. When `tech-spec.md` → `### Test Hooks` names a *Real inputs* corpus, run the derivation's core (the parse, classify, or transform rule the tasks prescribe) on that corpus before presenting the plan, and quote the command and the observed result (counts, any input the rule drops or misplaces) in the plan, on the task's `**Prototype:**` line. An input the rule cannot place is a tech-spec defect: say so and stop. When the core cannot run before the feature exists, make a spike on the corpus the plan's first task, and give its expected result. A tech-spec with no *Real inputs* line skips this.
+
 **Global Constraints (REQUIRED, once per plan):**
 Populate the plan's `## Global Constraints` section with the project-wide exacts collected in Step 1 — version floors, size/perf limits, naming rules, invariants — copied verbatim from `spec.md` / `tech-spec.md` with source refs. Every task's requirements implicitly include this section; per-task text must not re-derive or paraphrase these values — re-derivation is how they drift.
 
@@ -95,7 +99,7 @@ Populate the `**Interfaces:**` block with exact signatures — names, parameter 
 Give every milestone a `**Checkpoint probes:**` block (format and tags in [references/plan-templates.md](references/plan-templates.md#milestone-section)). The probes are written now, before any code exists, because a separate executor runs them at the checkpoint and the controller may not substitute its own judgment: a probe authored after the fact by the agent that built the feature proves what that agent chose to look at. Each probe is literal and references only the tech-spec's `### Test Hooks` contract surface — a CSS class or internal DOM path is a plan bug. A `verification_mode` with no `### Test Hooks` section is a tech-spec gap: say so and stop. So is a writing probe — a `[demo]`, a `[real-input]`, a data mutation — when Test Hooks has no *Scratch environment* line: the executor cannot isolate it, and it comes back BLOCKED at every checkpoint.
 
 **Blast radius — every barrier green (REQUIRED):**
-For every Produces item that changes a signature, adds a required field or enum value, removes or renames a symbol, or adds files to an existing directory, grep the codebase for its callers and consumers — including tests and loaders that read the directory by glob or `fs` rather than import, which changed-file test runs never select. Put each hit in that task's Files (`Modify:`) and Touch only, or in a dedicated barrier step, so the barrier after it can pass typecheck and tests. A barrier that is red by design is a plan bug.
+For every Produces item that changes a signature, adds a required field or enum value, removes or renames a symbol, or adds files to an existing directory, grep the codebase for its callers and consumers — including tests and loaders that read the directory by glob or `fs` rather than import, which changed-file test runs never select. When the change adds an entity or value (a country, enum member, code, record type), also grep tests and fixtures for its literal: a test that uses it as the absent or "unlisted" example breaks once it exists, or stays green only by coincidence. Put each hit in that task's Files (`Modify:`) and Touch only, or in a dedicated barrier step, so the barrier after it can pass typecheck and tests. A barrier that is red by design is a plan bug.
 
 ### Step 4: Review Loop (large plans only)
 
@@ -149,6 +153,10 @@ description to sound like it covers more, or by pointing at a task that only
 partly realizes it. If a spec requirement cannot be turned into a task at all,
 the tech-spec is missing a step — say so and stop, rather than planning around
 it.
+
+### Step 4.6: Plan Self-Check (REQUIRED, all plans)
+
+Implementers paste the plan's snippets verbatim, and phase reviewers grade the diff against the plan. A defect the plan dictates therefore passes the implementer and costs a fix loop at phase review. Before saving, read the written plan against `spec.md` and `tech-spec.md` and run the four checks in [references/plan-self-check.md](references/plan-self-check.md): snippets vs their spec contract, steps that contradict each other, reader-visible strings, and probe lint. Fix each finding in the plan, then record the result in the plan's `## Plan Self-Check` section. A probe that depends on an earlier probe's writes is allowed if the probe line declares the dependency.
 
 ### Step 5: Save Plan
 
@@ -309,6 +317,7 @@ Before presenting the plan:
 - [ ] Every task has exact file paths matching tech-spec file inventory
 - [ ] Every task has TDD steps and a `**Verify at phase review:**` command scoped to the task's own tests
 - [ ] Every algorithm or relied-on library call has a `**Prototype:**` line from a scratch run
+- [ ] If Test Hooks names *Real inputs*: the derivation's core ran on that corpus and the plan quotes the result, or the first task is a spike on it
 - [ ] Parallel groups have zero file overlap (check file lists)
 - [ ] Barriers exist after every parallel group
 - [ ] Consecutive small sequential tasks share a phase; a new phase starts only after a task publishing a contract later tasks are written against
@@ -318,12 +327,13 @@ Before presenting the plan:
 - [ ] Every task whose Files contain `Modify:` has a populated **Touch only** line
 - [ ] Every task has an Interfaces block (Consumes/Produces, exact signatures); names and types match verbatim between producer and consumer tasks
 - [ ] Walked in execution order, every Consumes item matches an earlier task's Produces as written, and no task in between removed or renamed it (a retired field, symbol, or config key a later task still relies on)
-- [ ] Every signature-, field-, enum-, symbol-, or directory-changing Produces item has its grepped callers and consumers in that task's Files/Touch only or a barrier step
+- [ ] Every signature-, field-, enum-, symbol-, or directory-changing Produces item has its grepped callers and consumers in that task's Files/Touch only or a barrier step, including tests and fixtures that use a newly added entity or value as the absent example
 - [ ] Within each milestone, lower-level layers (data, services) precede higher-level layers (UI, presentation) per project conventions
 - [ ] Phase numbers are globally unique across all milestones
 - [ ] Cross-milestone dependencies use `Milestone N` in the Depends On column (not individual phase numbers from other milestones)
 - [ ] Each milestone is a coherent vertical slice
 - [ ] If tech-spec.md sets `verification_mode` (not `none`): every milestone has a `**Checkpoint probes:**` block of literal probes with expected values, referencing only `### Test Hooks` handles; a `[real-input]` probe on every milestone touching a named real corpus; a *Scratch environment* line in Test Hooks whenever any probe writes
+- [ ] `## Plan Self-Check` records the four Step 4.6 checks, each clean or naming its fixes; every probe that depends on an earlier probe declares it
 - [ ] Commit decision presented to user (Step 7); plan committed before handoff
 
 ## Red Flags

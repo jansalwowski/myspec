@@ -5,7 +5,7 @@ Dispatch after ALL phases complete. Reviews the entire implementation as a whole
 Before dispatching, write the full-feature review package to one file and substitute its path below — same shape as the phase review package, over `BASE_SHA..HEAD`:
 
 ```bash
-PKG=$(mktemp "${TMPDIR:-/tmp}/holistic-review.XXXXXX")
+PKG="$STATE/feature-review.diff"   # $STATE: SKILL.md Step 2
 { git log --oneline "$BASE_SHA"..HEAD; echo; git diff --stat "$BASE_SHA"..HEAD; echo; git diff -U10 "$BASE_SHA"..HEAD; } > "$PKG"
 ```
 
