@@ -80,6 +80,7 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 | `route-spec-review` | trigger, near-miss | "before the technical design, check the requirements doc" → feature-spec-review, not tech-spec-review or the built-in /code-review |
 | `trigger-memorize` | trigger | a named fact to keep → memorize, not memorify or session-complete |
 | `nearmiss-personal-preference` | near-miss | "remember that I prefer short answers" → auto-memory, not memorize or memorify |
+| `trigger-memory-sanitize` | trigger, near-miss | "clean up the auto-memory under ~/.claude/projects" (the default config dir, #161) → memory-sanitize, not memory-optimize |
 | `trigger-memorify` | trigger | "anything from this debugging worth keeping?" → memorify |
 | `trigger-memory-lookup` | trigger, near-miss | "have we run into this before?" → memory-lookup, not a capture skill |
 | `trigger-session-complete` | trigger | "that's it for today, wrap up the session" → session-complete, not memorify |
@@ -96,7 +97,7 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 | `feature-plan-gate` | procedure | spec and tech-spec still `status: draft` → feature-plan stops at its gate: no plan written, the reply says they are not approved (a3562ed) |
 | `feature-implement-dispatch` | orchestration | approved 2-task plan → feature-implement dispatches the Task 1 implementer Agent (matched on its prompt, not any Agent) before any `app/` or `tests/` Write (9ed2ed9); graded on the start of the run |
 
-`nearmiss-personal-preference` is a `capability` case until it has been run across releases, and so is `trigger-feature-spec-scenarios` (added with #264, not yet run). So are the three feature-plan and feature-implement cases (Sonnet, 2026-09-29):
+`nearmiss-personal-preference` is a `capability` case until it has been run across releases, and so are `trigger-feature-spec-scenarios` (added with #264, not yet run) and `trigger-memory-sanitize` (added with #161, not yet run). So are the three feature-plan and feature-implement cases (Sonnet, 2026-09-29):
 
 - `feature-plan-coverage` passed 6 of 6.
 - `feature-plan-gate` wrote a plan from draft documents in 4 of 4 (#173).

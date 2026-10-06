@@ -130,8 +130,8 @@ absolute_path_findings() {
 
 # absolute_path_hint <match> <repo root> -> the replacement to suggest.
 absolute_path_hint() {
-  local match="$1" root="$2" rel rest first tail
-  local hint="use <repo_root>/<relative-path> for repo-internal paths, or ~/.claude-personal/projects/<encoded_cwd>/... for the harness memory dir"
+  local match="$1" root="$2" rel rest first dir
+  local hint="use <repo_root>/<relative-path> for repo-internal paths, or <config_dir>/projects/<encoded_cwd>/... for the harness memory store (<config_dir> is \$CLAUDE_CONFIG_DIR, default ~/.claude)"
   case "$match" in
     "$root"*)
       rel="${match#"$root"}"
@@ -143,19 +143,22 @@ absolute_path_hint() {
       fi
       ;;
   esac
-  if [ -n "${HOME:-}" ]; then
+  # The memory store under a Claude config dir: $CLAUDE_CONFIG_DIR, ~/.claude,
+  # or ~/.claude-personal (config_projects_rest in path-normalize.sh).
+  for dir in "${CLAUDE_CONFIG_DIR:-}" "${HOME:+$HOME/.claude}" "${HOME:+$HOME/.claude-personal}"; do
+    dir="${dir%/}"
+    [ -n "$dir" ] || continue
     case "$match" in
-      "$HOME"/.claude-personal/projects/*)
-        rest="${match#"$HOME"/.claude-personal/projects/}"
+      "$dir"/projects/?*)
+        rest="${match#"$dir"/projects/}"
         first="${rest%%/*}"
-        tail=""
-        if [ "$first" != "$rest" ]; then
-          tail="/${rest#"$first"/}"
-        fi
-        hint="replace with ~/.claude-personal/projects/<encoded_cwd>$tail"
+        rel=""
+        [ "$first" = "$rest" ] || rel="/${rest#"$first"/}"
+        hint="replace with <config_dir>/projects/<encoded_cwd>$rel"
+        break
         ;;
     esac
-  fi
+  done
   printf '%s\n' "$hint"
 }
 
