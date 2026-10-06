@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # require-reuse-audit.sh
 # PreToolUse hook (Write|Edit|MultiEdit|NotebookEdit matcher) — denies a
-# write that would leave a `.../features/*/tech-spec.md` without a valid
+# write that would leave a `${aiDir}/features/**/tech-spec.md` without a valid
 # `## Reuse audit` (or `### Reuse audit`) section, at the two moments the
 # section is the call's own doing (#263):
 #   - the tech-spec is created (a Write to a path that does not exist);
@@ -67,12 +67,17 @@ fi
 payload_parse "$(cat)" FILE_PATH=.tool_input.file_path TOOL_INPUT=.tool_input CWDS="$HOOK_CWDS"
 [ -n "$FILE_PATH" ] || exit 0
 
-reuse_audit_scope "$FILE_PATH" || exit 0
-
+REPO_ROOT=$(hook_repo_root "$CWDS" myspec) || exit 0
 if [[ "$FILE_PATH" != /* ]]; then
   BASE_DIR=$(first_dir "$CWDS") || BASE_DIR="$PWD"
   FILE_PATH="$BASE_DIR/$FILE_PATH"
 fi
+# Re-root on the file, as validate-frontmatter.sh does, so a tech-spec in a
+# linked worktree is judged against that worktree's aiDir.
+if checkout_facts "$FILE_PATH"; then
+  REPO_ROOT="$CF_ROOT"
+fi
+reuse_audit_scope "$(ai_dir "$REPO_ROOT")" "${FILE_PATH#"$REPO_ROOT"/}" || exit 0
 
 TMP=$(mktemp "${TMPDIR:-/tmp}/.myspec-ra.XXXXXX")
 trap 'rm -f "$TMP"' EXIT

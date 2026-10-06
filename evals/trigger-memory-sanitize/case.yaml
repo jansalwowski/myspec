@@ -1,5 +1,5 @@
 schema_version: "1.1"
-name: trigger-doctor
+name: trigger-memory-sanitize
 context:
   scaffold_script: fixture.sh
 
