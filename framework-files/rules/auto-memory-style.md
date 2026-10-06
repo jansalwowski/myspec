@@ -1,12 +1,12 @@
 ---
 title: "Auto-Memory Style Guide"
 purpose: "Length budget, cut list, and write-time consolidation for user-level auto-memory entries"
-updated: 2026-09-03
+updated: 2026-10-06
 ---
 
 # Auto-Memory Style Guide
 
-Governs entries in the harness-managed user-level auto-memory store at `~/.claude-personal/projects/<encoded_cwd>/memory/`. Project-level myspec memory under `${aiDir}/memory/` is out of scope — it has its own typed templates and `.claude/rules/memory-system.md`.
+Governs entries in the harness-managed user-level auto-memory store at `<config_dir>/projects/<encoded_cwd>/memory/` (`<config_dir>` is `$CLAUDE_CONFIG_DIR`, default `~/.claude`). Project-level myspec memory under `${aiDir}/memory/` is out of scope — it has its own typed templates and `.claude/rules/memory-system.md`.
 
 The lesson is the **rule** plus the **trigger** plus the **minimal pattern**; everything else is a token tax paid on every recall. The budget applies at creation time and during `/myspec:memory-sanitize` COMPRESS passes.
 
