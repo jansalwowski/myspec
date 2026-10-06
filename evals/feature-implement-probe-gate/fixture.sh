@@ -12,3 +12,6 @@ git_commit_all "chore: invoice-due-dates spec and tech-spec approved"
 git checkout -q -b feat/invoice-due-dates
 cp -R "$(dirname "${BASH_SOURCE[0]}")/workspace/." .
 git_commit_all "feat(invoice-due-dates): due-date rules and API fields"
+# The sandbox grants only read-only git, so the controller cannot run Step 4b's
+# mkdir; the run's artifact directory exists already (gitignored run state).
+mkdir -p .claude/state/implement/invoice-due-dates/probes/milestone-1/run-1

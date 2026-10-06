@@ -2,7 +2,7 @@
   "dispatched-probe-executor": {
     "pass": [
       [
-        { "tool": "Agent", "input": { "description": "Checkpoint probes for Milestone 1", "subagent_type": "myspec:probe-executor", "model": "sonnet", "prompt": "## Probes\n\n**Checkpoint probes:**\n- Target: `python3 -c` ...\n- P1 [data]: ...\n\n## Working directory\n\n<workspace>   Base commit: abc1234\n\n## Target override\n\nnone" } }
+        { "tool": "Agent", "input": { "description": "Checkpoint probes for Milestone 1", "subagent_type": "myspec:probe-executor", "model": "sonnet", "prompt": "## Probes\n\n**Checkpoint probes:**\n- Target: `python3 -c` ...\n- P1 [data]: ...\n\n## Working directory\n\n<workspace>   Base commit: abc1234\n\n## Artifact directory\n\n<workspace>/.claude/state/implement/invoice-due-dates/probes/milestone-1/run-1\n\n## Target override\n\nnone" } }
       ]
     ],
     "fail": [
