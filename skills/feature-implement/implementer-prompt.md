@@ -169,6 +169,13 @@ Task tool (general-purpose):
     static checks on the files you changed), then commit with the Commit
     Trailers above and report what you changed and what you ran.
 
+    A finding about a rule (an invariant, a boundary, a format, a
+    requirement's wording) names every place that states or applies the
+    rule, not only the cited line. Grep the phase's code, tests and docs and
+    the feature's spec and tech-spec for it, fix each place, and list each
+    one in your report. The spec stays the authority: edit spec or
+    tech-spec text only when the finding says that text is what is wrong.
+
     ## Report Format
 
     - **Status:** DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT
