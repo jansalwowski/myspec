@@ -170,9 +170,16 @@ printf '# T\n\n## Architecture\n' > "$CUR"
 expect 'missing required section: "## Reuse audit" (or ### )' "$(reuse_audit_issues "$CUR")" "a missing section is reported"
 printf '# T\n\n### Reuse audit\n\n| a | b | c | d |\n|---|---|---|---|\n| Foo | lib | skip | - |\n' > "$CUR"
 expect "row 1: skip rows require a non-empty Reason" "$(reuse_audit_issues "$CUR")" "a skip row without a reason is reported"
-reuse_audit_scope .ai/features/pay/tech-spec.md && ok || fail "a tech-spec is in scope"
-reuse_audit_scope .ai/features/pay/sub/tech-spec.md && ok || fail "a nested tech-spec is in scope"
-reuse_audit_scope .ai/features/pay/spec.md && fail "a spec.md is out" || ok
+reuse_audit_scope .ai .ai/features/pay/tech-spec.md && ok || fail "a tech-spec is in scope"
+reuse_audit_scope .ai .ai/features/pay/sub/tech-spec.md && ok || fail "a nested tech-spec is in scope"
+reuse_audit_scope docs/ai docs/ai/features/pay/tech-spec.md && ok || fail "a tech-spec under a configured aiDir is in scope"
+reuse_audit_scope .ai .ai/features/pay/spec.md && fail "a spec.md is out" || ok
+# #165: only a file named tech-spec.md, under the aiDir, outside plans/.
+for p in .ai/features/pay/old-tech-spec.md .ai/features/pay/draft-tech-spec.md \
+    .ai/features/pay/plans/2026-01-01-tech-spec.md .ai/features/pay/plans/tech-spec.md \
+    src/features/login/tech-spec.md src/features/login/a-tech-spec.md docs/ai/features/pay/tech-spec.md; do
+  reuse_audit_scope .ai "$p" && fail "$p is out of scope" || ok
+done
 expect_in() { case "$2" in *"$1"*) ok ;; *) fail "$3" ;; esac; }
 expect_in 'BLOCKED: x/tech-spec.md is missing a valid "## Reuse audit" section.' "$(reuse_audit_reason x/tech-spec.md diag)" "the reason opens with the friction-scan line"
 expect_in "myspec:reuse-audit skip: <reason>" "$(reuse_audit_reason x/tech-spec.md diag)" "the reason names the marker"
@@ -188,7 +195,11 @@ printf 'clean\n' > "$CUR"
 expect "" "$(absolute_path_findings "$CUR")" "a clean file has no findings"
 expect "replace with <repo_root>/src/a.ts" "$(absolute_path_hint /r/src/a.ts /r)" "a repo-internal path suggests <repo_root>"
 expect "replace with <repo_root>" "$(absolute_path_hint /r /r)" "the root itself suggests <repo_root>"
-expect "replace with ~/.claude-personal/projects/<encoded_cwd>/memory" "$(HOME=/Users/h absolute_path_hint /Users/h/.claude-personal/projects/-Users-h-proj/memory /r)" "a harness memory path suggests <encoded_cwd>"
+expect "replace with <config_dir>/projects/<encoded_cwd>/memory" "$(HOME=/Users/h absolute_path_hint /Users/h/.claude-personal/projects/-Users-h-proj/memory /r)" "a ~/.claude-personal memory path suggests <config_dir>"
+# #161: the default store is ~/.claude/projects, and CLAUDE_CONFIG_DIR moves it.
+expect "replace with <config_dir>/projects/<encoded_cwd>/memory/a.md" "$(HOME=/Users/h CLAUDE_CONFIG_DIR='' absolute_path_hint /Users/h/.claude/projects/-Users-h-proj/memory/a.md /r)" "a ~/.claude memory path suggests <config_dir>"
+expect "replace with <config_dir>/projects/<encoded_cwd>/memory" "$(HOME=/Users/h CLAUDE_CONFIG_DIR=/opt/cc/ absolute_path_hint /opt/cc/projects/-Users-h-proj/memory /r)" "a CLAUDE_CONFIG_DIR memory path suggests <config_dir>"
+case "$(HOME=/Users/h CLAUDE_CONFIG_DIR='' absolute_path_hint /Users/h/.claudex/projects/p /r)" in "use <repo_root>"*) ok ;; *) fail "a look-alike config dir gets the generic hint" ;; esac
 R=$(absolute_paths_reason "the content proposed for" docs/a.md /r "line 2	/r/src/a.ts
 ")
 expect_in "BLOCKED: the content proposed for docs/a.md contains absolute homedir paths" "$R" "the reason opens with the subject and the signature"

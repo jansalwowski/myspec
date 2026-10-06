@@ -176,7 +176,11 @@ changes, each recorded rather than silently applied:
   untested. Phase 1 ships `skills/feature-implement/probe-executor-prompt.md`,
   dispatched like the other reviewers, with its no-edit rule stated in the prompt.
   Requirement 8's "tools absent, not merely discouraged" is deferred to the agent
-  definition once Open Question 1 is answered.
+  definition once Open Question 1 is answered. *Superseded in 3.0.0 (#171):* Open
+  Question 1 was answered on #134, and the executor ships as `agents/probe-executor.md`,
+  dispatched as `myspec:probe-executor`, with Edit, Write, NotebookEdit and Agent
+  removed by `disallowedTools`. Bash stays, so "never edit the working tree" is
+  still a prompt rule.
 - *Medium-agnostic executor.* Requirement 12 is superseded (see above). `mixed`
   dispatches one executor per milestone with the whole block, not one per medium:
   probes run in plan order and may depend on an earlier probe's writes (an `[api]`
