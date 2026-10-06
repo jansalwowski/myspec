@@ -77,6 +77,22 @@ run "$FIX" ''
 has 'records no frameworkVersion' "a missing version is named as missing"
 has 'v1.28.0, then v2.12.0' "a missing version gets the whole route"
 
+# PR #281 review: a hand-edited version that is not strict X.Y.Z was read as
+# "no frameworkVersion" and sent through every floor, 1.28.0 included.
+for v in 2.12 v2.12.0 '2.12.0 ' ' v2.12' 3.0.0-rc.1 2.12.0+build 2.12.0-rc.1; do
+  run "$FIX" "$v"
+  if [ "$STATUS" -eq 0 ] && [ -z "$OUTPUT" ]; then ok; else fail "'$v' reads as at or above 2.12.0 (exit $STATUS, output: $OUTPUT)"; fi
+done
+run "$FIX" 2.5
+has 'This project is on v2.5.0' "2.5 reads as 2.5.0"
+has 'Update through v2.12.0, then this version' "2.5 is sent through v2.12.0 only"
+for v in garbage 2 2.x.0 1.2.3.4; do
+  run "$FIX" "$v"
+  [ "$STATUS" -eq 2 ] && ok || fail "'$v' is not a version: exit 2 (got $STATUS)"
+  has "frameworkVersion '$v' is not a version" "'$v' is named as not a version"
+  hasnt 'records no frameworkVersion' "'$v' is not reported as missing"
+done
+
 # A manifest with no floor is a usage error, not a pass.
 echo '{ "frameworkVersion": "3.0.0", "files": {} }' > "$ROOT/plugin/framework-files/manifest.json"
 run "$FIX" 1.0.0
