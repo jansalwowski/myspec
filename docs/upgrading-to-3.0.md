@@ -12,7 +12,7 @@ breaking changes are tracked in the
 
 | Requirement | Why |
 |---|---|
-| **myspec 2.12.0 or later** | 3.0 upgrades only from the last 2.x minor (RELEASING.md, "Upgrade base"). `update` refuses a lower version: check out the plugin at tag `v2.12.0`, start Claude with `--plugin-dir` pointing at that checkout, run `/myspec:update`, then return to the current plugin. A project still on 1.x goes through `v1.28.0` first, then `v2.12.0`; [upgrading-to-2.0.md](upgrading-to-2.0.md) covers that step. |
+| **myspec 2.12.0 or later** | 3.0 upgrades only from the last 2.x minor (RELEASING.md, "Upgrade base"). `update` refuses a lower version and names the whole route from the recorded one: below 1.28.0, update with `v1.28.0`, then `v2.12.0`, then 3.0; from 1.28.0 up to 2.12.0, `v2.12.0`, then 3.0. For each release, check out the plugin at its tag, start Claude with `--plugin-dir` pointing at that checkout and run `/myspec:update`. [upgrading-to-2.0.md](upgrading-to-2.0.md) covers the 1.x step. The route is the manifest's `upgradeChain` plus `upgradeFrom`, read by `lib/upgrade-route.mjs`. |
 | **Claude Code 2.0.12 or later** | The hooks run from the plugin's `hooks.json` with `${CLAUDE_PLUGIN_ROOT}`, which arrived in 2.0.12. README "Installation" lists the sources. |
 | **git 2.31 or later** | `git rev-parse --path-format=absolute`, which the memory scripts and the friction scan need. |
 | **jq 1.6 or later** | Unchanged from 2.x. |

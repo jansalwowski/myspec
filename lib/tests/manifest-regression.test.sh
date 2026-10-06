@@ -156,6 +156,20 @@ if printf '%s' "$FLOOR" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then ok; else fai
 FLOOR=${FLOOR:-0.0.0}
 version_le "$FLOOR" "$(jq -r .frameworkVersion "$MANIFEST")" && ok || fail "upgradeFrom $FLOOR is above frameworkVersion"
 
+# `upgradeChain` holds the earlier majors' floors, oldest first; the refusal
+# (lib/upgrade-route.mjs) sends a project through each one above it, then
+# `upgradeFrom`. Out of order or at/above the floor, it would misroute.
+PREV=0.0.0
+while IFS= read -r step; do
+  [ -n "$step" ] || continue
+  if printf '%s' "$step" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' && ! version_le "$step" "$PREV" && ! version_le "$FLOOR" "$step"; then
+    ok
+  else
+    fail "upgradeChain entry '$step' is not X.Y.Z, ascending and below upgradeFrom $FLOOR"
+  fi
+  PREV=$step
+done <<< "$(jq -r '(.upgradeChain // [])[]' "$MANIFEST")"
+
 while IFS=$'\t' read -r what version; do
   [ -n "$what" ] || continue
   if printf '%s' "$version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' && ! version_le "$version" "$FLOOR"; then
