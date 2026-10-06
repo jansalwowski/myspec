@@ -2,7 +2,7 @@
 
 Grooms the *project* memory tree at `ai/memory/{procedural,semantic,episodic}/`. Re-anchors memories whose code moved, retunes ones nobody can find, merges pairs that collide, consolidates aged-out episodes, and retires what no longer holds — always behind an audit table and a confirmation.
 
-> **Related**: [`/myspec:memory-sanitize`](memory-sanitize.md) grooms the *user-level* auto-memory store at `~/.claude-personal/projects/<encoded_cwd>/memory/`. Different store, different objective: sanitize optimizes bytes in context (it compresses bodies), optimize protects retrieval (it never touches body length, because project memory bodies load only on a match).
+> **Related**: [`/myspec:memory-sanitize`](memory-sanitize.md) grooms the *user-level* auto-memory store at `<config_dir>/projects/<encoded_cwd>/memory/`. Different store, different objective: sanitize optimizes bytes in context (it compresses bodies), optimize protects retrieval (it never touches body length, because project memory bodies load only on a match).
 
 **Contents**
 

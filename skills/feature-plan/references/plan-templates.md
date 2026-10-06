@@ -43,7 +43,7 @@ Project-wide exact values — version floors, size/perf limits, naming rules, in
 
 ## Spec Coverage
 
-Last section of the plan, written by Step 4.5 after every task exists:
+Written by Step 4.5 after every task exists, directly before the closing `## Plan Self-Check` section (Step 4.6, format in [plan-self-check.md](plan-self-check.md#recording-the-result)):
 
 ```markdown
 ## Spec Coverage

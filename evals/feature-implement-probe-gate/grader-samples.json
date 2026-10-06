@@ -1,0 +1,29 @@
+{
+  "dispatched-probe-executor": {
+    "pass": [
+      [
+        { "tool": "Agent", "input": { "description": "Checkpoint probes for Milestone 1", "subagent_type": "myspec:probe-executor", "model": "sonnet", "prompt": "## Probes\n\n**Checkpoint probes:**\n- Target: `python3 -c` ...\n- P1 [data]: ...\n\n## Working directory\n\n<workspace>   Base commit: abc1234\n\n## Artifact directory\n\n<workspace>/.claude/state/implement/invoice-due-dates/probes/milestone-1/run-1\n\n## Target override\n\nnone" } }
+      ]
+    ],
+    "fail": [
+      [
+        { "tool": "Agent", "input": { "description": "Checkpoint probes for Milestone 1", "subagent_type": "general-purpose", "model": "sonnet", "prompt": "You are a probe executor. You run the probes below exactly as written...\n\n## Probes\n\n- P1 [data]: ..." } }
+      ],
+      [
+        { "tool": "Bash", "input": { "command": "python3 -c \"from app.invoices.serializers import invoice_to_dict\"" } }
+      ]
+    ]
+  },
+  "no-general-purpose-executor": {
+    "pass": [
+      [
+        { "tool": "Agent", "input": { "description": "Checkpoint probes for Milestone 1", "subagent_type": "myspec:probe-executor", "prompt": "## Probes\n\n- P1 [data]: ..." } }
+      ]
+    ],
+    "fail": [
+      [
+        { "tool": "Agent", "input": { "description": "Checkpoint probes for Milestone 1", "subagent_type": "general-purpose", "prompt": "You are a probe executor. You run the probes below exactly as written...\n\n## Probes\n\n- P1 [data]: ..." } }
+      ]
+    ]
+  }
+}

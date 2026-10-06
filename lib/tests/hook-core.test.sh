@@ -265,6 +265,20 @@ eq "$(bash -e -c '. "$1"; canonical_main_worktree "$2"; echo AFTER' _ "$ROOT/pn-
 eq "$(bash -e -c '. "$1"; canonical_main_worktree "$2"' _ "$PN" "$ROOT/plain/.claude/worktrees/wt" 2>&1)" \
   "$ROOT/plain" "path-normalize with hook-core: a linked worktree maps to its main checkout"
 
+# normalize_path maps the auto-memory store under any Claude config dir to
+# <config_dir>/projects/<encoded_cwd> (#161: ~/.claude, the default, gave rc=1).
+pn() { bash -c '. "$1"; shift; normalize_path "$@"' _ "$PN" "$@" 2>&1; }
+eq "$(HOME=/Users/h CLAUDE_CONFIG_DIR='' pn /Users/h/.claude/projects/-Users-h-repo/memory/a.md /r)" \
+  "<config_dir>/projects/<encoded_cwd>/memory/a.md" "normalize_path: the default ~/.claude store"
+eq "$(HOME=/Users/h CLAUDE_CONFIG_DIR='' pn /Users/h/.claude-personal/projects/-Users-h-repo /r)" \
+  "<config_dir>/projects/<encoded_cwd>" "normalize_path: a ~/.claude-personal store"
+eq "$(HOME=/Users/h CLAUDE_CONFIG_DIR=/opt/cc pn /opt/cc/projects/-Users-h-repo/memory /r)" \
+  "<config_dir>/projects/<encoded_cwd>/memory" "normalize_path: a CLAUDE_CONFIG_DIR store"
+rc=0; HOME=/Users/h CLAUDE_CONFIG_DIR='' pn /Users/h/.claude/settings.json /r >/dev/null || rc=$?
+[ "$rc" -eq 1 ] && ok || fail "normalize_path: a config-dir file outside projects/ is not convertible"
+rc=0; HOME=/Users/h CLAUDE_CONFIG_DIR='' pn /Users/h/.claudex/projects/p /r >/dev/null || rc=$?
+[ "$rc" -eq 1 ] && ok || fail "normalize_path: a look-alike dir is not a config dir"
+
 # --- file_sha256 ----------------------------------------------------------------------
 
 printf 'abc' > "$ROOT/hash.txt"
