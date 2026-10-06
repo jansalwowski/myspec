@@ -93,6 +93,16 @@ for v in garbage 2 2.x.0 1.2.3.4; do
   hasnt 'records no frameworkVersion' "'$v' is not reported as missing"
 done
 
+# PR #281 review: a string upgradeChain was spread into characters ("v2, then
+# v8"), a numeric one threw a TypeError. Either is an unusable manifest.
+for chain in '"1.28.0"' 128 '["1.28"]' '[128]' '{"a":"1.28.0"}'; do
+  printf '{ "frameworkVersion": "3.0.0", "upgradeFrom": "2.12.0", "upgradeChain": %s, "files": {} }\n' "$chain" \
+    > "$ROOT/plugin/framework-files/manifest.json"
+  run "$FIX" 1.0.0
+  [ "$STATUS" -eq 2 ] && ok || fail "upgradeChain $chain exits 2 (got $STATUS, output: $OUTPUT)"
+  has 'upgradeChain is not an array of X.Y.Z strings' "upgradeChain $chain is named as unusable"
+done
+
 # A manifest with no floor is a usage error, not a pass.
 echo '{ "frameworkVersion": "3.0.0", "files": {} }' > "$ROOT/plugin/framework-files/manifest.json"
 run "$FIX" 1.0.0

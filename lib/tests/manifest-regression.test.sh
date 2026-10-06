@@ -158,7 +158,11 @@ version_le "$FLOOR" "$(jq -r .frameworkVersion "$MANIFEST")" && ok || fail "upgr
 
 # `upgradeChain` holds the earlier majors' floors, oldest first; the refusal
 # (lib/upgrade-route.mjs) sends a project through each one above it, then
-# `upgradeFrom`. Out of order or at/above the floor, it would misroute.
+# `upgradeFrom`. Out of order or at/above the floor, it would misroute. A
+# string or number made the jq below fail inside `<<< "$(…)"`, which swallowed
+# the error and ran the loop zero times: the test passed (PR #281 review).
+if jq -e '(.upgradeChain // []) | type == "array"' "$MANIFEST" >/dev/null; then ok; else fail "upgradeChain is an array (got $(jq -c '.upgradeChain' "$MANIFEST"))"; fi
+if CHAIN=$(jq -r '(.upgradeChain // [])[]' "$MANIFEST" 2>&1); then ok; else fail "upgradeChain can be read as a list: $CHAIN"; CHAIN=; fi
 PREV=0.0.0
 while IFS= read -r step; do
   [ -n "$step" ] || continue
@@ -168,7 +172,7 @@ while IFS= read -r step; do
     fail "upgradeChain entry '$step' is not X.Y.Z, ascending and below upgradeFrom $FLOOR"
   fi
   PREV=$step
-done <<< "$(jq -r '(.upgradeChain // [])[]' "$MANIFEST")"
+done <<< "$CHAIN"
 
 while IFS=$'\t' read -r what version; do
   [ -n "$what" ] || continue
