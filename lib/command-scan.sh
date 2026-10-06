@@ -14,6 +14,8 @@
 #   split_segments                     # one "<sep><TAB><segment>" line each
 #   decode_word "$word"                # undoes the keep-mode encoding
 #   strip_command_prefix "$segment"    # drops then/do/else, FOO=bar, sudo
+#   decode_word_to VAR "$word"         # the same two, into VAR: no subshell
+#   strip_command_prefix_to VAR "$segment"
 #   find_matching_segment "$cmd" pattern...   # echoes offending segment, if any
 #
 # KNOWN LIMIT: nested command substitution is not parsed. In `--body "$(printf
@@ -183,7 +185,28 @@ split_segments() {
 
 # decode_word <word> — the text of a word from `sanitize_command keep`.
 decode_word() {
-  printf '%s' "$1" | tr '\037\036\021\022\023\024\025\026\027\030' ' \n|&;(){}`' | tr -d '\035'
+  local _dw
+  decode_word_to _dw "$1"
+  printf '%s' "$_dw"
+}
+
+# decode_word_to <var> <word> — decode_word into <var>. Parameter expansion,
+# not `tr`: a hook decodes every operand of a long command, and a pipeline
+# per word cost seconds on a 200-statement one (#277).
+decode_word_to() {
+  local _dw_w="$2"
+  _dw_w=${_dw_w//$'\037'/ }
+  _dw_w=${_dw_w//$'\036'/$'\n'}
+  _dw_w=${_dw_w//$'\021'/|}
+  _dw_w=${_dw_w//$'\022'/&}
+  _dw_w=${_dw_w//$'\023'/;}
+  _dw_w=${_dw_w//$'\024'/(}
+  _dw_w=${_dw_w//$'\025'/)}
+  _dw_w=${_dw_w//$'\026'/\{}
+  _dw_w=${_dw_w//$'\027'/\}}
+  _dw_w=${_dw_w//$'\030'/\`}
+  _dw_w=${_dw_w//$'\035'/}
+  printf -v "$1" '%s' "$_dw_w"
 }
 
 # Strips whatever can precede a command name without changing which command
@@ -191,26 +214,35 @@ decode_word() {
 # Done in bash rather than sed — BSD sed rejects inline labels (`:a; ...; ta`)
 # and lacks `\b`, so the portable sed for this is unreadable.
 strip_command_prefix() {
-  local segment="$1" previous=""
+  local _sp
+  strip_command_prefix_to _sp "$1"
+  printf '%s' "$_sp"
+}
 
-  while [ "$segment" != "$previous" ]; do
-    previous="$segment"
-    segment="${segment#"${segment%%[![:space:]]*}"}"
+# strip_command_prefix_to <var> <segment> — strip_command_prefix into <var>,
+# for a caller looping over every segment of a command.
+# Its locals carry a _scp_ prefix so no <var> a caller picks is shadowed.
+strip_command_prefix_to() {
+  local _scp_seg="$2" _scp_prev=""
 
-    if [[ "$segment" =~ ^(then|do|else)[[:space:]]+(.*)$ ]]; then
-      segment="${BASH_REMATCH[2]}"
+  while [ "$_scp_seg" != "$_scp_prev" ]; do
+    _scp_prev="$_scp_seg"
+    _scp_seg="${_scp_seg#"${_scp_seg%%[![:space:]]*}"}"
+
+    if [[ "$_scp_seg" =~ ^(then|do|else)[[:space:]]+(.*)$ ]]; then
+      _scp_seg="${BASH_REMATCH[2]}"
     fi
 
-    if [[ "$segment" =~ ^[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+(.*)$ ]]; then
-      segment="${BASH_REMATCH[1]}"
+    if [[ "$_scp_seg" =~ ^[A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+(.*)$ ]]; then
+      _scp_seg="${BASH_REMATCH[1]}"
     fi
 
-    if [[ "$segment" =~ ^sudo[[:space:]]+(.*)$ ]]; then
-      segment="${BASH_REMATCH[1]}"
+    if [[ "$_scp_seg" =~ ^sudo[[:space:]]+(.*)$ ]]; then
+      _scp_seg="${BASH_REMATCH[1]}"
     fi
   done
 
-  printf '%s' "$segment"
+  printf -v "$1" '%s' "$_scp_seg"
 }
 
 # find_matching_segment <command> <pattern>...
@@ -227,10 +259,12 @@ find_matching_segment() {
   sanitized=$(printf '%s' "$command" | sanitize_command | tr '|&;(){}`' '\n\n\n\n\n\n\n\n')
 
   while IFS= read -r segment; do
-    segment=$(strip_command_prefix "$segment")
+    strip_command_prefix_to segment "$segment"
 
+    # [[ =~ ]] is the same POSIX ERE as `grep -E`, without a process per
+    # segment and pattern.
     for pattern in "$@"; do
-      if printf '%s' "$segment" | grep -qE "$pattern"; then
+      if [[ "$segment" =~ $pattern ]]; then
         printf '%s' "$segment"
         return 0
       fi
