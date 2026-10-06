@@ -154,6 +154,10 @@ partly realizes it. If a spec requirement cannot be turned into a task at all,
 the tech-spec is missing a step — say so and stop, rather than planning around
 it.
 
+### Step 4.6: Plan Self-Check (REQUIRED, all plans)
+
+Implementers paste the plan's snippets verbatim, and phase reviewers grade the diff against the plan. A defect the plan dictates therefore passes the implementer and costs a fix loop at phase review. Before saving, read the written plan against `spec.md` and `tech-spec.md` and run the four checks in [references/plan-self-check.md](references/plan-self-check.md): snippets vs their spec contract, steps that contradict each other, reader-visible strings, and probe lint. Fix each finding in the plan, then record the result in the plan's `## Plan Self-Check` section. A probe that depends on an earlier probe's writes is allowed if the probe line declares the dependency.
+
 ### Step 5: Save Plan
 
 Save to the path shown in [## Plan Document Format](#plan-document-format).
@@ -329,6 +333,7 @@ Before presenting the plan:
 - [ ] Cross-milestone dependencies use `Milestone N` in the Depends On column (not individual phase numbers from other milestones)
 - [ ] Each milestone is a coherent vertical slice
 - [ ] If tech-spec.md sets `verification_mode` (not `none`): every milestone has a `**Checkpoint probes:**` block of literal probes with expected values, referencing only `### Test Hooks` handles; a `[real-input]` probe on every milestone touching a named real corpus; a *Scratch environment* line in Test Hooks whenever any probe writes
+- [ ] `## Plan Self-Check` records the four Step 4.6 checks, each clean or naming its fixes; every probe that depends on an earlier probe declares it
 - [ ] Commit decision presented to user (Step 7); plan committed before handoff
 
 ## Red Flags
