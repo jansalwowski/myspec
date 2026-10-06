@@ -139,12 +139,12 @@ Written by the `setup` skill's `mockup` blueprint (`blueprints/mockup.md`, Post-
 
 ### Probes: `.myspec.json` `probes`
 
-The probe runs `feature-plan` writes and `feature-implement` dispatches. Both keys are recorded by the schema since 3.0 so that a project can declare them once; reading them is #196 and #197.
+The probe runs `feature-plan` writes and `feature-implement` dispatches. Both keys are recorded by the schema since 3.0 so that a project can declare them once. `feature-implement` reads `scratchEnvScript` (#197); `feature-plan` and the probe executor read `portSource` (#196).
 
 | Key | Type | Default | Issue | Effect |
 |---|---|---|---|---|
-| `portSource` | repo-relative path, or `$NAME` | none | #196 | Where a probe takes its dev-server ports from instead of literal ports in the plan: a file holding the per-checkout port slots, or the environment variable that holds them. |
-| `scratchEnvScript` | repo-relative path | none | #197 | A script that provisions the scratch environment a probe run needs (database, cache, buckets), reused across probe runs instead of rebuilt by each one. |
+| `portSource` | repo-relative path, or `$NAME` | none | #196 | Where a probe takes its dev-server ports from instead of literal ports in the plan: a file holding the per-checkout port slots, or the environment variable that holds them. `feature-plan` names it on each probe block's Ports line and writes ports as `$<slot>`; the probe executor resolves the slots in its own checkout. Unset, probes keep the Target line's literal address. |
+| `scratchEnvScript` | repo-relative path | none | #197 | A script that provisions the scratch environment a probe run needs (database, cache, buckets), reused across probe runs instead of rebuilt by each one. `feature-implement` passes it to the probe executor, which runs it from the checkout root before the first probe that writes; a non-zero exit makes the writing probes BLOCKED. Unset, the executor builds the scratch environment from the Scratch env line as before. |
 
 ### Deferred
 
