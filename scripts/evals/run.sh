@@ -15,8 +15,9 @@
 #                   Results land in <out>/<model>/ (full) or
 #                   <out>/<model>/<case>/ (changed: one invocation per case).
 #   --case          shell glob on case names, applied after selection.
-#   --plugin-dir    plugin under test, default: this repo. Its evals/ must hold
-#                   the same cases (release-check.sh copies them in).
+#   --plugin-dir    plugin under test, default: a snapshot of this repo's
+#                   tracked and untracked, not-ignored files (#311). Its evals/
+#                   must hold the same cases (release-check.sh copies them in).
 #
 # Environment:
 #   MYSPEC_EVALS_STRICT=1          exit 1 when a case scores below threshold (default: report only)
@@ -298,6 +299,24 @@ if [ "${MYSPEC_EVALS_DRY_RUN:-0}" != 1 ]; then preflight; fi
 [ -n "$OUT" ] || OUT="$REPO_ROOT/.eval-results/$(date -u +%Y%m%dT%H%M%SZ)-$MODE-$$"
 mkdir -p "$OUT" || die "cannot create $OUT"
 echo "evals: results in $OUT"
+
+# The plugin under test is a copy of this repo's tracked and untracked,
+# not-ignored files, never the working tree itself (#311): `claude plugin
+# eval` refuses a directory of more than 20000 entries, and ignored local
+# state (.claude/worktrees/ from agent sessions, .eval-results/) grows past
+# that. Uncommitted edits are kept, so a local run still evaluates them.
+SNAPSHOT=""
+cleanup_snapshot() { [ -z "$SNAPSHOT" ] || rm -rf "$SNAPSHOT"; }
+if [ "$PLUGIN_DIR" = "$REPO_ROOT" ]; then
+  SNAPSHOT=$(mktemp -d "${TMPDIR:-/tmp}/myspec-eval-plugin.XXXXXX") || die "cannot create a plugin snapshot directory"
+  trap cleanup_snapshot EXIT
+  trap 'cleanup_snapshot; exit 2' INT TERM HUP
+  git -C "$REPO_ROOT" ls-files -z --cached --others --exclude-standard \
+    | (cd "$REPO_ROOT" && while IFS= read -r -d '' f; do { [ -e "$f" ] || [ -L "$f" ]; } && printf '%s\0' "$f"; done) \
+    | (cd "$REPO_ROOT" && tar --null -T - -cf -) | (cd "$SNAPSHOT" && tar -xf -) \
+    || die "cannot copy the plugin to $SNAPSHOT"
+  PLUGIN_DIR="$SNAPSHOT"
+fi
 
 worst=0
 note() { if [ "$1" -gt "$worst" ]; then worst="$1"; fi; }
