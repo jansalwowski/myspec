@@ -145,6 +145,21 @@ session_seen "$REPO" $S code "$REPO" a.ts "" && fail "seen: a write before the r
 session_append "$REPO" $S "$(jq -nc --arg r "$REPO" '{t:"write",root:$r,rel:"c.ts",kind:"code",via:"tool"}')"
 session_seen "$REPO" $S code "$REPO" c.ts "" tool && ok || fail "seen: the same write by the same route"
 session_seen "$REPO" $S code "$REPO" c.ts "" bash && fail "seen: a Bash write is not the same as a tool write" || ok
+# session_seen_many answers the same five questions in one read (#277).
+SEEN_CANDS=$(jq -nc --arg r "$REPO" --arg m "$REPO/mod" '[
+  ["code", $m, "m.ts", "a1", ""], ["code", $m, "m.ts", "", ""], ["code", $r, "a.ts", "", ""],
+  ["code", $r, "c.ts", "", "tool"], ["code", $r, "c.ts", "", "bash"]]')
+eq "$(session_seen_many "$REPO" $S "$SEEN_CANDS" | tr '\n' ' ')" "0 3 " "seen many: the entries session_seen finds, by index"
+eq "$(session_seen_many "$REPO" no-such-session "$SEEN_CANDS")" "" "seen many: nothing without a file"
+
+# session_append_many: every event on stdin, each its own line with "at";
+# a value that is not an event is dropped.
+S=s5m
+printf '%s\n' '{"t":"pre","root":"/r","rel":"a.md","blob":""}' '[1]' '{"rel":"x"}' \
+  '{"t":"write","root":"/r","rel":"a.md","kind":"file","via":"bash","blob":"b1"}' \
+  | session_append_many "$REPO" $S
+eq "$(session_events "$REPO" $S | jq -r '[.t, .rel, (.at | type)] | join(" ")' | tr '\n' ',')" "pre a.md number,write a.md number," \
+  "append many: events in order, each stamped, non-events dropped"
 
 # --- Bash writes as before/after pairs (the Stop gate's content checks) ------------------
 S=s5b

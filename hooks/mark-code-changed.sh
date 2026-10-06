@@ -264,7 +264,7 @@ emit_target() {
     done < <(cd "$BASE_DIR" 2>/dev/null && { compgen -G "$w" || true; })
     return 0
   fi
-  p=$(physical_path "$w" "$BASE_DIR") || return 0
+  target_path_to p "$w" || return 0
   if [ -d "$p" ]; then
     return 0
   fi
@@ -274,7 +274,88 @@ emit_target() {
   printf '%s\n' "$p"
 }
 
-# bash_write_targets <command> -> the files the command writes, one physical
+# Directories target_path_to resolved, for this run: RES_DIRS[i] is
+# RES_PHYS[i] physically.
+RES_DIRS=()
+RES_PHYS=()
+
+# target_path_to <var> <word> -> physical_path "<word>" "$BASE_DIR" into
+# <var>, with each directory resolved once per run: a long command names the
+# same few directories over and over, and the subshells physical_path spends
+# per call cost seconds on one (#277). A path ending in / takes physical_path
+# itself.
+target_path_to() {
+  local _tp_p="$2" _tp_dir _tp_rest _tp_phys="" _tp_i
+  case "$_tp_p" in
+    /*) ;;
+    *) _tp_p="${BASE_DIR:-$PWD}/$_tp_p" ;;
+  esac
+  case "$_tp_p" in
+    */)
+      _tp_p=$(physical_path "$_tp_p") || return 1
+      printf -v "$1" '%s' "$_tp_p"
+      return 0
+      ;;
+  esac
+  _tp_dir="${_tp_p%/*}"
+  _tp_rest="${_tp_p##*/}"
+  [ -n "$_tp_dir" ] || _tp_dir=/
+  while [ ! -d "$_tp_dir" ]; do
+    _tp_rest="${_tp_dir##*/}/$_tp_rest"
+    _tp_dir="${_tp_dir%/*}"
+    [ -n "$_tp_dir" ] || _tp_dir=/
+  done
+  for ((_tp_i = 0; _tp_i < ${#RES_DIRS[@]}; _tp_i++)); do
+    if [ "${RES_DIRS[$_tp_i]}" = "$_tp_dir" ]; then
+      _tp_phys="${RES_PHYS[$_tp_i]}"
+      break
+    fi
+  done
+  if [ -z "$_tp_phys" ]; then
+    _tp_phys=$(cd "$_tp_dir" 2>/dev/null && pwd -P) || return 1
+    RES_DIRS+=("$_tp_dir")
+    RES_PHYS+=("$_tp_phys")
+  fi
+  printf -v "$1" '%s/%s' "${_tp_phys%/}" "$_tp_rest"
+}
+
+# SCAN_PLAIN and SCAN_KEEP: the command's segments (split_segments) from the
+# blanking and the keep scan of lib/command-scan.sh, each made once per hook
+# call (scan_command) and read by the write gate, bash_write_targets and
+# implement_requests alike.
+SCAN_PLAIN=""
+SCAN_KEEP=""
+SCAN_KEPT=0
+
+# scan_command [keep]: fills SCAN_PLAIN from $COMMAND, and SCAN_KEEP too with
+# `keep`, each once.
+scan_command() {
+  if [ -z "$SCAN_PLAIN" ]; then
+    SCAN_PLAIN=$(printf '%s' "$COMMAND" | sanitize_command | split_segments)
+  fi
+  if [ -n "${1:-}" ] && [ "$SCAN_KEPT" = 0 ]; then
+    # shellcheck disable=SC2119 # keep mode is the argument
+    SCAN_KEEP=$(printf '%s' "$COMMAND" | sanitize_command keep | split_segments)
+    SCAN_KEPT=1
+  fi
+}
+
+# segment_matches <pattern>... -> 0 when a segment of $COMMAND, its prefix
+# stripped, matches one of the anchored EREs: find_matching_segment over the
+# scan already made.
+segment_matches() {
+  local line seg pattern
+  scan_command
+  while IFS= read -r line; do
+    strip_command_prefix_to seg "${line#*$'\t'}"
+    for pattern in "$@"; do
+      [[ "$seg" =~ $pattern ]] && return 0
+    done
+  done <<< "$SCAN_PLAIN"
+  return 1
+}
+
+# bash_write_targets -> the files $COMMAND writes, one physical
 # path per line. Every segment is scanned for redirects; a segment's operands
 # count only when a write verb stands at its command position. A literal `cd`
 # moves BASE_DIR for the segments after it, and a subshell restores it on exit,
@@ -284,7 +365,7 @@ emit_target() {
 # the operand's text, so a quoted literal path ("src/a.ts") resolves too. Both
 # split into the same segments and words (lib/command-scan.sh).
 bash_write_targets() {
-  local line kline sep seg kseg verb word skip i last dest next inplace
+  local line kline sep seg kseg verb word skip i last dest next inplace dw
   local -a words kwords ops scopes=()
   while IFS= read -r line && IFS= read -r kline <&3; do
     sep="${line%%$'\t'*}"
@@ -297,12 +378,16 @@ bash_write_targets() {
         fi
         ;;
     esac
-    seg=$(strip_command_prefix "${line#*$'\t'}")
+    strip_command_prefix_to seg "${line#*$'\t'}"
     [ -n "$seg" ] || continue
-    kseg=$(strip_command_prefix "${kline#*$'\t'}")
+    strip_command_prefix_to kseg "${kline#*$'\t'}"
 
-    read -ra words <<< "$seg"
-    read -ra kwords <<< "$kseg"
+    # Split as `read -a` does, without a here-string per segment (a temp
+    # file each in bash 3.2) and with no glob expansion.
+    set -f
+    # shellcheck disable=SC2206 # word splitting is the point; globbing is off
+    words=($seg) kwords=($kseg)
+    set +f
     [ "${#words[@]}" -gt 0 ] || continue
     if [ "${#kwords[@]}" -ne "${#words[@]}" ]; then
       kwords=("${words[@]}")
@@ -312,18 +397,24 @@ bash_write_targets() {
     # written whatever runs, and the word after it is the command name.
     while [ "${#words[@]}" -gt 0 ] && [[ "${words[0]}" =~ ^[0-9]*\>{1,2} ]]; do
       if [[ "${words[0]}" =~ ^[0-9]*\>{1,2}$ ]]; then
-        [ "${#words[@]}" -lt 2 ] || emit_target "$(decode_word "${kwords[1]}")"
+        if [ "${#words[@]}" -ge 2 ]; then
+          decode_word_to dw "${kwords[1]}"
+          emit_target "$dw"
+        fi
         words=("${words[@]:2}")
         kwords=("${kwords[@]:2}")
       else
-        emit_target "$(decode_word "$(printf '%s' "${kwords[0]}" | sed -E 's/^[0-9]*>{1,2}//')")"
+        [[ "${kwords[0]}" =~ ^[0-9]*\>{1,2}(.*)$ ]]
+        decode_word_to dw "${BASH_REMATCH[1]}"
+        emit_target "$dw"
         words=("${words[@]:1}")
         kwords=("${kwords[@]:1}")
       fi
     done
     [ "${#words[@]}" -gt 0 ] || continue
     if [ "${words[0]}" = cd ]; then
-      if [ "${#words[@]}" -ge 2 ] && next=$(cd "$BASE_DIR" 2>/dev/null && cd "$(decode_word "${kwords[1]}")" 2>/dev/null && pwd -P); then
+      [ "${#words[@]}" -lt 2 ] || decode_word_to dw "${kwords[1]}"
+      if [ "${#words[@]}" -ge 2 ] && next=$(cd "$BASE_DIR" 2>/dev/null && cd "$dw" 2>/dev/null && pwd -P); then
         BASE_DIR="$next"
       fi
       continue
@@ -344,13 +435,16 @@ bash_write_targets() {
       # get here with a target: the split on `&` leaves nothing after `>`.
       if [[ "$word" =~ ^[0-9]*\>{1,2}$ ]]; then
         if [ $((i + 1)) -lt "${#words[@]}" ]; then
-          emit_target "$(decode_word "${kwords[$((i + 1))]}")"
+          decode_word_to dw "${kwords[$((i + 1))]}"
+          emit_target "$dw"
         fi
         skip=1
         continue
       fi
       if [[ "$word" =~ ^[0-9]*\>{1,2}(.+)$ ]]; then
-        emit_target "$(decode_word "$(printf '%s' "${kwords[$i]}" | sed -E 's/^[0-9]*>{1,2}//')")"
+        [[ "${kwords[$i]}" =~ ^[0-9]*\>{1,2}(.*)$ ]]
+        decode_word_to dw "${BASH_REMATCH[1]}"
+        emit_target "$dw"
         continue
       fi
       case "$word" in
@@ -373,7 +467,8 @@ bash_write_targets() {
             # the file it writes.
             patch:-o|patch:--output)
               if [ $((i + 1)) -lt "${#words[@]}" ]; then
-                emit_target "$(decode_word "${kwords[$((i + 1))]}")"
+                decode_word_to dw "${kwords[$((i + 1))]}"
+                emit_target "$dw"
               fi
               skip=1
               ;;
@@ -382,7 +477,8 @@ bash_write_targets() {
           continue
           ;;
       esac
-      ops+=("$(decode_word "${kwords[$i]}")")
+      decode_word_to dw "${kwords[$i]}"
+      ops+=("$dw")
     done
     [ "${#ops[@]}" -gt 0 ] || continue
     last="${ops[${#ops[@]}-1]}"
@@ -401,7 +497,7 @@ bash_write_targets() {
         if [ "$verb" = mv ]; then
           for word in "${ops[@]}"; do emit_target "$word"; done
         fi
-        dest=$(physical_path "$last" "$BASE_DIR") || continue
+        target_path_to dest "$last" || continue
         if [ -d "$dest" ]; then
           for ((i = 0; i < ${#ops[@]} - 1; i++)); do
             emit_target "$last/$(basename "${ops[$i]}")"
@@ -415,97 +511,267 @@ bash_write_targets() {
         emit_target "${ops[0]}" must-exist
         ;;
     esac
-  done < <(printf '%s' "$1" | sanitize_command | split_segments) \
-       3< <(printf '%s' "$1" | sanitize_command keep | split_segments)
+  done <<< "$SCAN_PLAIN" 3<<< "$SCAN_KEEP"
   return 0
 }
 
-# ledger_add <kind> <root> <rel>: records the write in the session-state
-# file of <root>'s repository, unless the same write is already there since
-# the root's last `verified` event. A subagent's event carries its agent_id.
-# A checkout nested in the cwd's (a plain clone, not a submodule) whose own
-# repository is untracked is filed with the cwd's checkout instead, under its
-# own root: the Stop gate verifies such a root through the cwd's checkout
-# (NESTED_ROOTS in lib/stop-gate/arm.sh). A checkout counts as tracked when
-# its home or the checkout itself has the config: a linked worktree's branch
-# can add a stop gate the main checkout does not have yet.
-#
-# A Bash write (VIA=bash) to a file the content checks cover also carries
-# the file's snapshot after the write (snapshot_blob), or "@" when the file
-# is judged but could be neither hashed nor kept, and is recorded every time,
-# since each one is a new before/after pair for the Stop gate.
-ledger_add() {
-  local home blob="" rc=1
-  home=$(ledger_home "$2") || return 0
-  if [ "$VIA" = bash ]; then
-    if blob=$(snapshot_blob "$2" "$3"); then rc=0; else rc=$?; fi
-    # Judged but not hashed: "@" tells the Stop gate to read the file as it
-    # is then, rather than drop the write.
-    [ "$rc" -ne 2 ] || { blob="@"; rc=0; }
-  fi
-  if [ "$rc" -eq 0 ]; then
-    session_append "$home" "$SESSION_ID" "$(jq -nc --arg k "$1" --arg r "$2" --arg p "$3" --arg a "$AGENT_ID" --arg b "$blob" \
-      '{t: "write", root: $r, rel: $p, kind: $k, via: "bash", blob: $b} + (if $a != "" then {agent: $a} else {} end)')" || true
-    return 0
-  fi
-  session_seen "$home" "$SESSION_ID" "$1" "$2" "$3" "$AGENT_ID" "$VIA" && return 0
-  session_append "$home" "$SESSION_ID" "$(jq -nc --arg k "$1" --arg r "$2" --arg p "$3" --arg a "$AGENT_ID" --arg v "$VIA" \
-    '{t: "write", root: $r, rel: $p, kind: $k, via: $v} + (if $a != "" then {agent: $a} else {} end)')" || true
+# Events for the session-state files, appended once the targets are done
+# (flush_events): one jq call and one session_append_many per home, however
+# many files the command wrote (#277). QUEUE_HOMES[i] is the home of the
+# event built from fields 7i to 7i+6 of QUEUE_FIELDS: t, root, rel, kind,
+# via, blob, and 1 when the event carries the blob (a `pre` event's "" means
+# no file; a write without a snapshot has no blob field at all).
+QUEUE_HOMES=()
+QUEUE_FIELDS=()
+
+# queue_event <home> <t> <root> <rel> <kind> <via> <blob> <has blob>; kind
+# and via are empty for a `pre` event.
+queue_event() {
+  QUEUE_HOMES+=("$1")
+  shift
+  QUEUE_FIELDS+=("$@")
 }
 
-# ledger_home <root> -> the session home a write in <root> is filed with
-# (ledger_add); fails when neither it nor the cwd's checkout is tracked.
-ledger_home() {
+# flush_events: appends the queued events, home by home in first-queued
+# order, each in the order queued. A write event carries this run's agent.
+flush_events() {
+  local i j home done_homes=$'\n'
+  local -a args
+  for ((i = 0; i < ${#QUEUE_HOMES[@]}; i++)); do
+    home="${QUEUE_HOMES[$i]}"
+    case "$done_homes" in *$'\n'"$home"$'\n'*) continue ;; esac
+    done_homes="$done_homes$home"$'\n'
+    args=()
+    for ((j = i; j < ${#QUEUE_HOMES[@]}; j++)); do
+      [ "${QUEUE_HOMES[$j]}" = "$home" ] || continue
+      args+=("${QUEUE_FIELDS[@]:$((j * 7)):7}")
+    done
+    jq -nc --arg ag "$AGENT_ID" '$ARGS.positional as $a | range(0; $a | length; 7) as $i
+      | {t: $a[$i], root: $a[$i + 1], rel: $a[$i + 2]}
+        + (if $a[$i + 3] != "" then {kind: $a[$i + 3], via: $a[$i + 4]} else {} end)
+        + (if $a[$i + 6] == "1" then {blob: $a[$i + 5]} else {} end)
+        + (if $a[$i] == "write" and $ag != "" then {agent: $ag} else {} end)' \
+      --args "${args[@]}" | session_append_many "$home" "$SESSION_ID" || true
+  done
+  QUEUE_HOMES=()
+  QUEUE_FIELDS=()
+}
+
+# ledger_home_to <var> <root> -> the session home a write in <root> is filed
+# with; fails when neither it nor the cwd's checkout is tracked. A checkout
+# nested in the cwd's (a plain clone, not a submodule) whose own repository
+# is untracked is filed with the cwd's checkout instead, under its own root:
+# the Stop gate verifies such a root through the cwd's checkout (NESTED_ROOTS
+# in lib/stop-gate/arm.sh). A checkout counts as tracked when its home or the
+# checkout itself has the config: a linked worktree's branch can add a stop
+# gate the main checkout does not have yet. The last answer is kept: the
+# targets of one command share a root.
+LH_ROOT="" LH_HOME="" LH_RC=1
+ledger_home_to() {
+  local _lh_home
+  if [ "$2" != "$LH_ROOT" ] || [ -z "$LH_ROOT" ]; then
+    LH_ROOT="$2" LH_HOME="" LH_RC=0
+    if _lh_home=$(session_home "$2"); then
+      if ! session_tracked_at "$_lh_home" "$2"; then
+        case "$2/" in
+          "$CWD_ROOT"/?*) [ -n "$CWD_ROOT" ] && [ -n "$CWD_HOME" ] && _lh_home="$CWD_HOME" || LH_RC=1 ;;
+          *) LH_RC=1 ;;
+        esac
+      fi
+    else
+      LH_RC=1
+    fi
+    [ "$LH_RC" = 1 ] || LH_HOME="$_lh_home"
+  fi
+  [ "$LH_RC" = 0 ] || return 1
+  printf -v "$1" '%s' "$LH_HOME"
+}
+
+# The writes of this run, one per target in order (pend_write), recorded by
+# record_pending: PEND_KIND is "" at PreToolUse, PEND_HOME the ledger home;
+# snapshot_pending sets PEND_SNAP (0: PEND_BLOB is the snapshot, 1: not
+# judged, 2: judged but neither hashed nor kept) and PEND_SEEN marks a write
+# already recorded.
+PEND_ROOT=()
+PEND_REL=()
+PEND_KIND=()
+PEND_HOME=()
+PEND_SNAP=()
+PEND_BLOB=()
+PEND_SEEN=()
+
+# pend_write <kind> <root> <rel>: queues the write for record_pending,
+# unless <root> files with no tracked home.
+pend_write() {
   local home
-  home=$(session_home "$1") || return 1
-  if ! session_tracked_at "$home" "$1"; then
-    [ -n "$CWD_ROOT" ] && [ -n "$CWD_HOME" ] || return 1
-    case "$1/" in
-      "$CWD_ROOT"/?*) home="$CWD_HOME" ;;
-      *) return 1 ;;
-    esac
-  fi
-  printf '%s\n' "$home"
+  ledger_home_to home "$2" || return 0
+  PEND_KIND+=("$1")
+  PEND_ROOT+=("$2")
+  PEND_REL+=("$3")
+  PEND_HOME+=("$home")
+  PEND_SNAP+=(1)
+  PEND_BLOB+=("")
+  PEND_SEEN+=(0)
 }
 
-# snapshot_blob <root> <rel> -> the blob id of the file as it is now, written
-# to <root>'s object store; "" when the file does not exist. Prints nothing
-# and returns 1 for a file the content checks never judge: one they do not
-# cover (absolute_paths_scope: the frontmatter and reuse-audit files are docs
-# too), or a binary (a NUL in its first 8000 bytes, git's own test: its diff
-# has no `+` lines to judge). Only those two skip the object store: a file
-# the checks judge needs a before/after pair whatever its size, or its
-# baseline falls back to HEAD (which a commit moves) and its after side to
-# the file at Stop (which holds other sessions' lines). When git cannot write
-# the blob (a read-only object store), a copy beside the session file stands
-# in for it, as "kept:<id>" (session_keep). Returns 2 when neither could be
-# written.
-snapshot_blob() {
-  local home
-  [ "$SNAPSHOTS" = 1 ] || return 1
-  absolute_paths_scope "$1" "$2" || return 1
-  if [ ! -f "$1/$2" ]; then
-    printf '\n'
-    return 0
-  fi
-  if [ "$(head -c 8000 "$1/$2" 2>/dev/null | LC_ALL=C tr -dc '\000' | wc -c)" -gt 0 ]; then
-    return 1
-  fi
-  git -C "$1" hash-object -w -- "$2" 2>/dev/null && return 0
-  home=$(ledger_home "$1") || return 2
-  session_keep "$home" "$SESSION_ID" "$1" "$2" || return 2
+# is_binary <file> -> 0 when a NUL is in its first 8000 bytes, git's own
+# test: its diff has no `+` lines to judge. A builtin read under the C locale
+# counts bytes, with no process per file.
+is_binary() {
+  # shellcheck disable=SC2034 # LC_ALL is read by bash itself
+  local LC_ALL=C _ib
+  IFS= read -r -d '' -n 8000 _ib 2>/dev/null < "$1" && [ "${#_ib}" -lt 8000 ]
 }
 
-# snapshot_pre <root> <rel>: records the file's content before a Bash write
-# (PreToolUse), as a `pre` event, for a file snapshot_blob hashes. A file it
-# cannot hash gets no `pre` event: the Stop gate then falls back to the
-# session's previous after-blob, then HEAD (session_bash_writes).
-snapshot_pre() {
-  local home blob
-  home=$(ledger_home "$1") || return 0
-  blob=$(snapshot_blob "$1" "$2") || return 0
-  session_append "$home" "$SESSION_ID" "$(jq -nc --arg r "$1" --arg p "$2" --arg b "$blob" \
-    '{t: "pre", root: $r, rel: $p, blob: $b}')" || true
+# snapshot_pending: for a Bash write, the snapshot of each pending file the
+# Stop gate's content checks judge: its blob id as it is now, written to its
+# root's object store ("" when the file does not exist). Not judged: a file
+# the checks do not cover (absolute_paths_scope: the frontmatter and
+# reuse-audit files are docs too; a gitignored file) or a binary. Every other
+# file needs a before/after pair whatever its size, or its baseline falls
+# back to HEAD (which a commit moves) and its after side to the file at Stop
+# (which holds other sessions' lines). When git cannot write the blob (a
+# read-only object store), a copy beside the session file stands in for it,
+# as "kept:<id>" (session_keep); PEND_SNAP 2 when neither could be written.
+# Per root, one git call asks which files are ignored and one hashes them
+# all, so a command writing many files does not pay processes per file
+# (#277). A path holding a newline cannot ride --stdin-paths: the root's
+# files are then hashed one by one.
+snapshot_pending() {
+  local i j k root ai rel x id ignored done_roots=$'\n' one
+  local -a idx hash_idx ids
+  [ "$SNAPSHOTS" = 1 ] || return 0
+  for ((i = 0; i < ${#PEND_ROOT[@]}; i++)); do
+    root="${PEND_ROOT[$i]}"
+    case "$done_roots" in *$'\n'"$root"$'\n'*) continue ;; esac
+    done_roots="$done_roots$root"$'\n'
+    idx=()
+    for ((j = i; j < ${#PEND_ROOT[@]}; j++)); do
+      [ "${PEND_ROOT[$j]}" != "$root" ] || idx+=("$j")
+    done
+    ai=""
+    [ ! -f "$root/.myspec.json" ] || ai=$(ai_dir "$root")
+    ignored=$'\034'
+    while IFS= read -r -d '' x; do
+      ignored="$ignored$x"$'\034'
+    done < <(for j in "${idx[@]}"; do printf '%s\0' "${PEND_REL[$j]}"; done \
+      | git -C "$root" check-ignore --stdin -z 2>/dev/null || true)
+    hash_idx=()
+    one=0
+    for j in "${idx[@]}"; do
+      rel="${PEND_REL[$j]}"
+      case "$ignored" in *$'\034'"$rel"$'\034'*) continue ;; esac
+      absolute_paths_scope_unignored "$root" "$rel" "$ai" || continue
+      if [ ! -f "$root/$rel" ]; then
+        PEND_SNAP[j]=0
+        continue
+      fi
+      ! is_binary "$root/$rel" || continue
+      case "$rel" in *$'\n'*) one=1 ;; esac
+      hash_idx+=("$j")
+    done
+    [ "${#hash_idx[@]}" -gt 0 ] || continue
+    ids=()
+    if [ "$one" = 0 ]; then
+      while IFS= read -r id; do
+        ids+=("$id")
+      done < <(for j in "${hash_idx[@]}"; do printf '%s\n' "${PEND_REL[$j]}"; done \
+        | git -C "$root" hash-object -w --stdin-paths 2>/dev/null || true)
+    fi
+    for ((k = 0; k < ${#hash_idx[@]}; k++)); do
+      j="${hash_idx[$k]}"
+      rel="${PEND_REL[$j]}"
+      if [ "${#ids[@]}" -eq "${#hash_idx[@]}" ] && [ -n "${ids[$k]}" ]; then
+        id="${ids[$k]}"
+      elif ! id=$(git -C "$root" hash-object -w -- "$rel" 2>/dev/null) \
+          && ! id=$(session_keep "${PEND_HOME[$j]}" "$SESSION_ID" "$root" "$rel"); then
+        PEND_SNAP[j]=2
+        continue
+      fi
+      PEND_SNAP[j]=0
+      PEND_BLOB[j]="$id"
+    done
+  done
+}
+
+# mark_seen_pending: sets PEND_SEEN for each write without a snapshot that
+# the session already recorded since its root's last `verified` event
+# (session_seen), with one read of each home's file.
+mark_seen_pending() {
+  local i j home done_homes=$'\n' cands
+  local -a map fields
+  for ((i = 0; i < ${#PEND_ROOT[@]}; i++)); do
+    [ "${PEND_SNAP[$i]}" = 1 ] || continue
+    home="${PEND_HOME[$i]}"
+    case "$done_homes" in *$'\n'"$home"$'\n'*) continue ;; esac
+    done_homes="$done_homes$home"$'\n'
+    map=()
+    fields=()
+    for ((j = i; j < ${#PEND_ROOT[@]}; j++)); do
+      if [ "${PEND_SNAP[$j]}" != 1 ] || [ "${PEND_HOME[$j]}" != "$home" ]; then
+        continue
+      fi
+      map+=("$j")
+      fields+=("${PEND_KIND[$j]}" "${PEND_ROOT[$j]}" "${PEND_REL[$j]}" "$AGENT_ID" "$VIA")
+    done
+    cands=$(jq -nc '$ARGS.positional | [range(0; length; 5) as $i | .[$i:$i + 5]]' --args "${fields[@]}") || continue
+    while IFS= read -r j; do
+      case "$j" in ''|*[!0-9]*) continue ;; esac
+      PEND_SEEN[${map[$j]}]=1
+    done < <(session_seen_many "$home" "$SESSION_ID" "$cands")
+  done
+}
+
+# record_pending: the pending writes as events, in target order. PreToolUse:
+# a `pre` event for each snapshot. PostToolUse: a `write` event for each
+# file. A Bash write to a file the content checks judge carries its snapshot,
+# or "@" when it could be neither hashed nor kept (the Stop gate then reads
+# the file as it is), and is recorded every time, since each one is a new
+# before/after pair for the Stop gate. Any other write is recorded once
+# since its root's last `verified` event.
+record_pending() {
+  local i
+  [ "$VIA" != bash ] || snapshot_pending
+  if [ "$PRE" = 1 ]; then
+    for ((i = 0; i < ${#PEND_ROOT[@]}; i++)); do
+      [ "${PEND_SNAP[$i]}" = 0 ] || continue
+      queue_event "${PEND_HOME[$i]}" pre "${PEND_ROOT[$i]}" "${PEND_REL[$i]}" "" "" "${PEND_BLOB[$i]}" 1
+    done
+  else
+    mark_seen_pending
+    for ((i = 0; i < ${#PEND_ROOT[@]}; i++)); do
+      case "${PEND_SNAP[$i]}" in
+        0) queue_event "${PEND_HOME[$i]}" write "${PEND_ROOT[$i]}" "${PEND_REL[$i]}" "${PEND_KIND[$i]}" bash "${PEND_BLOB[$i]}" 1 ;;
+        2) queue_event "${PEND_HOME[$i]}" write "${PEND_ROOT[$i]}" "${PEND_REL[$i]}" "${PEND_KIND[$i]}" bash "@" 1 ;;
+        *)
+          [ "${PEND_SEEN[$i]}" = 0 ] || continue
+          queue_event "${PEND_HOME[$i]}" write "${PEND_ROOT[$i]}" "${PEND_REL[$i]}" "${PEND_KIND[$i]}" "$VIA" "" 0
+          ;;
+      esac
+    done
+  fi
+  flush_events
+}
+
+# target_root <path>: sets ROOT to the checkout holding the file (from its
+# nearest existing directory, checkout_root) and REL to its path there;
+# fails when it is in none. The last directory's answer is kept.
+TR_DIR="" TR_ROOT=""
+target_root() {
+  local dir="${1%/*}" anchor
+  [ -n "$dir" ] || dir=/
+  if [ "$dir" != "$TR_DIR" ] || [ -z "$TR_DIR" ]; then
+    TR_DIR="$dir" TR_ROOT=""
+    if anchor=$(existing_dir "$dir"); then
+      TR_ROOT=$(checkout_root "$anchor") || TR_ROOT=""
+    fi
+  fi
+  [ -n "$TR_ROOT" ] || return 1
+  ROOT="$TR_ROOT"
+  case "$1" in
+    "$ROOT"/*) REL="${1#"$ROOT"/}" ;;
+    *) return 1 ;;
+  esac
 }
 
 # script_word <word...> -> the index of the word that names the program a
@@ -570,29 +836,35 @@ script_word() {
   return 1
 }
 
-# implement_requests <command> -> `start` or `stop` for each segment that
+# implement_requests -> `start` or `stop` for each segment that
 # runs session-event.sh implement <state>, the script called by any path,
 # directly or through bash, sh, env or command.
 implement_requests() {
   local line kline seg kseg i w
   local -a words kwords decoded
   while IFS= read -r line && IFS= read -r kline <&3; do
-    seg=$(strip_command_prefix "${line#*$'\t'}")
-    kseg=$(strip_command_prefix "${kline#*$'\t'}")
-    read -ra words <<< "$seg"
-    read -ra kwords <<< "$kseg"
+    strip_command_prefix_to seg "${line#*$'\t'}"
+    strip_command_prefix_to kseg "${kline#*$'\t'}"
+    # Split as `read -a` does, without a here-string per segment (a temp
+    # file each in bash 3.2) and with no glob expansion.
+    set -f
+    # shellcheck disable=SC2206 # word splitting is the point; globbing is off
+    words=($seg) kwords=($kseg)
+    set +f
     if [ "${#kwords[@]}" -lt 3 ] || [ "${#kwords[@]}" -ne "${#words[@]}" ]; then
       continue
     fi
     decoded=()
-    for w in "${kwords[@]}"; do decoded+=("$(decode_word "$w")"); done
+    for w in "${kwords[@]}"; do
+      decode_word_to w "$w"
+      decoded+=("$w")
+    done
     i=$(script_word "${decoded[@]}") || continue
     [ $((i + 2)) -lt "${#words[@]}" ] || continue
     [ "${decoded[$i]##*/}" = session-event.sh ] || continue
     [ "${words[$((i + 1))]}" = implement ] || continue
     case "${words[$((i + 2))]}" in start|stop) printf '%s\n' "${words[$((i + 2))]}" ;; esac
-  done < <(printf '%s' "$1" | sanitize_command | split_segments) \
-       3< <(printf '%s' "$1" | sanitize_command keep | split_segments)
+  done <<< "$SCAN_PLAIN" 3<<< "$SCAN_KEEP"
   return 0
 }
 
@@ -737,9 +1009,10 @@ elif [ -n "$COMMAND" ]; then
   # session id in the cwd's checkout, once (at PostToolUse).
   if [ "$PRE" = 0 ] && [[ "$COMMAND" == *session-event.sh*implement* ]] && IMPLEMENT_HOME=$(session_home "$BASE_DIR") \
       && session_tracked_at "$IMPLEMENT_HOME" "$(checkout_root "$BASE_DIR" || true)"; then
+    scan_command keep
     while IFS= read -r state; do
       session_append "$IMPLEMENT_HOME" "$SESSION_ID" "{\"t\":\"implement\",\"state\":\"$state\"}" || true
-    done < <(implement_requests "$COMMAND")
+    done < <(implement_requests)
   fi
 
   # Cheap gate before the full scan: a write verb or a redirect at some
@@ -748,11 +1021,19 @@ elif [ -n "$COMMAND" ]; then
     '^([^[:space:]]*/)?(sed|perl|tee|mv|cp|rsync|install|patch)([[:space:]]|$)'
     '>{1,2}[[:space:]]*[^&[:space:]]'
   )
-  [ -n "$(find_matching_segment "$COMMAND" "${WRITE_PATTERNS[@]}")" ] || exit 0
+  segment_matches "${WRITE_PATTERNS[@]}" || exit 0
 
+  # Each file once, in first-seen order: a command that appends to the same
+  # file in every statement writes it once as far as the ledger is concerned
+  # (one snapshot before, one after).
+  scan_command keep
+  SEEN=$'\n'
   while IFS= read -r p; do
-    [ -n "$p" ] && TARGETS+=("$p")
-  done < <(bash_write_targets "$COMMAND")
+    [ -n "$p" ] || continue
+    case "$SEEN" in *$'\n'"$p"$'\n'*) continue ;; esac
+    SEEN="$SEEN$p"$'\n'
+    TARGETS+=("$p")
+  done < <(bash_write_targets)
 
   # Parameter expansion, not `printf | tr | head -c`: head exits after 120
   # bytes, tr dies of SIGPIPE on a long command (a heredoc write), and under
@@ -767,7 +1048,7 @@ fi
 [ "${#TARGETS[@]}" -gt 0 ] || exit 0
 
 # The cwd's checkout and its tracked session home, for a write into a
-# nested untracked clone (ledger_add). Empty when the cwd is in no tracked
+# nested untracked clone (ledger_home_to). Empty when the cwd is in no tracked
 # project.
 CWD_ROOT="" CWD_HOME=""
 if CWD_ROOT=$(checkout_root "$BASE_DIR") && CWD_HOME=$(session_home "$CWD_ROOT") \
@@ -783,14 +1064,10 @@ CODE_PATHS=()
 for p in "${TARGETS[@]}"; do
   # PostToolUse runs after the write, so the parent normally exists; the
   # nearest existing directory keeps resolution working when it does not.
-  anchor=$(existing_dir "$(dirname "$p")") || continue
-  root=$(checkout_root "$anchor") || continue
-  case "$p" in
-    "$root"/*) rel="${p#"$root"/}" ;;
-    *) continue ;;
-  esac
+  target_root "$p" || continue
+  root="$ROOT" rel="$REL"
   if [ "$PRE" = 1 ]; then
-    snapshot_pre "$root" "$rel"
+    pend_write "" "$root" "$rel"
     continue
   fi
   load_settings "$root"
@@ -800,8 +1077,9 @@ for p in "${TARGETS[@]}"; do
     CODE_ROOTS+=("$root")
     CODE_PATHS+=("$p")
   fi
-  ledger_add "$kind" "$root" "$rel"
+  pend_write "$kind" "$root" "$rel"
 done
+record_pending
 [ "$PRE" = 0 ] || exit 0
 
 # One log per checkout the code writes landed in, in first-seen order.
