@@ -12,18 +12,19 @@ description: "Use when a feature has an approved spec.md and tech-spec.md and ne
 
 ## When to Use
 
-Check these gates in order:
+Check these gates in order. Read each document's `status:` frontmatter before writing anything; a gate that says Stop means no plan file is written and nothing is handed off.
 
-1. **Have `tech-spec.md`?** → No: run `/myspec:feature-tech-spec` first. Stop.
-2. **Tech-spec approved (or user confirms draft)?** → No: get approval first. Stop.
-3. **Feature in `${aiDir}/features/`?** → No: create a spec first with `/myspec:feature-spec`. Stop.
+1. **Feature in `${aiDir}/features/`?** → No: create a spec first with `/myspec:feature-spec`. Stop.
+2. **Have `tech-spec.md`?** → No: run `/myspec:feature-tech-spec` first. Stop.
+3. **`spec.md` is `status: approved`?** → No: say the spec is not approved, route to `/myspec:feature-spec-review` (it sets the status), and stop. There is no override: the tech-spec and the plan both build on the approved requirements.
+4. **`tech-spec.md` is `status: approved`?** → `draft`: ask with `AskUserQuestion` whether to plan from the draft, with two options and neither marked `(Recommended)`: "Plan from the draft tech-spec" and "Stop — review it first (`/myspec:feature-tech-spec-review`)". Proceed only on an explicit "Plan from the draft" answer given in this session. The request to write a plan is not that answer. With no answer, or no way to ask (non-interactive run), say the tech-spec is not approved and stop. Autopilot does not answer this gate ([`_shared/autopilot.md`](../_shared/autopilot.md): no recommended option).
 
 All gates pass → proceed to Workflow Step 1.
 
 ## Prerequisites
 
 - `${aiDir}/features/{feature}/spec.md` exists with `status: approved`
-- `${aiDir}/features/{feature}/tech-spec.md` exists with `status: approved` or `status: draft` (user confirms ready)
+- `${aiDir}/features/{feature}/tech-spec.md` exists with `status: approved`, or `status: draft` that the user explicitly confirmed at gate 4
 - For sub-features: `${aiDir}/features/{parent}/{subfeature}/tech-spec.md`
 
 ## Workflow

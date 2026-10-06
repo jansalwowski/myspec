@@ -96,15 +96,15 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 | `feature-plan-gate` | procedure | spec and tech-spec still `status: draft` → feature-plan stops at its gate: no plan written, the reply says they are not approved (a3562ed) |
 | `feature-implement-dispatch` | orchestration | approved 2-task plan → feature-implement dispatches the Task 1 implementer Agent (matched on its prompt, not any Agent) before any `app/` or `tests/` Write (9ed2ed9); graded on the start of the run |
 
-`nearmiss-personal-preference` is a `capability` case until it has been run across releases, and so is `trigger-feature-spec-scenarios` (added with #264, not yet run). So are the three feature-plan and feature-implement cases (Sonnet, 2026-09-29):
+`nearmiss-personal-preference` is a `capability` case until it has been run across releases, and so is `trigger-feature-spec-scenarios` (added with #264, not yet run). So are two of the three feature-plan and feature-implement cases (Sonnet, 2026-09-29):
 
 - `feature-plan-coverage` passed 6 of 6.
-- `feature-plan-gate` wrote a plan from draft documents in 4 of 4 (#173).
 - `feature-implement-dispatch` dispatched the implementer in 5 of 6. In the sixth, the controller wrote both tasks itself (#174). `dispatch-before-source-write` also fails when the implementer writes no file at all: in 1 of 3 runs its Bash heredoc was denied and it reported BLOCKED.
 - None of the three is graded on more than read-only git. Listing `Bash` in `allowed_tools` grants only what `run.sh --allow-tools` grants every case: the git read verbs, including `git merge-base`, plus read-only shell commands. Prototypes, `pytest`, commits and the orchestration marker are denied.
 - feature-plan's base check (`git merge-base --is-ancestor`) is therefore not graded. 5 of 6 coverage runs skipped it; the sixth ran it inside a compound command that was denied, then planned anyway.
 
-One case started in `capability` and moved to `regression` once a description fix made it fire:
+Two cases started in `capability` and moved to `regression` once a skill fix made them pass:
+- `feature-plan-gate`: feature-plan wrote a plan from draft documents in 4 of 4 runs on v3 (#173). Once its gates refused a draft spec and asked about a draft tech-spec with no recommended option, it stopped in 6 of 6.
 - `trigger-memorize`: Claude Code's built-in auto-memory took "remember this" prompts (0 of 7 runs fired). Once memorize's description claimed project facts over auto-memory, it fired in 10 of 10.
 
 ## Project instructions
