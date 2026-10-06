@@ -104,12 +104,8 @@ has "$SID-5" "code src/b.ts" && ok || fail "a deleted code file is a code write 
 git -C "$REPO" checkout -q -- src/b.ts
 
 # --- the capture lives for the call only -----------------------------------------
-[ ! -e "$STATE/$SID-5.bash/$CALL" ] && ok || fail "the capture is gone after PostToolUse"
+ls "$STATE/$SID-5.bash/$CALL".* >/dev/null 2>&1 && fail "the capture is gone after PostToolUse" || ok
 tail -1 "$STATE/bash-calls.log" | grep -q " end $SID-5 $CALL\$" && ok || fail "the call's end is in the call log"
-mkdir -p "$STATE/$SID-5.bash/toolu_stale"
-touch -t 200001010000 "$STATE/$SID-5.bash/toolu_stale"
-bashcall "$SID-5" "true"
-[ ! -e "$STATE/$SID-5.bash/toolu_stale" ] && ok || fail "a capture older than an hour is swept at PreToolUse"
 
 # --- a linked worktree reached by cd ------------------------------------------------
 WT="$ROOT/wt"
@@ -185,8 +181,14 @@ mark "$SID-16" PostToolUse "$CMD"
 has "$SID-16" "file docs/o.md" && ok || fail "a call whose start was rotated to bash-calls.log.old is still diffed (got: $(written "$SID-16"))"
 rm -f "$REPO/docs/o.md"
 head -c 300000 /dev/zero | tr '\0' 'x' > "$LOG"
+mkdir -p "$STATE/$SID-17.bash"
+: > "$STATE/$SID-17.bash/toolu_stale.0"
+touch -t 200001010000 "$STATE/$SID-17.bash/toolu_stale.0"
+: > "$STATE/$SID-17.bash/toolu_fresh.0"
 bashcall "$SID-17" "true"
 [ "$(wc -l < "$LOG" | tr -d ' ')" = 2 ] && ok || fail "a log past 256 KiB is rotated at the next start"
+[ ! -e "$STATE/$SID-17.bash/toolu_stale.0" ] && ok || fail "the rotation sweeps a capture older than an hour"
+[ -e "$STATE/$SID-17.bash/toolu_fresh.0" ] && ok || fail "the rotation keeps a younger capture"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

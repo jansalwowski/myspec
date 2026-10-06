@@ -23,28 +23,42 @@
 # writes it finds. Its writes are the command scanner's alone.
 STATUS_DIFF_MAX=${STATUS_DIFF_MAX:-2000}
 
-# status_entries <root> -> the changed and untracked files of the checkout,
-# one NUL-terminated repo-relative path each, sorted: tracked files that
-# differ from HEAD or the index, deletions included, and untracked files
-# that are not ignored. A submodule or a nested repository is left out.
-# The caller has checked that <root> is a work tree (status_head).
-status_entries() {
-  GIT_OPTIONAL_LOCKS=0 git -C "$1" status --porcelain -z --untracked-files=all \
-    --no-renames --ignore-submodules=all 2>/dev/null \
-    | jq -Rsrj 'split("\u0000") | map(select(length > 3) | .[3:] | select(endswith("/") | not))
-        | unique | map(. + "\u0000") | add // ""' 2>/dev/null || true
-}
-
-# status_head <root> -> HEAD's commit id ("" on an unborn branch); fails
-# when git cannot read <root> as a work tree. One git call.
-status_head() {
-  local out
-  out=$(GIT_OPTIONAL_LOCKS=0 git -C "$1" rev-parse --is-inside-work-tree -q --verify HEAD 2>/dev/null) || true
-  [ "${out%%$'\n'*}" = true ] || return 1
-  case "$out" in
-    *$'\n'*) printf '%s\n' "${out#*$'\n'}" ;;
-    *) printf '\n' ;;
-  esac
+# status_read <root> -> sets ST_HEAD to HEAD's commit id ("" on an unborn
+# branch) and ST_RELS to the changed and untracked files of the checkout,
+# repo-relative: tracked files that differ from HEAD or the index,
+# deletions and conflicts included, and untracked files that are not
+# ignored. A submodule or a nested repository is left out. One `git status
+# --porcelain=v2 --branch` call, read here: each process costs a Bash call
+# milliseconds, twice. Fails when git cannot read <root> as a work tree (no
+# branch header). Runs in the caller's shell, so the caller must not read it
+# through a subshell.
+ST_HEAD=""
+ST_RELS=()
+status_read() {
+  local rec n i ok=1
+  ST_HEAD=""
+  ST_RELS=()
+  while IFS= read -r -d '' rec; do
+    case "$rec" in
+      '# branch.oid '*)
+        ok=0
+        ST_HEAD="${rec#'# branch.oid '}"
+        [ "$ST_HEAD" != '(initial)' ] || ST_HEAD=""
+        continue
+        ;;
+      '1 '*) n=8 ;;
+      'u '*) n=10 ;;
+      '? '*) n=1 ;;
+      *) continue ;;
+    esac
+    # The fields before the path are fixed in number, so a path with a
+    # space keeps it.
+    for ((i = 0; i < n; i++)); do rec="${rec#* }"; done
+    case "$rec" in */) continue ;; esac
+    ST_RELS+=("$rec")
+  done < <(GIT_OPTIONAL_LOCKS=0 git -C "$1" status --porcelain=v2 -z --branch --untracked-files=all \
+    --no-renames --ignore-submodules=all 2>/dev/null || true)
+  return "$ok"
 }
 
 # status_hash <root> <write: 0|1> <rel>... -> one line per path: the blob id
@@ -91,13 +105,12 @@ status_hash() {
 # object store: the before side of a content check. Fails when git cannot
 # read the checkout.
 status_capture() {
-  local root="$1" keep="${2:-}" head rel n=0 h
+  local root="$1" keep="${2:-}" head rel n h
   local -a rels=() kept=() plain=() hashes=()
-  head=$(status_head "$root") || return 1
-  while IFS= read -r -d '' rel; do
-    rels+=("$rel")
-    n=$((n + 1))
-  done < <(status_entries "$root")
+  status_read "$root" || return 1
+  head="$ST_HEAD"
+  n=${#ST_RELS[@]}
+  [ "$n" -eq 0 ] || rels=("${ST_RELS[@]}")
   if [ "$n" -gt "$STATUS_DIFF_MAX" ]; then
     printf '%s\0%s\0%s\0' "$root" "$head" 1
     return 0
@@ -141,10 +154,15 @@ status_changes() {
     done
   } < "$cap"
   [ "$capped" = 0 ] || return 1
-  status_head "$root" >/dev/null || return 1
-  while IFS= read -r -d '' rel; do
-    now+=("$rel")
-  done < <(status_entries "$root")
+  status_read "$root" || return 1
+  [ "${#ST_RELS[@]}" -eq 0 ] || now=("${ST_RELS[@]}")
+  # Nothing changed before: every file changed now is new, with no jq.
+  # Nothing either side: nothing written (the usual Bash call).
+  if [ "${#pre[@]}" -eq 0 ]; then
+    [ "${#now[@]}" -gt 0 ] || return 0
+    status_head_blobs "$root" "$head" "${now[@]}"
+    return 0
+  fi
   # Which files need a look: jq sorts it out, so a dirty tree costs one
   # process, not a scan per file. Its arguments: the number of capture
   # fields, the capture's path/hash pairs, the paths changed now (a count,

@@ -995,7 +995,7 @@ SESSION
 
 # The status diff (lib/status-diff.sh, #276): at PreToolUse each checkout a
 # Bash call reaches is captured, under
-# <session dir>/<session_id>.bash/<tool_use_id>/ in the cwd's home; at
+# <session dir>/<session_id>.bash/<tool_use_id>.<n> in the cwd's home; at
 # PostToolUse (or PostToolUseFailure) what changed since is added to what the
 # command scanner read. The scanner stays for what the diff cannot see: a
 # gitignored file, a project without git, a call with no capture.
@@ -1023,24 +1023,28 @@ diff_keep() {
 # <session_id> <tool_use_id>`), so concurrent sessions' lines never
 # interleave. The order of the lines is the order of the calls, with no clock
 # to compare: that is what diff_overlap reads. Past 256 KiB the log becomes
-# bash-calls.log.old (a rename, atomic) and a new one starts.
+# bash-calls.log.old (a rename, atomic) and a new one starts; then, too,
+# captures older than an hour go (calls whose PostToolUse never came), so
+# the sweep costs no process on every call. <epoch> is NOW.
 diff_log() {
   local log="$BASH_DIRS/bash-calls.log" size
   if [ "$1" = start ] && [ -f "$log" ]; then
     size=$(wc -c < "$log" 2>/dev/null || printf 0)
-    [ "${size// /}" -le 262144 ] || mv -f -- "$log" "$log.old" 2>/dev/null || true
+    if [ "${size// /}" -gt 262144 ]; then
+      mv -f -- "$log" "$log.old" 2>/dev/null || true
+      find "${BASH_DIRS:?}" -mindepth 2 -maxdepth 2 -path '*.bash/*' -mmin +60 -exec rm -f {} + 2>/dev/null || true
+    fi
   fi
-  printf '%s %s %s %s\n' "$(date +%s)" "$1" "$SESSION_ID" "$TOOL_USE_ID" >> "$log" 2>/dev/null || true
+  printf '%s %s %s %s\n' "$NOW" "$1" "$SESSION_ID" "$TOOL_USE_ID" >> "$log" 2>/dev/null || true
 }
 
 # diff_capture <dir>...: logs the call's start, then captures the checkout of
-# each directory that files with a tracked home, once each, as files 0, 1,
-# ... in CALL_DIR. Also sweeps call directories older than an hour (a call
-# whose PostToolUse never came).
+# each directory that files with a tracked home, once each, as
+# <CALL>.0, <CALL>.1, ... in the session's .bash directory (made once per
+# session, not per call).
 diff_capture() {
   local d root home n=0 done_roots=$'\n' done_dirs=$'\n'
-  find "${BASH_DIRS:?}" -mindepth 2 -maxdepth 2 -path '*.bash/*' -mmin +60 -exec rm -rf {} + 2>/dev/null || true
-  mkdir -p "${CALL_DIR:?}" 2>/dev/null || return 0
+  [ -d "${CALL%/*}" ] || mkdir -p "${CALL%/*}" 2>/dev/null || return 0
   diff_log start
   for d in "$@"; do
     # Each directory once: a command writing many files in one directory
@@ -1056,8 +1060,8 @@ diff_capture() {
     case "$done_roots" in *$'\n'"$root"$'\n'*) continue ;; esac
     done_roots="$done_roots$root"$'\n'
     ledger_home_to home "$root" || continue
-    if ! status_capture "$root" diff_keep > "${CALL_DIR:?}/$n" 2>/dev/null; then
-      rm -f -- "${CALL_DIR:?}/$n"
+    if ! status_capture "$root" diff_keep > "${CALL:?}.$n" 2>/dev/null; then
+      rm -f -- "${CALL:?}.$n"
       continue
     fi
     n=$((n + 1))
@@ -1074,7 +1078,7 @@ diff_capture() {
 # parent's session id, so its calls are this session's own.
 diff_overlap() {
   local log="$BASH_DIRS/bash-calls.log"
-  { cat -- "$log.old" "$log" 2>/dev/null || true; } | awk -v sid="$SESSION_ID" -v id="$TOOL_USE_ID" -v now="$(date +%s)" '
+  { cat -- "$log.old" "$log" 2>/dev/null || true; } | awk -v sid="$SESSION_ID" -v id="$TOOL_USE_ID" -v now="$NOW" '
     $3 == sid && $4 == id && $2 == "start" {
       found = 1
       for (k in open) if (open[k] >= now - 900) busy = 1
@@ -1089,14 +1093,14 @@ diff_overlap() {
 
 # diff_targets: adds each file the status diff found to TARGETS (and its
 # content before the call to DIFF_PATHS / DIFF_BEFORE), then closes the call:
-# its captures go, and its end goes to the call log.
+# its capture files go, and its end goes to the call log.
 DIFF_PATHS=()
 DIFF_BEFORE=()
 diff_targets() {
   local cap rel before p
-  [ -d "$CALL_DIR" ] || return 0
-  if [ -f "$CALL_DIR/0" ] && ! diff_overlap; then
-    for cap in "$CALL_DIR"/*; do
+  [ -f "$CALL.0" ] || return 0
+  if ! diff_overlap; then
+    for cap in "$CALL".[0-9]*; do
       [ -f "$cap" ] || continue
       while IFS= read -r -d '' p && IFS= read -r -d '' rel && IFS= read -r -d '' before; do
         p="$p/$rel"
@@ -1112,7 +1116,7 @@ diff_targets() {
       done < <(status_changes "$cap" | diff_with_root "$cap")
     done
   fi
-  rm -rf -- "${CALL_DIR:?}"
+  rm -f -- "${CALL:?}".[0-9]*
   diff_log end
 }
 
@@ -1239,7 +1243,8 @@ elif [ -n "$COMMAND" ]; then
     # shellcheck source=lib/status-diff.sh
     . "$HOOK_LIB/status-diff.sh"
     BASH_DIRS=$(session_dir "$CWD_HOME")
-    CALL_DIR="$BASH_DIRS/$SESSION_ID.bash/$TOOL_USE_ID"
+    CALL="$BASH_DIRS/$SESSION_ID.bash/$TOOL_USE_ID"
+    NOW=$(date +%s)
     if [ "$PRE" = 1 ]; then
       diff_capture ${REACH[@]+"${REACH[@]}"}
     else
