@@ -180,7 +180,7 @@ After every phase in Milestone 1 passes, the skill runs the milestone verificati
 > NEED: the scratch Redis at `$REDIS_URL` running
 > Verdict: PROBES_BLOCKED
 
-The scratch Redis was never started. The controller does not rerun P2 against the default Redis, and does not count the green integration test as a substitute — it puts the `NEED:` line to the user. The user starts the scratch Redis and picks **fix**; nothing in the code needs changing, so the executor is re-dispatched with the same probes, returns `PROBES_PASSED` with the post-run check showing the real database and queue untouched, and each probe line goes into the Execution Log. Then the checkpoint pauses:
+The scratch Redis was never started. The controller does not rerun P2 against the default Redis, and does not count the green integration test as a substitute — it puts the `NEED:` line to the user. The user starts the scratch Redis and picks **fix**; nothing in the code needs changing, so the executor is re-dispatched with the same probes, returns `PROBES_PASSED` with the post-run check showing the real database and queue untouched, and each probe line goes into the Execution Log. (A project that sets `probes.scratchEnvScript` in `.myspec.json` avoids this round trip: the controller passes the script to the executor, which runs it before the first writing probe and reports its exit status ahead of the checklist, so the scratch Redis is started the same way on every run. This project sets none, so the executor reports "no script".) Then the checkpoint pauses:
 
 > ═══ Milestone 1 complete: Scheduled Reports core CRUD + cron infra ═══
 >

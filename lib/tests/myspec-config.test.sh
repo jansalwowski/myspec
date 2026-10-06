@@ -340,6 +340,27 @@ for (const f of files) {
     if (!keyCovered(m[2])) { problems.push(`${rel}: reads .myspec.json key ${m[2]}, which has no schema entry`); }
   }
 }
+// A key the schema records ahead of its reader says so in its description
+// ("Recorded by the schema since 3.0; reading it … is #N"). The note and the
+// shipped files must agree: a key some skill, hook or lib script names has a
+// reader, so its note is stale. The other direction is checked on the probes
+// block, whose keys are read by their full name from skill prose: one nobody
+// names, with no note, claims a reader that does not exist (#196, #197).
+const shipped = [];
+const walkAll = (dir) => {
+  for (const name of readdirSync(dir)) {
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) { if (name !== 'tests' && name !== 'node_modules') { walkAll(p); } }
+    else if (/\.(sh|mjs|md|json)$/.test(name) && !p.endsWith('myspec-config.schema.json')) { shipped.push(readFileSync(p, 'utf8')); }
+  }
+};
+for (const dir of ['skills', 'hooks', 'lib', 'framework-files', 'blueprints']) { walkAll(join(plugin, dir)); }
+for (const [key, entry] of Object.entries(schema.keys)) {
+  const pending = /Recorded by the schema since [\d.]+; .* is #\d+/.test(entry.description ?? '');
+  const read = shipped.some((text) => text.includes(key));
+  if (pending && read) { problems.push(`${key}: the schema says nothing reads it yet, but a shipped file names it`); }
+  if (!pending && !read && /^probes\./.test(key)) { problems.push(`${key}: no shipped file reads it; mark it "Recorded by the schema since 3.0; reading it is #N"`); }
+}
 console.log(problems.length ? problems.join('\n') : `ok ${rows} rows`);
 JS
 CATALOGUE=$(node "$ROOT/catalogue.mjs" "$SCHEMA" "$DOC" "$PLUGIN" 2>&1)

@@ -135,8 +135,9 @@ pin a framework file by hand, run
 `.myspec.json` is schema version 2. Every key it may hold is in
 `lib/myspec-config.schema.json`, and `/myspec:doctor` reports any other as
 `setting-unknown-key`. A `mockups` block is a setting now, so the doctor stops
-warning on it. `orchestration.featureImplement`, `probes.portSource` and
-`probes.scratchEnvScript` are recorded by the schema but not read yet.
+warning on it. `probes.scratchEnvScript` names a script the probe executor
+runs before the first probe that writes. `orchestration.featureImplement` and
+`probes.portSource` are recorded by the schema but not read yet.
 
 ### 8. Old skill names
 

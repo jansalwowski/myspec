@@ -47,7 +47,12 @@ Task tool (general-purpose):
     3. Before any probe that writes (every `[demo]` and `[real-input]`
        probe, and any probe that mutates data), complete the checklist in
        [SCRATCH_CHECKLIST path], using the Scratch env line
-       above for concrete values. A check you cannot complete makes those
+       above for concrete values. When Scratch env script below names a
+       script, run it once from the working directory first, with the
+       Scratch env line's variables exported, and report the command, its
+       exit status and the tail of its output; it provisions the scratch
+       systems, and the checklist still verifies them. A script that is
+       missing or exits non-zero makes the writing probes BLOCKED. A check you cannot complete makes those
        probes BLOCKED. After the run, do the post-run checks; a real system
        that changed is a FAIL of the whole run, reported first.
     4. `[real-input]` probes compare against the stated expectation. When
@@ -71,11 +76,16 @@ Task tool (general-purpose):
 
     [Replacement Target address from the user, or "none"]
 
+    ## Scratch env script
+
+    [Repo-relative path from probes.scratchEnvScript, or "none"]
+
     ## Report
 
     ### Scratch isolation
-    Checks 1-6 from the checklist, each with the command and its literal
-    output, or "not applicable — no writing probe".
+    The scratch env script's command, exit status and output tail, or
+    "no script". Then checks 1-6 from the checklist, each with the command
+    and its literal output, or "not applicable — no writing probe".
 
     ### Probes
     One line per probe, in plan order, labelled as the plan labels it
@@ -102,6 +112,7 @@ Task tool (general-purpose):
 - `[absolute path]` — the controller's checkout for this feature
 - `[BASE_SHA]` — recorded in Step 2; used only by `[real-input]` probes
 - `[Target override]` — an address the user gave in answer to a `NEED:` line; "none" otherwise
+- `[Scratch env script]` — the value of `"${CLAUDE_PLUGIN_ROOT}/lib/myspec-config.sh" get probes.scratchEnvScript`, unquoted; "none" when it prints `null`, and the executor then builds the scratch environment from the Scratch env line alone, as before the key existed
 - `[PROVISIONING path]` — `../_shared/worktree-provisioning.md`, resolved or pasted like the scratch checklist; used only by `[real-input]` probes
 - `[SCRATCH_CHECKLIST path]` — `../_shared/scratch-isolation.md` resolved to an absolute path from this skill's directory (the executor runs in the project checkout, where the plugin's files do not live); paste the file's contents instead when the path is not readable from there
 
