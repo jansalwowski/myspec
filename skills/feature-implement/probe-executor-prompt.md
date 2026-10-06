@@ -17,8 +17,8 @@ Task tool (general-purpose):
     ## Probes
 
     [The milestone's Checkpoint probes block, copied verbatim from the plan
-    — Target line, Scratch env line, Scratch setup line if any, and every
-    probe line]
+    — Target line, Ports line if any, Scratch env line, Scratch setup
+    line if any, and every probe line]
 
     ## Working directory
 
@@ -32,7 +32,15 @@ Task tool (general-purpose):
        handle it names does not exist — that probe is BLOCKED. Report the exact command and error, and move on to the
        next probe. Never report a verdict you did not observe. The one
        permitted edit: when Target override below names an address, use
-       it wherever a probe uses the Target's.
+       it wherever a probe uses the Target's. When the block has a Ports
+       line, resolve each slot it names from that source before starting
+       the target — from the file at that repo-relative path in the
+       working directory, or from the environment variable a `$NAME`
+       source names — and export it under the slot's name, so `$<slot>`
+       in Target and the probes reads this checkout's port. A source or
+       slot that does not resolve makes every probe BLOCKED, with a
+       `NEED:` line naming it (rule 6). No Ports line: use the addresses
+       as written.
     2. Never edit, create, or delete files in the working tree, and never
        change git state beyond rule 4's base worktree. You may start the
        target, run the probe commands, and write artifacts under one temp
