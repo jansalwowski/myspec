@@ -22,7 +22,7 @@ execution:
 
     # Auto-Memory Style Guide
 
-    Governs entries in the harness-managed user-level auto-memory store at `~/.claude-personal/projects/<encoded_cwd>/memory/`. Project-level myspec memory under `.ai/memory/` is out of scope — it has its own typed templates and `.claude/rules/memory-system.md`.
+    Governs entries in the harness-managed user-level auto-memory store at `<config_dir>/projects/<encoded_cwd>/memory/` (`<config_dir>` is `$CLAUDE_CONFIG_DIR`, default `~/.claude`). Project-level myspec memory under `.ai/memory/` is out of scope — it has its own typed templates and `.claude/rules/memory-system.md`.
 
     The lesson is the **rule** plus the **trigger** plus the **minimal pattern**; everything else is a token tax paid on every recall. The budget applies at creation time and during `/myspec:memory-sanitize` COMPRESS passes.
 
@@ -53,7 +53,7 @@ execution:
 
     # Agent Memory System
 
-    Governs the project-level memory under `.ai/memory/`. User-level auto-memory: `.claude/rules/auto-memory-style.md`. Always loaded, so it holds only triggers and contracts; procedures are in the skills, protocols in `.ai/pre-flight.md`.
+    Governs the project-level memory under `.ai/memory/`. User-level auto-memory: `.claude/rules/auto-memory-style.md`. Procedures are in the skills, protocols in `.ai/pre-flight.md`.
 
     ## Triggers
 
@@ -62,14 +62,14 @@ execution:
     | Session start | `/myspec:bootstrap` — Layer 1, memory health, session sweep; Layer 2 only when given a task |
     | Before significant work (new feature, multi-file change, debugging) | `/myspec:memory-preflight`, unless bootstrap already scanned Layer 2 for this task |
     | Before trivial work (single-file fix, typo, config) | Read `.ai/memory/index.md` only |
-    | First code edit | Automatic — `mark-code-changed.sh` creates `.claude/state/sessions/{session_id}.md`, shared with subagents, and appends every code path to its `## Files touched` — Bash writes included |
+    | First code edit | Automatic — `mark-code-changed.sh` appends every code path, Bash writes included, to `## Files touched` in `.claude/state/sessions/{session_id}.md`, shared with subagents |
     | Non-code session (debugging without edits, discovery, doc-only) | `/myspec:session-start` |
     | Repeated failure — same file edited 3+ times, same error after 2 different fixes, about to retry a failed approach | `/myspec:memory-lookup`, then pause and ask the user. Protocol and message template: `.ai/pre-flight.md` |
     | Debugging an unfamiliar error | `/myspec:memory-lookup` |
     | Work complete | `/myspec:session-complete` — extraction plus archive of your own session file only |
     | User says "remember / note / keep in mind …" | Project fact (environment, gotcha, decision, convention) → `/myspec:memorize`, not auto-memory. Personal preference (style, role) → auto-memory. `/memorize` always wins |
     | User approves a memory | `/myspec:memory-create` |
-    | Allocating a memory ID | `/myspec:memory-create` claims it (`memory-claim-id.sh`) — never read the index and pick a number; parallel sessions pick the same one. Exit 3 → fix the conformance errors it printed |
+    | Allocating a memory ID | `/myspec:memory-create` claims it (`memory-claim-id.sh`) — never pick a number from the index; parallel sessions collide. Exit 3 → fix the conformance errors it printed |
     | After adding, removing, or superseding a memory | The skill that edited it regenerates the tables (`/myspec:memory-create`, `/myspec:memory-optimize`); never hand-write an index row. On an `index.md` merge conflict keep either side and regenerate |
     | Memory drift suspected | `/myspec:memory-optimize` — runs the doctor, which reports each disagreement and its fix |
     | Before reporting anything as done | Run the check and read the output first; "should work" is not a result |
@@ -88,7 +88,7 @@ execution:
 
     | Aspect | Convention |
     |--------|-----------|
-    | Live file | `.claude/state/sessions/{session_id}.md` in the **main checkout** of the repo the edited file belongs to — gitignored, never inside a linked worktree (where `git worktree remove` destroys it) |
+    | Live file | `.claude/state/sessions/{session_id}.md` in the edited file's **main checkout** — gitignored, never in a linked worktree (`git worktree remove` would destroy it) |
     | Own session | The live file whose `## Files touched` lists a path you edited untagged, or tags your subagent; several or none → newest mtime, and confirm. You never see your session id; never pass this one to `set-isolation.sh` |
     | Archive file | `.ai/memory/sessions/archive/YYYY-MM-DD-{slug}.md`; topic-less sweeps use `orphaned-{first 8 of session_id}` |
     | Terminal statuses | `completed` (via `/myspec:session-complete`) or `abandoned` (swept). Archive is a location, not a status |

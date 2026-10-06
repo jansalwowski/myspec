@@ -1,0 +1,17 @@
+{
+  "trailer-in-dispatch": {
+    "pass": [
+      [
+        { "tool": "Agent", "input": { "description": "Implement Task 1: Due-date rules", "subagent_type": "general-purpose", "model": "sonnet", "prompt": "You are implementing Task 1: Due-date rules\n\n## Commit Trailers\n\nEnd every commit message you write with these lines, verbatim:\n\nRefs: BILL-142\n\n## Report Format\nStatus: DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT" } }
+      ]
+    ],
+    "fail": [
+      [
+        { "tool": "Agent", "input": { "description": "Implement Task 1: Due-date rules", "subagent_type": "general-purpose", "model": "sonnet", "prompt": "You are implementing Task 1: Due-date rules\n\n4. Commit your work\n\n## Report Format\nStatus: DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT" } }
+      ],
+      [
+        { "tool": "Agent", "input": { "description": "Implement Task 1: Due-date rules", "subagent_type": "general-purpose", "prompt": "You are implementing Task 1: Due-date rules\n\nEnd every commit message with:\nCo-Authored-By: Claude <noreply@anthropic.com>\n\nStatus: DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT" } }
+      ]
+    ]
+  }
+}

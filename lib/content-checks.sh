@@ -90,14 +90,22 @@ ABSOLUTE_PATH_RE='(^|[^A-Za-z0-9._/-])(/Users/[A-Za-z][A-Za-z0-9._-]*|/home/[A-Z
 # a gitignored file (never committed), and the plugin's own files that define
 # the shapes.
 absolute_paths_scope() {
+  if git -C "$1" check-ignore -q -- "$2" 2>/dev/null; then
+    return 1
+  fi
+  absolute_paths_scope_unignored "$@"
+}
+
+# absolute_paths_scope_unignored <repo root> <repo-relative path> [aiDir] ->
+# absolute_paths_scope for a path the caller already knows is not gitignored:
+# a hook judging many files asks git about all of them in one call
+# (mark-code-changed.sh).
+absolute_paths_scope_unignored() {
   local root="$1" rel="$2" ai="${3:-}"
   case "$rel" in
     .git/*|*/.git/*) return 1 ;;
     lib/path-normalize.sh|lib/content-checks.sh) return 1 ;;
   esac
-  if git -C "$root" check-ignore -q -- "$rel" 2>/dev/null; then
-    return 1
-  fi
   case "$rel" in
     *.md|*.mdx|*.markdown|*.txt|*.rst|*.adoc|.claude/*|docs/*) return 0 ;;
   esac
@@ -130,8 +138,8 @@ absolute_path_findings() {
 
 # absolute_path_hint <match> <repo root> -> the replacement to suggest.
 absolute_path_hint() {
-  local match="$1" root="$2" rel rest first tail
-  local hint="use <repo_root>/<relative-path> for repo-internal paths, or ~/.claude-personal/projects/<encoded_cwd>/... for the harness memory dir"
+  local match="$1" root="$2" rel rest first dir
+  local hint="use <repo_root>/<relative-path> for repo-internal paths, or <config_dir>/projects/<encoded_cwd>/... for the harness memory store (<config_dir> is \$CLAUDE_CONFIG_DIR, default ~/.claude)"
   case "$match" in
     "$root"*)
       rel="${match#"$root"}"
@@ -143,19 +151,22 @@ absolute_path_hint() {
       fi
       ;;
   esac
-  if [ -n "${HOME:-}" ]; then
+  # The memory store under a Claude config dir: $CLAUDE_CONFIG_DIR, ~/.claude,
+  # or ~/.claude-personal (config_projects_rest in path-normalize.sh).
+  for dir in "${CLAUDE_CONFIG_DIR:-}" "${HOME:+$HOME/.claude}" "${HOME:+$HOME/.claude-personal}"; do
+    dir="${dir%/}"
+    [ -n "$dir" ] || continue
     case "$match" in
-      "$HOME"/.claude-personal/projects/*)
-        rest="${match#"$HOME"/.claude-personal/projects/}"
+      "$dir"/projects/?*)
+        rest="${match#"$dir"/projects/}"
         first="${rest%%/*}"
-        tail=""
-        if [ "$first" != "$rest" ]; then
-          tail="/${rest#"$first"/}"
-        fi
-        hint="replace with ~/.claude-personal/projects/<encoded_cwd>$tail"
+        rel=""
+        [ "$first" = "$rest" ] || rel="/${rest#"$first"/}"
+        hint="replace with <config_dir>/projects/<encoded_cwd>$rel"
+        break
         ;;
     esac
-  fi
+  done
   printf '%s\n' "$hint"
 }
 
@@ -251,11 +262,14 @@ REUSE_AUDIT_HEADING="Reuse audit"
 # in the tech-spec counts as a skip decision for the whole document.
 REUSE_AUDIT_MARKER_RE='<!--[[:space:]]*myspec:reuse-audit[[:space:]]+skip:'
 
-# reuse_audit_scope <path> -> 0 for a tech-spec.md under a features/ tree
-# (any aiDir prefix, sub-feature nesting allowed).
+# reuse_audit_scope <ai dir> <repo-relative path> -> 0 for a file named
+# exactly tech-spec.md under <ai dir>/features/, a sub-feature's included.
+# A plans/ tree holds dated copies, and `old-tech-spec.md` or a tech-spec.md
+# outside the aiDir (src/features/...) is not a feature's tech-spec (#165).
 reuse_audit_scope() {
-  case "$1" in
-    */features/*tech-spec.md) return 0 ;;
+  case "$2" in
+    "$1"/features/*/plans/*) return 1 ;;
+    "$1"/features/*/tech-spec.md) return 0 ;;
   esac
   return 1
 }

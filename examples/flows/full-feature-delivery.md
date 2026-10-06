@@ -192,7 +192,7 @@ The agent reads the approved spec, examines existing patterns (the notification-
 /myspec:feature-tech-spec-review scheduled-exports
 ```
 
-Builds the Requirement Coverage table (each spec.md requirement ID → implementation steps with a Fidelity verdict; an empty row is Critical, a step that narrows its requirement High), then verifies every acceptance criterion traces to a step, every step has a file path matching the inventory, every interface is defined, and — the Task-extractability dimension — each step is self-contained enough to hand to a single implementation task without cross-step guesswork. Passes. Status flipped to `approved`.
+Builds the Requirement Coverage table (each spec.md requirement ID → implementation steps with a Fidelity verdict; an empty row is Critical, a step that narrows its requirement High), then verifies every acceptance criterion traces to a step, every step has a file path matching the inventory, every interface is defined, and — the Task-extractability dimension — each step is self-contained enough to hand to a single implementation task without cross-step guesswork. One Medium: the design derives export files from report data but sets no `verification_mode`, so no milestone would get a probe on real data. The user leaves it unset for now; a Medium does not block. Passes. Status flipped to `approved`.
 
 ---
 
