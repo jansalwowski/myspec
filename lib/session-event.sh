@@ -191,6 +191,26 @@ session_append() {
   _session_write "$f" "$line"
 }
 
+# session_append_many <home> <session id>: session_append for each JSON value
+# on stdin, all with the same "at", from one jq call: a hook recording many
+# events at once (mark-code-changed.sh, a Bash command writing many files)
+# pays for one process, not one per event (#277). A value that is not an
+# object with a string "t" is dropped. Each line is still its own append.
+session_append_many() {
+  local f line first=1
+  f=$(session_file "$1" "$2") || return 1
+  while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    if [ "$first" = 1 ]; then
+      _session_write "$f" "$line" || return 1
+      first=0
+    else
+      printf '%s\n' "$line" >> "$f" || return 1
+    fi
+  done < <(jq -c --argjson at "$(date +%s)" \
+    'select(type == "object" and (.t | type) == "string") | . + {at: $at}' 2>/dev/null)
+}
+
 # session_query <home> <session id> <jq program over $ev, the event array>
 # [jq args...] -> the program's raw output; nothing when the file is absent.
 session_query() {
@@ -268,6 +288,22 @@ session_seen() {
       elif $e.t == "write" and $e.rel == $p and $e.kind == $k and ($e.agent // "") == $a
         and ($e.via // "") == $v then true
       else . end)' --arg k "$3" --arg r "$4" --arg p "$5" --arg a "$6" --arg v "${7:-}")" = true ]
+}
+
+# session_seen_many <home> <session id> <JSON array of [kind, root, rel,
+# agent, via]> -> the index of each entry session_seen would find, one per
+# line, from one read of the file: a hook recording many writes at once
+# asks once (#277).
+session_seen_many() {
+  session_query "$1" "$2" '
+    (reduce ($ev[] | select((.root | type) == "string")) as $e ({};
+      if $e.t == "verified" then del(.[$e.root])
+      elif $e.t == "write" then
+        .[$e.root][[$e.kind, $e.rel, ($e.agent // ""), ($e.via // "")] | tojson] = true
+      else . end)) as $s
+    | $c | to_entries[]
+    | select($s[.value[1]][[.value[0], .value[2], .value[3], .value[4]] | tojson] == true)
+    | .key' --argjson c "$3"
 }
 
 # session_isolation <home> <session id> -> sets ISO_MODE (develop, worktree,

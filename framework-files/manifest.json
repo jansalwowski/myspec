@@ -1,7 +1,9 @@
 {
-  "frameworkVersion": "2.12.0",
+  "frameworkVersion": "3.0.0",
   "upgradeFrom": "2.12.0",
-  "upgradeChain": ["1.28.0"],
+  "upgradeChain": [
+    "1.28.0"
+  ],
   "migrations": [
     "3.0.0-code-review",
     "3.0.0-plugin-hooks",

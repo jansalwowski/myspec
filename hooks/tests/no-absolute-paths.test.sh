@@ -102,7 +102,7 @@ expect_deny "non-doc file under .claude/"
 write_call "$REPO/docs/notes.html" "<p>$LEAK</p>"
 expect_deny "non-doc file under docs/"
 
-write_call "$REPO/CLAUDE.md" "Memory: ~/.claude-personal/projects/-Users-alice-work-proj/memory"
+write_call "$REPO/CLAUDE.md" "Memory: ~/.claude/projects/-Users-alice-work-proj/memory"
 expect_deny "encoded-cwd literal in a doc"
 
 mkdir -p "$REPO/docs"
