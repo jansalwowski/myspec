@@ -110,7 +110,9 @@ for root in "${VERIFY_ROOTS[@]}"; do
   attribute_begin
   config="$root/.claude/verification.json"
   [ -f "$config" ] || config="$CONFIG_FILE"
+  failed_from=${#FAILED_CWDS[@]}
   run_checks "$config"
+  deps_note "$root" "$failed_from"
   attribute_root
 done
 rm -f "$CAP_SENTINEL"

@@ -53,7 +53,7 @@ conformance_gates() {
 }
 
 # report_decision -> prints the decision and exits 0. Reads the run.sh
-# arrays, the attribute.sh notes and SCOPE_NOTES. Sets GATE_DECIDED=1 just
+# arrays, the attribute.sh notes, SCOPE_NOTES and DEPS_NOTES (provision.sh). Sets GATE_DECIDED=1 just
 # before the decision goes out: finish_run records `verified` only then, so a
 # hook that dies on the way (set -e) leaves its checkouts armed.
 report_decision() {
@@ -104,7 +104,13 @@ report_decision() {
       details+="${entry}"$'\n---\n'
     done
     details=${details%$'\n---\n'}
-    notes="${scope:+$scope$'\n\n'}"
+    # A dependency directory with nothing installed comes first: it is the
+    # likeliest reason for the failures under it (#239).
+    notes=""
+    for entry in ${DEPS_NOTES[@]+"${DEPS_NOTES[@]}"}; do
+      notes+="${entry}"$'\n\n'
+    done
+    notes+="${scope:+$scope$'\n\n'}"
     for entry in ${WARN_NOTES[@]+"${WARN_NOTES[@]}"}; do
       notes+="${entry}"$'\n\n'
     done
