@@ -95,12 +95,14 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 | `feature-plan-coverage` | artifact contract | feature-plan (Python fixture) writes implementation-plan.md whose Spec Coverage table maps every REQ ID to a task, including two no AC restates (837f68d), plus the Execution Order table feature-implement parses, and closes with the Step 4.6 `## Plan Self-Check` (#188) |
 | `feature-plan-gate` | procedure | spec and tech-spec still `status: draft` → feature-plan stops at its gate: no plan written, the reply says they are not approved (a3562ed) |
 | `feature-implement-dispatch` | orchestration | approved 2-task plan → feature-implement dispatches the Task 1 implementer Agent (matched on its prompt, not any Agent) before any `app/` or `tests/` Write (9ed2ed9); graded on the start of the run |
+| `feature-implement-probe-gate` | orchestration | both tasks `[x]`, Checkpoint probes not yet run → the Step 4b probe gate dispatches the plugin agent `myspec:probe-executor`, never a general-purpose subagent carrying the executor prompt (#171) |
 
-`nearmiss-personal-preference` is a `capability` case until it has been run across releases, and so is `trigger-feature-spec-scenarios` (added with #264, not yet run). So are two of the three feature-plan and feature-implement cases (Sonnet, 2026-09-29):
+`nearmiss-personal-preference` is a `capability` case until it has been run across releases, and so is `trigger-feature-spec-scenarios` (added with #264, not yet run). So are two of the three feature-plan and feature-implement cases (Sonnet, 2026-09-29), and `feature-implement-probe-gate`:
 
 - `feature-plan-coverage` passed 6 of 6.
 - `feature-implement-dispatch` dispatched the implementer in 5 of 6. In the sixth, the controller wrote both tasks itself (#174). `dispatch-before-source-write` also fails when the implementer writes no file at all: in 1 of 3 runs its Bash heredoc was denied and it reported BLOCKED.
-- None of the three is graded on more than read-only git. Listing `Bash` in `allowed_tools` grants only what `run.sh --allow-tools` grants every case: the git read verbs, including `git merge-base`, plus read-only shell commands. Prototypes, `pytest`, commits and the orchestration marker are denied.
+- `feature-implement-probe-gate` (Sonnet, 2026-10-06) dispatched `myspec:probe-executor` in 3 of 3 runs. On v3, where the executor was a general-purpose template, it did so in 0 of 3: the skill fired once and dispatched general-purpose, and the other two runs ran the probes in the controller. One branch run dispatched the agent without loading the skill, so `skill-fired` failed there. The prompt says only read-only git runs; without that line the controller stopped at the denied `pytest` before the gate.
+- None of these is graded on more than read-only git. Listing `Bash` in `allowed_tools` grants only what `run.sh --allow-tools` grants every case: the git read verbs, including `git merge-base`, plus read-only shell commands. Prototypes, `pytest`, commits and the orchestration marker are denied.
 - feature-plan's base check (`git merge-base --is-ancestor`) is therefore not graded. 5 of 6 coverage runs skipped it; the sixth ran it inside a compound command that was denied, then planned anyway.
 
 Two cases started in `capability` and moved to `regression` once a skill fix made them pass:

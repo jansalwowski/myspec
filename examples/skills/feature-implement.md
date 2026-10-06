@@ -173,7 +173,7 @@ Had the review returned Critical/Important findings, the fix loop would run: rou
 
 #### Milestone Checkpoint
 
-After every phase in Milestone 1 passes, the skill runs the milestone verification commands. The milestone carries a `**Checkpoint probes:**` block (the tech-spec sets `verification_mode: mixed`), so the controller dispatches one probe executor with that block verbatim and whole, and nothing else — no spec, no phase verdicts, no implementer reports. The executor works through the scratch-isolation checklist (separate database, a second Redis on its own port, a "before" fingerprint of the real database and queue; no bucket in this feature), runs each probe, and reports:
+After every phase in Milestone 1 passes, the skill runs the milestone verification commands. The milestone carries a `**Checkpoint probes:**` block (the tech-spec sets `verification_mode: mixed`), so the controller dispatches one `myspec:probe-executor` agent with that block verbatim and whole, the checkout path and base commit, and nothing else — no spec, no phase verdicts, no implementer reports. The agent has no Edit, Write, NotebookEdit or Agent tool and loads no project CLAUDE.md, so everything it needs to start the target comes from the block's Target and Scratch env lines. The executor works through the scratch-isolation checklist (separate database, a second Redis on its own port, a "before" fingerprint of the real database and queue; no bucket in this feature), runs each probe, and reports:
 
 > P1: PASS — observed: `201`, body `{"id":"sch_1","cadence":"WEEKLY_MONDAY"}` — artifact: `…/probe-artifacts.x7Q/p1.json`
 > P2: BLOCKED — observed: `ECONNREFUSED` on the scratch `REDIS_URL` — artifact: `…/probe-artifacts.x7Q/p2.log`

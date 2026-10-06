@@ -22,7 +22,7 @@ Updates framework-owned files in an existing project while preserving project cu
 
 Two checks before anything is read or written:
 
-1. **Host floor** (README "Installation" has the why): Claude Code 2.0.12 or later (`claude --version`; plugin `hooks.json`) and git 2.31 or later (`git --version`; the memory scripts). When either is older, stop with: "myspec 3.0 needs Claude Code ≥ 2.0.12 and git ≥ 2.31 (found {versions}). Update the host first."
+1. **Host floor** (README "Installation" has the why): Claude Code 2.1.288 or later (`claude --version`; the `myspec:probe-executor` agent's `disallowedTools`, enforced by name in agent teams from 2.1.288) and git 2.31 or later (`git --version`; the memory scripts). When either is older, stop with: "myspec 3.0 needs Claude Code ≥ 2.1.288 and git ≥ 2.31 (found {versions}). Update the host first."
 2. **No session in flight.** Print, once: "Finish open sessions before updating: in-flight 2.x session state is not imported." (`docs/stop-gate.md`, "Session writes": the 2.x ledger and markers are read by nothing in 3.0; `/myspec:session-complete` closes a session cleanly, and the leftover files are deleted by hand.)
 
 ### Step 1: Read Current Version

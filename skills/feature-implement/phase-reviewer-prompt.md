@@ -11,7 +11,7 @@ PKG=$(mktemp "${TMPDIR:-/tmp}/phase-review.XXXXXX")
 
 `PHASE_BASE` is the sha recorded before the phase's first dispatch — never `HEAD~1`, which silently drops all but the last commit of a multi-commit phase.
 
-Substitute the barrier verification log (`VERIFY_LOG`, SKILL.md Step 4a) and the spec requirement IDs the phase touches as well, plus `[SCRATCH_CHECKLIST path]` — `../_shared/scratch-isolation.md` resolved to an absolute path, as in `probe-executor-prompt.md`.
+Substitute the barrier verification log (`VERIFY_LOG`, SKILL.md Step 4a) and the spec requirement IDs the phase touches as well, plus `[SCRATCH_CHECKLIST path]` — `../_shared/scratch-isolation.md` resolved to an absolute path from this skill's directory (the reviewer runs in the project checkout, where the plugin's files do not live); paste the file's contents when that path is not readable from there.
 
 ```
 Task tool (general-purpose):

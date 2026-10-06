@@ -13,7 +13,7 @@ breaking changes are tracked in the
 | Requirement | Why |
 |---|---|
 | **myspec 2.12.0 or later** | 3.0 upgrades only from the last 2.x minor (RELEASING.md, "Upgrade base"). `update` refuses a lower version and names the whole route from the recorded one: below 1.28.0, update with `v1.28.0`, then `v2.12.0`, then 3.0; from 1.28.0 up to 2.12.0, `v2.12.0`, then 3.0. For each release, check out the plugin at its tag, start Claude with `--plugin-dir` pointing at that checkout and run `/myspec:update`. [upgrading-to-2.0.md](upgrading-to-2.0.md) covers the 1.x step. The route is the manifest's `upgradeChain` plus `upgradeFrom`, read by `lib/upgrade-route.mjs`. |
-| **Claude Code 2.0.12 or later** | The hooks run from the plugin's `hooks.json` with `${CLAUDE_PLUGIN_ROOT}`, which arrived in 2.0.12. README "Installation" lists the sources. |
+| **Claude Code 2.1.288 or later** | The milestone probe gate dispatches the plugin agent `myspec:probe-executor`, whose `disallowedTools` removes the edit tools. 2.1.288 is the release where a plugin agent spawned by name in agent teams runs with its own `disallowedTools` ("Fixed agent teams: a plugin-defined agent spawned by name now runs with its own prompt, tools, disallowedTools and effort instead of the defaults"); Agent-tool dispatch enforced it from 2.1.78 (2.1.119 for `--print`), and `omitClaudeMd` needs 2.1.271. The hooks' own needs top out at 2.0.12. README "Installation" lists the sources. |
 | **git 2.31 or later** | `git rev-parse --path-format=absolute`, which the memory scripts and the friction scan need. |
 | **jq 1.6 or later** | Unchanged from 2.x. |
 | **Claude Code, not Codex** | Codex support is gone (see [Codex support removed](#codex-support-removed)). |
