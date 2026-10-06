@@ -44,6 +44,8 @@ route-spec-review          sonnet  1.00   1/1    0/1    -       $0.14  33s
 
 Every run passes `--trust-plugin --scaffold --no-publish --judge-model sonnet --ablation none`, a tool grant (`Write`, `Edit`, and read-only `git` verbs), and a cost ceiling.
 
+The plugin under test is a temporary copy of the repo's tracked and untracked, not-ignored files, removed when the run ends, so uncommitted edits are evaluated and ignored local state is not. `claude plugin eval` refuses a plugin directory of more than 20000 entries, and the agent worktrees under `.claude/worktrees/` passed that on the 3.0.0 release (#311).
+
 | Variable | Default | Effect |
 |---|---|---|
 | `MYSPEC_EVALS_STRICT` | `0` | `1`: exit 1 when a case scores below the threshold |

@@ -7,7 +7,10 @@
 # an aggregate-result.json with one case per <plugin-dir>/evals/*/prompt.md
 # (filtered by --case), every run scoring the number in
 # <plugin-dir>/STUB_SCORE_<model> if present, else <plugin-dir>/STUB_SCORE,
-# and logs "EVAL HEAD|PREV <dir> <model> <case glob>". `-p` answers the
+# and logs "EVAL HEAD|PREV <dir> <model> <case glob>". HEAD is the run whose
+# plugin dir holds STUB_HEAD, an untracked file only the fixture's working
+# tree has (run.sh evaluates a snapshot of it, #311), and "IGNORED" is logged
+# when the plugin dir holds the fixture's gitignored local/ directory. `-p` answers the
 # model-id probe with stub-<model>-$STUB_MODEL_REV_<model> (default a), or
 # fails when STUB_PROBE_FAIL is set.
 #
@@ -49,7 +52,8 @@ if (a[0] === '-p') {
 }
 if (a[0] === 'plugin' && a[1] === 'eval') {
   const dir = a[2];
-  const isHead = dir === env.STUB_HEAD_ROOT;
+  const isHead = fs.existsSync(path.join(dir, 'STUB_HEAD'));
+  if (fs.existsSync(path.join(dir, 'local'))) log('IGNORED');
   const glob = opt('--case');
   log(`EVAL ${isHead ? 'HEAD' : 'PREV'} ${dir} ${opt('--model')} ${glob || '-'}`);
   const nap = isHead ? env.STUB_SLEEP_HEAD : env.STUB_SLEEP_PREV;
@@ -113,8 +117,10 @@ echo "# v1.1" >> evals/case-a/prompt.md
 git commit -qam v1.1.0 && git tag v1.1.0
 mkdir -p evals/case-f && echo "prompt f" > evals/case-f/prompt.md
 echo 0.5 > STUB_SCORE
+echo local/ > .gitignore
 git add -A && git commit -qm head
-export STUB_HEAD_ROOT="$REPO"
+touch STUB_HEAD
+mkdir -p local && touch local/clutter
 RC_SH="$REPO/scripts/evals/release-check.sh"
 B11="$REPO/quality/baselines/v1.1.0.json"
 B12="$REPO/quality/baselines/v1.2.0.json"
@@ -138,6 +144,12 @@ rc_run first --version 1.2.0 --models sonnet --runs 2
 expect_eq "exit 0: regressed but the gate is off" "$RC" 0
 expect_has "reason for the rerun is printed" "$OUTPUT" "baseline RERUN sonnet no stored baseline (v1.1.0.json)"
 expect_eq "HEAD ran once, the previous tag's whole suite once" "$(grep -c '^EVAL HEAD' "$STUB_LOG") $(prevs)" "1 sonnet:- "
+# #311: HEAD runs on a snapshot of the working tree, never the tree itself,
+# without its gitignored files, and the snapshot is gone afterwards.
+HEAD_DIR=$(grep '^EVAL HEAD' "$STUB_LOG" | head -1 | cut -d' ' -f3)
+expect_eq "HEAD evaluates a snapshot, not the working tree" "$([ "$HEAD_DIR" != "$REPO" ] && [ -n "$HEAD_DIR" ] && echo snapshot)" "snapshot"
+expect_eq "the snapshot leaves gitignored files out" "$(grep -c '^IGNORED' "$STUB_LOG")" "0"
+expect_eq "the snapshot is removed after the run" "$([ -e "$HEAD_DIR" ] && echo left || echo gone)" "gone"
 PREV_DIR=$(sed -n 's/^EVAL PREV \([^ ]*\) .*/\1/p' "$STUB_LOG")
 expect_has "previous tag ran from a temporary worktree" "$PREV_DIR" "myspec-release-check."
 expect_eq "the worktree is gone afterwards" "$([ -e "$PREV_DIR" ] && echo present || echo gone) $(worktrees) $(leftovers)" "gone 1 0"
