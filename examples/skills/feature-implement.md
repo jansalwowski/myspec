@@ -64,7 +64,7 @@ For T1 (migration):
 2. Dispatches one implementer subagent (`implementer-prompt.md`) with the task text inline — it never reads the plan file. The tier is named on the dispatch (`cheap` here: one file plus its test, fully specified in the task text). It also carries the commit trailers the controller's own instructions require (a harness attribution line, a project commit rule), verbatim, since the subagent never sees those instructions. The dispatch carries the task block's `**Verify at phase review:**` command (`pnpm test migrations/report_favorites`) and the file-scoped static checks (`pnpm eslint <touched files>`). The implementer writes the migration and its test, runs those two, commits with the task block's `**Commit:**` message and those trailers, self-reviews its own diff, and reports `DONE` with each command it ran and its result. It never runs the full suite, a build, or an install.
 3. The skill leaves T1 at `[~]` — the only route to `[x]` is the phase review.
 
-Repeats for T2–T6 in order, each leaving its checkbox at `[~]`. The implementer never spawns a reviewer of its own: review is the controller's job and is already scheduled.
+Repeats for T2–T6 in order, each leaving its checkbox at `[~]`. The implementer never spawns a reviewer of its own: review is the controller's job and is already scheduled. Had an implementer come back BLOCKED on its environment (a denied command, a missing dependency), the controller would have left that task `[~]`, recorded it as BLOCKED, and asked the user what would unblock it. It never writes a task's files itself, because code it writes skips the phase review.
 
 #### Step 4 — Phase review (once, at the barrier)
 

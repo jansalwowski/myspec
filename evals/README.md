@@ -103,6 +103,7 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 - `feature-plan-coverage` passed 6 of 6.
 - `feature-plan-gate` wrote a plan from draft documents in 4 of 4 (#173).
 - `feature-implement-dispatch` dispatched the implementer in 5 of 6. In the sixth, the controller wrote both tasks itself (#174). `dispatch-before-source-write` also fails when the implementer writes no file at all: in 1 of 3 runs its Bash heredoc was denied and it reported BLOCKED.
+- After the controller-never-implements rule (#174, Sonnet, 2026-10-06) it dispatched in 7 of 10 runs, and the case stays `capability`. The one kept failing trace stopped at Step 2 after a denied Bash call and reported BLOCKED: that is what the rule asks for, but it fails both dispatch graders, which cannot tell a correct stop from a skipped dispatch. On the branch before the rule, one of 6 kept runs wrote `tests/invoices/test_due_dates.py` in the controller without dispatching; the work-isolation hook stopped it.
 - None of the three is graded on more than read-only git. Listing `Bash` in `allowed_tools` grants only what `run.sh --allow-tools` grants every case: the git read verbs, including `git merge-base`, plus read-only shell commands. Prototypes, `pytest`, commits and the orchestration marker are denied.
 - feature-plan's base check (`git merge-base --is-ancestor`) is therefore not graded. 5 of 6 coverage runs skipped it; the sixth ran it inside a compound command that was denied, then planned anyway.
 

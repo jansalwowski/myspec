@@ -12,6 +12,8 @@ Execute a feature implementation plan by dispatching subagents per task and revi
 
 **Autopilot:** when the user opted in, answer this skill's gates — Step 0's "always ask" included — per [`_shared/autopilot.md`](../_shared/autopilot.md).
 
+**You never write task code.** Every file a plan task creates or modifies is written by that task's implementer subagent, whatever goes wrong. When the environment gets in the way — a denied command, a missing dependency, a tool that will not run — record the task as BLOCKED or NEEDS_CONTEXT, leave it `[~]`, and ask the user what would unblock it. Code you write yourself skips the phase review, and nothing reports that it did.
+
 ## Execution Model
 
 **Milestone** = a vertical slice of the feature (BE → FE → tests). Top-level execution unit. Agent checkpoints occur at milestone boundaries.
@@ -62,6 +64,7 @@ A running plan does not wait on the user for every wrinkle. Non-catastrophic con
 - A security-sensitive change (auth, secrets, permissions)
 - A plan ↔ spec contradiction the code cannot bridge
 - Scope explosion — the fix requires work no plan task covers
+- Environment friction a dispatch cannot get past (a denied command, a missing dependency) — the task is BLOCKED until the user unblocks it; doing it yourself is never the fallback
 - A checkpoint probe that came back FAIL or BLOCKED — a failing probe often means the spec was misread, which a fix loop cannot see
 
 At Step 5, list every ruling in the completion report under **"Rulings I made"**, in the order made, each with its cost-if-wrong. The list is exhaustive: if the Execution Log holds a ruling, the report holds it.
@@ -359,7 +362,7 @@ Skill text uses **tier names** (`cheap` / `mid` / `premium`). Controller (main t
 
 | Situation | Action |
 |-----------|--------|
-| BLOCKED | More context → re-dispatch; better model; break down; or ask user |
+| BLOCKED | More context → re-dispatch; better model; break down; or ask user — never implement it yourself |
 | NEEDS_CONTEXT | Provide info, re-dispatch |
 | One parallel task fails | Keep other worktrees, fix failed, then barrier |
 | Merge conflict at barrier | Attempt resolution; escalate if stuck |
@@ -377,6 +380,7 @@ Skill text uses **tier names** (`cheap` / `mid` / `premium`). Controller (main t
 - Proceed past 3 failed attempts without escalating — the issue won't fix itself on attempt 4
 - Tell a reviewer what not to flag — a suppressed finding never reaches the user; adjudicate it in triage instead
 - Diff a review with `HEAD~1` — use the recorded `PHASE_BASE` / `FIX_BASE` / `BASE_SHA`
+- Write or edit a file a plan task owns — not after a denied command or a missing dependency, not to save a dispatch; mark the task BLOCKED or NEEDS_CONTEXT and ask the user. Controller-written code skips every review
 - Fix review findings in the controller session — resume or dispatch an implementer; controller fixes skip review
 - `cd` into a task worktree — reach it with `git -C <path>` and absolute paths; implementers do the `cd`. Why: [`_shared/worktree-provisioning.md`](../_shared/worktree-provisioning.md) (Controller stays out)
 - Let an implementer run the full suite, a build, or an install — its checks are its task's Verify command and file-scoped static checks; the suite is the barrier's
