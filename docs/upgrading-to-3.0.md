@@ -194,9 +194,9 @@ When the git object store is read-only, the snapshots are copied to
 that directory with the session file. [stop-gate.md](stop-gate.md) R14 has the
 rules.
 
-The hook now parses a Bash command at PreToolUse and again after it, so a long
-command (hundreds of statements, many redirects into files) costs noticeably
-more per call than in 2.x
+The hook now parses a Bash command at PreToolUse and again after it. Each
+parse is cheap: a 200-statement command that appends to files costs well
+under a second per hook call, where 2.x took seconds to tens of seconds once
 ([#277](https://github.com/jansalwowski/myspec/issues/277)).
 
 ### PreToolUse denials print `hookSpecificOutput` only
