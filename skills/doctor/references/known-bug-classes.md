@@ -12,7 +12,7 @@ mechanical can see them.
 | Config value breaks derived pattern | trailing slash in a configured dir → derived glob `dir//*` matches nothing; consumer silently dead | tier 0 `aidir-trailing-slash` |
 | Promised binary absent | `timeout` assumed, absent on macOS → "120s cap" runs unbounded | tier 0 `tooling-absent` (jq/node); judgment otherwise |
 | Mixed status vocabularies | frontmatter statuses outside the manifest's allowed enum | `audit.mjs` (surface F) |
-| ID collision across namespaces | framework P001 vs project P001 in one index | `memory-doctor.mjs` `duplicate-id` |
+| ID collision across branches | two branches each claim P001; both files land in one index | `memory-doctor.mjs` `duplicate-id` |
 | Framework file silently forked | a rule hand-edited at a matching version; an update that half-applied | tier 0 `framework-drift` |
 | Framework hook still wired or copied locally | a 2.x `settings.json` entry runs a stale copy beside the plugin's own; a copy sits under `.claude/hooks/` or `.claude/lib/` that nothing runs | tier 0 `hook-wired-locally` / `hook-copy-retired` |
 | Project hook copied but never wired | the file is there, no settings entry, nothing ever runs it | tier 0 `hook-unregistered` |
