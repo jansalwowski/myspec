@@ -17,7 +17,9 @@
 // summary.mjs does: it was graded on an empty or truncated transcript.
 //
 // Baselines also carry content hashes of evals/ (evalsHashes), so a stored
-// baseline is not reused for a case whose prompt, fixture or graders changed.
+// baseline is not reused for a case whose prompt, fixture or graders changed,
+// and each case's stability tier (caseTiers), so the comparison can keep
+// capability cases out of the verdict.
 
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -26,8 +28,14 @@ import path from 'node:path';
 export const SCHEMA = 1;
 const BENIGN_ERROR_RE = /maximum number of turns/i;
 
+// The generated project-instructions block at the end of a case.yaml
+// (evals/_fixtures/project-instructions.sh), markers included.
+const BLOCK_RE = /\n*^# BEGIN project-instructions\b[^\n]*\n[\s\S]*?^# END project-instructions[^\n]*(?:\n|$)/m;
+export const stripInstructions = (text) => text.replace(BLOCK_RE, '\n');
+
 // sha256 (first 16 hex) over every file below dir: relative path and content.
-function hashDir(dir) {
+// transform(relPath, buffer) may rewrite a file's content before hashing.
+function hashDir(dir, transform) {
   const h = crypto.createHash('sha256');
   const walk = (d, rel) => {
     for (const e of fs.readdirSync(d, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
@@ -35,23 +43,72 @@ function hashDir(dir) {
       const r = rel ? `${rel}/${e.name}` : e.name;
       if (e.name === '.DS_Store') continue;
       if (e.isDirectory()) walk(p, r);
-      else if (e.isFile()) h.update(`${r}\0`).update(fs.readFileSync(p)).update('\0');
+      else if (e.isFile()) {
+        const buf = fs.readFileSync(p);
+        h.update(`${r}\0`).update(transform ? transform(r, buf) : buf).update('\0');
+      }
     }
   };
   walk(dir, '');
   return h.digest('hex').slice(0, 16);
 }
 
-// { fixtures: <hash of _fixtures/>, cases: { <case>: <hash of evals/<case>/> } }
+const withoutBlock = (r, buf) => (r === 'case.yaml' ? Buffer.from(stripInstructions(buf.toString('utf8'))) : buf);
+
+// { fixtures: <hash of _fixtures/>, cases: { <case>: <hash of evals/<case>/> },
+//   inputs: { <case>: <same, with case.yaml's generated project-instructions
+//   block left out> } }
 export function evalsHashes(evalsDir) {
   const cases = {};
+  const inputs = {};
   for (const e of fs.readdirSync(evalsDir, { withFileTypes: true })) {
     if (!e.isDirectory() || e.name.startsWith('_') || e.name === 'results') continue;
     const d = path.join(evalsDir, e.name);
-    if (fs.existsSync(path.join(d, 'prompt.md')) || fs.existsSync(path.join(d, 'case.yaml'))) cases[e.name] = hashDir(d);
+    if (fs.existsSync(path.join(d, 'prompt.md')) || fs.existsSync(path.join(d, 'case.yaml'))) {
+      cases[e.name] = hashDir(d);
+      inputs[e.name] = hashDir(d, withoutBlock);
+    }
   }
   const fx = path.join(evalsDir, '_fixtures');
-  return { fixtures: fs.existsSync(fx) ? hashDir(fx) : null, cases };
+  return { fixtures: fs.existsSync(fx) ? hashDir(fx) : null, cases, inputs };
+}
+
+// prompt.md frontmatter tags, in either YAML list form ([a, b] or "- a" lines).
+export function promptTags(file) {
+  if (!fs.existsSync(file)) return [];
+  const fm = fs.readFileSync(file, 'utf8').match(/^---\n([\s\S]*?)\n---/);
+  if (!fm) return [];
+  const lines = fm[1].split('\n');
+  const i = lines.findIndex((l) => /^tags:/.test(l));
+  if (i < 0) return [];
+  const unq = (t) => t.trim().replace(/^(['"])(.*)\1$/, '$2');
+  const inline = lines[i].match(/^tags:\s*\[(.*)\]\s*$/);
+  if (inline) return inline[1].split(',').map(unq).filter(Boolean);
+  const out = [];
+  for (const l of lines.slice(i + 1)) {
+    const m = l.match(/^\s+-\s+(.*)$/);
+    if (!m) break;
+    out.push(unq(m[1]));
+  }
+  return out;
+}
+
+// { <case>: 'capability' | 'regression' }: a case tagged capability is
+// report-only in the release comparison; every other case gates.
+export function caseTiers(evalsDir) {
+  const out = {};
+  for (const e of fs.readdirSync(evalsDir, { withFileTypes: true })) {
+    if (!e.isDirectory() || e.name.startsWith('_') || e.name === 'results') continue;
+    const tags = promptTags(path.join(evalsDir, e.name, 'prompt.md'));
+    if (tags.length) out[e.name] = tags.includes('capability') ? 'capability' : 'regression';
+  }
+  return out;
+}
+
+// Case names a model's comparison keeps out of its verdict: the capability
+// cases of a set's evals.tiers.
+export function reportOnlyCases(set) {
+  return new Set(Object.entries(set?.evals?.tiers ?? {}).filter(([, t]) => t === 'capability').map(([c]) => c));
 }
 
 function findAggregates(dir) {
