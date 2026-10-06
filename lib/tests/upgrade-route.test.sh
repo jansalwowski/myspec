@@ -44,14 +44,14 @@ FIX="$ROOT/plugin"
 
 # A 1.x project is sent through both floors, in order.
 run "$FIX" 1.17.0
-[ "$STATUS" -eq 1 ] && ok || fail "1.17.0 is refused with exit 1 (got $STATUS)"
+[ "$STATUS" -eq 3 ] && ok || fail "1.17.0 is refused with exit 3 (got $STATUS)"
 has 'v1.28.0, then v2.12.0, then this version' "1.17.0 is given the whole route, oldest first"
 has 'docs/upgrading-to-3.0.md' "the refusal points at the upgrade guide"
 has 'This project is on v1.17.0' "the refusal names the recorded version"
 
 # A 2.x project below the floor needs only the last floor.
 run "$FIX" 2.5.0
-[ "$STATUS" -eq 1 ] && ok || fail "2.5.0 is refused with exit 1 (got $STATUS)"
+[ "$STATUS" -eq 3 ] && ok || fail "2.5.0 is refused with exit 3 (got $STATUS)"
 has 'Update through v2.12.0, then this version' "2.5.0 is sent through v2.12.0 only"
 hasnt 'v1.28.0' "2.5.0 is not sent through v1.28.0"
 
@@ -73,7 +73,7 @@ hasnt 'v1.28.0' "1.100.0 compares above 1.28.0"
 
 # No recorded version: the whole route.
 run "$FIX" ''
-[ "$STATUS" -eq 1 ] && ok || fail "a missing version is refused (got $STATUS)"
+[ "$STATUS" -eq 3 ] && ok || fail "a missing version is refused with exit 3 (got $STATUS)"
 has 'records no frameworkVersion' "a missing version is named as missing"
 has 'v1.28.0, then v2.12.0' "a missing version gets the whole route"
 
@@ -82,11 +82,24 @@ echo '{ "frameworkVersion": "3.0.0", "files": {} }' > "$ROOT/plugin/framework-fi
 run "$FIX" 1.0.0
 [ "$STATUS" -eq 2 ] && ok || fail "a manifest without upgradeFrom exits 2 (got $STATUS)"
 
+# PR #281 review: the refusal must not share Node's crash status. Node exits
+# 1 on an uncaught error or a missing script, and the update skill printed
+# exit-1 output verbatim as the route, so a stack trace would read as one.
+node "$ROOT/no-such-script.mjs" >/dev/null 2>&1; CRASH=$?
+run "$PLUGIN" 0.1.0
+[ "$STATUS" -ne "$CRASH" ] && ok || fail "the refusal exit ($STATUS) differs from Node's crash exit ($CRASH)"
+# The update skill branches on the same codes: 3 is the route, anything else
+# stops the update with the floor check reported as not run.
+SKILL="$PLUGIN/skills/update/SKILL.md"
+grep -q 'Exit 3 → stop and print its stdout verbatim' "$SKILL" && ok || fail "skills/update/SKILL.md treats exit 3 as the refusal"
+grep -q 'Any other exit .*→ stop, tell the user the upgrade floor check could not run' "$SKILL" && ok || fail "skills/update/SKILL.md stops on any other exit"
+grep -q 'Exit 1 →' "$SKILL" && fail "skills/update/SKILL.md still reads exit 1 as the refusal" || ok
+
 # The shipped manifest: a project below its floor is refused and given every
 # floor in upgradeChain plus upgradeFrom; one at the floor passes.
 FLOOR=$(jq -r .upgradeFrom "$PLUGIN/framework-files/manifest.json")
 run "$PLUGIN" 0.1.0
-[ "$STATUS" -eq 1 ] && ok || fail "the shipped manifest refuses 0.1.0 (got $STATUS)"
+[ "$STATUS" -eq 3 ] && ok || fail "the shipped manifest refuses 0.1.0 with exit 3 (got $STATUS)"
 for v in $(jq -r '(.upgradeChain // [])[], .upgradeFrom' "$PLUGIN/framework-files/manifest.json"); do
   has "v$v" "the shipped route names v$v"
 done

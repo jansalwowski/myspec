@@ -38,7 +38,7 @@ Resolve the plugin directory in this order:
 
 Compare versions. If they match, tell the user: "Already up to date (v{version}). No changes needed." and stop.
 
-**Upgrade base.** The manifest's `upgradeFrom` is the oldest version this plugin migrates from, and `upgradeChain` lists the earlier majors' floors (RELEASING.md, "Upgrade base"). Run `node "${CLAUDE_PLUGIN_ROOT}/lib/upgrade-route.mjs" --version "<project frameworkVersion>"` (empty when none is recorded). Exit 0 → continue. Exit 1 → stop and print its output verbatim: it names every release to update through, oldest first, so the user never learns the route one refusal at a time.
+**Upgrade base.** The manifest's `upgradeFrom` is the oldest version this plugin migrates from, and `upgradeChain` lists the earlier majors' floors (RELEASING.md, "Upgrade base"). Run `node "${CLAUDE_PLUGIN_ROOT}/lib/upgrade-route.mjs" --version "<project frameworkVersion>"` (empty when none is recorded). Exit 0 → continue. Exit 3 → stop and print its stdout verbatim: it names every release to update through, oldest first, so the user never learns the route one refusal at a time. Any other exit (2 is a bad manifest or version; 1 is Node itself failing, e.g. a missing script) → stop, tell the user the upgrade floor check could not run and quote its stderr. Never continue the update without a 0, and never print a non-3 output as the route.
 Every migration, rename and removal an older version needed ran in that update; this plugin no longer ships them.
 
 ### Step 1.5: Run One-Shot Migrations
