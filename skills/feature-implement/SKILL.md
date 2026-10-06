@@ -306,10 +306,9 @@ After all phases in a milestone complete (for the final milestone run only (b), 
 **b) Probe gate** — only when the milestone carries a `**Checkpoint probes:**` block. Dispatch the plugin agent `myspec:probe-executor` (Agent tool, `subagent_type: "myspec:probe-executor"`, `mid` tier) — never general-purpose, which keeps the edit tools the executor's definition removes. Its prompt is the payload and nothing else: the block verbatim and whole, the checkout's absolute path with `BASE_SHA`, the artifact directory, and the Target override (an address the user gave for a `NEED:` line, else "none") — never the spec rationale, the plan's reasoning, implementer reports, phase verdicts, or your view of the milestone. One executor per milestone, `mixed` included, so probes run in plan order. Create the artifact directory before each dispatch, under the restart-safe, gitignored run state rather than `mktemp`, so the artifact paths in the Execution Log still open after a restart; each dispatch gets the next free `run-R`:
 
 ```bash
-PROBES="$(git rev-parse --show-toplevel)/.claude/state/implement/{feature}/probes/milestone-N"
+PROBES="$STATE/probes/milestone-N"   # $STATE: Step 2
 R=1; while [ -e "$PROBES/run-$R" ]; do R=$((R+1)); done
 ART="$PROBES/run-$R"; mkdir -p "$ART"
-git check-ignore -q "$ART" || echo '.claude/state/' >> "$(git rev-parse --git-path info/exclude)"
 ```
 
 The executor loads no project CLAUDE.md, so what the target needs to start must be on the Target and Scratch env lines; a gap comes back as a `NEED:` line. You never run, reword, or drop a probe yourself: the agent that did the work must not be the one that decides whether its verification ran, and tests green is not a substitute. Copy each probe line into the Execution Log. The gate passes only on `PROBES_PASSED`, with an observed value and artifact on every line. A missing report counts as BLOCKED, and FAIL or BLOCKED is a hard stop — ask the user, putting each of the report's `NEED:` lines to them first:
