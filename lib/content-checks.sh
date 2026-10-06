@@ -90,14 +90,22 @@ ABSOLUTE_PATH_RE='(^|[^A-Za-z0-9._/-])(/Users/[A-Za-z][A-Za-z0-9._-]*|/home/[A-Z
 # a gitignored file (never committed), and the plugin's own files that define
 # the shapes.
 absolute_paths_scope() {
+  if git -C "$1" check-ignore -q -- "$2" 2>/dev/null; then
+    return 1
+  fi
+  absolute_paths_scope_unignored "$@"
+}
+
+# absolute_paths_scope_unignored <repo root> <repo-relative path> [aiDir] ->
+# absolute_paths_scope for a path the caller already knows is not gitignored:
+# a hook judging many files asks git about all of them in one call
+# (mark-code-changed.sh).
+absolute_paths_scope_unignored() {
   local root="$1" rel="$2" ai="${3:-}"
   case "$rel" in
     .git/*|*/.git/*) return 1 ;;
     lib/path-normalize.sh|lib/content-checks.sh) return 1 ;;
   esac
-  if git -C "$root" check-ignore -q -- "$rel" 2>/dev/null; then
-    return 1
-  fi
   case "$rel" in
     *.md|*.mdx|*.markdown|*.txt|*.rst|*.adoc|.claude/*|docs/*) return 0 ;;
   esac
