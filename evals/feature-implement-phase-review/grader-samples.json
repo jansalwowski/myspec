@@ -1,0 +1,17 @@
+{
+  "checkboxes-context-in-review": {
+    "pass": [
+      [
+        { "tool": "Agent", "input": { "description": "Phase review for Phase 1: Due dates", "subagent_type": "general-purpose", "model": "sonnet", "prompt": "You are reviewing Phase 1 of the invoice-due-dates implementation.\n\nPlan checkboxes are controller-managed: the controller flips each task to `[~]` before dispatching it." } }
+      ]
+    ],
+    "fail": [
+      [
+        { "tool": "Agent", "input": { "description": "Phase review for Phase 1: Due dates", "subagent_type": "general-purpose", "model": "sonnet", "prompt": "You are reviewing Phase 1 of the invoice-due-dates implementation.\n\n## Diff Under Review\n**Package file:** /tmp/phase-review.abc" } }
+      ],
+      [
+        { "tool": "Agent", "input": { "description": "Implement Task 1: Due-date rules", "subagent_type": "general-purpose", "prompt": "You are implementing Task 1. Checkboxes are controller-managed." } }
+      ]
+    ]
+  }
+}

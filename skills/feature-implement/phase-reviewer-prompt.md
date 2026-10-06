@@ -5,7 +5,7 @@ Dispatch this reviewer after ALL tasks in a phase complete and worktrees are mer
 Before dispatching, write the review package to one file and substitute its path below. A pasted diff parks itself permanently in the controller's context, and a reviewer without one rebuilds it by hand — the single biggest reviewer cost:
 
 ```bash
-PKG=$(mktemp "${TMPDIR:-/tmp}/phase-review.XXXXXX")
+PKG="$STATE/phase-N-review.diff"   # $STATE: SKILL.md Step 2
 { git log --oneline "$PHASE_BASE"..HEAD; echo; git diff --stat "$PHASE_BASE"..HEAD; echo; git diff -U10 "$PHASE_BASE"..HEAD; } > "$PKG"
 ```
 
@@ -28,6 +28,12 @@ Task tool (general-purpose):
     ## What Was Requested
 
     [FULL TEXT of all tasks in this phase from the plan — paste inline]
+
+    Plan checkboxes are controller-managed: the controller flips each task
+    to `[~]` in implementation-plan.md before dispatching it, and flips the
+    phase's tasks to `[x]` after your approval. Those plan edits stay
+    uncommitted until the controller commits them. A resumed run re-executes every
+    `[~]` task from scratch.
 
     ## Spec and Acceptance Criteria
 
