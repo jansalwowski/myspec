@@ -47,7 +47,7 @@ Task tool (general-purpose):
     1. Implement exactly what the task specifies
     2. Write tests (following TDD if task says to)
     3. Run the checks you may run (see below) and fix what they find
-    4. Commit your work
+    4. Commit your work (see Commit Trailers below)
     5. Self-review (see below)
     6. Report back
 
@@ -59,6 +59,12 @@ Task tool (general-purpose):
     run every command as `cd [worktree path] && …` in one call (or
     `git -C [worktree path] …`). A commit made from the controller's
     checkout lands on the feature branch and bypasses the barrier merge.
+
+    ## Commit Trailers
+
+    End every commit message you write with these lines, verbatim:
+
+    [Commit trailers]
 
     **While you work:** If you encounter something unexpected or unclear, **ask questions**.
     It is always OK to pause and clarify. Do not guess or make assumptions.
@@ -160,8 +166,8 @@ Task tool (general-purpose):
     If the phase review finds issues in your task, you will receive
     the findings. Fix exactly what the findings name — do not expand scope
     while fixing — rerun the checks the finding touches (the test it names,
-    static checks on the files you changed), then commit and report what
-    you changed and what you ran.
+    static checks on the files you changed), then commit with the Commit
+    Trailers above and report what you changed and what you ran.
 
     ## Report Format
 
@@ -183,6 +189,8 @@ Task tool (general-purpose):
 ## Optional sections
 
 Omit each one, heading included, when it does not apply:
+
+- `## Commit Trailers` — only when the controller's instructions name no commit attribution lines; otherwise `[Commit trailers]` is those lines, verbatim (SKILL.md Step 3)
 
 - `## Plan Drift` — only for a task that modifies a file Step 1's plan-freshness check listed
 - `## Open Findings`, `## Earlier Rounds`, and the framing line after them — only for a fresh fix dispatch in rounds 2–5 of Step 4d (or round 1 when the harness cannot resume); `[Rounds summary]` is the same paragraph `re-review-prompt.md` receives

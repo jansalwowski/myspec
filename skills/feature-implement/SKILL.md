@@ -199,6 +199,8 @@ Walk milestones in order. For each milestone, walk its DAG topologically. For ea
 
 Fill each implementer dispatch with its Verify command and the file-scoped lint/typecheck commands ("none" when a tool cannot take a file list). Scoped runs catch in seconds the slips that otherwise each cost a review round; the risk they add — weakening a test until it passes — is what the phase reviewer's test-weakening audit catches.
 
+**Commit trailers.** Fill each implementer dispatch's `[Commit trailers]` with the lines your own instructions say end a commit message — a harness attribution reminder, a CLAUDE.md or project commit rule — copied verbatim, never one tool's trailer from memory. A subagent never sees those instructions, so a trailer you leave out is missing from every commit it and each fix round make. Every commit you make yourself (Step 5's `holistic-review.md`, a stop or fresh at a checkpoint) carries the same lines.
+
 **Sequential tasks** — dispatch one subagent at a time:
 
 ```
@@ -319,7 +321,7 @@ milestones.
 ### Step 5: Completion
 
 1. Remove the orchestration marker (Step 2.5) so the Stop hook blocks again, then run the Final Verification section from the plan.
-2. Build the full-feature review package (same commands as Step 4b, over `BASE_SHA..HEAD`) and dispatch the holistic reviewer (`./holistic-reviewer-prompt.md`) on the `premium` tier with the package path plus the plan's Execution Log entries (deferred minors and parked findings) so it can triage which must be fixed before merge. This pass is mandatory — never skipped, never downgraded to a cheaper tier. Write its report to `${aiDir}/features/{feature}/holistic-review.md` (frontmatter in the prompt file) and commit it: `/myspec:feature-implement-review` reads it and skips what it already covers.
+2. Build the full-feature review package (same commands as Step 4b, over `BASE_SHA..HEAD`) and dispatch the holistic reviewer (`./holistic-reviewer-prompt.md`) on the `premium` tier with the package path plus the plan's Execution Log entries (deferred minors and parked findings) so it can triage which must be fixed before merge. This pass is mandatory — never skipped, never downgraded to a cheaper tier. Write its report to `${aiDir}/features/{feature}/holistic-review.md` (frontmatter in the prompt file) and commit it with the commit trailers (Step 3): `/myspec:feature-implement-review` reads it and skips what it already covers.
 3. Print the completion report. It contains, in order: the milestone summary, with probe results and any live demo URL; the holistic verdict; **"Rulings I made"** — every `Ruling:` line from the Execution Log, in the order made, each with its cost-if-wrong ("none" if the log holds no rulings); every `Waiver:` line; and the deferred-minors triage outcome. This report is the only place the decisions taken on the user's behalf reach them.
 4. **Ask the user what to do next** via `AskUserQuestion` — do not auto-hand-off:
 
