@@ -5,7 +5,7 @@ Dispatch after each fix round (SKILL.md Step 4d). The re-reviewer verifies the f
 Build the fix-diff package first. `FIX_BASE` is the HEAD the previous review saw — never `HEAD~1`:
 
 ```bash
-PKG=$(mktemp "${TMPDIR:-/tmp}/fix-review.XXXXXX")
+PKG="$STATE/phase-N-fix-R.diff"   # $STATE: SKILL.md Step 2
 { git log --oneline "$FIX_BASE"..HEAD; echo; git diff --stat "$FIX_BASE"..HEAD; echo; git diff -U10 "$FIX_BASE"..HEAD; } > "$PKG"
 ```
 

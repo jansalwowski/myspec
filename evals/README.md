@@ -98,6 +98,7 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 | `feature-implement-attribution` | orchestration | a CLAUDE.md rule names a commit trailer → the Task 1 implementer dispatch carries it verbatim, since subagents never see CLAUDE.md (#191) |
 | `feature-implement-fix-round` | orchestration | Phase 1 committed, one Important finding about a rule the phase states in four places → the fix dispatch asks for every place the rule is stated, not only the cited line (#168) |
 | `feature-implement-phase-review` | orchestration | Phase 1 committed, both tasks `[~]` and uncommitted → the phase reviewer dispatch says plan checkboxes are controller-managed (#167) |
+| `feature-implement-restart-state` | orchestration | approved 2-task plan → before Phase 1's first dispatch the plan's Execution Log gets a `Base (Phase 1): <sha>` entry a restarted session can recover (#166) |
 
 `nearmiss-personal-preference` is a `capability` case until it has been run across releases, and so is `trigger-feature-spec-scenarios` (added with #264, not yet run). So are the three feature-plan and feature-implement cases (Sonnet, 2026-09-29):
 
@@ -105,6 +106,7 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 - `feature-plan-gate` wrote a plan from draft documents in 4 of 4 (#173).
 - `feature-implement-dispatch` dispatched the implementer in 5 of 6. In the sixth, the controller wrote both tasks itself (#174). `dispatch-before-source-write` also fails when the implementer writes no file at all: in 1 of 3 runs its Bash heredoc was denied and it reported BLOCKED.
 - After the controller-never-implements rule (#174, Sonnet, 2026-10-06) it dispatched in 7 of 10 runs, and the case stays `capability`. The one kept failing trace stopped at Step 2 after a denied Bash call and reported BLOCKED: that is what the rule asks for, but it fails both dispatch graders, which cannot tell a correct stop from a skipped dispatch. On the branch before the rule, one of 6 kept runs wrote `tests/invoices/test_due_dates.py` in the controller without dispatching; the work-isolation hook stopped it.
+- `feature-implement-restart-state` (#166, Sonnet, 2026-10-06) logged `Base (Phase 1)` in 3 of 8 runs, against 0 of 3 before the change. Every failing run that was kept stopped at Step 2 on a denied Bash call, before any plan edit, so the case measures sandbox friction as much as the entry. It is `capability`.
 - None of the three is graded on more than read-only git. Listing `Bash` in `allowed_tools` grants only what `run.sh --allow-tools` grants every case: the git read verbs, including `git merge-base`, plus read-only shell commands. Prototypes, `pytest`, commits and the orchestration marker are denied.
 - feature-plan's base check (`git merge-base --is-ancestor`) is therefore not graded. 5 of 6 coverage runs skipped it; the sixth ran it inside a compound command that was denied, then planned anyway.
 

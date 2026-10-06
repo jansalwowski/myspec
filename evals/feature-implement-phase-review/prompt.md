@@ -6,4 +6,4 @@ timeout_seconds: 600
 allowed_tools: [Read, Glob, Grep, Skill, Write, Edit, Agent, Bash]
 ---
 
-We're mid-way through implementing the invoice-due-dates plan on this branch. Tasks 1 and 2 (Phase 1) both reported DONE and are committed; the [~] marks in the plan are from this run. Phase 1's barrier has run too: the phase started at `HEAD~2`, the suite log is `.claude/state/phase-1/verify.log`, and the review package is `.claude/state/phase-1/review.diff`. Continue the feature-implement run with Phase 1's review, and proceed without asking.
+We're mid-way through implementing the invoice-due-dates plan on this branch. Tasks 1 and 2 (Phase 1) both reported DONE and are committed; the [~] marks in the plan are from this run. Phase 1's barrier has run too: the phase started at `HEAD~2`, the suite log is `.claude/state/implement/invoice-due-dates/phase-1-verify.log`, and the review package is `.claude/state/implement/invoice-due-dates/phase-1-review.diff`. Continue the feature-implement run with Phase 1's review, and proceed without asking.
