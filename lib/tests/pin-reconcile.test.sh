@@ -137,11 +137,18 @@ expect_verdict rules/ideas.md keep "--record on a reviewed pin re-records it"
 run
 expect_verdict rules/ideas.md keep "a re-recorded pin stays keep until upstream moves again"
 
-# The project changes the file after the pin: keep, whatever upstream did.
+# The project changes the file after the pin: keep while upstream stays put.
+# When upstream moves too, both sides changed: diverged, so update raises the
+# upstream move instead of hiding it behind keep (#282). --record settles it.
 printf '\nAnother project line.\n' >> "$REPO/.claude/rules/ideas.md"
+run
+expect_verdict rules/ideas.md keep "the project changed the file since the pin, upstream did not: keep"
 printf '\nMore upstream.\n' >> "$PLUGIN/framework-files/rules/ideas.md"
 run
-expect_verdict rules/ideas.md keep "the project changed the file since the pin: keep"
+expect_verdict rules/ideas.md diverged "the project and upstream both changed since the pin: diverged"
+printf '%s\n' "$OUT" | grep -q 'the plugin copy moved too' && ok || fail "the diverged detail names the upstream move"
+run --record rules/ideas.md
+expect_verdict rules/ideas.md keep "--record on a diverged pin re-records it"
 cp "$ROOT/ideas.orig" "$PLUGIN/framework-files/rules/ideas.md"
 
 # A pin backfilled with hash only (a hand-written one) cannot tell an upstream
@@ -195,6 +202,16 @@ printf '\n- template project check\n' >> "$PLUGIN/framework-files/pre-flight.md"
 run
 expect_verdict pre-flight.md keep "a change to the plugin's project-section template alone is not review"
 cp "$ROOT/pre-flight.orig" "$PLUGIN/framework-files/pre-flight.md"
+# The #282 repro: a recorded pre-flight.md pin whose framework region both
+# the project and the plugin edited afterwards.
+project .ai
+pin pre-flight.md "local tiering line"
+run --record pre-flight.md
+sed -i.bak 's#memory/index.md#memory/index.md and the local tiering#' "$REPO/.ai/pre-flight.md" && rm -f "$REPO/.ai/pre-flight.md.bak"
+sed -i.bak 's#memory/index.md#memory/index.md first#' "$PLUGIN/framework-files/pre-flight.md" && rm -f "$PLUGIN/framework-files/pre-flight.md.bak"
+run
+expect_verdict pre-flight.md diverged "both sides edited a marker-merge pin's framework region: diverged"
+cp "$ROOT/pre-flight.orig" "$PLUGIN/framework-files/pre-flight.md"
 
 # --- missing, retired, unknown, and a non-default aiDir -----------------------
 project docs/ai
@@ -236,7 +253,7 @@ run --record rules/ideas.md
 run --bogus
 [ "$RC" -eq 2 ] && ok || fail "an unknown flag is a usage error"
 run --help
-[ "$RC" -eq 0 ] && printf '%s\n' "$OUT" | grep -q '^  review ' && printf '%s\n' "$OUT" | grep -q 'Table:' && ok \
+[ "$RC" -eq 0 ] && printf '%s\n' "$OUT" | grep -q '^  review ' && printf '%s\n' "$OUT" | grep -q '^  diverged ' && printf '%s\n' "$OUT" | grep -q 'Table:' && ok \
   || fail "--help prints the table format and the verdicts"
 # A .myspec.json that is not a JSON object cannot say what is pinned: an
 # error, not "no pins", or the 3.0.0-schema-v2 migration would record a

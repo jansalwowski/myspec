@@ -126,7 +126,10 @@ marker never makes a pin look changed.
 
 `update` now asks per pin instead of comparing sizes. A pin whose file equals
 the plugin copy is offered for dropping; when you keep it, `update` records it
-(`--record "<key>"`) so the next upstream change under it is raised. When you
+(`--record "<key>"`) so the next upstream change under it is raised. When both
+you and upstream changed a pinned file since its pin was recorded, `update`
+reports it as `diverged` and offers to keep the pin, merge the upstream change
+by hand, or take the plugin copy. When you
 pin a framework file by hand, run
 `node "<plugin>/lib/pin-reconcile.mjs" --record "<key>"` afterwards.
 
