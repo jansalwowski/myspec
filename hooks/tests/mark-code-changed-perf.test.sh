@@ -38,12 +38,14 @@ fixture() {
   printf '%s\n' "$repo"
 }
 
-# timed <event> <repo> <command> -> runs the hook once; ELAPSED is the
-# whole seconds it took.
+# timed <event> <repo> <command> [tool_use_id] -> runs the hook once;
+# ELAPSED is the whole seconds it took. With a tool_use_id the status diff
+# runs too (#276).
 timed() {
   local start=$SECONDS
-  jq -nc --arg e "$1" --arg c "$2" --arg cmd "$3" \
-    '{hook_event_name: $e, session_id: "perf", tool_name: "Bash", cwd: $c, tool_input: {command: $cmd}}' \
+  jq -nc --arg e "$1" --arg c "$2" --arg cmd "$3" --arg id "${4:-}" \
+    '{hook_event_name: $e, session_id: "perf", tool_name: "Bash", cwd: $c, tool_input: {command: $cmd}}
+     + (if $id != "" then {tool_use_id: $id} else {} end)' \
     | bash "$HOOK" >/dev/null 2>&1
   ELAPSED=$((SECONDS - start))
 }
@@ -91,6 +93,16 @@ for i in $(seq 1 200); do printf 'x\n' >> "$REPO/docs/g$i.md"; done
 timed PostToolUse "$REPO" "$CMD"
 within 5 "200 appends to 200 docs, PostToolUse"
 [ "$(events "$REPO" write)" = 200 ] && ok || fail "200 appends to 200 docs: one write event per file"
+
+# The same 200 appends to 200 docs with the status diff on: a capture before,
+# a diff after, and the writes still recorded once each.
+REPO=$(fixture diffed)
+timed PreToolUse "$REPO" "$CMD" toolu_perf
+within 5 "200 appends to 200 docs with the status diff, PreToolUse"
+for i in $(seq 1 200); do printf 'x\n' >> "$REPO/docs/g$i.md"; done
+timed PostToolUse "$REPO" "$CMD" toolu_perf
+within 5 "200 appends to 200 docs with the status diff, PostToolUse"
+[ "$(events "$REPO" write)" = 200 ] && ok || fail "200 appends to 200 docs with the status diff: one write event per file"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

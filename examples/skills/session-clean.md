@@ -26,6 +26,8 @@ The user hasn't run a sweep in a while. `.claude/state/sessions/` contains:
 2026-04-27-1432-bugfix-oauth.md     (mtime 4d ago,   empty template, status: active)
 2026-04-30-1100-currentwork.md      (mtime 12m ago,  in progress — this agent's own session)
 <three session ids>.jsonl           (hook state: two 7–8d old, one 12m old)
+<two of those ids>.bash/            (the Bash status captures of the two old ones, empty)
+bash-calls.log                      (the hooks' shared Bash call log; it rotates itself)
 ```
 
 The first three are leftovers from earlier sessions where the auto-create hook fired but `/myspec:session-complete` was never run.
@@ -72,7 +74,7 @@ All three pass. Safe to act.
 | 1 | a1b2c3d4           | auto:mockups       | empty          | 8d ago | DELETE  | no log/insights/outcome |
 | 2 | f73e26d3           | auto:calibration   | substantive    | 7d ago | ARCHIVE | 3 log rows, 1 insight   |
 | 3 | 9e8d7c6b           | bugfix-oauth       | empty          | 4d ago | DELETE  | no log/insights/outcome |
-| 4 | —                  | 2 state files (.jsonl) | hook state | 7–8d ago | DELETE | older than 24h          |
+| 4 | —                  | 2 state files (.jsonl, with their .bash/) | hook state | 7–8d ago | DELETE | older than 24h          |
 
 Skipped: 2026-04-30-1100-currentwork.md (running agent's own session); one .jsonl state file under 24h old
 

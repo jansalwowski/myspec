@@ -327,9 +327,11 @@ paths_verdict() {
     [ -n "$f" ] || continue
     [[ "$f" =~ $alt ]] && return 0
   done <<< "$MYSPEC_SESSION_FILES"
-  # The ledger misses writes it cannot see: git revert or checkout, rm, a
-  # code generator, a variable path. A path under the globs that git reports
-  # changed, uncommitted or against the base, runs the check (fail closed).
+  # The ledger misses the Bash writes neither the scanner nor the status
+  # diff saw (docs/stop-gate.md Session writes: a call that overlapped
+  # another session's, a tree too dirty to capture, no tool_use_id). A path
+  # under the globs that git reports changed, uncommitted or against the
+  # base, runs the check (fail closed).
   unseen_files
   while IFS= read -r f; do
     [ -n "$f" ] || continue

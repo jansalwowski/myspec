@@ -125,7 +125,7 @@ report_decision() {
       for entry in "${BLOCK_NOTES[@]}"; do
         notes+="${entry}"$'\n\n'
       done
-      notes+="Fix what your changes broke. Do not edit files changed outside this session to make a check pass: another session sharing this checkout may be working on them. If a failure comes from those changes, say so and stop. A Bash side effect (an install, code generation) is not recorded as this session's write, so if you made one of those changes, it is yours."$'\n\n'
+      notes+="Fix what your changes broke. Do not edit files changed outside this session to make a check pass: another session sharing this checkout may be working on them. If a failure comes from those changes, say so and stop. A Bash side effect may not be recorded as this session's write (a file git ignores, or one written while another session's Bash call ran), so if you made one of those changes, it is yours."$'\n\n'
     fi
     GATE_DECIDED=1
     decision_block "Verification did not pass (%s). Fix the failures your changes caused before completing; for a timeout or a check not run, get the real result first.\n\n%s%s" "$names" "$notes" "$details"
