@@ -170,9 +170,16 @@ printf '# T\n\n## Architecture\n' > "$CUR"
 expect 'missing required section: "## Reuse audit" (or ### )' "$(reuse_audit_issues "$CUR")" "a missing section is reported"
 printf '# T\n\n### Reuse audit\n\n| a | b | c | d |\n|---|---|---|---|\n| Foo | lib | skip | - |\n' > "$CUR"
 expect "row 1: skip rows require a non-empty Reason" "$(reuse_audit_issues "$CUR")" "a skip row without a reason is reported"
-reuse_audit_scope .ai/features/pay/tech-spec.md && ok || fail "a tech-spec is in scope"
-reuse_audit_scope .ai/features/pay/sub/tech-spec.md && ok || fail "a nested tech-spec is in scope"
-reuse_audit_scope .ai/features/pay/spec.md && fail "a spec.md is out" || ok
+reuse_audit_scope .ai .ai/features/pay/tech-spec.md && ok || fail "a tech-spec is in scope"
+reuse_audit_scope .ai .ai/features/pay/sub/tech-spec.md && ok || fail "a nested tech-spec is in scope"
+reuse_audit_scope docs/ai docs/ai/features/pay/tech-spec.md && ok || fail "a tech-spec under a configured aiDir is in scope"
+reuse_audit_scope .ai .ai/features/pay/spec.md && fail "a spec.md is out" || ok
+# #165: only a file named tech-spec.md, under the aiDir, outside plans/.
+for p in .ai/features/pay/old-tech-spec.md .ai/features/pay/draft-tech-spec.md \
+    .ai/features/pay/plans/2026-01-01-tech-spec.md .ai/features/pay/plans/tech-spec.md \
+    src/features/login/tech-spec.md src/features/login/a-tech-spec.md docs/ai/features/pay/tech-spec.md; do
+  reuse_audit_scope .ai "$p" && fail "$p is out of scope" || ok
+done
 expect_in() { case "$2" in *"$1"*) ok ;; *) fail "$3" ;; esac; }
 expect_in 'BLOCKED: x/tech-spec.md is missing a valid "## Reuse audit" section.' "$(reuse_audit_reason x/tech-spec.md diag)" "the reason opens with the friction-scan line"
 expect_in "myspec:reuse-audit skip: <reason>" "$(reuse_audit_reason x/tech-spec.md diag)" "the reason names the marker"

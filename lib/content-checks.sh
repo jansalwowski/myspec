@@ -251,11 +251,14 @@ REUSE_AUDIT_HEADING="Reuse audit"
 # in the tech-spec counts as a skip decision for the whole document.
 REUSE_AUDIT_MARKER_RE='<!--[[:space:]]*myspec:reuse-audit[[:space:]]+skip:'
 
-# reuse_audit_scope <path> -> 0 for a tech-spec.md under a features/ tree
-# (any aiDir prefix, sub-feature nesting allowed).
+# reuse_audit_scope <ai dir> <repo-relative path> -> 0 for a file named
+# exactly tech-spec.md under <ai dir>/features/, a sub-feature's included.
+# A plans/ tree holds dated copies, and `old-tech-spec.md` or a tech-spec.md
+# outside the aiDir (src/features/...) is not a feature's tech-spec (#165).
 reuse_audit_scope() {
-  case "$1" in
-    */features/*tech-spec.md) return 0 ;;
+  case "$2" in
+    "$1"/features/*/plans/*) return 1 ;;
+    "$1"/features/*/tech-spec.md) return 0 ;;
   esac
   return 1
 }
