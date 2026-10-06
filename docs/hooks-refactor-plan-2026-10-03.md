@@ -1,6 +1,6 @@
 # Hooks: stop the churn — refactor plan
 
-Status: proposal, 2026-10-03. Written from the issue history (48 issues, #94 to #249), the commit history since 2026-09-27, and a read of the four hooks at 2.10.0. Companion to `stop-gate.md` (requirements) and `project-settings-design.md` (settings). Nothing here changes a requirement; it changes where each one is enforced.
+Status: implemented. Proposed 2026-10-03; steps 1-3 and 8 shipped in 2.11.0 (#251-#254), steps 4-6 in 3.0.0 (#255-#257). Kept as the record of why the hooks are shaped this way. Written from the issue history (48 issues, #94 to #249), the commit history since 2026-09-27, and a read of the four hooks at 2.10.0. Companion to `stop-gate.md` (requirements) and `project-settings-design.md` (settings). Nothing here changes a requirement; it changes where each one is enforced.
 
 ## Diagnosis
 
