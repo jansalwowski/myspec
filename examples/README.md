@@ -16,7 +16,7 @@ The eight skills you'll use to take a feature from idea to shipped:
 | Skill | Scenarios covered |
 |-------|-------------------|
 | [skills/feature-discover.md](skills/feature-discover.md) | Discovery only (capture tribal knowledge) · Full feature docs (pull existing code into pipeline) · Complex feature routes to decomposition |
-| [skills/feature-spec.md](skills/feature-spec.md) | Greenfield small feature · Cross-feature dependencies · Skill recommends decomposing first |
+| [skills/feature-spec.md](skills/feature-spec.md) | Greenfield small feature (with the optional scenarios + seed data step) · Cross-feature dependencies · Skill recommends decomposing first |
 | [skills/feature-decompose.md](skills/feature-decompose.md) | Mixed-priority split with deferred sub-features · Skill refuses to decompose |
 | [skills/feature-mockup.md](skills/feature-mockup.md) | First mockups for an approved spec · Unconfigured project (graceful degradation) · Scope-creep flag + schema handoff |
 | [skills/feature-mockup-review.md](skills/feature-mockup-review.md) | Full review with mixed findings · Focus prompt narrows to loose ends · Unconfigured project (Group E skipped, gap handed off) |
@@ -29,12 +29,11 @@ The eight skills you'll use to take a feature from idea to shipped:
 
 ### Code & conformance review
 
-The two complementary review passes that run on built code before completion — conformance to spec vs. code quality:
+The review pass that runs on built code before completion. For bugs in the diff, use Claude Code's built-in `/code-review` (myspec's own `code-review` skill was removed in 3.0):
 
 | Skill | Scenarios covered |
 |-------|-------------------|
 | [skills/feature-implement-review.md](skills/feature-implement-review.md) | Clean conformance pass · Scope drift detected · Missing acceptance criterion caught and routed |
-| [skills/code-review.md](skills/code-review.md) | Clean pass (Approve) · Mixed findings ranked across severities · Project-specific rule violation caught |
 
 ### Spec quality
 
@@ -62,7 +61,7 @@ The two complementary review passes that run on built code before completion —
 - **`/session-complete`** — wrapping up a tracked session; extracts memories from the session log table.
 - **`/session-clean`** — periodic sweep of the active sessions directory; deletes empty leftovers and archives substantive ones that were never closed.
 - **`/memory-lookup`** — search before you start work or debug. The first thing to run on a new bug or unfamiliar area.
-- **`/memory-sanitize`** — periodic groomer for the *user-level* auto-memory store at `~/.claude-personal/projects/{cwd}/memory/`. Triages every entry: drops stale, promotes feedback to CLAUDE.md / `.claude/rules/`, merges duplicates, **compresses bloated bodies** against the length budget in `.claude/rules/auto-memory-style.md`, and **supersedes contradictions** non-destructively (loser becomes a one-line stub on disk). Distinct from `session-clean`, which sweeps project-level session files.
+- **`/memory-sanitize`** — periodic groomer for the *user-level* auto-memory store at `<config_dir>/projects/<encoded_cwd>/memory/`. Triages every entry: drops stale, promotes feedback to CLAUDE.md / `.claude/rules/`, merges duplicates, **compresses bloated bodies** against the length budget in `.claude/rules/auto-memory-style.md`, and **supersedes contradictions** non-destructively (loser becomes a one-line stub on disk). Distinct from `session-clean`, which sweeps project-level session files.
 - **`/memory-optimize`** — periodic groomer for the *project* memory tree at `ai/memory/{procedural,semantic,episodic}/`. Re-anchors memories whose code moved, retunes ones nobody can find, merges colliding triggers, consolidates aged-out episodes, retires what no longer holds. Optimizes *retrieval*, never body length — the mirror image of `memory-sanitize`, which optimizes bytes in context on a different store.
 
 ### Ideas pipeline
@@ -87,7 +86,7 @@ The complex stuff. Each flow stitches together 3–12 skill calls and shows the 
 
 | Flow | Skills involved | Use it to understand |
 |------|-----------------|----------------------|
-| [flows/full-feature-delivery.md](flows/full-feature-delivery.md) | `brainstorm` → `idea-intake` → `idea-process` → `feature-spec-review` → `cross-spec-validation` → `feature-tech-spec` → `feature-tech-spec-review` → `feature-plan` → `feature-implement` → `feature-implement-review` → `code-review` → `feature-verify` → `feature-complete` | The full pipeline from "I have an idea" to "merged and shipped." |
+| [flows/full-feature-delivery.md](flows/full-feature-delivery.md) | `brainstorm` → `idea-intake` → `idea-process` → `feature-spec-review` → `cross-spec-validation` → `feature-tech-spec` → `feature-tech-spec-review` → `feature-plan` → `feature-implement` → `feature-implement-review` → built-in `/code-review` → `feature-verify` → `feature-complete` | The full pipeline from "I have an idea" to "merged and shipped." |
 | [flows/feature-decomposition.md](flows/feature-decomposition.md) | `feature-decompose` → per-sub-feature `feature-tech-spec` + `feature-plan` + `feature-implement` + `feature-complete`, with `cross-spec-validation` between them | Splitting a too-large feature into independently shippable sub-features. |
 | [flows/session-with-memory-extraction.md](flows/session-with-memory-extraction.md) | `bootstrap` → auto-session via hook → `session-complete` (vs. `memorify` as the alternative) | How session tracking, the `mark-code-changed.sh` hook, and memory extraction fit together. |
 | [flows/debugging-with-memory.md](flows/debugging-with-memory.md) | `memory-lookup` → `root-cause-debugging` (4 phases) → `memorize` | The full debugging loop: check what's known, investigate methodically, save the lesson. |
@@ -111,10 +110,9 @@ Skills not yet covered by per-skill examples:
 
 - **Spec quality** — `feature-spec-review`, `feature-tech-spec-review` (mostly gating; visible in flows)
 - **Drift fixers** — `feature-spec-sync`, `feature-spec-cleanup` (covered in [flows/spec-drift-recovery.md](flows/spec-drift-recovery.md))
-- **Auxiliary** — `feature-scenario`, `feature-seed-data`
 - **Batch audits** — `feature-status-audit`
 - **Project setup** — `init`, `update`, `setup`
 - **Memory + sessions** — `memory-preflight`, `memory-create`, `session-start`
-- **Utilities** — `skill-verify`, `worktree-clean`, `upstream-sync`
+- **Utilities** — `skill-verify`, `worktree-clean`
 
 If you'd find walk-throughs useful for any of these in isolation, open an issue or send a PR — examples are easy to add: each skill gets one file in `skills/{skill-name}.md` with H2 sections per scenario.

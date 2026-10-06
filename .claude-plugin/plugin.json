@@ -6,5 +6,6 @@
     "name": "Jan Salwowski"
   },
   "homepage": "https://github.com/jansalwowski/myspec",
-  "repository": "https://github.com/jansalwowski/myspec"
+  "repository": "https://github.com/jansalwowski/myspec",
+  "hooks": "./hooks.json"
 }

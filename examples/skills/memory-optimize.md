@@ -2,7 +2,7 @@
 
 Grooms the *project* memory tree at `ai/memory/{procedural,semantic,episodic}/`. Re-anchors memories whose code moved, retunes ones nobody can find, merges pairs that collide, consolidates aged-out episodes, and retires what no longer holds — always behind an audit table and a confirmation.
 
-> **Related**: [`/myspec:memory-sanitize`](memory-sanitize.md) grooms the *user-level* auto-memory store at `~/.claude-personal/projects/<encoded_cwd>/memory/`. Different store, different objective: sanitize optimizes bytes in context (it compresses bodies), optimize protects retrieval (it never touches body length, because project memory bodies load only on a match).
+> **Related**: [`/myspec:memory-sanitize`](memory-sanitize.md) grooms the *user-level* auto-memory store at `<config_dir>/projects/<encoded_cwd>/memory/`. Different store, different objective: sanitize optimizes bytes in context (it compresses bodies), optimize protects retrieval (it never touches body length, because project memory bodies load only on a match).
 
 **Contents**
 
@@ -35,7 +35,7 @@ The high-yield case: a store that has been written to for a year and never groom
 > Running memory optimization audit.
 
 ```bash
-node .claude/lib/memory-index.mjs --check
+node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs" --check
 # stale: ai/memory/procedural/index.md
 # 1 index file(s) out of date.
 ```
@@ -133,8 +133,8 @@ The generator prefers the row already in the index for the Anchor column, so edi
 #### 5. Verify
 
 ```bash
-node .claude/lib/memory-index.mjs
-node .claude/lib/memory-index.mjs --check   # exit 0
+node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs"
+node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs" --check   # exit 0
 grep -rn "S007\|P019\|E011" ai/ .claude/    # every retired ID still resolves to a file
 ```
 
@@ -299,7 +299,7 @@ A store groomed six weeks ago. 22 entries, all anchored, no episodes past 30 day
 > Running memory optimization audit.
 
 ```bash
-node .claude/lib/memory-index.mjs --check   # exit 0
+node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs" --check   # exit 0
 ```
 
 All 14 anchors resolve on the first check. No `triggers` pair shares two entries. No `related` id dangles or points one way. Every episode is inside 30 days or marked `persistent: true`.

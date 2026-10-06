@@ -15,20 +15,20 @@ The target is **retrieval quality, not size**. Memory bodies load only when `/my
 
 - Never `rm` a memory file. An entry that leaves the index gets `status: superseded` in its frontmatter and a one-line redirect body: the index generator filters superseded files out, and `memory-claim-id.sh` still counts the file when computing the high-water ID. Deleting the highest-numbered file hands the next session a colliding ID wherever `jq` is absent — the ID registry is only written when `jq` exists, and the filesystem scan is the fallback.
 - Never retire a memory whose ID is cited outside its own file. `grep -rn "P019" ${aiDir}/ .claude/` — `memory/sessions/archive/`, feature docs, and other memories' `related:` all count as citations.
-- Never hand-write index rows. Edit the files, then run `node .claude/lib/memory-index.mjs`; `--check` must exit 0 before reporting done.
+- Never hand-write index rows. Edit the files, then run `node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs"`; `--check` must exit 0 before reporting done.
 - Never retire an entry created less than 30 days ago — a new memory has not had time to be matched even once, so `validation_count: 0` carries no signal yet. RE-ANCHOR, RETUNE, and RELINK are non-destructive and allowed at any age.
 - A dead anchor path is not a dead memory — the second check in Step 2 decides.
-- Out of scope: `~/.claude-personal/projects/<encoded_cwd>/memory/` (`/myspec:memory-sanitize`) and session logs — `.claude/state/sessions/` and `${aiDir}/memory/sessions/archive/` (`/myspec:session-clean`).
+- Out of scope: `<config_dir>/projects/<encoded_cwd>/memory/` (`/myspec:memory-sanitize`) and session logs — `.claude/state/sessions/` and `${aiDir}/memory/sessions/archive/` (`/myspec:session-clean`).
 
 ## Workflow
 
 ### Step 1: Inventory
 
 1. Resolve `aiDir` from `.myspec.json` (`.aiDir`; the key is required since 2.0; when it is absent the tooling uses `.ai` and the setup doctor reports it).
-2. Run `node .claude/lib/memory-index.mjs --check`. Exit 1 means the tables are stale — regenerate before triage, so the audit reads files rather than a lagging table.
+2. Run `node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs" --check`. Exit 1 means the tables are stale — regenerate before triage, so the audit reads files rather than a lagging table.
 3. Read `${aiDir}/memory/index.md` (Layer 1) and the three `${aiDir}/memory/{type}/index.md` tables.
 4. Read every `P*.md`, `S*.md`, `E*.md`. Capture per entry: `id`, `hook`, `feature`, `related`, plus type fields — procedural: `polarity`, `triggers`, `not_for`, `anchors`, `validation_count`, `created`, `validated`; semantic: `topic`, `anchor`, `verified`; episodic: `outcome`, `persistent`, `date`.
-5. Run `node .claude/lib/memory-doctor.mjs` and report its structural faults before triage: duplicate IDs on disk or on any branch (the failure `memory-claim-id.sh` exists to prevent; `status: superseded` tombstones are exempt), memories without `hook:`, malformed anchors, `related:` IDs with no matching file. Add anything the doctor cannot see: files already marked `status: superseded` that are still cited as live.
+5. Run `node "${CLAUDE_PLUGIN_ROOT}/lib/memory-doctor.mjs"` and report its structural faults before triage: duplicate IDs on disk or on any branch (the failure `memory-claim-id.sh` exists to prevent; `status: superseded` tombstones are exempt), memories without `hook:`, malformed anchors, `related:` IDs with no matching file. Add anything the doctor cannot see: files already marked `status: superseded` that are still cited as live.
 
 ### Step 2: Per-entry checks
 
@@ -97,8 +97,8 @@ Execution order:
 1. File edits (anchors, triggers, hooks, `related`, merge survivors).
 2. Superseded stubs — add `status: superseded`, replace body with the one-line redirect or reason.
 3. Layer 1 edits in `${aiDir}/memory/index.md`.
-4. `node .claude/lib/memory-index.mjs`.
-5. `node .claude/lib/memory-index.mjs --check` — must exit 0.
+4. `node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs"`.
+5. `node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs" --check` — must exit 0.
 6. If it still exits 1, stop and show the drifting index. The generator disagrees with the files; hand-editing the row to make it pass violates the third hard rule and hides the real edit that went wrong.
 
 ## Verification Checklist
@@ -114,5 +114,5 @@ Execution order:
 - [ ] Merge survivors carry the union of `triggers` and a `not_for` that separates the merged cases
 - [ ] Consolidated episodes produced a real P or S memory before the episode was stubbed
 - [ ] `related` links resolve in both directions after RELINK
-- [ ] `node .claude/lib/memory-index.mjs --check` exits 0
+- [ ] `node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs" --check` exits 0
 - [ ] Summary line printed: re-anchored / retuned / merged / consolidated / expired / dropped / promoted, and index rows before → after

@@ -94,19 +94,19 @@ If the slug would collide with an existing archive file, append a short session_
 
 ### 7. Friction Report
 
-Run the transcript scan with the archived log's `session_id`. If the log has no `session_id` (manual sessions may leave it empty), skip the scan and say "Friction report skipped: the session log has no session_id".
+Run the transcript scan with every session id the work ran under, comma-separated, the archived log's `session_id` first. A resumed session continues under a new id with its own log, so add the `session_id` of each other log that step 1 matched by your edited paths, and any id the user names. If the archived log has no `session_id` (manual sessions may leave it empty), skip the scan and say "Friction report skipped: the session log has no session_id".
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/lib/friction-scan/scan.mjs" --session=<session_id>
+node "${CLAUDE_PLUGIN_ROOT}/lib/friction-scan/scan.mjs" --session=<session_id>[,<resumed_session_id>...]
 ```
 
-It reads the session's Claude Code transcript and its subagent transcripts, uses no model tokens, and prints nothing when no pattern crosses a threshold. It never writes files.
+It reads each session's Claude Code transcript and its subagent transcripts as one run, names on stderr any id it found no transcript for, uses no model tokens, and prints nothing when no pattern crosses a threshold. It never writes files.
 
 | Exit | Do |
 |------|----|
 | 0, empty output | Say nothing about friction |
 | 0, a table | Show the table as printed, with its footer lines. Do not re-attribute rows: `owner` comes from fixed rules (repeats, known hook messages, subagent verdicts), and `unknown` is an answer, not a gap to fill |
-| 1 (usage error), 2 (no transcript, e.g. Codex) or 3 (format not recognized) | One line: "Friction report skipped: <stderr>" |
+| 1 (usage error), 2 (no transcript for any id) or 3 (format not recognized) | One line: "Friction report skipped: <stderr>" |
 
 Owners: `myspec` — framework-side; `setup` — this project's myspec install drifted (a registered hook is missing, fixed by `/myspec:update`) or a command a hook needs is missing on this machine; `harness` — Claude Code itself; `project` — the project's checks, spec or hooks; `unknown` — not attributable from the transcript alone.
 
@@ -148,4 +148,4 @@ Report to user:
 - [ ] Outcome section is filled (what worked, root cause, key insights)
 - [ ] Approved memories were created via `/myspec:memory-create` (check respective index files)
 - [ ] User was presented extraction list and confirmed selections
-- [ ] Friction scan ran with the session's `session_id`; its table (if any) was shown unedited
+- [ ] Friction scan ran with every session id the work ran under; its table (if any) was shown unedited

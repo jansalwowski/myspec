@@ -1,6 +1,6 @@
 ---
 name: doctor
-description: "Use when the project's myspec setup needs a health check — CLAUDE.md, rules, skills, agents, hooks, ${aiDir} docs, memory tree, feature manifest. An optional surface (A-F) checks one. Keywords: healthcheck, setup broken, context bloat, rules drift. Do NOT use for project code (code-review), one skill (skill-verify), or one feature (feature-verify)."
+description: "Use when the project's myspec setup needs a health check — CLAUDE.md, rules, skills, agents, hooks, ${aiDir} docs, memory tree, feature manifest. A surface letter (A-F) checks one. Keywords: healthcheck, setup broken, context bloat, rules drift. Do NOT use for project code (/code-review), one skill (skill-verify), or one feature (feature-verify)."
 tags: [audit, maintenance, hooks, context-budget, drift]
 ---
 
@@ -16,7 +16,7 @@ Runs without configuration. An optional per-repo extension file `.claude/rules/d
 
 | Tier | Invocation | Cost | Answers |
 |---|---|---|---|
-| 0 | `node .claude/lib/setup-doctor.mjs` | ~1s, no model | Is anything mechanically broken or drifted? |
+| 0 | `node "${CLAUDE_PLUGIN_ROOT}/lib/setup-doctor.mjs"` | ~1s, no model | Is anything mechanically broken or drifted? |
 | 1 | `/myspec:doctor <surface>` | one subagent | Is surface X coherent? |
 | 2 | `/myspec:doctor` | six subagents + PRs | Full pass over everything |
 
@@ -38,17 +38,17 @@ due for a pass; reach for tier 1 when the user named a surface or tier 0 pointed
 ### Phase 0 — Load configuration
 
 1. Read `.myspec.json` for `aiDir` — the key is required since 2.0; when it is absent the tooling uses `.ai` and the setup doctor reports it. Use it everywhere `${aiDir}` appears below.
-2. Read the project extension if present — `.claude/rules/doctor.md`. Take its `## Project anchors`, `## Read-only`, and `## Extra checks` sections. Not present → note "no project extension; auditing framework surfaces only." The pre-rename `ai-setup-audit.md` is not read: tier 0 reports it as `doctor-rule-unrenamed` and `update` moves it.
+2. Read the project extension if present — `.claude/rules/doctor.md`. Take its `## Project anchors`, `## Read-only`, and `## Extra checks` sections. Not present → note "no project extension; auditing framework surfaces only."
 3. Detect the default branch: `git symbolic-ref --short refs/remotes/origin/HEAD`, falling back to `main`/`master`.
 4. Run the deterministic checks and keep the result — it is the ground truth every later phase quotes:
 
    ```bash
-   node .claude/lib/setup-doctor.mjs --json --plugin-root "${CLAUDE_PLUGIN_ROOT}"
+   node "${CLAUDE_PLUGIN_ROOT}/lib/setup-doctor.mjs" --json --plugin-root "${CLAUDE_PLUGIN_ROOT}"
    ```
 
    Each record is `{ id, group, path, detail, remediation: { commands, text } }`. Group them by
    `group` and carry them forward: `install` and `wiring` records go into surface E's brief,
-   `schema` into E, `features` into F, `budget` and `refs` into A. The `settings` array is the
+   `schema` and `worktree` into E, `features` into F, `budget` and `refs` into A. The `settings` array is the
    effective project policy, `{ key, value, source, loosens }` for every setting that differs
    from its default; it goes into E's brief and, as given, into the Phase 3 report. The brief says *these are established
    facts, verified by command — do not re-check them, and do not report a finding that
@@ -93,14 +93,14 @@ is left is judgment:
 - Run the backbone engine first: `node "${CLAUDE_PLUGIN_ROOT}/lib/backbone-audit/audit.mjs"` — it owns declared-vs-disk drift, workspace members and commands the file never learned about, and the git-backed liveness signals. Do not re-derive them. Exit 3 means it could not run at all: no topology file (a finding only when tier 0 reports `topology-missing`, i.e. `.myspec.json` names one), or a YAML construct it refuses to guess at, which is itself the finding. Read its NOT CHECKED block before characterising the result — a check that did not run is not a clean one. Add only what the script doesn't cover: the prose claims in `/myspec:backbone-sync` step 4
 - Spot-check 3–5 load-bearing claims per doc against code: lint flags, ports, directory locations, "not implemented" / "do not do X" claims, architecture framing
 - Dead links; docs for tools that left the repo; index files whose `updated:` predates the content they index; advertised-but-empty directories
-- Naming: `.md` files under `${aiDir}` in SCREAMING_CASE or PascalCase, `README.md` and `INDEX.md` excepted — `find "${aiDir}" -name '*.md' | grep -E '/[A-Z][^/]*\.md$' | grep -vE '/(README|INDEX)\.md$'`. The fix is `git mv` to kebab-case plus every inbound reference (this is the retired `docs-sanitize`'s naming job)
+- Naming: `.md` files under `${aiDir}` in SCREAMING_CASE or PascalCase, `README.md` and `INDEX.md` excepted — `find "${aiDir}" -name '*.md' | grep -E '/[A-Z][^/]*\.md$' | grep -vE '/(README|INDEX)\.md$'`. The fix is `git mv` to kebab-case plus every inbound reference
 - Duplication clusters — if a fact is stated in 3+ docs, give it one home + cross-refs
 
 **D. Memory tree** — `${aiDir}/memory/` against `.claude/rules/memory-system.md` (triggers, session lifecycle, layer budgets, 30-day consolidation) and `.claude/rules/auto-memory-style.md`:
-- Layer-1 index at its ~200-token budget; entry anchors still grep-match their targets; episodic entries > 30 days old with `persistent: false` and never consolidated; entries over the length caps; ID collisions across namespaces; `.claude/state/sessions/` empty of terminal-status files, nothing left under the pre-2.0 `${aiDir}/memory/sessions/active/` (tier 0 `sessions-unmigrated`); user-level auto-memory `MEMORY.md` overlap with project memory
+- Layer-1 index at its ~200-token budget; entry anchors still grep-match their targets; episodic entries > 30 days old with `persistent: false` and never consolidated; entries over the length caps; ID collisions across namespaces; `.claude/state/sessions/` empty of terminal-status files; user-level auto-memory `MEMORY.md` overlap with project memory
 
-**E. Hooks + harness config** — `.claude/settings.json`, every `.claude/hooks/*.sh`, `.claude/lib/*.sh`, `.claude/verification.json`, `.myspec.json`. Tier 0 owns existence, registration, executability, `bash -n`, framework and hook content drift, and schema validity; its `install`, `wiring`, and `schema` records are in the brief and are not to be re-derived. This surface is behavior, which no script can settle:
-- Execute each hook with synthetic stdin JSON (`printf '{"tool_input":{...},"cwd":"..."}' | bash <hook>`) for both the should-block and the should-pass case, and check the decision against what the hook claims to do. A hook can exist, be wired, be executable, parse cleanly — and still approve everything
+**E. Hooks + harness config** — `.claude/settings.json`, the project's own hook scripts, the framework hooks the plugin runs from `${CLAUDE_PLUGIN_ROOT}/hooks/` (nothing of them is copied into the project since 3.0), `.claude/verification.json`, `.myspec.json`. Tier 0 owns existence, registration, executability, `bash -n`, framework drift, a framework hook still wired or copied locally (`hook-wired-locally`, `hook-copy-retired`), and schema validity; its `install`, `wiring`, and `schema` records are in the brief and are not to be re-derived. This surface is behavior, which no script can settle:
+- Execute each hook with synthetic stdin JSON (`printf '{"tool_input":{...},"cwd":"..."}' | CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}" bash <hook>` — the framework hooks find their lib through that variable, as the harness sets it) for both the should-block and the should-pass case, and check the decision against what the hook claims to do. A hook can exist, be wired, be executable, parse cleanly — and still approve everything
 - Environment assumptions: commands run where the convention says (host vs container); the worktree case degrades gracefully; a `tooling-absent` record from tier 0 means some gate is currently passing without running
 - A required `verification.json` check that runs its work in a container or on another host (`docker exec`, `kubectl exec`, `ssh`), directly or through a script it calls, declares a `cleanup` that stops that work. The Stop hook's cap kills only the local client, so without one every capped stop leaves another run going there
 - `verification.json` commands actually exercise this project (right package manager, right workspace) — tier 0 only knows whether a command string is present
@@ -133,28 +133,9 @@ One worktree + branch per group, created from the fresh default branch (`git wor
 
 Per PR: scan the staged diff for absolute paths (`git diff --cached | grep -nE '/(Users|home)/'` — the same rule `no-absolute-paths.sh` enforces on writes); PR body lists defect → effect → fix with evidence and cross-links the sibling PRs.
 
-## Known bug classes (regression greps — check these first, they recur)
+## Known bug classes
 
-The **Owner** column says what already decides the class. A row owned by a script is not a
-subagent's job: read its verdict from the Phase 0 records. The rest recur because nothing
-mechanical can see them.
-
-| Class | Shape | Owner |
-|---|---|---|
-| Config value breaks derived pattern | trailing slash in a configured dir → derived glob `dir//*` matches nothing; consumer silently dead | tier 0 `aidir-trailing-slash` |
-| Promised binary absent | `timeout` assumed, absent on macOS → "120s cap" runs unbounded | tier 0 `tooling-absent` (jq/node); judgment otherwise |
-| Mixed status vocabularies | frontmatter statuses outside the manifest's allowed enum | `audit.mjs` (surface F) |
-| ID collision across namespaces | framework P001 vs project P001 in one index | `memory-doctor.mjs` `duplicate-id` |
-| Framework file silently forked | a rule hand-edited at a matching version; an update that half-applied | tier 0 `framework-drift` |
-| Hook copied but never wired | the file is there, no settings entry, nothing ever runs it | tier 0 `hook-unregistered` / `wiring-incomplete` |
-| Tool/server name drift | agent declares `mcp__db__*`; the real server registers under a different prefix | judgment (surface B) |
-| Phantom contract vocabulary | a consumer branches on labels its producer is forbidden from emitting | judgment (surface B) |
-| Defaults that don't exist | a documented default flag value names a project/target that was never defined | judgment (surface B) |
-| Script referenced ≠ script defined | docs say `lint --fix`, the manifest defines `lint:fix`; config file present but never wired as a script | judgment (surface B) |
-| Allowlist missing self | a guard hook blocks edits to its own file | judgment (surface E, behavioral run) |
-| Temporary ban outlives reality | "DO NOT implement X yet" beside shipped, working X | judgment (surface C) |
-| Frozen index | INDEX.md lists 2 of 15 features | judgment (surface C/F) |
-| History embedded in hot files | multi-KB changelog or "PR #N still draft" inside a manifest `note:` field | tier 0 `note-over-cap` / `note-volatile`; judgment for other hot files (surface F) |
+The regression greps that recur, with the owner that already decides each (a tier 0 finding, an engine, or judgment on a surface): [known-bug-classes.md](references/known-bug-classes.md). Read it before dispatching Phase 1; a row owned by a script is not a subagent's job.
 
 ## Project extension format
 
@@ -189,4 +170,4 @@ Additional per-surface checklist items, tagged [A]–[F].
 ## Integration
 
 **Routes to** [OPTIONAL]: `/myspec:skill-verify` — deep audit of a flagged skill. `/myspec:feature-verify` — deep audit of a flagged feature. `/myspec:session-clean` — dangling session files found in surface D. `/myspec:memory-sanitize` — user-level auto-memory findings.
-**See also:** `/myspec:feature-status-audit` — surface F runs its engine; invoke it standalone for a manifest-only check. `/myspec:backbone-sync` — surface C runs its engine; invoke it standalone to fix topology drift. `node .claude/lib/setup-doctor.mjs` — tier 0 standalone; `bootstrap` reports its summary every session and `update` verifies itself with it.
+**See also:** `/myspec:feature-status-audit` — surface F runs its engine; invoke it standalone for a manifest-only check. `/myspec:backbone-sync` — surface C runs its engine; invoke it standalone to fix topology drift. `node "${CLAUDE_PLUGIN_ROOT}/lib/setup-doctor.mjs"` — tier 0 standalone; `bootstrap` reports its summary every session and `update` verifies itself with it.

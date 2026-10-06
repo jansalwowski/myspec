@@ -141,24 +141,22 @@ Branching: every 3.0 PR targets the temporary integration branch `v3` (created f
 7. RELEASING.md breaking-list extension, `gate: true`, fill `upgrading-to-3.0.md`, record baseline, `/release`.
 8. Walk the three 1.x consumers through 2.11 → 3.0 as the dogfood run before tagging.
 
-## 7. Status and hand-off (2026-10-05)
+## 7. Status and hand-off (2026-10-06)
 
-Any session can continue from here; every artefact is on GitHub. Review loop per PR: read-only reviewer posts inline findings with evidence → implementer fixes and replies with shas → reviewer re-verifies and acknowledges on-thread → maintainer merges. Branch rules: §6 "Branching". v2.12.0 shipped 2026-10-04; `v2` and `v3` sit at it; the upgrade floor is 2.12.0.
+Every 3.0 PR is merged into `v3`: #255, #256, #257, #258, #269, #270, #278 (lands #272, #273, #274, #275, which had merged into stack branches after their parents merged into `v3`), #279, #259, #260. Each went through the review loop: a read-only reviewer posts findings with evidence, an implementer fixes them with a reverting test, the reviewer re-verifies on-thread, and the maintainer merges. #274 took three fix rounds. The upgrade floor is 2.12.0; `docs/upgrading-to-3.0.md` is the consumer guide.
 
-| PR | Base | State |
-|---|---|---|
-| #268 plan doc | main | ready to merge |
-| #255 container checks declared | v3 | approved — merge first |
-| #256 provision record | #255 | approved |
-| #257 stop-gate split | #256 | approved |
-| #272 hooks run from the plugin (#262) | #257 | approved — retarget to v3 after #257 merges |
-| #273 2.x shim sweep (#266) | #272 | approved (head d4f48ce); consumer floor Claude Code ≥ 2.0.12, git ≥ 2.31; adds `3.0.0-memory-registry` |
-| #274 diff-scoped gates (#263) | #272 | **fix round needed** — 2 High on the Stop gate: baseline must be session start (not HEAD) and compare only this session's added lines (`lib/stop-gate/content.sh`); the Edit splice in `lib/content-checks.sh` is quadratic under bash 3.2 (60 s at 200 KB) — rewrite as one awk/node pass. 3 Medium (committed-in-session escape; whole-file Write judged on untouched frontmatter; `content-checks.sh` missing → silent approve), 4 Low. Also adds three legacy `decision: block` emitters that #273 removes — rebase whichever merges second |
-| #275 schema v2 (#265, #160) | #274 | **review pending**; keys: `frameworkFiles.*.{pinned,hash,upstreamHash}`, `mockups.*`, `orchestration.featureImplement` (`controller`\|`workflow`), `probes.{portSource,scratchEnvScript}`; `lib/pin-reconcile.mjs`; `3.0.0-schema-v2` migration |
-| #258 drop code-review (#150) | v3 | approved |
-| #269 RELEASING surfaces, stub gate, eval gate on (#267) | v3 | approved |
-| #270 scenario/seed-data fold, upstream-sync move (#264) | v3 | approved |
-| #259 drop 1.x→2.0 shims, `upgradeFrom` | #257 (stale) | needs rebase onto #273; floor text → 2.12.0; `update` migration table gains `3.0.0-plugin-hooks`, `3.0.0-code-review`, `3.0.0-reuse-audit`, `3.0.0-schema-v2`; fills `docs/upgrading-to-3.0.md` from the upgrade text in the bodies of #272, #273, #274, #258 |
-| #260 drop Codex (#143) | #259 | needs rebase; must KEEP root `hooks.json` (now the plugin hook manifest) |
+Decisions taken 2026-10-05:
 
-Remaining after the PRs merge into v3: `scripts/evals/release-check.sh --version 3.0.0` on v3 (report-only, no `--record`); dogfood `/myspec:update` on the three 1.x consumers via v1.28 → v2.12 → v3 checkout (`--plugin-dir`); open the `v3 → main` merge-commit PR; `/release` 3.0.0 from main (first gated release; record the baseline). Open decision: Sonnet-only eval gate (a Haiku-only regression blocks today).
+- The release eval gate blocks only on Sonnet (`"gateModels": ["sonnet"]` in `quality/release-check.json`, #279). Haiku still runs and is recorded, and a Haiku-only regression is a report-only warning. A `gateModels` entry the run does not cover exits 2, so the gate cannot switch off silently.
+- The maintainer accepted #274's costs for 3.0. A Bash call that writes many judged docs spends about three times as long in hooks as on 2.12 (issue #277), and each snapshot of a large judged doc is a loose git object until gc prunes it. Follow-ups: #276 (record Bash writes from a `git status` diff, not by parsing the command) and #277.
+
+`scripts/evals/release-check.sh --version 3.0.0` on `v3` at b237e99, report-only, returned **no-change** for both models against v2.12.0. The first attempt hit 300 s timeouts on the v2.12.0 side and gave no verdict; the re-run reused HEAD's results.
+
+Added 2026-10-06, after a backlog triage, all merged into `v3`:
+
+- **#171 shipped in 3.0** (#306): the probe executor is the plugin agent `myspec:probe-executor` with `disallowedTools: Edit, Write, NotebookEdit, Agent` and `omitClaudeMd: true`. **The Claude Code host floor rises from 2.0.12 to 2.1.288**, the release in which a plugin agent spawned by name runs with its own `disallowedTools` in agent teams too (Agent-tool dispatch has honoured it since 2.1.78; `omitClaudeMd` is 2.1.271). Stated in README "Installation", `docs/upgrading-to-3.0.md` and `skills/update` Step 0.
+- **#277 fixed** (#299): one hook call on a 200-statement Bash command went from ~28 s to under 0.5 s, so the cost accepted above no longer applies. #276 follows in 3.1 (#305).
+- Non-breaking fixes that rode along: #159, #161, #165, #170, #183, #184, #282 (lib and hooks); #166, #167, #168, #174, #191 (feature-implement); #169, #173, #188 (feature-plan); `memory-system.md` trimmed back under the always-loaded budget (#283; #185 declined).
+- Deferred to 3.1, not breaking: #276, #239's Stop-gate half, and the probe-setup stack #194–#197.
+
+Remaining: dogfood `/myspec:update` on the 1.x consumers (v1.28 → v2.12 → v3, `--plugin-dir`, on throwaway clones); merge this `v3` → `main` PR; `/release` 3.0.0 from `main`, the first gated release, which records the baseline.

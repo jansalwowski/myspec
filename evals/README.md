@@ -10,7 +10,7 @@ Evals run **locally only**, on the maintainer's Claude Code login. There is no C
 |---|---|---|---|
 | pre-commit | static skill lint (no model) | `.githooks/pre-commit` | yes |
 | pre-push | cases for the skills changed on the branch, 1 run each, Sonnet | `.githooks/pre-push` → `run.sh --mode changed` | no (report-only) |
-| release | every case, 3 runs, two agent models (Sonnet, Haiku), judge Sonnet, compared with the previous release | `scripts/evals/release-check.sh` (RELEASING.md) | report-only; the maintainer decides |
+| release | every case, 3 runs, two agent models (Sonnet, Haiku), judge Sonnet, compared with the previous release | `scripts/evals/release-check.sh` (RELEASING.md) | yes: a Sonnet regression exits 1; Haiku is report-only (`quality/release-check.json` `gate`, `gateModels`) |
 
 Enable the hooks once per clone with `scripts/install-git-hooks.sh`. That script and `.githooks/pre-commit` come from PR #137 (requires #137). Skip the pre-push evals with `MYSPEC_SKIP_EVALS=1 git push` or `git push --no-verify`. Make a below-threshold result block the push with `MYSPEC_EVALS_STRICT=1`.
 
@@ -63,50 +63,58 @@ Files changed between `--base` (default: `git merge-base origin/main HEAD`) and 
 
 | Changed path | Selects |
 |---|---|
-| `skills/<name>/…` or `plugins/myspec/skills/<name>/…` | every case tagged `skill:<name>` |
+| `skills/<name>/…` | every case tagged `skill:<name>` |
 | `skills/_shared/<file>` | every case tagged with a skill whose files mention `_shared/<file>`, following `_shared` files that reference each other |
 | `evals/<case>/…` | that case |
 | `evals/_fixtures/<entry>…` | every case whose files mention `<entry>` (a top-level file or directory name); `lib.sh` is sourced by every case, so it selects them all |
 
 Nothing else selects a case. Changes to `framework-files/`, `scaffolding/`, `hooks/` or `lib/` are left to the full suite, even though the scaffold copies `framework-files/` into every workspace. The exception is an always-loaded rule in `framework-files/rules/`: regenerating the [project instructions](#project-instructions) rewrites every `case.yaml`, which selects every case.
 
-Tag a case with **every** skill its graders name, siblings included. A description change in `code-review` can start stealing `skill-verify`'s prompts, so `nearmiss-skill-verify` carries `skill:code-review` too.
+Tag a case with **every** skill its graders name, siblings included. A description change in `feature-spec-review` can start stealing `skill-verify`'s prompts, so `nearmiss-skill-verify` carries `skill:feature-spec-review` too. The exception is a sibling that is only a Claude Code built-in (`code-review`): no file in this repo changes it, so a tag would select nothing.
 
 ## The cases
 
 | Case | Family | What it proves |
 |---|---|---|
 | `trigger-new-feature` | trigger | "start a new feature … write the requirements" → feature-spec, spec.md written |
-| `route-spec-review` | trigger, near-miss | "before the technical design, check the requirements doc" → feature-spec-review, not tech-spec-review or code-review |
+| `route-spec-review` | trigger, near-miss | "before the technical design, check the requirements doc" → feature-spec-review, not tech-spec-review or the built-in /code-review |
 | `trigger-memorize` | trigger | a named fact to keep → memorize, not memorify or session-complete |
 | `nearmiss-personal-preference` | near-miss | "remember that I prefer short answers" → auto-memory, not memorize or memorify |
+| `trigger-memory-sanitize` | trigger, near-miss | "clean up the auto-memory under ~/.claude/projects" (the default config dir, #161) → memory-sanitize, not memory-optimize |
 | `trigger-memorify` | trigger | "anything from this debugging worth keeping?" → memorify |
 | `trigger-memory-lookup` | trigger, near-miss | "have we run into this before?" → memory-lookup, not a capture skill |
 | `trigger-session-complete` | trigger | "that's it for today, wrap up the session" → session-complete, not memorify |
-| `trigger-implement-review` | trigger, near-miss | "does what we built match the spec and plan?" → feature-implement-review, not code-review or feature-verify |
-| `nearmiss-skill-verify` | trigger, near-miss | "check my SKILL.md for problems" → skill-verify, not code-review or feature-spec-review |
+| `trigger-implement-review` | trigger, near-miss | "does what we built match the spec and plan?" → feature-implement-review, not the built-in /code-review or feature-verify |
+| `nearmiss-skill-verify` | trigger, near-miss | "check my SKILL.md for problems" → skill-verify, not the built-in /code-review or feature-spec-review |
 | `trigger-doctor` | trigger | "health check of our myspec setup" → doctor, not the feature audits |
 | `trigger-feature-verify` | trigger | one feature's drift → feature-verify, not feature-status-audit or doctor |
 | `trigger-feature-status-audit` | trigger | "does index.yaml match the features folder?" → feature-status-audit |
+| `trigger-feature-spec-scenarios` | trigger, near-miss | "write the test scenarios in Gherkin for the approved spec" → feature-spec (its `scenarios` argument; feature-scenario is gone in 3.0), not feature-tech-spec, feature-spec-review or feature-plan; scenarios.md written beside the spec |
 | `spec-review-planted-flaws` | planted flaw | feature-spec-review fires and flags an untestable AC, a REQ-002/REQ-004 contradiction, and missing error states; does not pass the review |
-| `tech-spec-review-planted-flaws` | planted flaw | feature-tech-spec-review flags a requirement with no step (REQ-004) and an ignored shared CSV writer the conventions mandate; reports a Critical and does not pass |
-| `code-review-planted-bug` | planted flaw | code-review (Python fixture) finds an off-by-one that drops the first line item and does not approve |
+| `tech-spec-review-planted-flaws` | planted flaw | feature-tech-spec-review flags a requirement with no step (REQ-004) and an ignored shared CSV writer the conventions mandate; reports a Critical and does not pass; flags the data-deriving export's missing `verification_mode` as Medium (#169) |
 | `feature-spec-contract` | artifact contract | feature-spec writes spec.md with every section and frontmatter key feature-spec-review checks, plus dependencies.md and a manifest entry |
-| `feature-plan-coverage` | artifact contract | feature-plan (Python fixture) writes implementation-plan.md whose Spec Coverage table maps every REQ ID to a task, including two no AC restates (837f68d), plus the Execution Order table feature-implement parses |
+| `feature-plan-coverage` | artifact contract | feature-plan (Python fixture) writes implementation-plan.md whose Spec Coverage table maps every REQ ID to a task, including two no AC restates (837f68d), plus the Execution Order table feature-implement parses, and closes with the Step 4.6 `## Plan Self-Check` (#188) |
 | `feature-plan-gate` | procedure | spec and tech-spec still `status: draft` → feature-plan stops at its gate: no plan written, the reply says they are not approved (a3562ed) |
 | `feature-implement-dispatch` | orchestration | approved 2-task plan → feature-implement dispatches the Task 1 implementer Agent (matched on its prompt, not any Agent) before any `app/` or `tests/` Write (9ed2ed9); graded on the start of the run |
+| `feature-implement-attribution` | orchestration | a CLAUDE.md rule names a commit trailer → the Task 1 implementer dispatch carries it verbatim, since subagents never see CLAUDE.md (#191) |
+| `feature-implement-fix-round` | orchestration | Phase 1 committed, one Important finding about a rule the phase states in four places → the fix dispatch asks for every place the rule is stated, not only the cited line (#168) |
+| `feature-implement-phase-review` | orchestration | Phase 1 committed, both tasks `[~]` and uncommitted → the phase reviewer dispatch says plan checkboxes are controller-managed (#167) |
+| `feature-implement-restart-state` | orchestration | approved 2-task plan → before Phase 1's first dispatch the plan's Execution Log gets a `Base (Phase 1): <sha>` entry a restarted session can recover (#166) |
+| `feature-implement-probe-gate` | orchestration | both tasks `[x]`, Checkpoint probes not yet run → the Step 4b probe gate dispatches the plugin agent `myspec:probe-executor`, never a general-purpose subagent carrying the executor prompt (#171) |
 
-`nearmiss-personal-preference` is a `capability` case until it has been run across releases. So are the three feature-plan and feature-implement cases (Sonnet, 2026-09-29):
+`nearmiss-personal-preference` is a `capability` case until it has been run across releases, and so are `trigger-feature-spec-scenarios` (added with #264, not yet run) and `trigger-memory-sanitize` (added with #161, not yet run). So are two of the three feature-plan and feature-implement cases (Sonnet, 2026-09-29), and `feature-implement-probe-gate`:
 
 - `feature-plan-coverage` passed 6 of 6.
-- `feature-plan-gate` wrote a plan from draft documents in 4 of 4 (#173).
 - `feature-implement-dispatch` dispatched the implementer in 5 of 6. In the sixth, the controller wrote both tasks itself (#174). `dispatch-before-source-write` also fails when the implementer writes no file at all: in 1 of 3 runs its Bash heredoc was denied and it reported BLOCKED.
-- None of the three is graded on more than read-only git. Listing `Bash` in `allowed_tools` grants only what `run.sh --allow-tools` grants every case: the git read verbs, including `git merge-base`, plus read-only shell commands. Prototypes, `pytest`, commits and the orchestration marker are denied.
+- After the controller-never-implements rule (#174, Sonnet, 2026-10-06) it dispatched in 7 of 10 runs, and the case stays `capability`. The one kept failing trace stopped at Step 2 after a denied Bash call and reported BLOCKED: that is what the rule asks for, but it fails both dispatch graders, which cannot tell a correct stop from a skipped dispatch. On the branch before the rule, one of 6 kept runs wrote `tests/invoices/test_due_dates.py` in the controller without dispatching; the work-isolation hook stopped it.
+- `feature-implement-restart-state` (#166, Sonnet, 2026-10-06) logged `Base (Phase 1)` in 3 of 8 runs, against 0 of 3 before the change. Every failing run that was kept stopped at Step 2 on a denied Bash call, before any plan edit, so the case measures sandbox friction as much as the entry. It is `capability`.
+- `feature-implement-probe-gate` (Sonnet, 2026-10-06) dispatched `myspec:probe-executor` in 3 of 3 runs. On v3, where the executor was a general-purpose template, it did so in 0 of 3: the skill fired once and dispatched general-purpose, and the other two runs ran the probes in the controller. One branch run dispatched the agent without loading the skill, so `skill-fired` failed there. The prompt says only read-only git runs; without that line the controller stopped at the denied `pytest` before the gate. For the same reason the fixture pre-creates the gate's `probes/milestone-1/run-1/` artifact directory: with the gate's `mkdir` denied, 0 of 3 runs dispatched; with the directory in place, 3 of 3 did, each passing it in the payload.
+- None of these is graded on more than read-only git. Listing `Bash` in `allowed_tools` grants only what `run.sh --allow-tools` grants every case: the git read verbs, including `git merge-base`, plus read-only shell commands. Prototypes, `pytest`, commits and the orchestration marker are denied.
 - feature-plan's base check (`git merge-base --is-ancestor`) is therefore not graded. 5 of 6 coverage runs skipped it; the sixth ran it inside a compound command that was denied, then planned anyway.
 
-Two cases started in `capability` and moved to `regression` once a description fix made them fire:
+Two cases started in `capability` and moved to `regression` once a skill fix made them pass:
+- `feature-plan-gate`: feature-plan wrote a plan from draft documents in 4 of 4 runs on v3 (#173). Once its gates refused a draft spec and asked about a draft tech-spec with no recommended option, it stopped in 6 of 6.
 - `trigger-memorize`: Claude Code's built-in auto-memory took "remember this" prompts (0 of 7 runs fired). Once memorize's description claimed project facts over auto-memory, it fired in 10 of 10.
-- `code-review-planted-bug`: Sonnet ran `git diff` and reviewed the change itself (0 of 5). Once the code-review description quoted natural review phrasing and said to use the skill instead of reading the diff, it fired in 5 of 5.
 
 ## Project instructions
 
@@ -206,7 +214,7 @@ arm: both
 ---
 ```
 
-For `code-review`, `doctor` and `init` write `"myspec:<name>"` without the optional group: Claude Code ships built-in skills with those names, and the bare call is not ours.
+For `doctor` and `init` write `"myspec:<name>"` without the optional group: Claude Code ships built-in skills with those names, and the bare call is not ours. `code-review` is the built-in alone since 3.0 (`feature-implement` hands off to it): a sibling grader guarding against it matches the bare `"code-review"`, and since it names nothing the repo ships, the case carries no `skill:code-review` tag.
 
 `evals/_fixtures/lib.sh` provides `myspec_init [name] [description] [stack]`, `add_feature <fixture-dir> <feature> <status> [phase] [priority]`, `register_feature <feature> <status>`, `copy_tree <fixture-dir>` and `git_commit_all <message>`. `project-instructions.sh` beside it generates each case's project instructions from the finished workspace. Shared fixture trees live beside it (`project-billing/`: a Python billing app with three features, a stale manifest and an orphan folder; `project-due-dates/`: a Python app with an approved invoice-due-dates spec and tech-spec). A fixture used by one case lives in that case's directory (`tech-spec-review-planted-flaws/workspace/`).
 
@@ -220,7 +228,7 @@ A grader that cannot fail is worthless, and a case that passes whether or not th
 
 ## Known gotchas
 
-- **Hooks don't load.** The eval sandbox never loads myspec's hooks (the plugin's root `hooks.json` isn't on Claude Code's plugin-hook path, and projects get hooks from `init`). The scaffold therefore installs no `.claude/hooks/` or `.claude/settings.json`. Hook behaviour stays with `hooks/tests/`.
+- **Hooks don't load.** The eval sandbox has not loaded myspec's hooks (observed with the 2.x layout, where the root `hooks.json` was not declared to Claude Code and projects got hooks from `init`). Since 3.0 `plugin.json` declares `hooks.json` and the plugin runs the hooks itself, so re-check this before relying on it; the scaffold still installs no `.claude/hooks/` or `.claude/settings.json`, and hook behaviour stays with `hooks/tests/`.
 - **Project instructions don't load on their own.** The harness disables `CLAUDE.md` loading and project settings, so a scaffolded `CLAUDE.md` and `.claude/rules/` are invisible (canary, 2026-09-29). Each case gets them through a generated `append_system_prompt` instead; see [Project instructions](#project-instructions). Path-scoped rules are still never loaded.
 - **Two-arm mode hides the skill signal.** Under `--ablation with-without`, `tool_used: Skill` graders become unscored "plugin-fired indicators", so a case can score 1.0 while its skill never fired. `run.sh` defaults to `--ablation none`, where they count, and its `FIRED` column reads them either way. Sibling graders carry `arm: both` so they are scored in both modes.
 - **Haiku as judge gives false negatives.** The judge is pinned to Sonnet. Prefer a regex for long outputs.

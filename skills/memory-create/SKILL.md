@@ -45,7 +45,7 @@ Bias toward UPDATE when the rule overlaps; only ADD when the trigger scenario, a
 ### 3. Claim an ID (ADD only)
 
 ```bash
-.claude/lib/memory-claim-id.sh <procedural|semantic|episodic>
+"${CLAUDE_PLUGIN_ROOT}/lib/memory-claim-id.sh" <procedural|semantic|episodic>
 ```
 
 Prints the claimed ID (e.g. `P053`) and nothing else. It runs the memory conformance check first, locks the main checkout, scans every worktree and every branch (local and remote), and records the claim before the file exists.
@@ -93,8 +93,8 @@ Use the type-appropriate template from `${aiDir}/.templates/memory-{type}.md`:
 Set `hook:` in the new memory's frontmatter — a one-line keyword/topic summary — then regenerate and verify:
 
 ```bash
-node .claude/lib/memory-index.mjs          # or `yarn memory:index` where wired up
-node .claude/lib/memory-index.mjs --check  # must print: memory indexes are up to date
+node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs"          # or `yarn memory:index` where wired up
+node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs" --check  # must print: memory indexes are up to date
 ```
 
 The index tables are generated from the memory files, so the row is derived from `hook:` rather than hand-written. The generator refuses to run while any memory lacks `hook:` — that is the check working, not a reason to edit the table by hand. If the generator is missing, the project predates it: run `/myspec:update`.

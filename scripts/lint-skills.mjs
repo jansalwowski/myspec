@@ -41,11 +41,12 @@ const KNOWN_BAD_KEYS = {
 // Confusable siblings each description's "Do NOT" clause must keep naming.
 // d60997b restored these after a description diet cut them: the sibling name is
 // what steers the model away from the wrong skill. Update this map when a
-// description deliberately changes its exclusions.
+// description deliberately changes its exclusions. `code-review` is Claude Code's
+// built-in (myspec's own was removed in 3.0, #150); it stays a sibling because
+// it is still the skill these descriptions must steer away from.
 const SIBLINGS = {
   'backbone-sync': ['feature-spec-sync', 'setup'],
   brainstorm: ['feature-plan'],
-  'code-review': ['feature-spec-review', 'feature-tech-spec-review', 'skill-verify'],
   'cross-spec-validation': ['feature-spec-review'],
   doctor: ['code-review', 'feature-verify', 'skill-verify'],
   'feature-implement': ['feature-plan'],
@@ -80,12 +81,20 @@ const SIBLINGS = {
 // skill-self-test as Critical in every repo the plugin is installed in
 // (AGENTS.md, "Never declare plugin-internal paths"; v1.20.0 mockup audits).
 const PLUGIN_INTERNAL_DIRS = [
-  'skills', 'plugins', 'blueprints', 'framework-files', 'scaffolding', 'templates',
-  'lib', 'hooks', 'examples', '.codex-plugin', '.claude-plugin',
+  'skills', 'blueprints', 'framework-files', 'scaffolding', 'templates',
+  'lib', 'hooks', 'examples', '.claude-plugin',
 ];
 
-// Caps from skills/skill-verify/references/detection-patterns.md.
-const DESCRIPTION_MAX = 1024;
+// Caps. The spec allows 1,024 description chars; this repo caps each shipped
+// skill at 350 (DESC-CAP) so no single skill crowds a consumer's own skills
+// out of the listing (docs/myspec-2.0-breaking-changes.md, the 2.0 description
+// diet: every description was rewritten to fit, doctor to exactly 350; by 2.11
+// code-review and memorize had grown back over it, issue #264). Repo-local
+// maintainer skills under .claude/skills/ never enter a consumer's listing, so
+// DESC-CAP skips them. LISTING_MAX (DESC-LENGTH) is Claude Code's own
+// truncation point and applies everywhere
+// (skills/skill-verify/references/detection-patterns.md).
+const DESCRIPTION_MAX = 350;
 const LISTING_MAX = 1536; // description + when_to_use, Claude Code listing truncation
 const BODY_TOKEN_BUDGET = 5000; // truncated past this on re-injection after /compact
 const BODY_LINE_BUDGET = 500;
@@ -94,7 +103,11 @@ const WORKFLOW_RE = /\b(analyzes?|generates?|creates?|validates?|checks?)\b.*\b(
 
 // Narrow per-skill exemptions: { skill: { RULE: 'reason' } }. Keep each one
 // tied to an owner and remove it when the finding is fixed.
-const EXEMPT = {};
+const EXEMPT = {
+  // code-review is removed by #258; drop this entry with the skill. Only the
+  // repo cap: the 1536 listing truncation (DESC-LENGTH) still applies.
+  'code-review': { 'DESC-CAP': 'removed by #258' },
+};
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -326,7 +339,9 @@ function lintFile(absPath, ctx) {
   if (!d.trim()) {
     add(desc?.line ?? 1, 'DESC-MISSING', '`description` is required and non-empty');
   } else {
-    if (d.length > DESCRIPTION_MAX) add(desc.line, 'DESC-LENGTH', `description is ${d.length} chars; the spec cap is ${DESCRIPTION_MAX}`);
+    // .claude/skills/<name>/SKILL.md: repo-local, never in a consumer's listing.
+    const repoLocal = path.basename(path.resolve(absPath, '../../..')) === '.claude';
+    if (!repoLocal && d.length > DESCRIPTION_MAX) add(desc.line, 'DESC-CAP', `description is ${d.length} chars; the cap is ${DESCRIPTION_MAX} (the 2.0 description diet; rewrite, do not truncate)`);
     const wtu = fields.when_to_use && typeof fields.when_to_use.value === 'string' ? fields.when_to_use.value : '';
     if (d.length + wtu.length > LISTING_MAX) add(desc.line, 'DESC-LENGTH', `description + when_to_use is ${d.length + wtu.length} chars; Claude Code truncates the listing at ${LISTING_MAX}`);
     if (!manualOnly) {

@@ -3,11 +3,11 @@
 # verify-before-stop.sh (issue #95, R6).
 #
 # A failing required check must block the stop when the session has no
-# implement run, must only warn (no block decision, a systemMessage instead)
-# while its last `implement` event in the session-state file is a start under
-# 8h old, and must block again when that start is stale, unreadable,
-# future-dated or followed by a stop, so a crashed run cannot disable the gate
-# for good.
+# implement run, and must only warn (no block decision, a systemMessage
+# instead) while its last `implement` event in the session-state file is a
+# start under 8h old. A start that is stale, unreadable, future-dated or
+# followed by a stop counts for nothing, so a crashed run cannot disable the
+# gate for good: session_implement_active in lib/tests/session-event.test.sh.
 #
 # The state is the session's own: a failing check in a linked task worktree
 # the session's subagents edited (armed through the shared session id) warns
@@ -21,6 +21,8 @@
 set -uo pipefail
 
 HOOK="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../verify-before-stop.sh}"
+# The hooks find their lib through CLAUDE_PLUGIN_ROOT, as the harness exports it.
+export CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$HOOK")/.." && pwd)}"
 MARK="$(cd "$(dirname "$HOOK")" && pwd)/mark-code-changed.sh"
 SESSION_EVENT="$(cd "$(dirname "$HOOK")" && pwd)/../lib/session-event.sh"
 
@@ -81,23 +83,9 @@ implement start "$NOW"
 OUT=$(run_hook)
 expect_warn "$OUT" "a fresh start downgrades to warning"
 
+# The real path: the skill's command, seen by mark-code-changed.sh, after a
+# stop ended the run above.
 implement stop "$NOW"
-OUT=$(run_hook)
-expect_block "$OUT" "a stop ends the downgrade"
-
-implement start "$(( NOW - 28801 ))"
-OUT=$(run_hook)
-expect_block "$OUT" "a stale start blocks"
-
-implement start '"garbage"'
-OUT=$(run_hook)
-expect_block "$OUT" "an unreadable start blocks"
-
-implement start "$(( NOW + 3600 ))"
-OUT=$(run_hook)
-expect_block "$OUT" "a future-dated start blocks"
-
-# The real path: the skill's command, seen by mark-code-changed.sh.
 jq -n --arg s "$SID" --arg d "$REPO" \
   '{session_id: $s, tool_name: "Bash", cwd: $d, tool_input: {command: "\"$(git rev-parse --show-toplevel)\"/.claude/lib/session-event.sh implement start"}}' \
   | bash "$MARK" >/dev/null 2>&1

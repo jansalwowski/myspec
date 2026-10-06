@@ -5,10 +5,12 @@
 # settings reader. One copy, one test file (lib/tests/hook-core.test.sh). The
 # session-state file has its own lib, lib/session-event.sh.
 #
-# Found the way the hooks find every other lib: next to the hook's own
-# directory (hooks/../lib in the plugin, .claude/hooks/../lib in a project),
-# else under CLAUDE_PLUGIN_ROOT. A hook that cannot find it fails open, as it
-# does without jq. bash 3.2 compatible (macOS /bin/bash). git 2.31 or later
+# Found the way the hooks find every other lib: under CLAUDE_PLUGIN_ROOT, the
+# plugin's installed directory, which the harness exports to every hook the
+# plugin's hooks.json declares (since 3.0 nothing is copied into a project's
+# .claude/). A hook that cannot find it fails open, as it does without jq.
+# A lib run by a skill or by hand sources hook-core.sh beside itself.
+# bash 3.2 compatible (macOS /bin/bash). git 2.31 or later
 # is recommended: checkout_facts asks `git rev-parse --path-format=absolute`,
 # and older git, which echoes the flag back, costs it a second call that
 # resolves the relative git dirs itself (README "Installation").
@@ -24,7 +26,7 @@ HOOK_LIB=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 HOOK_DECISION_TTL=28800
 
 # jq expression for payload_parse: the payload's cwd candidates, one per line.
-# `cwd` is what Claude Code and Codex send; the tool's own `cwd`/`workdir`
+# `cwd` is what Claude Code sends; the tool's own `cwd`/`workdir`
 # argument is the fallback.
 HOOK_CWDS='[.cwd, .tool_input.cwd, .tool_input.workdir] | map(select(type == "string" and . != "")) | join("\n")'
 
@@ -110,6 +112,25 @@ physical_dir() {
   (cd "$1" 2>/dev/null && pwd -P)
 }
 
+# file_sha256 <file> -> the file's SHA-256, hex. Fails when the file is not
+# a readable regular file or no hash tool exists (sha256sum on Linux and
+# BusyBox, shasum on macOS, openssl as the last resort).
+file_sha256() {
+  local out
+  [ -f "$1" ] && [ -r "$1" ] || return 1
+  if command -v sha256sum >/dev/null 2>&1; then
+    out=$(sha256sum < "$1") || return 1
+  elif command -v shasum >/dev/null 2>&1; then
+    out=$(shasum -a 256 < "$1") || return 1
+  elif command -v openssl >/dev/null 2>&1; then
+    out=$(openssl dgst -sha256 < "$1") || return 1
+    out="${out##* }"
+  else
+    return 1
+  fi
+  printf '%s\n' "${out%% *}"
+}
+
 # checkout_facts <path> -> facts about the checkout holding <path> (or its
 # nearest existing directory), from one `git rev-parse` call:
 #   CF_ROOT        its toplevel, physical
@@ -187,7 +208,8 @@ checkout_facts() {
 # hook_repo_root <cwd candidates> [myspec] -> the checkout the hook runs for:
 # the toplevel of the first candidate inside a work tree (with `myspec`, a
 # candidate holding .myspec.json counts too, for a project without git), else
-# that of $PWD, else that of the project the hook is installed in.
+# that of $PWD, else that of CLAUDE_PROJECT_DIR, the project the harness
+# started in (exported to hooks like CLAUDE_PLUGIN_ROOT).
 hook_repo_root() {
   local c top
   while IFS= read -r c; do
@@ -201,7 +223,8 @@ hook_repo_root() {
       return 0
     fi
   done <<< "$1"
-  for c in "$PWD" "$HOOK_LIB/../.."; do
+  for c in "$PWD" "${CLAUDE_PROJECT_DIR:-}"; do
+    [ -n "$c" ] || continue
     if top=$(git -C "$c" rev-parse --show-toplevel 2>/dev/null); then
       printf '%s\n' "$top"
       return 0
@@ -211,25 +234,38 @@ hook_repo_root() {
 }
 
 # ai_dir <root> -> the doc tree configured in <root>/.myspec.json, without a
-# leading ./ or trailing /; .ai, the documented default, when unset.
+# leading ./ or trailing /, read through the one settings reader (read_setting
+# below), whose schema holds the default: no hook carries one of its own. A
+# value the reader rejects (not a string, a file that is not JSON) is named on
+# stderr and replaced by the schema default inside the reader; an empty
+# string is unset and takes the same default here, read from the schema. A
+# caller that asks per file (the content checks) resolves once per root and
+# passes the value on.
 ai_dir() {
-  local ai=""
-  if [ -f "$1/.myspec.json" ]; then
-    ai=$(jq -r '.aiDir // empty' "$1/.myspec.json" 2>/dev/null || printf '')
+  local ai="" dflt
+  if read_setting aiDir "$1"; then
+    ai=$(printf '%s' "$SETTING" | jq -r 'if type == "string" then . else empty end' 2>/dev/null || printf '')
+    [ -z "$SETTING_NOTES" ] || printf '%s\n' "$SETTING_NOTES" | sed 's/^/myspec-config: /' >&2
   fi
   ai="${ai#./}"
   while [ "${ai%/}" != "$ai" ]; do ai="${ai%/}"; done
-  printf '%s\n' "${ai:-.ai}"
+  if [ -z "$ai" ]; then
+    dflt=$(jq -r '.keys.aiDir.default' "$HOOK_LIB/myspec-config.schema.json" 2>/dev/null || printf '')
+    ai="${dflt:-.ai}"
+  fi
+  printf '%s\n' "$ai"
 }
 
-# pretool_deny <reason> -> prints the PreToolUse deny (plus the legacy fields
-# older hosts read) and exits 0. An allowed call prints nothing: for
-# PreToolUse {"decision": "approve"} is the deprecated spelling of
-# permissionDecision "allow", which would skip the user's permission prompt.
+# pretool_deny <reason> -> prints the PreToolUse deny and exits 0. Only the
+# hookSpecificOutput form: the top-level decision/reason pair is the
+# deprecated PreToolUse spelling, and the host floor (README) reads this one.
+# An allowed call prints nothing: {"decision": "approve"} is the deprecated
+# spelling of permissionDecision "allow", which would skip the user's
+# permission prompt.
 pretool_deny() {
   local reason
   reason=$(printf '%s' "$1" | jq -Rs .)
-  printf '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": %s}, "decision": "block", "reason": %s}\n' "$reason" "$reason"
+  printf '{"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny", "permissionDecisionReason": %s}}\n' "$reason"
   exit 0
 }
 
@@ -246,15 +282,52 @@ decision_block() {
 
 # read_setting <dotted key> <root> -> sets SETTING to the value as JSON and
 # SETTING_NOTES to the reader's notes (what it ignored, or why it failed),
-# through the one settings reader (lib/myspec-config.sh, beside this file).
-# Fails without the reader, or when it fails.
+# through the one settings reader beside this file: lib/myspec-config.sh,
+# which needs jq, or its Node twin lib/myspec-config.mjs when jq is absent,
+# so a lib script that otherwise runs without jq keeps doing so. Fails
+# without a reader that can run, or when it fails.
 read_setting() {
-  local err rc=0
+  local err rc=0 reader
   SETTING="" SETTING_NOTES=""
-  [ -f "$HOOK_LIB/myspec-config.sh" ] || return 1
+  if command -v jq >/dev/null 2>&1 && [ -f "$HOOK_LIB/myspec-config.sh" ]; then
+    reader=(bash "$HOOK_LIB/myspec-config.sh")
+  elif command -v node >/dev/null 2>&1 && [ -f "$HOOK_LIB/myspec-config.mjs" ]; then
+    reader=(node "$HOOK_LIB/myspec-config.mjs")
+  else
+    SETTING_NOTES="reading a setting needs jq with $HOOK_LIB/myspec-config.sh, or node with $HOOK_LIB/myspec-config.mjs"
+    return 1
+  fi
   err=$(mktemp "${TMPDIR:-/tmp}/.myspec-cfg.XXXXXX") || return 1
-  SETTING=$(bash "$HOOK_LIB/myspec-config.sh" get "$1" --root "$2" 2>"$err") || rc=$?
+  SETTING=$("${reader[@]}" get "$1" --root "$2" 2>"$err") || rc=$?
   SETTING_NOTES=$(sed 's/^myspec-config: //' "$err")
   rm -f "$err"
   return "$rc"
+}
+
+# json_string <json> -> the string a JSON string value holds; nothing for
+# any other value. jq when present; without it sed, which undoes only \" and
+# \\ (enough for a path setting read through the Node reader).
+json_string() {
+  if command -v jq >/dev/null 2>&1; then
+    printf '%s' "$1" | jq -r 'if type == "string" then . else empty end' 2>/dev/null || printf ''
+  else
+    printf '%s\n' "$1" | sed -n 's/^"\(.*\)"$/\1/p' | sed 's/\\"/"/g; s/\\\\/\\/g'
+  fi
+}
+
+# lock_paths_for <dir> <pattern>... -> the <dir>-relative regular files the
+# lockfile patterns match there, one per line, in pattern order. A pattern
+# is a shell glob: * and ? stay within one directory, [...] is a class. The
+# one matcher for worktree-provision.sh, which records what a pattern
+# matched, and the Stop hook's provision check (stop-gate/provision.sh),
+# which compares it, so the two cannot drift on what a pattern matches.
+lock_paths_for() {
+  local dir="$1" pat f IFS=''
+  shift
+  for pat in "$@"; do
+    for f in "$dir"/$pat; do
+      [ -f "$f" ] && printf '%s\n' "${f#"$dir"/}"
+    done
+  done
+  return 0
 }

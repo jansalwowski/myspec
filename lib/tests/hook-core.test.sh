@@ -244,7 +244,8 @@ rc=0; read_setting '.bad' "$ROOT/plain" 2>/dev/null || rc=$?
 
 # shellcheck disable=SC2317 # reached only if pretool_deny fails to exit
 out=$(pretool_deny 'no "way"'; echo unreachable)
-eq "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision + "|" + .reason')" 'deny|no "way"' "pretool_deny prints the deny form and exits"
+eq "$(printf '%s' "$out" | jq -r '.hookSpecificOutput.permissionDecision + "|" + .hookSpecificOutput.permissionDecisionReason')" 'deny|no "way"' "pretool_deny prints the deny form and exits"
+eq "$(printf '%s' "$out" | jq -r 'has("decision") or has("reason")')" false "pretool_deny prints no legacy decision/reason pair (the 3.0 host floor reads hookSpecificOutput)"
 
 # shellcheck disable=SC2317 # reached only if decision_block fails to exit
 out=$(decision_block 'Fix %s:\n\n%s\n' "a.ts" 'line "1"'; echo unreachable)
@@ -263,6 +264,39 @@ eq "$(bash -e -c '. "$1"; canonical_main_worktree "$2"; echo AFTER' _ "$ROOT/pn-
   "$ROOT/plain/.claude/worktrees/wt"$'\n'"AFTER" "path-normalize without hook-core: the path itself, and the caller goes on"
 eq "$(bash -e -c '. "$1"; canonical_main_worktree "$2"' _ "$PN" "$ROOT/plain/.claude/worktrees/wt" 2>&1)" \
   "$ROOT/plain" "path-normalize with hook-core: a linked worktree maps to its main checkout"
+
+# normalize_path maps the auto-memory store under any Claude config dir to
+# <config_dir>/projects/<encoded_cwd> (#161: ~/.claude, the default, gave rc=1).
+pn() { bash -c '. "$1"; shift; normalize_path "$@"' _ "$PN" "$@" 2>&1; }
+eq "$(HOME=/Users/h CLAUDE_CONFIG_DIR='' pn /Users/h/.claude/projects/-Users-h-repo/memory/a.md /r)" \
+  "<config_dir>/projects/<encoded_cwd>/memory/a.md" "normalize_path: the default ~/.claude store"
+eq "$(HOME=/Users/h CLAUDE_CONFIG_DIR='' pn /Users/h/.claude-personal/projects/-Users-h-repo /r)" \
+  "<config_dir>/projects/<encoded_cwd>" "normalize_path: a ~/.claude-personal store"
+eq "$(HOME=/Users/h CLAUDE_CONFIG_DIR=/opt/cc pn /opt/cc/projects/-Users-h-repo/memory /r)" \
+  "<config_dir>/projects/<encoded_cwd>/memory" "normalize_path: a CLAUDE_CONFIG_DIR store"
+rc=0; HOME=/Users/h CLAUDE_CONFIG_DIR='' pn /Users/h/.claude/settings.json /r >/dev/null || rc=$?
+[ "$rc" -eq 1 ] && ok || fail "normalize_path: a config-dir file outside projects/ is not convertible"
+rc=0; HOME=/Users/h CLAUDE_CONFIG_DIR='' pn /Users/h/.claudex/projects/p /r >/dev/null || rc=$?
+[ "$rc" -eq 1 ] && ok || fail "normalize_path: a look-alike dir is not a config dir"
+
+# --- file_sha256 ----------------------------------------------------------------------
+
+printf 'abc' > "$ROOT/hash.txt"
+eq "$(file_sha256 "$ROOT/hash.txt")" "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad" "file_sha256: the SHA-256 of the file's bytes"
+rc=0; file_sha256 "$ROOT/no-such-file" >/dev/null || rc=$?
+[ "$rc" -ne 0 ] && ok || fail "file_sha256 fails on a missing file"
+rc=0; file_sha256 "$ROOT" >/dev/null || rc=$?
+[ "$rc" -ne 0 ] && ok || fail "file_sha256 fails on a directory"
+
+# --- lock_paths_for --------------------------------------------------------------------
+
+mkdir -p "$ROOT/locks/a" "$ROOT/locks/b" "$ROOT/locks/c/d" "$ROOT/locks/sp ace"
+for f in a/x.lock b/x.lock c/d/x.lock "sp ace/x.lock" top.lock; do printf 'l' > "$ROOT/locks/$f"; done
+mkdir -p "$ROOT/locks/dir.lock"
+eq "$(lock_paths_for "$ROOT/locks" '*/x.lock' | paste -sd, -)" "a/x.lock,b/x.lock,sp ace/x.lock" "lock_paths_for: a * stays within one directory"
+eq "$(lock_paths_for "$ROOT/locks" '[ab]/x.lock' | paste -sd, -)" "a/x.lock,b/x.lock" "lock_paths_for: [...] is a class"
+eq "$(lock_paths_for "$ROOT/locks" 'sp ace/x.lock' top.lock nope.lock | paste -sd, -)" "sp ace/x.lock,top.lock" "lock_paths_for: a space is not a separator, a missing file prints nothing"
+eq "$(lock_paths_for "$ROOT/locks" '*.lock' | paste -sd, -)" "top.lock" "lock_paths_for: only regular files"
 
 # --- glob-regex comes along -------------------------------------------------------
 

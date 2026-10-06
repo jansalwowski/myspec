@@ -112,14 +112,14 @@ expect_empty "quoted hook text and a non-error result are not events"
 S=s5-hook-errors
 {
   prompt 'go'
-  hook_err PreToolUse:Bash '.claude/hooks/guard-git-branch.sh' 127 'Failed with non-blocking status code: /bin/sh: .claude/hooks/guard-git-branch.sh: No such file or directory'
+  hook_err PreToolUse:Bash '.claude/hooks/guard-worktree-context.sh' 127 'Failed with non-blocking status code: /bin/sh: .claude/hooks/guard-worktree-context.sh: No such file or directory'
   # shellcheck disable=SC2016 # literal text, not an expansion
   hook_err Stop '"${CLAUDE_PLUGIN_ROOT}/hooks/verify-before-stop.sh"' 1 'jq: error'
   hook_err PreToolUse:Bash '.claude/hooks/guard-bulk-read.sh' 127 'Failed with non-blocking status code: /bin/sh: .claude/hooks/guard-bulk-read.sh: No such file or directory'
   hook_err PostToolUse:Write '.claude/hooks/no-absolute-paths.sh' 127 '.claude/hooks/no-absolute-paths.sh: line 12: jq: command not found'
 } > "$(session $S)"
 run --session=$S
-expect_line '^\| hook not found: guard-git-branch.sh \| setup \| 1 \|' "retired myspec hook still registered: setup"
+expect_line '^\| hook not found: guard-worktree-context.sh \| setup \| 1 \|' "myspec hook registered but missing: setup"
 expect_line '^\| hook failed \(exit 1\): verify-before-stop.sh \| myspec \|' "myspec hook crashing: myspec"
 expect_line '^\| hook not found: guard-bulk-read.sh \| project \|' "project's missing hook: project"
 expect_line '^\| hook failed \(exit 127\): no-absolute-paths.sh \| setup \| 1 \| hooks/no-absolute-paths.sh \| a command the hook calls is missing' "exit 127 from a command inside the hook: not 'script missing'"
@@ -236,23 +236,60 @@ expect_exit 3 "unrecognized format: exit 3"
 run
 expect_exit 1 "no arguments: usage error"
 
+# ── 9b. a resumed session: several ids scanned as one run (#170) ──
+# Two blocks in the first id and one in the resumed id cross the threshold
+# only together; each id's subagents are read from its own directory.
+{ prompt 'fix the bug'; for i in 1 2; do tool_use "r$i" Edit; tool_err "r$i" "PreToolUse:Edit hook error: $ISO"; done; } > "$(session s10-first)"
+{ prompt 'continue'; tool_use r3 Edit; tool_err r3 "PreToolUse:Edit hook error: $ISO"; } > "$(session s10-resumed)"
+F=$(subagent s10-resumed b1); meta s10-resumed b1 'Implement Task 7'
+{ prompt 'Task 7'; say $'**Status:** BLOCKED\nNo credentials.'; } > "$F"
+run --session=s10-first
+expect_empty "first id alone: below threshold"
+run --session=s10-first,s10-resumed
+expect_exit 0 "two ids: exit 0"
+expect_line '^\| hook block: isolation-undecided \| myspec \| 3 \|' "two ids: events counted across the chain"
+expect_line '^\| subagent-blocked \| unknown \| 1 \| - \| Implement Task 7' "two ids: the resumed id's subagents are read"
+expect_line '^friction-scan: session s10-firs' "two ids: header names the first id"
+run --session=s10-first,does-not-exist
+expect_exit 0 "one id of several missing: still scans the rest"
+expect_line 'no transcript found for session does-not-exist' "one id of several missing: named on stderr"
+run --session=nope-1,nope-2
+expect_exit 2 "every id missing: exit 2"
+
 # ── 10. the signature table matches the hook sources ──
+# A hook's messages may live in the modules it sources: verify-before-stop.sh
+# is a shim over lib/stop-gate/, and the three content gates print the
+# reasons lib/content-checks.sh builds (#263).
 OUTPUT=$(node --input-type=module -e "
   import { HOOK_SIGNATURES, MYSPEC_HOOKS } from '$SCRIPT'
-  import { readFileSync, existsSync } from 'node:fs'
-  const retired = ['guard-git-branch.sh']
+  import { readFileSync, existsSync, readdirSync, statSync } from 'node:fs'
+  const modules = {
+    'verify-before-stop.sh': '$HERE/../stop-gate',
+    'no-absolute-paths.sh': '$HERE/../content-checks.sh',
+    'validate-frontmatter.sh': '$HERE/../content-checks.sh',
+    'require-reuse-audit.sh': '$HERE/../content-checks.sh',
+  }
+  const sources = (p) => statSync(p).isDirectory() ? readdirSync(p).map((f) => readFileSync(p + '/' + f, 'utf8')) : [readFileSync(p, 'utf8')]
+  const text = (h) => [readFileSync('$HOOKS_DIR/' + h, 'utf8')]
+    .concat(modules[h] ? sources(modules[h]) : []).join('\\n')
   for (const s of HOOK_SIGNATURES) {
     const src = '$HOOKS_DIR/' + s.hook
     if (!existsSync(src)) { console.log('missing hook ' + s.hook); continue }
-    if (!readFileSync(src, 'utf8').includes(s.match)) { console.log('stale signature ' + s.id) }
+    if (!text(s.hook).includes(s.match)) { console.log('stale signature ' + s.id) }
   }
   for (const h of MYSPEC_HOOKS) {
-    if (!retired.includes(h) && !existsSync('$HOOKS_DIR/' + h)) { console.log('unknown hook ' + h) }
+    if (!existsSync('$HOOKS_DIR/' + h)) { console.log('unknown hook ' + h) }
   }
 " 2>&1)
 expect_empty "every signature is a literal substring of its hook"
 OUTPUT=$(cd "$HOOKS_DIR" && for h in *.sh; do grep -q "'$h'" "$SCRIPT" || echo "not in MYSPEC_HOOKS: $h"; done)
 expect_empty "every shipped hook is in MYSPEC_HOOKS"
+# The user-facing part of docs/friction-report.md shows real rows, so every
+# hook it names is one the scanner knows. The maintainer section may name
+# retired hooks as history.
+DOC="$HERE/../../docs/friction-report.md"
+OUTPUT=$(sed '/^## For maintainers/,$d' "$DOC" | grep -oE '[a-z0-9-]+\.sh' | sort -u | while read -r h; do grep -q "'$h'" "$SCRIPT" || echo "friction-report.md names a hook not in MYSPEC_HOOKS: $h"; done)
+expect_empty "friction-report.md example rows name only known hooks"
 
 printf 'friction-scan: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

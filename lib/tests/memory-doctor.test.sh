@@ -101,9 +101,12 @@ expect_line '^memory doctor: no memory tree at \.ai/memory$' "no memory tree is 
 
 # --- 1. a clean project -------------------------------------------------------
 
-mkdir -p .ai/memory/procedural .ai/memory/semantic .ai/memory/episodic .claude/lib .claude/state
+mkdir -p .ai/memory/procedural .ai/memory/semantic .ai/memory/episodic .claude/state
 printf '.claude/state/\n' > .gitignore
-touch .claude/lib/memory-claim-id.sh .claude/lib/memory-index.mjs .claude/lib/memory-files.mjs
+# Live anchors: the files exist and contain their patterns.
+mkdir -p src
+printf 'function foo() {}\n' > src/a.js
+printf 'const bar = 1;\n' > src/b.js
 
 memory .ai/memory/procedural/P001-first.md P001 "first thing" 'anchors: [{file: "src/a.js", pattern: "foo"}]' 'related: [S001]'
 memory .ai/memory/procedural/P002-old.md P002 "second thing"
@@ -165,6 +168,11 @@ memory .ai/memory/procedural/p005-lower.md P005 "lowercase name"
 memory .ai/memory/procedural/P006.md P006 "slugless"
 memory .ai/memory/procedural/P007-mismatch.md P070 "id disagrees"
 memory .ai/memory/procedural/P008-related.md P008 "dangling related" 'related: [P099, E001]'
+# Dead anchors (#184): a file that is gone, a pattern its file no longer has.
+memory .ai/memory/procedural/P010-gone-file.md P010 "gone file" 'anchors: [{file: "src/deleted.js", pattern: "foo"}]'
+memory .ai/memory/procedural/P011-gone-pattern.md P011 "gone pattern" 'anchors: [{file: "src/a.js", pattern: "renamedAway"}]'
+# A regex pattern that matches is live.
+memory .ai/memory/procedural/P012-regex.md P012 "regex pattern" 'anchors: [{file: "src/a.js", pattern: "function fo+\\("}]'
 index .ai/memory/procedural/index.md '| ID | Hook | Anchor |' \
   '| [P001](P001-first.md) | first thing | src/a.js |' \
   '| [P002](P002-new.md) | second thing | |' \
@@ -173,7 +181,10 @@ index .ai/memory/procedural/index.md '| ID | Hook | Anchor |' \
   '| [P006](P006.md) | slugless | |' \
   '| [P007](P007-mismatch.md) | id disagrees | |' \
   '| [P008](P008-old-name.md) | dangling related | |' \
-  '| [P009](P009-gone.md) | no such file | |'
+  '| [P009](P009-gone.md) | no such file | |' \
+  '| [P010](P010-gone-file.md) | gone file | src/deleted.js |' \
+  '| [P011](P011-gone-pattern.md) | gone pattern | src/a.js |' \
+  '| [P012](P012-regex.md) | regex pattern | src/a.js |'
 
 # Semantic: malformed and pattern-less anchors.
 memory .ai/memory/semantic/S002-bad.md S002 "bad anchor" 'anchor: false'
@@ -188,7 +199,6 @@ index .ai/memory/semantic/index.md '| ID | Hook | Anchor |' \
 mkdir -p ai/memory/procedural .claude/rules
 printf -- '---\nload_when: always\n---\n# rule\n' > .claude/rules/inert.md
 printf -- '---\npaths: ["src/**"]\n---\n# rule\n' > .claude/rules/fine.md
-rm .claude/lib/memory-index.mjs
 
 run_doctor --root "$REPO"
 
@@ -211,10 +221,13 @@ expect_line '^ERROR index-drift: \.ai/memory/procedural/index\.md: P008 links to
 expect_no_line '^ERROR index-drift: \.ai/memory/procedural/index\.md: P005' "bare-ID row still counts as indexed"
 expect_line '^ERROR index-drift: \.ai/memory/episodic/index\.md: E003 on disk but not in the table' "the episodic index is checked for drift like any other"
 expect_line '^ERROR malformed-anchor: \.ai/memory/semantic/S002-bad\.md: anchor value "false"' "anchor: false"
-expect_line '^ERROR tooling-missing: \.claude/lib/: missing memory-index\.mjs — run /myspec:update$' "missing lib file"
 
 # warnings
 expect_line '^WARN anchor-no-pattern: \.ai/memory/semantic/S003-scalar\.md: anchor src/c\.js has no pattern' "scalar anchor has no pattern"
+expect_line '^WARN anchor-missing-file: \.ai/memory/procedural/P010-gone-file\.md: anchor src/deleted\.js does not exist' "anchor to a missing file warns"
+expect_line '^WARN anchor-pattern-gone: \.ai/memory/procedural/P011-gone-pattern\.md: anchor pattern "renamedAway" no longer matches src/a\.js' "anchor whose pattern is gone warns"
+expect_no_line 'anchor-(missing-file|pattern-gone): \.ai/memory/procedural/P012-regex\.md' "a regex pattern that matches is live"
+expect_no_line '^ERROR anchor-' "dead anchors are never errors"
 expect_line '^WARN empty-anchors: \.ai/memory/procedural/P004-empty\.md: .*remove the key or add one$' "anchors: []"
 expect_line '^WARN filename-case: \.ai/memory/procedural/p005-lower\.md: .*rename to P005-lower\.md for consistency$' "lowercase prefix"
 expect_line '^WARN filename-slugless: \.ai/memory/procedural/P006\.md' "slugless filename"
@@ -252,12 +265,6 @@ if [ "$(printf '%s' "$OUTPUT" | jq '.warnings | length')" -eq "$N_WARN" ]; then 
 if printf '%s' "$OUTPUT" | jq -e '[.errors[], .warnings[]] | all(has("id") and has("detail") and has("path"))' >/dev/null 2>&1; then ok; else fail "--json findings carry id, detail, path"; fi
 if [ "$(printf '%s' "$OUTPUT" | jq -r '.errors[] | select(.id == "duplicate-id" and (.detail | startswith("S001"))) | .path')" = ".ai/memory/semantic/S001-main.md" ]; then ok; else fail "--json duplicate path is the on-disk file"; fi
 if [ "$(printf '%s' "$OUTPUT" | jq -r '.warnings[] | select(.id == "state-not-ignored") | .path')" = ".claude/state/" ]; then ok; else fail "--json project-level finding carries a path"; fi
-
-# --- 3. no .claude/lib means the project opted out of tooling -----------------
-
-rm -rf .claude/lib
-run_doctor --root "$REPO"
-expect_no_line '^ERROR tooling-missing' "no .claude/lib skips tooling-missing"
 
 # --- 4. issue #124: an ID deleted on the default branch and reused there -----
 #

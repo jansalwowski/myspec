@@ -46,6 +46,17 @@ A later layer wins key by key. Objects merge; lists merge by the rule in princip
 
 `verification.json` stays where the checks are. Settings about checks live on the check, so a check and its scope never sit in two files.
 
+## Schema version
+
+`lib/myspec-config.schema.json` carries a `version`, and that number is the versioned contract of `.myspec.json`. A key rename or removal bumps it and ships a one-shot migration in `framework-files/manifest.json` (run by `update`, recorded in `.myspec.json` `migrations`), so a project is never left holding a key nothing reads. An added key does not bump it: absent means today's behaviour (principle 2), so a project on the previous version reads the same under the new schema.
+
+| Version | Since | Removed (with its migration) | Added |
+|---|---|---|---|
+| 1 | 2.11.0 | — | the keys the catalogue below listed at 2.11 |
+| 2 | 3.0.0 | `project.description` (`3.0.0-schema-v2`, #265), `codeReview` (`3.0.0-code-review`, #258), `reuseAudit` (`3.0.0-reuse-audit`, #274) | `project.name` and `project.techStack` typed; `frameworkFiles[key].hash` and `.upstreamHash` (#160, backfilled by `3.0.0-schema-v2`); `mockups` (#265); `orchestration.featureImplement` (#247); `probes.portSource` (#196); `probes.scratchEnvScript` (#197) |
+
+A `*` segment in a schema key (`frameworkFiles.*.pinned`) types every value of the map above it, the way `name[]` types every item of a list; the readers look inside neither, doctor validates both.
+
 ## Catalogue
 
 Keys marked **new** are proposed; the rest exist and are listed so the schema starts complete.
@@ -69,7 +80,7 @@ Polyglot example:
 ]
 ```
 
-Interaction with the guards: a tree that `install` built in the worktree is a real directory, not a link, so the linked-dependency guard (#229 / PR #236) passes it. That is why #236 should merge together with #230: #236 refuses the false pass, and `install` is the supported way to a true one. When a dependency tree holds workspace links that resolve into the main checkout and `install` is unset, provisioning skips that link and prints "set `isolation.provision.install` or run a real install", as it does today for a lockfile change. A workspace config alone skips nothing, so a tree with no such links (a pnpm workspace's Composer `vendor`) is still linked.
+Interaction with the guards: a tree that `install` built in the worktree is a real directory, not a link, so provision neither links nor records it and the Stop gate has nothing to compare. That is why #236 should merge together with #230: #236 refuses the false pass, and `install` is the supported way to a true one. When a dependency tree holds workspace links that resolve into the main checkout and `install` is unset, provisioning skips that link and prints "set `isolation.provision.install` or run a real install", as it does today for a lockfile change. A workspace config alone skips nothing, so a tree with no such links (a pnpm workspace's Composer `vendor`) is still linked.
 
 `--no-install` on `worktree-provision.sh` skips the install steps, for restricted environments, and prints each step it skipped.
 
@@ -93,7 +104,8 @@ Removing a default extension is deliberately not offered. A project that wants a
 |---|---|---|---|---|
 | `checks[].paths` | list of glob | none (always runs) | **new**, #232 | Run the check only when a file this session wrote in this checkout (`$MYSPEC_SESSION_FILES`), or a path git reports changed there (uncommitted, or against the base), matches. In a polyglot monorepo, `api/**` scopes the PHP checks and `web/**` the TypeScript ones. Loosens the gate, so doctor lists it, and a required check scoped by `paths` is reported in the stop message when it was skipped. |
 | `containers` | map of name → `{mountSource, mountTarget}` | none | **new**, #221 | Describes a container that bind-mounts part of the repo. `mountSource` is repo-relative (usually `.`), `mountTarget` is the absolute path inside the container. |
-| `checks[].runIn` | container name | none | **new**, #221 | The gate exports `MYSPEC_CHECK_WORKDIR` = `mountTarget` + the path of the checkout's `mountSource` relative to the main checkout's `mountSource` (with `mountSource` `.`, the checkout's own path; with `api`, a worktree's `api/` is never under the main checkout's, so only the main checkout is visible). The command uses it, e.g. `docker compose -p myapp exec -w "$MYSPEC_CHECK_WORKDIR" api make lint`, which is right in the main checkout and in a worktree nested under the mount (`-p` pins the compose project, which compose otherwise names after the worktree directory). When the worktree is not under `mountSource`, the check is refused with "this worktree is not visible inside the container" and never run. A check with `runIn` satisfies the #220 refusal when its command passes `-w`/`--workdir` or uses `MYSPEC_CHECK_WORKDIR`. |
+| `checks[].cwd` | repo-relative path | none (the checkout root) | #250 | The check runs from this directory of the verified checkout, so a package's check needs no `cd` in its command. An absolute value or one with a `..` segment is ignored and named in the stop message. With `runIn`, `MYSPEC_CHECK_WORKDIR` includes it. `$MYSPEC_SESSION_FILES` is relative to it (a file outside it gets `../`); `git diff --name-only` still prints repo-root-relative paths, so a `diffCommand` there adds `--relative` or `cd`s to the root. |
+| `checks[].runIn` | container name | none | **new**, #221 | The gate exports `MYSPEC_CHECK_WORKDIR` = `mountTarget` + the path of the checkout's `mountSource` relative to the main checkout's `mountSource` (with `mountSource` `.`, the checkout's own path; with `api`, a worktree's `api/` is never under the main checkout's, so only the main checkout is visible). The command uses it, e.g. `docker compose -p myapp exec -w "$MYSPEC_CHECK_WORKDIR" api make lint`, which is right in the main checkout and in a worktree nested under the mount (`-p` pins the compose project, which compose otherwise names after the worktree directory). When the worktree is not under `mountSource`, the check is refused with "this worktree is not visible inside the container" and never run. A check with `runIn` is trusted to use the workdir and satisfies the #220 refusal; doctor warns when its command passes neither `-w`/`--workdir` nor `MYSPEC_CHECK_WORKDIR`. |
 
 The framework never names a container runtime: the command is the project's, and `MYSPEC_CHECK_WORKDIR` works with Docker, Podman, `nerdctl` or `kubectl exec` alike.
 
@@ -101,9 +113,38 @@ The framework never names a container runtime: the command is the project's, and
 
 | Key | Type | Default | Issue | Effect |
 |---|---|---|---|---|
-| `blockInMain` | list of anchored ERE | `[]` | exists | Extra commands blocked in the main checkout while a session is in worktree mode. |
-| `allowLinkedModules` | bool | `false` | exists | Accept a linked dependency tree at the Stop gate. Loosens the gate. |
+| `blockInMain` | list of anchored ERE | the built-in list (see schema) | exists; default #250 | Commands blocked in the main checkout while a session is in worktree mode. The default is the guard's former `HEAVY_PATTERNS`: builds, installs, e2e runs, `lint:fix`, `docker compose exec`, `git push`, `git worktree prune`, for the JS, PHP, Python, Ruby, Rust, Go, JVM (Maven, Gradle), .NET and Make stacks. A project's entries extend it. |
+| `ignoreBlockInMain` | list of anchored ERE | `[]` | #250 | Default `blockInMain` entries, by their exact text, that the guard drops. Loosens the gate, so doctor lists it. |
+| `allowLinkedModules` | bool | `false` | exists | Read by `worktree-provision.sh` only (#239): link a dependency tree even when its lockfiles differ from the main checkout's, and record it without lockfile hashes, so the Stop gate does not compare them. Loosens the gate. |
 | `worktreeRoot` | repo-relative path | `.claude/worktrees` | exists | Where worktrees are created. |
+
+### Mockups: `.myspec.json` `mockups`
+
+Written by the `setup` skill's `mockup` blueprint (`blueprints/mockup.md`, Post-generation), read by `feature-mockup`, `feature-mockup-review` and `update`. Absent means no mockup configuration: the skills run their universal guards only. Each key is optional; the blueprint omits the ones answered "none".
+
+| Key | Type | Default | Issue | Effect |
+|---|---|---|---|---|
+| `extension` | string, dot included | none | exists, #265 | The file extension mockups are written with (`.vue`, `.html`, `.tsx`). |
+| `commands.verify` | command | none | exists, #265 | Type-check or lint run over the mockups after each build. |
+| `commands.preview` | command | none | exists, #265 | Dev server that serves the mockups for preview. |
+| `commands.compileCheck` | command | none | exists, #265 | Per-file compile check against the preview server; `{port}` and `{absPath}` are substituted. |
+| `commands.audit` | command | none | exists, #265 | Reuse audit listing shared mockup scaffolding, run before non-trivial chrome is authored. |
+| `siblingRoots` | list of path | none | exists, #265 | Repo-relative directories of production components the mockups may import from. |
+
+### Orchestration: `.myspec.json` `orchestration`
+
+| Key | Type | Default | Issue | Effect |
+|---|---|---|---|---|
+| `featureImplement` | `"controller"` or `"workflow"` | `"controller"` | #247 | How `feature-implement` runs the per-task loop. `controller` is today's behaviour; `workflow` opts in to the host's Workflow tool where it exists. The schema records the key since 3.0; the mode itself is #247. |
+
+### Probes: `.myspec.json` `probes`
+
+The probe runs `feature-plan` writes and `feature-implement` dispatches. Both keys are recorded by the schema since 3.0 so that a project can declare them once; reading them is #196 and #197.
+
+| Key | Type | Default | Issue | Effect |
+|---|---|---|---|---|
+| `portSource` | repo-relative path, or `$NAME` | none | #196 | Where a probe takes its dev-server ports from instead of literal ports in the plan: a file holding the per-checkout port slots, or the environment variable that holds them. |
+| `scratchEnvScript` | repo-relative path | none | #197 | A script that provisions the scratch environment a probe run needs (database, cache, buckets), reused across probe runs instead of rebuilt by each one. |
 
 ### Deferred
 
@@ -117,7 +158,7 @@ The schema lives in `lib/myspec-config.schema.json`. Hooks don't validate at run
 
 ## Visibility: doctor (#233)
 
-- `setup-doctor schema` validates `.myspec.json` and `verification.json` against the schema: unknown keys (with a near-miss suggestion), wrong types, and `runIn` naming an undefined container are reported, and so are a glob the readers would skip and an `install` step whose `cwd` does not exist. The doctor names no key: the schema's `format` (`glob`, `dir`) and `refersTo` fields say what to check, and `name[]` / `name[].field` entries type the items of a list. A wrong type and an undefined reference are errors, because the readers drop the value and the stop gate refuses the check. The other findings are warnings.
+- `setup-doctor schema` validates `.myspec.json` and `verification.json` against the schema: unknown keys (with a near-miss suggestion), wrong types, and `runIn` naming an undefined container are reported, and so are a glob the readers would skip and an `install` step whose `cwd` does not exist. The doctor names no key: the schema's `format` (`glob`, `dir`), `refersTo` and `itemOf` fields say what to check (`itemOf`: an `isolation.ignoreBlockInMain` entry that is not, by exact text, an entry of the effective `isolation.blockInMain` warns, since it removes nothing), and `name[]` / `name[].field` entries type the items of a list. A wrong type and an undefined reference are errors, because the readers drop the value and the stop gate refuses the check. The other findings are warnings.
 - A new `setup-doctor settings` surface prints every key that differs from its default, its value and its layer, and marks the ones the schema flags `loosens`. Keys flagged `bookkeeping` are left out. `/myspec:doctor` includes it, so a reviewer of a consumer project sees the effective policy in one place.
 
 ## #226: how `work-isolation.md` loads

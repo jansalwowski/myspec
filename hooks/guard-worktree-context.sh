@@ -21,8 +21,10 @@
 #      are blocked as well: builds, installs, e2e runs, `lint:fix`,
 #      `docker compose exec`, `git push` and `git worktree prune` (not its
 #      `--dry-run`) silently target the wrong tree and are noticed
-#      only when the output looks wrong. `.myspec.json` `isolation.blockInMain`
-#      adds project patterns (anchored extended regexes over a command segment).
+#      only when the output looks wrong. The list is the setting
+#      `isolation.blockInMain` (anchored extended regexes over a command
+#      segment): a default in the settings schema, which a project extends
+#      there and trims with `isolation.ignoreBlockInMain`.
 #
 # Until 2.0 gate A was its own hook, guard-git-branch.sh; folding the two keeps
 # one root resolver, one scanner, one worktree lookup, one block message.
@@ -37,7 +39,8 @@
 #
 # WHERE a segment runs is decided per segment, not once per command: the
 # payload's cwd, then every `cd <dir>` before it (scoped to its subshell), then
-# `git -C <dir>` / `--git-dir`. Launchers are looked through — `env`, `command`,
+# `git -C <dir>` / `--git-dir`, and a build tool's own directory flag
+# (`make -C`, `mvn -f <pom>`, `gradle -p`). Launchers are looked through — `env`, `command`,
 # `sudo`, `exec`, `nohup`, `time`, `nice`, git's global options (`-c k=v`,
 # `--no-pager`, ...) — and `bash -c '...'` / `eval` payloads are scanned as
 # commands. So `cd <worktree> && git checkout x` (the sanctioned path both block
@@ -66,12 +69,23 @@ set -euo pipefail
 
 MAX_DEPTH=3        # nested `bash -c` / `eval` payloads scanned
 
-# The hook and its libs ship as a set: hooks/ + lib/ in the plugin,
-# .claude/hooks/ + .claude/lib/ in a project. A missing jq or lib fails open
-# rather than block on an infra error.
+# The hook runs from the plugin (hooks.json), which exports CLAUDE_PLUGIN_ROOT,
+# and its libs are the plugin's lib/. A missing jq or lib fails open rather
+# than block on an infra error.
 command -v jq >/dev/null 2>&1 || exit 0
-HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
-[ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
+# The lib is the plugin's lib/, under CLAUDE_PLUGIN_ROOT, which the harness
+# exports to a hook the plugin's hooks.json declares. Without it the hook
+# cannot load hook-core.sh, and approving in silence would hide a gate that
+# is not running (a stale copy wired in .claude/settings.json, a harness that
+# did not export the variable). Say so, naming the variable and the repair.
+# The same preamble sits in every non-Stop hook: hook-core is what is missing.
+HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
+if [ ! -f "$HOOK_CORE" ]; then
+  LIB_MISSING="myspec lib missing: hook-core.sh not found under \${CLAUDE_PLUGIN_ROOT}/lib (CLAUDE_PLUGIN_ROOT is ${CLAUDE_PLUGIN_ROOT:-unset}). The hook did not run from the plugin's hooks.json; a copy wired in .claude/settings.json is retired by /myspec:update."
+  printf '%s\n' "$LIB_MISSING" >&2
+  jq -nc --arg r "$LIB_MISSING" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}}'
+  exit 0
+fi
 if [ ! -f "$HOOK_CORE" ] || [ ! -f "$(dirname "$HOOK_CORE")/command-scan.sh" ] \
     || [ ! -f "$(dirname "$HOOK_CORE")/session-event.sh" ]; then
   exit 0
@@ -114,29 +128,17 @@ BRANCH_PATTERNS=(
 # Resuming or unwinding an operation already in progress.
 BRANCH_CARVE_OUT='^git[[:space:]]+(rebase|merge)[[:space:]]+--(continue|abort|skip)[[:space:]]*$'
 
-# Commands whose result depends on which tree they run in, or which write to it.
-# `build` also covers a `build:<target>` script (`build:web`, `build:prod`):
-# projects whose builds are all targets otherwise got no gate B (issue #164).
-# `docker compose exec` runs inside the container of the compose project in
-# the current directory, which mounts that tree; global options before `exec`
-# (`-f <file>`, `--project-name <n>`) are looked through.
-HEAVY_PATTERNS=(
-  '^(yarn|npm|pnpm|bun)[[:space:]]+((run|run-script)[[:space:]]+)?build([[:space:]]|:|$)'
-  '^composer[[:space:]]+((run|run-script)[[:space:]]+)?build([[:space:]]|:|$)'
-  '^(docker[[:space:]]+compose|docker-compose)([[:space:]]+-[^[:space:]]+([[:space:]]+[^-[:space:]][^[:space:]]*)?)*[[:space:]]+exec([[:space:]]|$)'
-  '^(yarn|pnpm|bun)[[:space:]]+(install|add|upgrade|remove|dedupe|up)([[:space:]]|$)'
-  '^npm[[:space:]]+(install|ci|i|uninstall|update)([[:space:]]|$)'
-  '^(yarn|npm|pnpm|bun)[[:space:]]+(run[[:space:]]+)?test:e2e'
-  '^(yarn|npm|pnpm|bun)[[:space:]]+(run[[:space:]]+)?lint:fix([[:space:]]|$)'
-  '^(pip|pip3|poetry|composer|bundle)[[:space:]]+install([[:space:]]|$)'
-  '^(cargo|go)[[:space:]]+build([[:space:]]|$)'
-  '^git[[:space:]]+push([[:space:]]|$)'
-  '^git[[:space:]]+worktree[[:space:]]+prune([[:space:]]|$)'
-)
+# Commands whose result depends on which tree they run in, or which write to
+# it, are data: `isolation.blockInMain`, read through the settings reader. Its
+# default (lib/myspec-config.schema.json) covers builds, installs, e2e runs,
+# lint:fix, `docker compose exec`, `git push` and `git worktree prune` across
+# the common stacks; a project adds anchored EREs there and removes default
+# entries, by their exact text, with `isolation.ignoreBlockInMain`.
 
-# Built-in patterns above that a read-only form would otherwise trip.
-# `git worktree prune -n` / `--dry-run` only reports (issue #223). Not applied
-# to the project's own isolation.blockInMain patterns.
+# A read-only form the default patterns would otherwise trip.
+# `git worktree prune -n` / `--dry-run` only reports (issue #223). Applied to
+# the schema's default entries only: a project entry that matches the dry run
+# blocks it, as the project wrote it to.
 HEAVY_CARVE_OUT='^git[[:space:]]+worktree[[:space:]]+prune([[:space:]]+[^[:space:]]+)*[[:space:]]+(-v*nv*|--dry-run)([[:space:]]|$)'
 
 # --- where does a segment run? -------------------------------------------------
@@ -157,6 +159,74 @@ resolve_dir() {
   esac
   [ -n "$word" ] || return 1
   (cd "$word" 2>/dev/null && pwd -P)
+}
+
+# resolve_file_dir <base> <encoded word> -> the directory a build-file
+# argument names: the word itself when it is a directory, else its parent.
+resolve_file_dir() {
+  local word
+  resolve_dir "$1" "$2" && return 0
+  word=$(decode_word "$2")
+  case "$word" in */*) ;; *) word=. ;; esac
+  resolve_dir "$1" "${word%/*}"
+}
+
+# build_dir <dir> <tool> <sanitized word>... -- <encoded word>... -> sets
+# BUILD_DIR to where a make, maven or gradle run builds: <dir> moved by
+# `make -C`/`--directory`, `mvn -f`/`--file` (a pom's directory) or
+# `gradle -p`/`--project-dir`, wherever among the arguments it appears. Sets
+# BUILD_DRY=1 for a make run that only reports (-n, -q and their long forms).
+# An unresolvable value leaves the directory unchanged.
+build_dir() {
+  local dir="$1" tool="$2" i n w v flag rest
+  local -a sw=() rw=()
+  shift 2
+  while [ "$#" -gt 0 ] && [ "$1" != -- ]; do sw+=("$1"); shift; done
+  [ "$#" -gt 0 ] && shift
+  rw=("$@")
+  n=${#sw[@]}
+  BUILD_DIR="$dir" BUILD_DRY=0
+  for ((i = 0; i < n; i++)); do
+    w="${sw[i]}" v="" flag=""
+    case "$tool:$w" in
+      make:-C|make:--directory|mvn:-f|mvn:--file|gradle:-p|gradle:--project-dir)
+        flag="$w" v="${rw[i+1]:-}"
+        i=$((i + 1)) ;;
+      make:--directory=*|mvn:--file=*|gradle:--project-dir=*)
+        flag="${w%%=*}" v="${rw[i]#*=}" ;;
+      make:-C?*|mvn:-f?*|gradle:-p?*)
+        flag="${w:0:2}" v="${rw[i]:2}" ;;
+      make:--just-print|make:--dry-run|make:--recon|make:--question)
+        BUILD_DRY=1 ;;
+      make:-[A-Za-z]*)
+        # A short-option cluster: n or q before a letter that takes a value.
+        # A C there takes the rest of the cluster, else the next word, as
+        # the directory (`make -kC <dir>`).
+        rest="${w#-}"
+        while [ -n "$rest" ]; do
+          case "${rest:0:1}" in
+            n|q) BUILD_DRY=1 ;;
+            C)
+              flag=-C
+              if [ -n "${rest:1}" ]; then
+                v="${rw[i]:$(( ${#w} - ${#rest} + 1 ))}"
+              else
+                v="${rw[i+1]:-}"
+                i=$((i + 1))
+              fi
+              break ;;
+            f|I|o|W|l|j|E) break ;;
+          esac
+          rest="${rest:1}"
+        done ;;
+    esac
+    [ -n "$flag" ] || continue
+    case "$flag" in
+      -f|--file) v=$(resolve_file_dir "$BUILD_DIR" "$v") || continue ;;
+      *) v=$(resolve_dir "$BUILD_DIR" "$v") || continue ;;
+    esac
+    BUILD_DIR="$v"
+  done
 }
 
 # classify <dir> <git-dir or empty> -> sets CLS_ROOT to the main checkout the
@@ -261,7 +331,7 @@ branch_verdict() {
     # WT-A to the ref file of wt-a, so a case-variant name deletes it too.
     if grep -qixF -- "$word" <<< "$checked_out"; then
       # shellcheck disable=SC2016 # literal backticks: the message quotes a command
-      printf 'BLOCKED: branch %s is checked out in a worktree (see `git worktree list`), and deleting it would leave that working tree on a missing branch. Remove the worktree first, or clean up with .claude/lib/branch-cleanup.sh. Blocked: %s' "$word" "${segment:0:200}"
+      printf 'BLOCKED: branch %s is checked out in a worktree (see `git worktree list`), and deleting it would leave that working tree on a missing branch. Remove the worktree first, or clean up with %s/branch-cleanup.sh. Blocked: %s' "$word" "$HOOK_LIB" "${segment:0:200}"
       return 0
     fi
   done
@@ -308,6 +378,69 @@ If the main checkout really is the right place (refreshing the symlinked node_mo
 Full procedure: $(procedure_doc "$root")"
 }
 
+# heavy_patterns <main root> -> sets HEAVY to that checkout's
+# isolation.blockInMain minus isolation.ignoreBlockInMain, read once per root,
+# and HEAVY_DEFAULT[i] to 1 when HEAVY[i] is one of the schema's defaults
+# (myspec-config.schema.json, beside the reader).
+# The reader's notes go to stderr. When the reader fails (a partial install)
+# there is no list: the first such command of the session is denied with the
+# reader's error, recorded as a `notice` event, and later ones pass, as the
+# Stop gate blocks once on a missing lib rather than guess.
+HEAVY_ROOT=""
+HEAVY=()
+HEAVY_DEFAULT=()
+heavy_patterns() {
+  local p schema="$HOOK_LIB/myspec-config.schema.json"
+  [ "$1" != "$HEAVY_ROOT" ] || return 0
+  HEAVY_ROOT="$1"
+  HEAVY=()
+  HEAVY_DEFAULT=()
+  [ -f "$schema" ] || schema=/dev/null
+  if ! read_setting isolation "$1"; then
+    [ -z "$SETTING_NOTES" ] || printf 'guard-worktree-context: %s\n' "$SETTING_NOTES" >&2
+    # shellcheck disable=SC2016 # a jq program: $ev is a jq variable
+    if [ -n "$SESSION_ID" ] && [ "$(session_query "$1" "$SESSION_ID" \
+        '[$ev[] | select(.t == "notice" and .what == "guard-settings")] | length')" = 0 ] \
+        && session_append "$1" "$SESSION_ID" '{"t":"notice","what":"guard-settings"}'; then
+      pretool_deny "myspec lib missing, run /myspec:update. The settings reader (lib/myspec-config.sh) could not read isolation.blockInMain, so this session's worktree guard cannot tell which commands to keep out of the main checkout: ${SETTING_NOTES:-no reason given}. This command is denied once; later ones are not checked until the install is repaired."
+    fi
+    return 0
+  fi
+  [ -z "$SETTING_NOTES" ] || printf 'guard-worktree-context: %s\n' "$SETTING_NOTES" >&2
+  # One line per entry: 1 or 0 (a schema default or not), a tab, the
+  # pattern; then x, a tab, and each ignoreBlockInMain entry that names no
+  # blockInMain entry (it drops nothing: a typo, or a changed default).
+  while IFS= read -r p; do
+    [ -n "${p#?$'\t'}" ] || continue
+    case "$p" in
+      x*) printf 'guard-worktree-context: isolation.ignoreBlockInMain entry matches no isolation.blockInMain entry, so it drops nothing: %s\n' "${p#?$'\t'}" >&2 ;;
+      *)
+        HEAVY+=("${p#?$'\t'}")
+        HEAVY_DEFAULT+=("${p%%$'\t'*}") ;;
+    esac
+  done < <(jq -r --slurpfile schema "$schema" '
+    ($schema[0].keys["isolation.blockInMain"].default // []) as $def
+    | (.ignoreBlockInMain // [] | if type == "array" then . else [] end) as $skip
+    | (.blockInMain // [] | if type == "array" then . else [] end) as $all
+    | ($all[] | select(type == "string") | select(. as $p | $skip | index([$p]) | not)
+       | (if . as $p | $def | index([$p]) then "1" else "0" end) + "\t" + .),
+      ($skip[] | strings | select(. as $p | $all | index([$p]) | not) | "x\t" + .)' <<< "$SETTING" 2>/dev/null)
+}
+
+# heavy_match <segment> -> 0 when an entry of HEAVY matches the segment, the
+# dry-run carve-out excepted for the default entries.
+heavy_match() {
+  local i
+  for ((i = 0; i < ${#HEAVY[@]}; i++)); do
+    grep -qE -- "${HEAVY[i]}" <<< "$1" || continue
+    if [ "${HEAVY_DEFAULT[i]}" = 1 ] && grep -qE -- "$HEAVY_CARVE_OUT" <<< "$1"; then
+      continue
+    fi
+    return 0
+  done
+  return 1
+}
+
 matches_any() {  # matches_any <segment> <pattern>...
   local segment="$1" pattern
   shift
@@ -321,8 +454,7 @@ matches_any() {  # matches_any <segment> <pattern>...
 
 # check_segment <normalized segment> <dir> <git-dir> — applies both gates.
 check_segment() {
-  local segment="$1" dir="$2" gitdir="$3" verdict extra
-  local -a patterns
+  local segment="$1" dir="$2" gitdir="$3" verdict
 
   if [ "$ALLOW_BRANCH_OPS" = 0 ]; then
     if matches_any "$segment" "${BRANCH_PATTERNS[@]}" \
@@ -350,19 +482,8 @@ check_segment() {
   session_mode "$CLS_ROOT"
   [ "$ISO_MODE" = "worktree" ] || return 0
 
-  if matches_any "$segment" "${HEAVY_PATTERNS[@]}" \
-      && ! grep -qE -- "$HEAVY_CARVE_OUT" <<< "$segment"; then
-    block_heavy "$CLS_ROOT" "$segment"
-  fi
-
-  patterns=()
-  if [ -f "$CLS_ROOT/.myspec.json" ]; then
-    while IFS= read -r extra; do
-      [ -n "$extra" ] && patterns+=("$extra")
-    done < <(jq -r '.isolation.blockInMain // [] | .[] | select(type == "string")' "$CLS_ROOT/.myspec.json" 2>/dev/null)
-  fi
-
-  if [ "${#patterns[@]}" -gt 0 ] && matches_any "$segment" "${patterns[@]}"; then
+  heavy_patterns "$CLS_ROOT"
+  if heavy_match "$segment"; then
     block_heavy "$CLS_ROOT" "$segment"
   fi
 }
@@ -516,6 +637,12 @@ walk() {
         norm="git $(join_words "$j" "${sw[@]}")"
         norm="${norm% }"
         check_segment "$norm" "$gdir" "$gitdir"
+        ;;
+      make|mvn|mvnw|gradle|gradlew)
+        case "$c" in mvnw) c=mvn ;; gradlew) c=gradle ;; esac
+        build_dir "$dir" "$c" "${sw[@]:j+1}" -- "${rw[@]:j+1}"
+        [ "$BUILD_DRY" = 0 ] || continue
+        check_segment "$(join_words "$j" "${sw[@]}")" "$BUILD_DIR" ""
         ;;
       *)
         check_segment "$(join_words "$j" "${sw[@]}")" "$dir" ""

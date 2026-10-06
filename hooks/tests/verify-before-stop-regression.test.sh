@@ -21,6 +21,19 @@
 #   (once)   attribute_failures ran session_files again, a second jq pass
 #            over the state file per failing checkout for the list the root
 #            loop already exported as MYSPEC_SESSION_FILES (#254 review).
+#   (lib)    A hook installed without the settings reader read the checks
+#            its own way and refused every runIn check; it now blocks once
+#            with the repair.
+#   (#257)   The MYSPEC_STOP_HOOK_ACTIVE guard was dropped while the gate
+#            still exported the variable to its checks, so a check that
+#            started a nested claude session ran the whole gate inside it.
+#            The variable in the hook's own environment approves again.
+#   (utf8)   macOS awk exits 2 on invalid UTF-8 in a failing check's log
+#            ("towc: multibyte conversion failure"); under set -e the hook
+#            died before deciding, and the EXIT trap still recorded
+#            `verified`, so the next stop approved. Attribution's awk runs
+#            under LC_ALL=C, and `verified` is recorded only after a
+#            decision was printed. Pre-existing on main.
 #   (pipefail) The memory and setup conformance gates were armed by
 #            `git status --porcelain | grep -q .`. grep exits on the first
 #            line, so a status longer than a pipe buffer killed git with
@@ -31,6 +44,8 @@
 set -uo pipefail
 
 HOOK="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../verify-before-stop.sh}"
+# The hooks find their lib through CLAUDE_PLUGIN_ROOT, as the harness exports it.
+export CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$HOOK")/.." && pwd)}"
 
 if [ ! -f "$HOOK" ]; then
   echo "FATAL: hook not found: $HOOK" >&2
@@ -78,6 +93,17 @@ OUT=$(run_hook ',"stop_hook_active":true')
 [ "$(decision "$OUT")" = approve ] && ok || fail "stop_hook_active:true approves (got: ${OUT:0:200})"
 [ ! -e "$RAN" ] && ok || fail "stop_hook_active:true runs no check"
 
+# --- #257: MYSPEC_STOP_HOOK_ACTIVE in the hook's own environment approves ------
+# The gate exports it to its checks: a nested session a check started stops
+# without running the gate again.
+OUT=$(also_wrote "$REPO" src/edited.ts; rm -f "$RAN"; printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$REPO" \
+  | MYSPEC_STOP_HOOK_ACTIVE=1 bash "$HOOK" 2>/dev/null)
+[ "$(decision "$OUT")" = approve ] && ok || fail "MYSPEC_STOP_HOOK_ACTIVE in the environment approves (got: ${OUT:0:200})"
+[ ! -e "$RAN" ] && ok || fail "MYSPEC_STOP_HOOK_ACTIVE in the environment runs no check"
+case "$OUT" in *MYSPEC_STOP_HOOK_ACTIVE*) ok ;; *) fail "the approve names why (got: ${OUT:0:200})" ;; esac
+OUT=$(also_wrote "$REPO" src/edited.ts; rm -f "$RAN"; printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$REPO" | CLAUDE_STOP_HOOK_ACTIVE=1 bash "$HOOK" 2>/dev/null)
+[ "$(decision "$OUT")" = block ] && ok || fail "CLAUDE_STOP_HOOK_ACTIVE, which the harness never sets, is not a re-entry (got: ${OUT:0:200})"
+
 # --- 4eb8ccb: the failure report is readable ----------------------------------
 OUT=$(run_hook '')
 [ "$(decision "$OUT")" = block ] && ok || fail "two failing checks block (got: ${OUT:0:200})"
@@ -89,6 +115,30 @@ printf '%s\n' "$R" | grep -qx -- '---' && ok || fail "per-check sections are sep
 printf '%s' "$R" | grep -qF '\' && fail "the report holds no literal backslash (got: $(printf '%s' "$R" | grep -F '\' | head -1))" || ok
 printf '%s\n' "$R" | grep -qx 'ALPHA-OUT' && ok || fail "check output starts on its own line"
 printf '%s\n' "$R" | grep -qx 'BETA-OUT' && ok || fail "the second check's output is reported too"
+
+# --- a missing lib blocks with the repair, once -------------------------------
+# The libs are the plugin's, under CLAUDE_PLUGIN_ROOT; without one the gate
+# does not guess at the checks. A plugin root whose lib/ lacks the settings
+# reader, and one that is not set at all (the hook did not run from the
+# plugin's hooks.json), which also means no project-local lib is consulted.
+BROKEN="$ROOT/broken"
+mkdir -p "$BROKEN/hooks"
+cp "$HOOK" "$BROKEN/hooks/"
+cp -R "$CLAUDE_PLUGIN_ROOT/lib" "$BROKEN/lib"
+rm "$BROKEN/lib/myspec-config.sh"
+OUT=$(printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$REPO" | CLAUDE_PLUGIN_ROOT="$BROKEN" bash "$BROKEN/hooks/verify-before-stop.sh" 2>/dev/null)
+[ "$(decision "$OUT")" = block ] && ok || fail "a missing settings reader blocks (got: ${OUT:0:200})"
+reason "$OUT" | grep -qF 'myspec lib missing' && ok || fail "the block says the lib is missing (got: $(reason "$OUT"))"
+reason "$OUT" | grep -qF 'myspec-config.sh' && ok || fail "the block names the missing lib"
+reason "$OUT" | grep -qF "$BROKEN" && ok || fail "the block names the plugin root it looked under"
+OUT=$(printf '{"session_id":"%s","cwd":"%s","stop_hook_active":true}' "$SID" "$REPO" | CLAUDE_PLUGIN_ROOT="$BROKEN" bash "$BROKEN/hooks/verify-before-stop.sh" 2>/dev/null)
+[ "$(decision "$OUT")" = approve ] && ok || fail "a missing lib blocks once: the continuation approves (got: ${OUT:0:200})"
+mkdir -p "$REPO/.claude/lib" && cp "$CLAUDE_PLUGIN_ROOT/lib/hook-core.sh" "$REPO/.claude/lib/"
+OUT=$(printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$REPO" | env -u CLAUDE_PLUGIN_ROOT bash "$HOOK" 2>/dev/null)
+[ "$(decision "$OUT")" = block ] && ok || fail "without CLAUDE_PLUGIN_ROOT the hook blocks rather than read a project copy (got: ${OUT:0:200})"
+reason "$OUT" | grep -qF 'hook-core.sh' && ok || fail "the block names hook-core.sh as missing: .claude/lib is not consulted"
+reason "$OUT" | grep -qF '(unset)' && ok || fail "the block says the plugin root is unset"
+rm -rf "$REPO/.claude/lib"
 
 # --- (#201) the checkout the session edited is the one verified -------------
 # The worktree carries a marker file that makes its copy of the check fail;
@@ -154,43 +204,19 @@ OUT=$(inv_run 1 "$HOOK")
 [ "$(cat "$ROOT/inv.rc")" = 0 ] && ok || fail "utf8: the hook exits 0 (got $(cat "$ROOT/inv.rc"): $(cat "$ROOT/inv.err"))"
 case "$(decision "$OUT")" in block|approve) ok ;; *) fail "utf8: the hook decides (got: ${OUT:0:200})" ;; esac
 grep -qi 'awk' "$ROOT/inv.err" && fail "utf8: no awk error (got: $(cat "$ROOT/inv.err"))" || ok
-# An abort before the decision (a copy of the hook that exits 3 where the
-# report starts) records no verified event, so the checkout stays armed.
+# An abort before the decision (a report that exits 3) records no verified
+# event, so the checkout stays armed.
 ABORT="$ROOT/abort"
 mkdir -p "$ABORT/hooks"
-cp -R "$(cd "$(dirname "$HOOK")/.." && pwd)/lib" "$ABORT/lib"
-sed 's/^# One line per note, deduplicated.*/exit 3/' "$HOOK" > "$ABORT/hooks/verify-before-stop.sh"
-grep -qx 'exit 3' "$ABORT/hooks/verify-before-stop.sh" && ok || fail "abort: the stub found the report's start"
-OUT=$(inv_run 2 "$ABORT/hooks/verify-before-stop.sh")
-[ "$(cat "$ROOT/inv.rc")" = 3 ] && ok || fail "abort: the stubbed hook exits 3 (got $(cat "$ROOT/inv.rc"))"
+cp "$HOOK" "$ABORT/hooks/"
+cp -R "$CLAUDE_PLUGIN_ROOT/lib" "$ABORT/lib"
+printf '\nreport_decision() { exit 3; }\n' >> "$ABORT/lib/stop-gate/report.sh"
+OUT=$(CLAUDE_PLUGIN_ROOT="$ABORT" inv_run 2 "$ABORT/hooks/verify-before-stop.sh")
+[ "$(cat "$ROOT/inv.rc")" = 3 ] && ok || fail "abort: the stubbed report exits 3 (got $(cat "$ROOT/inv.rc"))"
 [ -z "$(inv_events 2)" ] && ok || fail "abort: no verified event without a decision (got: $(inv_events 2))"
 OUT=$(inv_run 3 "$HOOK")
 [ "$(inv_events 3)" = "$INV" ] && ok || fail "a decided run still records verified (got: $(inv_events 3))"
 rm -f "$INV/other.ts"
-
-# --- (once) attribution reads the session's files from MYSPEC_SESSION_FILES --
-# A copy of the hook whose session_files returns nothing once the root loop
-# has exported the list: attribution must still know app.ts is this
-# session's, so the failure naming it blocks as the session's own.
-ONCE="$ROOT/once"
-mkdir -p "$ONCE/.claude"
-git init -q -b main "$ONCE"
-git -C "$ONCE" config user.email t@t
-git -C "$ONCE" config user.name t
-printf '.claude/state/\n' > "$ONCE/.gitignore"
-printf '{"checks":[{"name":"lint","command":"echo app.ts:1 BROKEN; exit 1","required":true}]}\n' > "$ONCE/.claude/verification.json"
-: > "$ONCE/app.ts"; : > "$ONCE/other.ts"
-git -C "$ONCE" add -A && git -C "$ONCE" commit -q -m init
-printf 'x\n' >> "$ONCE/app.ts"; printf 'x\n' >> "$ONCE/other.ts"
-ONCE_HOOK="$ROOT/once-hook/hooks/verify-before-stop.sh"
-mkdir -p "$ROOT/once-hook/hooks"
-cp -R "$(cd "$(dirname "$HOOK")/.." && pwd)/lib" "$ROOT/once-hook/lib"
-sed 's/^export MYSPEC_SESSION_FILES$/&; session_files() { :; }/' "$HOOK" > "$ONCE_HOOK"
-grep -q 'session_files() { :; }' "$ONCE_HOOK" && ok || fail "once: the stub found the export"
-bash "$SESSION_EVENT" --root "$ONCE" append "$SID-once" "$(jq -nc --arg r "$ONCE" '{t: "write", root: $r, rel: "app.ts", kind: "code"}')"
-OUT=$(printf '{"session_id":"%s-once","cwd":"%s"}' "$SID" "$ONCE" | bash "$ONCE_HOOK" 2>/dev/null)
-reason "$OUT" | grep -qF 'names files this session wrote: app.ts' && ok \
-  || fail "once: attribution takes the session's files from MYSPEC_SESSION_FILES (got: ${OUT:0:300})"
 
 # --- (pipefail) a long status still arms the conformance gates --------------
 # Each doctor stub always fails, so the gate must block whenever it is armed.
@@ -198,21 +224,26 @@ reason "$OUT" | grep -qF 'names files this session wrote: app.ts' && ok \
 # status well past a 64 KiB pipe buffer.
 if command -v node >/dev/null 2>&1; then
   CONF="$ROOT/conformance"
-  mkdir -p "$CONF/.claude/lib" "$CONF/.ai/memory" "$CONF/src"
+  mkdir -p "$CONF/.claude" "$CONF/.ai/memory" "$CONF/src"
   git init -q -b main "$CONF"
   git -C "$CONF" config user.email t@t
   git -C "$CONF" config user.name t
   printf '{"aiDir":".ai"}\n' > "$CONF/.myspec.json"
   printf '{"checks":[{"name":"ok","command":"true","required":true}]}\n' > "$CONF/.claude/verification.json"
-  printf 'process.stdout.write("doctor stub: error\\n"); process.exit(1);\n' > "$CONF/.claude/lib/memory-doctor.mjs"
-  printf 'process.stdout.write("setup stub: error\\n"); process.exit(1);\n' > "$CONF/.claude/lib/setup-doctor.mjs"
   : > "$CONF/.ai/memory/index.md"
   : > "$CONF/src/a.ts"
   git -C "$CONF" add -A && git -C "$CONF" commit -q -m init
+  # The doctors are the plugin's (lib/ under CLAUDE_PLUGIN_ROOT), so the stubs
+  # go in a copy of the plugin whose doctors always fail.
+  STUBBED="$ROOT/plugin-stubbed"
+  mkdir -p "$STUBBED"
+  cp -R "$CLAUDE_PLUGIN_ROOT/lib" "$STUBBED/lib"
+  printf 'process.stdout.write("doctor stub: error\\n"); process.exit(1);\n' > "$STUBBED/lib/memory-doctor.mjs"
+  printf 'process.stdout.write("setup stub: error\\n"); process.exit(1);\n' > "$STUBBED/lib/setup-doctor.mjs"
   conf_run() {
     rm -f "$CONF/.claude/state/sessions/$SID.jsonl"
     also_wrote "$CONF" src/a.ts
-    printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$CONF" | bash "$HOOK" 2>/dev/null
+    printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$CONF" | CLAUDE_PLUGIN_ROOT="$STUBBED" bash "$HOOK" 2>/dev/null
   }
   pad=untracked-file-with-a-long-enough-name-to-fill-the-pipe-buffer
   for dir in .ai/memory .claude; do

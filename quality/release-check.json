@@ -1,5 +1,6 @@
 {
-  "gate": false,
+  "gate": true,
+  "gateModels": ["sonnet"],
   "seed": 42,
   "resamples": 10000
 }

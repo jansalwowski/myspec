@@ -89,7 +89,7 @@ User: `all`.
 
 User: *"Yes — regular session cookies stay Lax, this rule is specifically for OAuth state cookies that need to survive provider round-trips."*
 
-Skill claims `P020` via `.claude/lib/memory-claim-id.sh procedural` and drafts `P020-oauth-state-cookie-samesite.md` with explicit `not_for: [regular session cookies, cookies not used in OAuth flow]`.
+Skill claims `P020` via `"${CLAUDE_PLUGIN_ROOT}/lib/memory-claim-id.sh" procedural` and drafts `P020-oauth-state-cookie-samesite.md` with explicit `not_for: [regular session cookies, cookies not used in OAuth flow]`.
 
 **Memory 2 (semantic)**:
 
@@ -252,12 +252,12 @@ A `feature-implement` run on the invoices feature took most of the afternoon. Du
 
 #### Steps 1–6
 
-Standard. The archived log's frontmatter has `session_id: 9f3c2a71-…`.
+Standard. The archived log's frontmatter has `session_id: 9f3c2a71-…`. The session was resumed once after a restart, so step 1 also matched a second log, `session_id: 4b7e10d2-…`, by the paths it lists.
 
 #### Step 7 — friction report
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/lib/friction-scan/scan.mjs" --session=9f3c2a71-…
+node "${CLAUDE_PLUGIN_ROOT}/lib/friction-scan/scan.mjs" --session=9f3c2a71-…,4b7e10d2-…
 ```
 
 ```
@@ -284,4 +284,5 @@ The skill shows the table as printed and does not re-argue the owners.
 - **Single events are not friction.** The one isolation prompt and the one test failure are absent: a hook doing its job once, and a project check the agent fixed, are normal. Only the repeat is reported.
 - **`NEEDS_CONTEXT` points at the project by default.** The implementer asks for context when the spec or plan did not provide it, so the fix is usually a spec edit, not a framework change.
 - **`unknown` is an answer.** A row the rules cannot attribute stays `unknown`. The skill does not guess, because a confident wrong owner sends the user to the wrong repo.
+- **A resumed session is one run.** The work after the restart ran under a new id. Passing only the archived log's id left everything after the restart unscanned (#170); the scan takes every id and counts repeats across them.
 - **Opting out** is `"feedback": { "frictionReport": false }` in `.myspec.json`.

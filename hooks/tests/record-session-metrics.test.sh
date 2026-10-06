@@ -3,9 +3,9 @@
 #
 # The hook runs as every session closes, inside Claude Code's shared 1.5 s
 # SessionEnd budget, so it must never be felt: it returns at once, prints
-# nothing, exits 0 on any input, and bounds the scan it starts. It is tested
-# in the layout init installs (.claude/hooks/ beside .claude/lib/friction-scan/)
-# so the lookup of the scan is covered too.
+# nothing, exits 0 on any input, and bounds the scan it starts. It runs the
+# way the plugin's hooks.json runs it, with CLAUDE_PLUGIN_ROOT set, so the
+# lookup of the scan under the plugin's lib/ is covered too.
 #
 # MYSPEC_METRICS_CAP_SECONDS lowers the cap so the timeout case runs in
 # seconds; the hook ignores values above its default.
@@ -15,9 +15,10 @@
 set -uo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-HOOK_SRC="${1:-$HERE/../record-session-metrics.sh}"
-LIB_SRC="$HERE/../../lib/friction-scan"
-[ -f "$HOOK_SRC" ] || { echo "FATAL: hook not found: $HOOK_SRC" >&2; exit 1; }
+HOOK="${1:-$HERE/../record-session-metrics.sh}"
+[ -f "$HOOK" ] || { echo "FATAL: hook not found: $HOOK" >&2; exit 1; }
+# The hooks find their lib through CLAUDE_PLUGIN_ROOT, as the harness exports it.
+export CLAUDE_PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$HOOK")/.." && pwd)}"
 
 ROOT=$(cd "$(mktemp -d)" && pwd -P)
 REPO="$ROOT/repo"
@@ -25,16 +26,10 @@ SHIM_PID="$ROOT/shim.pid"
 trap 'if [ -f "$SHIM_PID" ]; then kill "$(cat "$SHIM_PID")" 2>/dev/null; fi; rm -rf "$ROOT"' EXIT
 unset MYSPEC_DISABLE_METRICS DO_NOT_TRACK MYSPEC_METRICS_CAP_SECONDS
 
-mkdir -p "$REPO/.claude/hooks" "$REPO/.claude/lib/friction-scan"
+mkdir -p "$REPO/.claude"
 git -C "$REPO" init -q -b main
 echo '.claude/state/' > "$REPO/.gitignore"
 echo '{ "aiDir": ".ai", "frameworkVersion": "9.9.9" }' > "$REPO/.myspec.json"
-cp "$HOOK_SRC" "$REPO/.claude/hooks/record-session-metrics.sh"
-chmod +x "$REPO/.claude/hooks/record-session-metrics.sh"
-cp "$LIB_SRC/scan.mjs" "$LIB_SRC/metrics.mjs" "$REPO/.claude/lib/friction-scan/"
-# The installed layout: the hook sources .claude/lib/hook-core.sh.
-cp "$LIB_SRC/../hook-core.sh" "$REPO/.claude/lib/"
-HOOK="$REPO/.claude/hooks/record-session-metrics.sh"
 RUNS="$REPO/.claude/state/metrics/runs.jsonl"
 
 TRANSCRIPT="$ROOT/hook-session.jsonl"

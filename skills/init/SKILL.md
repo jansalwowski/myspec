@@ -22,8 +22,8 @@ Check if `.myspec.json` already exists in the project root.
 
 Ask these **one at a time** and wait for each answer:
 
-1. **Project name and description**
-   "What is the project name and a one-line description?"
+1. **Project name**
+   "What is the project name?"
 
 2. **Tech stack**
    "What is the tech stack? (e.g., 'Node.js + TypeScript, PostgreSQL, REST API' or 'Python + Django, MySQL, GraphQL')"
@@ -38,16 +38,18 @@ Ask these **one at a time** and wait for each answer:
    - Type-check command (e.g., `npx tsc --noEmit`, `pnpm typecheck`, or leave empty):
    - Test command (e.g., `npm test`, `pnpm test`, `pytest`):"
 
-5. **Hooks**
-   "Set up Claude-compatible repo hooks and rules under `.claude/`? (y/n, default: y)
-   This configures:
+5. **Harness config**
+   "Set up the framework rules and the verification config under `.claude/`? (y/n, default: y)
+   This writes `.claude/rules/` (the always-loaded framework rules) and `.claude/verification.json` (what the stop gate runs), and gitignores `.claude/state/`.
+
+   The hooks themselves need no setup: the plugin runs them from its own `hooks.json` wherever it is enabled —
    - Work-isolation gate (asks develop vs worktree before the first source edit; blocks main-checkout builds and branch mutations while a session works in a worktree)
    - Session tracking (creates a live log in `.claude/state/sessions/` on the first code edit)
    - Frontmatter validation (enforces YAML frontmatter on AI docs)
    - Verification on stop (runs lint/tests before agent completes)
    - Field metrics on session end (per-skill counts and timings in gitignored `.claude/state/metrics/`, never uploaded; opt out with `"feedback": { "metrics": false }` or `DO_NOT_TRACK=1`)
 
-   Note: Codex can use the plugin's built-in `hooks.json` directly. This option is for keeping project-local Claude compatibility."
+   A teammate without the plugin gets none of them (and none of the skills)."
 
 ### Step 3: Create `.myspec.json`
 
@@ -65,7 +67,6 @@ Write `.myspec.json` at project root:
   "frameworkVersion": "{VERSION}",
   "project": {
     "name": "{name from step 2}",
-    "description": "{description from step 2}",
     "techStack": "{techStack from step 2}"
   },
   "migrations": {the manifest's `migrations` array, copied verbatim}
@@ -85,11 +86,11 @@ ${aiDir}/
   memory/
     index.md           ← create with basic Layer 1 template
     procedural/
-      index.md         ← copy from framework-files/templates/index-procedural.md
+      index.md         ← copy from scaffolding/memory/procedural/index.md
     semantic/
-      index.md         ← copy from framework-files/templates/index-semantic.md
+      index.md         ← copy from scaffolding/memory/semantic/index.md
     episodic/
-      index.md         ← copy from framework-files/templates/index-episodic.md
+      index.md         ← copy from scaffolding/memory/episodic/index.md
     sessions/
       archive/
         .gitkeep            ← create empty file   (live logs go to .claude/state/sessions/, created by the hook)
@@ -117,7 +118,7 @@ Also create these framework files in `${aiDir}/`:
 - `pre-flight.md` ← copy from `framework-files/pre-flight.md`
 - `work-isolation.md` ← copy from `framework-files/work-isolation.md` (the procedure the isolation hooks' block messages cite; the always-loaded rule of the same name is only its contract)
 
-Replace `${aiDir}` placeholders with the configured value in the **documents** copied above — the `${aiDir}/` tree and `.claude/rules/`. **Never in `.claude/hooks/` or `.claude/lib/`:** those resolve `aiDir` at runtime and carry `${aiDir}` as live shell and JS template-literal syntax, so substituting there freezes their paths to this project's value and breaks any helper that takes `aiDir` as an argument. Copy them byte-for-byte.
+Replace `${aiDir}` placeholders with the configured value in the documents copied above — the `${aiDir}/` tree and `.claude/rules/`. Nothing else is copied: the hooks and their lib run from the plugin and resolve `aiDir` at runtime.
 
 ### Step 4.5: Announce `${aiDir}` binding to project context
 
@@ -139,23 +140,11 @@ Skill instructions reference `${aiDir}/`. Resolve to **`{aiDir from step 2}/`** 
 
 If the markers already exist in the file, replace everything between them. Do not modify content outside the markers.
 
-### Step 5: Set Up Hooks (if user said yes)
+### Step 5: Set Up the Harness Config (if user said yes)
 
-Create `.claude/hooks/` directory. Copy these files from the plugin's `hooks/` directory:
-- `guard-worktree-context.sh`
-- `require-isolation-decision.sh`
-- `validate-frontmatter.sh`
-- `mark-code-changed.sh`
-- `verify-before-stop.sh`
-- `no-absolute-paths.sh`
-- `require-reuse-audit.sh`
-- `record-session-metrics.sh`
+Do not copy anything from the plugin's `hooks/` or `lib/`, and do not write a `hooks` key into `.claude/settings.json`: since 3.0 the plugin's `hooks.json` runs the framework hooks, and a settings entry would run a copy a second time (`/myspec:doctor` reports one as `hook-wired-locally`).
 
-Make them executable: `chmod +x .claude/hooks/*.sh`
-
-Create `.claude/lib/` and copy the lib files listed in `manifest.json`'s `lib` block from the plugin's `lib/` directory (a key with a slash, such as `friction-scan/scan.mjs`, lands in the matching subdirectory of its `dest`), then `chmod +x .claude/lib/*.sh` (some are sourced, some are invoked directly). Use the manifest as the source of truth — do not glob the directory (it also holds plugin-internal helpers like `lib/feature-status-audit/` and `lib/brainstorm-server/`, which run from the plugin root and are never copied into projects). These back skills and hooks (e.g. `<repo_root>`/`<encoded_cwd>` placeholders; the reuse-audit table validator; the branch-guard command scanner; sanctioned branch cleanup; memory ID allocation, index generation, and the memory conformance check).
-
-Append `.claude/state/` to `.gitignore` (create the file if absent). `memory-claim-id.sh` keeps its per-checkout ID registry there; committing it would make one clone's claims another clone's stale floor, and the field metrics in `.claude/state/metrics/` are not recorded until the line exists.
+Append `.claude/state/` to `.gitignore` (create the file if absent). The hooks keep per-checkout state there (session logs, isolation decisions, the memory ID registry — committing it would make one clone's claims another clone's stale floor), and the field metrics in `.claude/state/metrics/` are not recorded until the line exists.
 
 Copy `.claude/rules/` framework rules from `framework-files/rules/`:
 - `workflow.md`
@@ -166,8 +155,6 @@ Copy `.claude/rules/` framework rules from `framework-files/rules/`:
 - `paths.md`
 - `skill-self-test.md`
 - `work-isolation.md`
-
-Create `.claude/settings.json` using `templates/settings-hooks.json` as the base.
 
 Create `.claude/verification.json` using `templates/verification.json` as the base, substituting verification commands from Step 2 question 4.
 
@@ -200,14 +187,13 @@ For each selected blueprint, invoke the `setup` skill with that blueprint name i
 
 Project: {name}
 AI dir:  {aiDir}/
-Hooks:   {enabled / skipped}
+Hooks:   run from the plugin (nothing copied)
+Harness config: {written / skipped}
 
 Created:
   .myspec.json
   ${aiDir}/ (features, memory, ideas, templates)
-  {if hooks: .claude/hooks/ (8 hooks), .claude/lib/ (N helpers, per manifest), .claude/rules/ (8 rules)}
-  {if hooks: .claude/settings.json, .claude/verification.json}
-  {if base agents installed: list each ~/.{harness}/agents/{file} that was installed or updated, grouped by harness}
+  {if harness config: .claude/rules/ (8 rules), .claude/verification.json, .gitignore line for .claude/state/}
 
 Next steps:
   1. Run the `bootstrap` skill to verify the setup
@@ -221,17 +207,12 @@ Next steps:
 - Default to `.ai` for aiDir if user is uncertain; never store a trailing slash
 - Skip empty verification commands gracefully (write placeholder, note it needs filling)
 - Never overwrite existing `.myspec.json` without explicit confirmation
-- If `.claude/settings.json` already exists, deep-merge the `hooks` key only:
-  - For each hook type (`PreToolUse`, `PostToolUse`, `Stop`, `SessionEnd`), append new hook entries that don't already exist (match by `command` field)
-  - Do not modify or remove existing hook entries or any other settings keys
-  - If no `hooks` key exists in the existing file, add it
-- Base subagents (`skills/feature-implement/agents/`) install to user scope only. Never copy to project-scope `.claude/agents/`, `.cursor/agents/`, `.codex/agents/` in the repo root.
-- Skip a harness entirely if `~/.{harness}/` does not exist — the user does not use that tool.
-- Never silently overwrite a locally-customized agent file; always diff + prompt.
+- Never write to `.claude/settings.json`, `.claude/hooks/` or `.claude/lib/`: the plugin runs the framework hooks and lib itself
+- The plugin ships no subagent definitions. Never write to `~/.{harness}/agents/` or to project-scope `.claude/agents/`, `.cursor/agents/`, `.codex/agents/`.
 
 ## Verification Checklist
 
-- [ ] `.myspec.json` created with project name, description, techStack, aiDir
+- [ ] `.myspec.json` created with project name, techStack, aiDir (no `project.description`: schema v2 dropped it, nothing read it)
 - [ ] `.myspec.json` `frameworkVersion` matches `manifest.json`'s (no hardcoded literal), `migrations` copied from the manifest, no `frameworkFiles` block, `aiDir` without a trailing slash
 - [ ] `${aiDir}/features/index.yaml` created
 - [ ] `${aiDir}/memory/` directory structure created with all 3 type indexes
@@ -240,7 +221,5 @@ Next steps:
 - [ ] `${aiDir}/anti-patterns.md` created (framework anti-pattern index — distinct from `${aiDir}/memory/index.md`, the Layer 1 memory index)
 - [ ] `${aiDir}/pre-flight.md` and `${aiDir}/work-isolation.md` created
 - [ ] `${aiDir}` binding written to `AGENTS.md` (or `CLAUDE.md`) between `myspec:paths` markers
-- [ ] If hooks enabled: `.claude/hooks/` has 8 scripts, all executable
-- [ ] If hooks enabled: `.claude/lib/` has every helper in `manifest.json`'s `lib` block, all executable
-- [ ] If hooks enabled: `.claude/rules/` has 8 framework rules
-- [ ] If hooks enabled: `.claude/settings.json` and `.claude/verification.json` created
+- [ ] If harness config enabled: `.claude/rules/` has 8 framework rules and `.claude/verification.json` exists; `.gitignore` has a `.claude/state/` line
+- [ ] Nothing written under `.claude/hooks/`, `.claude/lib/` or `.claude/settings.json`

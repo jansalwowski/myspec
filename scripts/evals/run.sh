@@ -74,7 +74,8 @@ if [ "$MODE" = changed ]; then MAX_COST="${MYSPEC_EVAL_MAX_COST_USD:-2}"; else M
 DEADLINE="${MYSPEC_EVAL_DEADLINE_SECONDS:-0}"
 case "$DEADLINE" in ''|*[!0-9]*) die "MYSPEC_EVAL_DEADLINE_SECONDS must be a whole number of seconds" ;; esac
 # Tools beyond the read-only set that some case needs: feature-spec writes
-# spec.md (Write, Edit); code-review reads the branch diff (git, read-only verbs).
+# spec.md (Write, Edit); feature-plan and feature-implement read the branch
+# (git, read-only verbs).
 ALLOW_TOOLS=(Write Edit "Bash(git diff:*)" "Bash(git log:*)" "Bash(git status:*)" "Bash(git show:*)"
   "Bash(git merge-base:*)" "Bash(git rev-parse:*)" "Bash(git branch:*)" "Bash(git symbolic-ref:*)")
 
@@ -113,22 +114,21 @@ resolve_base() {
 }
 
 # Prints the selected case names, one per line. Rules (evals/README.md):
-#   skills/<s>/…, plugins/myspec/skills/<s>/…  → cases tagged skill:<s>
+#   skills/<s>/…                                → cases tagged skill:<s>
 #   skills/_shared/<f>                          → cases tagged with any skill whose
 #                                                 files mention _shared/<f> (transitively
 #                                                 through other _shared files)
 #   evals/<case>/…                              → that case
 #   evals/_fixtures/<entry>…                    → cases whose files mention <entry>
 select_changed() {
-  local base="$1" changed f rest skill entry c
+  local base="$1" changed f skill entry c
   changed=$(git -C "$REPO_ROOT" diff --name-only "$base" HEAD) || die "git diff $base HEAD failed"
   local skills="" shared="" fixtures="" cases=""
   while IFS= read -r f; do
     [ -n "$f" ] || continue
-    rest="${f#plugins/myspec/}"
-    case "$rest" in
-      skills/_shared/*) shared="$shared ${rest#skills/_shared/}" ;;
-      skills/*/*) skill="${rest#skills/}"; skills="$skills ${skill%%/*}" ;;
+    case "$f" in
+      skills/_shared/*) shared="$shared ${f#skills/_shared/}" ;;
+      skills/*/*) skill="${f#skills/}"; skills="$skills ${skill%%/*}" ;;
     esac
     case "$f" in
       evals/_fixtures/*) entry="${f#evals/_fixtures/}"; fixtures="$fixtures ${entry%%/*}" ;;

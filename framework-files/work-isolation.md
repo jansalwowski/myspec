@@ -17,10 +17,10 @@ Edits under `${aiDir}/`, `.claude/`, `docs/` and the root agent files never trig
 On the block, call `AskUserQuestion` with one question — `header: "Isolation"`, options `develop` and `Worktree` — then record it:
 
 ```
-.claude/lib/set-isolation.sh <session_id> develop|worktree
+set-isolation.sh <session_id> develop|worktree
 ```
 
-The session id is embedded in the block message, and that is its only source. Never take one from `.claude/state/sessions/` filenames: every session in the checkout has a file there, and nothing shows which is yours. `set-isolation.sh` refuses to change a live decision already recorded under an id; if the user really changed the answer, `--reset` it first. Mark one option `(Recommended)` from the heuristic below; presenting them as equals wastes the prompt.
+The block message prints the exact command with the path resolved: `set-isolation.sh`, like every helper named in this file, runs from the myspec plugin's `lib/` (`${CLAUDE_PLUGIN_ROOT}/lib/` inside a skill), never from `.claude/`, and the hook's messages are where the resolved path comes from. The session id is embedded in that message, and that is its only source. Never take one from `.claude/state/sessions/` filenames: every session in the checkout has a file there, and nothing shows which is yours. `set-isolation.sh` refuses to change a live decision already recorded under an id; if the user really changed the answer, `--reset` it first. Mark one option `(Recommended)` from the heuristic below; presenting them as equals wastes the prompt.
 
 | Recommend `develop` | Recommend `Worktree` |
 |---|---|
@@ -42,24 +42,26 @@ Edits land in the user's checkout so they can test immediately. **Do not commit*
 
 ```
 git worktree add -b <type>/<slug> "$(git rev-parse --show-toplevel)/.claude/worktrees/<slug>" origin/<default-branch>
-.claude/lib/worktree-provision.sh "$(git rev-parse --show-toplevel)/.claude/worktrees/<slug>" --base origin/<default-branch>
-.claude/lib/set-isolation.sh <session_id> worktree --worktree-path <abs worktree path>
+worktree-provision.sh "$(git rev-parse --show-toplevel)/.claude/worktrees/<slug>" --base origin/<default-branch>
+set-isolation.sh <session_id> worktree --worktree-path <abs worktree path>
 ```
 
-Provisioning links each `isolation.provision.symlink` entry (default `node_modules`) except one pinned by a lockfile the branch changed, which needs a real install instead; it copies the lint cache and keeps both out of git; `.myspec.json` `isolation.provision` extends the lists. Never symlink a build output directory. Recipe and rationale: `_shared/worktree-provisioning.md` in the plugin.
+The worktree block message prints both commands with their paths resolved (a skill reads them from `_shared/worktree-provisioning.md`).
 
-Absolute paths and `git -C <worktree>` for every git call. Write files with the Write tool. The Stop hook refuses to verify a tree whose dependency directory (`node_modules`, `vendor`, `.venv`, or a configured entry) is a symlink into a checkout with different lockfiles (or none), or loads that checkout's own source, unless `.myspec.json` sets `isolation.allowLinkedModules: true` — right for repos whose worktrees share the main checkout's dependencies by construction, wrong for dependency work.
+Provisioning links each `isolation.provision.symlink` entry (default `node_modules`) except one pinned by a lockfile the branch changed or that differs from the main checkout's, which needs a real install instead; it copies the lint cache and keeps both out of git; `.myspec.json` `isolation.provision` extends the lists. Never symlink a build output directory. Recipe and rationale: `_shared/worktree-provisioning.md` in the plugin.
 
-`guard-worktree-context.sh` enforces the split for Bash: while this session is in worktree mode, builds (`build:<target>` scripts included), installs, e2e runs, `lint:fix`, `docker compose exec`, `git push` and `git worktree prune` are blocked in the main checkout (`isolation.blockInMain` adds project patterns). Lint, dev servers, unit tests and read-only git (`git worktree prune --dry-run` included) stay allowed. When the main checkout genuinely is the right place — refreshing the symlinked `node_modules`, say — prefix the command with `MYSPEC_ALLOW_MAIN_CHECKOUT=1`.
+Absolute paths and `git -C <worktree>` for every git call. Write files with the Write tool. Provisioning records what it linked; the Stop hook blocks when a recorded lockfile changed since, or a recorded link moved, and says to rerun provision. Link dependency directories only through provision: a hand-made link is not compared, and doctor reports it.
+
+`guard-worktree-context.sh` enforces the split for Bash: while this session is in worktree mode, builds (`build:<target>` scripts included), installs, e2e runs, `lint:fix`, `docker compose exec`, `git push` and `git worktree prune` are blocked in the main checkout (the list is the setting `isolation.blockInMain`: a project's patterns extend its default, and `isolation.ignoreBlockInMain` drops a default one). Lint, dev servers, unit tests and read-only git (`git worktree prune --dry-run` included) stay allowed. When the main checkout genuinely is the right place — refreshing the symlinked `node_modules`, say — prefix the command with `MYSPEC_ALLOW_MAIN_CHECKOUT=1`.
 
 A PR is always opened when the work is done — the user cannot inspect a worktree in the IDE.
 
 ## At the end (develop mode only)
 
-Ask whether to open a PR. If yes:
+Ask whether to open a PR. If yes, run the plugin's `promote-to-worktree.sh` — `/myspec:feature-complete` does, and the isolation hook's block message prints its resolved path:
 
 ```
-.claude/lib/promote-to-worktree.sh --branch <type>/<slug> --title "<conventional commit subject>" \
+promote-to-worktree.sh --branch <type>/<slug> --title "<conventional commit subject>" \
   --only <path> [--only <path>]... [--body-file <path>] [--trailer "<Key: value>"]... [--session-url <url>]
 ```
 
@@ -68,8 +70,10 @@ It copies the diff into a fresh worktree, commits, provisions, pushes, and opens
 ## Resetting
 
 ```
-.claude/lib/set-isolation.sh --show                 # current decisions
-.claude/lib/set-isolation.sh --reset <session_id>   # force a re-ask
+set-isolation.sh --show                 # current decisions
+set-isolation.sh --reset <session_id>   # force a re-ask
 ```
+
+The isolation hook's ask message prints both with the path resolved.
 
 Decisions expire after 8h.

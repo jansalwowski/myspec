@@ -1,15 +1,17 @@
 {
   "frameworkVersion": "2.12.0",
+  "upgradeFrom": "2.12.0",
+  "upgradeChain": ["1.28.0"],
   "migrations": [
-    "2.0.0-schema",
-    "2.0.0-doctor-rule",
-    "2.0.0-sessions",
-    "2.0.0-base-agents"
+    "3.0.0-code-review",
+    "3.0.0-plugin-hooks",
+    "3.0.0-reuse-audit",
+    "3.0.0-memory-registry",
+    "3.0.0-schema-v2"
   ],
   "files": {
     "anti-patterns.md": {
-      "type": "marker-merge",
-      "renamedFrom": "memory-index.md"
+      "type": "marker-merge"
     },
     "pre-flight.md": {
       "type": "marker-merge"
@@ -24,15 +26,6 @@
       "type": "overwrite"
     },
     "templates/memory-episodic.md": {
-      "type": "overwrite"
-    },
-    "templates/index-procedural.md": {
-      "type": "overwrite"
-    },
-    "templates/index-semantic.md": {
-      "type": "overwrite"
-    },
-    "templates/index-episodic.md": {
       "type": "overwrite"
     },
     "templates/session-log.md": {
@@ -73,154 +66,162 @@
       "dest": ".claude/rules/work-isolation.md"
     }
   },
-  "hooks": {
-    "guard-worktree-context.sh": {
-      "type": "overwrite",
-      "dest": ".claude/hooks/guard-worktree-context.sh"
-    },
-    "require-isolation-decision.sh": {
-      "type": "overwrite",
-      "dest": ".claude/hooks/require-isolation-decision.sh"
-    },
-    "validate-frontmatter.sh": {
-      "type": "overwrite",
-      "dest": ".claude/hooks/validate-frontmatter.sh"
-    },
-    "mark-code-changed.sh": {
-      "type": "overwrite",
-      "dest": ".claude/hooks/mark-code-changed.sh"
-    },
-    "verify-before-stop.sh": {
-      "type": "overwrite",
-      "dest": ".claude/hooks/verify-before-stop.sh"
-    },
-    "no-absolute-paths.sh": {
-      "type": "overwrite",
-      "dest": ".claude/hooks/no-absolute-paths.sh"
-    },
-    "require-reuse-audit.sh": {
-      "type": "overwrite",
-      "dest": ".claude/hooks/require-reuse-audit.sh"
-    },
-    "record-session-metrics.sh": {
-      "type": "overwrite",
-      "dest": ".claude/hooks/record-session-metrics.sh"
-    }
-  },
-  "lib": {
-    "path-normalize.sh": {
-      "type": "overwrite",
-      "dest": ".claude/lib/path-normalize.sh"
-    },
-    "markdown-section-check.sh": {
-      "type": "overwrite",
-      "dest": ".claude/lib/markdown-section-check.sh"
-    },
-    "command-scan.sh": {
-      "type": "overwrite",
-      "dest": ".claude/lib/command-scan.sh"
-    },
-    "glob-regex.sh": {
-      "type": "overwrite",
-      "dest": ".claude/lib/glob-regex.sh"
-    },
-    "hook-core.sh": {
-      "type": "overwrite",
-      "dest": ".claude/lib/hook-core.sh"
-    },
-    "session-event.sh": {
-      "type": "overwrite",
-      "dest": ".claude/lib/session-event.sh"
-    },
-    "dependency-map.sh": {
-      "type": "overwrite",
-      "dest": ".claude/lib/dependency-map.sh"
-    },
-    "branch-cleanup.sh": {
-      "type": "overwrite",
-      "dest": ".claude/lib/branch-cleanup.sh"
-    },
-    "memory-claim-id.sh": {
-      "type": "overwrite",
-      "dest": ".claude/lib/memory-claim-id.sh"
-    },
-    "memory-index.mjs": {
-      "type": "overwrite",
-      "dest": ".claude/lib/memory-index.mjs"
-    },
-    "memory-files.mjs": {
-      "type": "overwrite",
-      "dest": ".claude/lib/memory-files.mjs"
-    },
-    "memory-doctor.mjs": {
-      "type": "overwrite",
-      "dest": ".claude/lib/memory-doctor.mjs"
-    },
-    "setup-doctor.mjs": {
-      "type": "overwrite",
-      "dest": ".claude/lib/setup-doctor.mjs"
-    },
-    "set-isolation.sh": {
-      "type": "overwrite",
-      "dest": ".claude/lib/set-isolation.sh"
-    },
-    "worktree-provision.sh": {
-      "type": "overwrite",
-      "dest": ".claude/lib/worktree-provision.sh"
-    },
-    "promote-to-worktree.sh": {
-      "type": "overwrite",
-      "dest": ".claude/lib/promote-to-worktree.sh"
-    },
-    "task-worktree.sh": {
-      "type": "overwrite",
-      "dest": ".claude/lib/task-worktree.sh"
-    },
-    "myspec-config.sh": {
-      "type": "overwrite",
-      "dest": ".claude/lib/myspec-config.sh"
-    },
-    "myspec-config.mjs": {
-      "type": "overwrite",
-      "dest": ".claude/lib/myspec-config.mjs"
-    },
-    "myspec-config.schema.json": {
-      "type": "overwrite",
-      "dest": ".claude/lib/myspec-config.schema.json"
-    },
-    "plan-checkbox.sh": {
-      "type": "overwrite",
-      "dest": ".claude/lib/plan-checkbox.sh"
-    },
-    "friction-scan/scan.mjs": {
-      "type": "overwrite",
-      "dest": ".claude/lib/friction-scan/scan.mjs"
-    },
-    "friction-scan/metrics.mjs": {
-      "type": "overwrite",
-      "dest": ".claude/lib/friction-scan/metrics.mjs"
-    }
-  },
   "removed": {
-    "hooks/guard-git-branch.sh": {
-      "dest": ".claude/hooks/guard-git-branch.sh",
-      "since": "2.0.0"
+    "hooks/guard-worktree-context.sh": {
+      "dest": ".claude/hooks/guard-worktree-context.sh",
+      "since": "3.0.0"
     },
-    "memory-system.md": {
-      "dest": "${aiDir}/memory-system.md",
-      "since": "2.0.0"
+    "hooks/require-isolation-decision.sh": {
+      "dest": ".claude/hooks/require-isolation-decision.sh",
+      "since": "3.0.0"
     },
-    "templates/README.md": {
-      "dest": "${aiDir}/.templates/README.md",
-      "since": "2.0.0"
+    "hooks/validate-frontmatter.sh": {
+      "dest": ".claude/hooks/validate-frontmatter.sh",
+      "since": "3.0.0"
     },
-    "templates/feature-pre-flight.md": {
-      "dest": "${aiDir}/.templates/feature-pre-flight.md",
-      "since": "2.0.0"
+    "hooks/mark-code-changed.sh": {
+      "dest": ".claude/hooks/mark-code-changed.sh",
+      "since": "3.0.0"
     },
-    "templates/example-usage.md": {
-      "dest": "${aiDir}/.templates/example-usage.md",
-      "since": "2.0.0"
+    "hooks/verify-before-stop.sh": {
+      "dest": ".claude/hooks/verify-before-stop.sh",
+      "since": "3.0.0"
+    },
+    "hooks/no-absolute-paths.sh": {
+      "dest": ".claude/hooks/no-absolute-paths.sh",
+      "since": "3.0.0"
+    },
+    "hooks/require-reuse-audit.sh": {
+      "dest": ".claude/hooks/require-reuse-audit.sh",
+      "since": "3.0.0"
+    },
+    "hooks/record-session-metrics.sh": {
+      "dest": ".claude/hooks/record-session-metrics.sh",
+      "since": "3.0.0"
+    },
+    "lib/path-normalize.sh": {
+      "dest": ".claude/lib/path-normalize.sh",
+      "since": "3.0.0"
+    },
+    "lib/markdown-section-check.sh": {
+      "dest": ".claude/lib/markdown-section-check.sh",
+      "since": "3.0.0"
+    },
+    "lib/command-scan.sh": {
+      "dest": ".claude/lib/command-scan.sh",
+      "since": "3.0.0"
+    },
+    "lib/glob-regex.sh": {
+      "dest": ".claude/lib/glob-regex.sh",
+      "since": "3.0.0"
+    },
+    "lib/hook-core.sh": {
+      "dest": ".claude/lib/hook-core.sh",
+      "since": "3.0.0"
+    },
+    "lib/session-event.sh": {
+      "dest": ".claude/lib/session-event.sh",
+      "since": "3.0.0"
+    },
+    "lib/stop-gate/arm.sh": {
+      "dest": ".claude/lib/stop-gate/arm.sh",
+      "since": "3.0.0"
+    },
+    "lib/stop-gate/provision.sh": {
+      "dest": ".claude/lib/stop-gate/provision.sh",
+      "since": "3.0.0"
+    },
+    "lib/stop-gate/run.sh": {
+      "dest": ".claude/lib/stop-gate/run.sh",
+      "since": "3.0.0"
+    },
+    "lib/stop-gate/attribute.sh": {
+      "dest": ".claude/lib/stop-gate/attribute.sh",
+      "since": "3.0.0"
+    },
+    "lib/stop-gate/report.sh": {
+      "dest": ".claude/lib/stop-gate/report.sh",
+      "since": "3.0.0"
+    },
+    "lib/branch-cleanup.sh": {
+      "dest": ".claude/lib/branch-cleanup.sh",
+      "since": "3.0.0"
+    },
+    "lib/memory-claim-id.sh": {
+      "dest": ".claude/lib/memory-claim-id.sh",
+      "since": "3.0.0"
+    },
+    "lib/memory-index.mjs": {
+      "dest": ".claude/lib/memory-index.mjs",
+      "since": "3.0.0"
+    },
+    "lib/memory-files.mjs": {
+      "dest": ".claude/lib/memory-files.mjs",
+      "since": "3.0.0"
+    },
+    "lib/memory-doctor.mjs": {
+      "dest": ".claude/lib/memory-doctor.mjs",
+      "since": "3.0.0"
+    },
+    "lib/setup-doctor.mjs": {
+      "dest": ".claude/lib/setup-doctor.mjs",
+      "since": "3.0.0"
+    },
+    "lib/set-isolation.sh": {
+      "dest": ".claude/lib/set-isolation.sh",
+      "since": "3.0.0"
+    },
+    "lib/worktree-provision.sh": {
+      "dest": ".claude/lib/worktree-provision.sh",
+      "since": "3.0.0"
+    },
+    "lib/promote-to-worktree.sh": {
+      "dest": ".claude/lib/promote-to-worktree.sh",
+      "since": "3.0.0"
+    },
+    "lib/task-worktree.sh": {
+      "dest": ".claude/lib/task-worktree.sh",
+      "since": "3.0.0"
+    },
+    "lib/myspec-config.sh": {
+      "dest": ".claude/lib/myspec-config.sh",
+      "since": "3.0.0"
+    },
+    "lib/myspec-config.mjs": {
+      "dest": ".claude/lib/myspec-config.mjs",
+      "since": "3.0.0"
+    },
+    "lib/myspec-config.schema.json": {
+      "dest": ".claude/lib/myspec-config.schema.json",
+      "since": "3.0.0"
+    },
+    "lib/plan-checkbox.sh": {
+      "dest": ".claude/lib/plan-checkbox.sh",
+      "since": "3.0.0"
+    },
+    "lib/friction-scan/scan.mjs": {
+      "dest": ".claude/lib/friction-scan/scan.mjs",
+      "since": "3.0.0"
+    },
+    "lib/friction-scan/metrics.mjs": {
+      "dest": ".claude/lib/friction-scan/metrics.mjs",
+      "since": "3.0.0"
+    },
+    "lib/dependency-map.sh": {
+      "dest": ".claude/lib/dependency-map.sh",
+      "since": "3.0.0"
+    },
+    "templates/index-procedural.md": {
+      "dest": "${aiDir}/.templates/index-procedural.md",
+      "since": "3.0.0"
+    },
+    "templates/index-semantic.md": {
+      "dest": "${aiDir}/.templates/index-semantic.md",
+      "since": "3.0.0"
+    },
+    "templates/index-episodic.md": {
+      "dest": "${aiDir}/.templates/index-episodic.md",
+      "since": "3.0.0"
     }
   }
 }

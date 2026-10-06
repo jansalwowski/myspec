@@ -1,6 +1,6 @@
 ---
 name: feature-tech-spec-review
-description: "Use when a tech-spec.md needs review for implementability, spec alignment, and pattern conformance before planning. Keywords: validate technical design, critique tech-spec. Do NOT use for spec.md (feature-spec-review) or code (code-review)."
+description: "Use when a tech-spec.md needs review for implementability, spec alignment, and pattern conformance before planning. Keywords: validate technical design, critique tech-spec. Do NOT use for spec.md (feature-spec-review) or code (built-in /code-review)."
 tags: [feature, tech-spec, validation, critical-thinking, review]
 ---
 
@@ -21,13 +21,14 @@ tags: [feature, tech-spec, validation, critical-thinking, review]
 2. **Analyze Structure**
    - Verify required sections exist: Architecture, Reuse audit, Implementation Steps, Edge Cases, File Inventory
    - Check optional sections present if relevant: Key Interfaces/Types, Database Changes, API Schema, API Endpoints, Decisions
-   - **Reuse-audit gate** (skip only if `.myspec.json` has `reuseAudit.enabled: false`). Flag and **refuse approval** (do not recommend `/myspec:feature-plan`) when the `### Reuse audit` section is:
+   - **Reuse-audit gate** (skip only when the tech-spec carries `<!-- myspec:reuse-audit skip: <reason> -->` with a reason; a marker without one is a High finding). Flag and **refuse approval** (do not recommend `/myspec:feature-plan`) when the `### Reuse audit` section is:
      - missing, OR
      - an empty table (header + separator only, zero data rows), OR
      - a blanket-skip audit (every row `skip`) with one or more rows lacking a `Reason`, OR
      - has any `skip` row with an empty / dash-only `Reason`, OR
      - has any row whose `Decision` is not exactly `reuse` or `skip`.
    - A blanket-skip audit where every row has a substantive `Reason` is allowed but warrants a High finding asking the author to re-confirm nothing is reusable.
+   - **No verification mode on a data-deriving design**: when frontmatter has no `verification_mode` and the design derives output from input data (a parser, importer, converter, export, aggregation, or classification rule), report a Medium finding: `verification_mode: data` with Test Hooks *Real inputs* gets each milestone a probe on the inputs the rule must handle. Medium does not block approval or `/myspec:feature-plan`.
    - **Verification-surface gate** (skip when frontmatter has no `verification_mode`, or it is `none`). `verification_mode` must be one of `visual`, `api`, `data`, `mixed`, `none`. Otherwise the `### Test Hooks` section must exist with *Target* and *Contract surface* lines, plus *Scratch environment* when the mode is `visual` or `mixed` (feature-plan adds a `[demo]` probe there), when *Real inputs* is named (a `[real-input]` probe follows), or when the spec's flows mutate data. Probes do not exist yet at this stage, so decide from the mode and the Test Hooks lines, not from probes. Each missing line is High and blocks `/myspec:feature-plan`: `feature-plan` writes checkpoint probes only against these handles. A *Contract surface* entry that reaches past the public surface — a style class, internal element structure, private state — is High, naming the unstable reference.
    - Validate frontmatter has `title`, `status`, `based_on_spec_version`, `created`, `last_updated`
    - Verify `based_on_spec_version` matches current `spec_version` in spec.md
@@ -183,7 +184,7 @@ When flagging:
 //   non-dash Reason (this also covers a blanket-skip table with any Reason-less row).
 // High finding (not a refusal): every row is `skip` but each has a substantive Reason —
 //   ask the author to re-confirm nothing is reusable.
-// Skip this check entirely if .myspec.json has reuseAudit.enabled === false
+// Skip this check entirely when the tech-spec holds <!-- myspec:reuse-audit skip: <reason> --> with a reason
 
 // Missing edge cases (Completeness)
 // Check: Edge Cases section exists and has at least one item
@@ -246,7 +247,7 @@ After running the skill:
 
 - [ ] All 10 review dimensions checked against tech-spec.md
 - [ ] Each implementation step is task-extractable (concrete enough for a plan task without interpretation)
-- [ ] Reuse-audit gate applied: section present, >= 1 row, valid Decision/Reason (or `reuseAudit.enabled: false`)
+- [ ] Reuse-audit gate applied: section present, >= 1 row, valid Decision/Reason (or a `<!-- myspec:reuse-audit skip: <reason> -->` marker with a reason)
 - [ ] `based_on_spec_version` matches spec.md `spec_version`
 - [ ] Verification-surface gate applied when `verification_mode` is set and not `none`: `### Test Hooks` has Target, Contract surface, and Scratch environment for `visual` / `mixed`, *Real inputs*, or data-mutating flows; no unstable references
 - [ ] Requirement Coverage table built from spec.md, one row per requirement ID; every empty Steps cell reported as Critical; every `narrows` / `contradicts` Fidelity cell reported as High / Critical

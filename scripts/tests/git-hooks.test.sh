@@ -205,14 +205,6 @@ git add skills/linker/references/local.md
 in_repo git commit -qm "link with its target"
 expect_exit 0 "staging the link target clears it"
 
-mkdir -p plugins/myspec/skills/bad2
-bad_skill plugins/myspec/skills/bad2/SKILL.md bad2
-git add plugins/myspec/skills/bad2/SKILL.md
-in_repo git commit -qm "bad mirror skill"
-expect_exit 1 "a bad skill in the plugin mirror blocks the commit"
-git reset -q
-rm -rf plugins
-
 mkdir -p skills/nested/references
 bad_skill skills/nested/references/SKILL.md whatever
 git add skills/nested/references/SKILL.md
@@ -267,21 +259,14 @@ expect_exit 1 "a shellcheck exit of 2 blocks the commit instead of skipping the 
 expect_line "^In lib/lintme\.sh line 2" "findings printed alongside an exit of 2 are shown"
 git rm -q --cached lib/gone.sh; rm lib/gone.sh
 
-mkdir -p plugins/myspec/lib
-cp lib/lintme.sh plugins/myspec/lib/lintme.sh
-git add lib/lintme.sh plugins/myspec/lib/lintme.sh
-in_repo git commit -qm "finding in a script and its mirror"
-expect_exit 1 "a finding in a script staged with its mirror blocks the commit"
-[ "$(grep -c 'SC_BAD is unused' <<<"$OUTPUT")" -eq 1 ] && ok || fail "the mirror is not linted a second time"
-
+git add lib/lintme.sh
 SHELLCHECK="$TMP/no-such-shellcheck" in_repo git commit -qm "no shellcheck installed"
 expect_exit 0 "without shellcheck the commit goes through"
 expect_line "shellcheck not found; shell lint skipped" "the skip is announced"
 printf '#!/usr/bin/env bash\necho fine\n' > lib/lintme.sh
-cp lib/lintme.sh plugins/myspec/lib/lintme.sh
-git add lib/lintme.sh plugins/myspec/lib/lintme.sh
+git add lib/lintme.sh
 in_repo git commit -qm "clean again"
-expect_exit 0 "the cleaned script and mirror pass"
+expect_exit 0 "the cleaned script passes"
 
 # JS lint (#208). A stub stands in for scripts/lint-js.sh so the suite stays
 # offline: it flags any file containing unusedVar the way eslint does (absolute
@@ -306,7 +291,7 @@ done
 exit $rc
 STUB
 git add scripts/lint-js.sh && git commit -q --no-verify -m "stub js lint"
-mkdir -p lib plugins/myspec/lib
+mkdir -p lib
 echo 'const unusedVar = 1' > lib/bad.mjs
 git add lib/bad.mjs
 PATH="$TMP/bin:$PATH" in_repo git commit -qm "bad lib js"
@@ -316,10 +301,10 @@ STUB_ESLINT_DOWN=1 PATH="$TMP/bin:$PATH" in_repo git commit -qm "eslint unavaila
 expect_exit 0 "when eslint cannot run, the commit is not blocked"
 expect_line "eslint could not run .*JS lint skipped" "the skip is announced"
 git reset -q
-echo 'export const used = 1' > plugins/myspec/lib/ok.mjs
-git add plugins/myspec/lib/ok.mjs
-PATH="$TMP/bin:$PATH" in_repo git commit -qm "clean mirror js"
-expect_exit 0 "a clean staged mirror lib JS file passes"
+echo 'export const used = 1' > lib/ok.mjs
+git add lib/ok.mjs
+PATH="$TMP/bin:$PATH" in_repo git commit -qm "clean lib js"
+expect_exit 0 "a clean staged lib JS file passes"
 expect_no_line "lib/bad\.mjs" "an unstaged lib JS file is not linted"
 
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"

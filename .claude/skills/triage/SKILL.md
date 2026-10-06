@@ -27,10 +27,8 @@ Triage and fix are separate turns. This skill reads, reproduces and labels. It n
 | `hooks/`, `hooks.json` | `area:hooks` |
 | `lib/` | `area:lib` |
 | `framework-files/`, `blueprints/`, `templates/`, the manifest | `area:framework-files` |
-| `.claude-plugin/`, `.codex-plugin/`, `plugins/myspec/` | `area:plugin` |
+| `.claude-plugin/` | `area:plugin` |
 | `scripts/`, `evals/`, `quality/`, `.github/`, `.githooks/`, `.claude/` | `area:tooling` |
-
-A change to a mirrored tree also touches `plugins/myspec/` (AGENTS.md "Mirrored trees"). Don't add `area:plugin` for that; the mirror follows automatically.
 
 ## Workflow
 
@@ -127,7 +125,7 @@ With `prs` as the argument, analyse the open PR queue instead of the issues. It 
    - **Companions.** `gh api --paginate repos/<owner>/<repo>/pulls/<n>/files | jq -s 'add // []' | node scripts/triage/pr-companions.mjs --body-file <body>`, with the body written to a file first.
    - **Stale.** A draft, or no update in 7 days.
 3. **Across PRs**, find:
-   - **Collisions:** two open PRs whose changed files overlap, with the `plugins/myspec/` mirror paths dropped. List the shared files, because the second PR to merge rebases over them.
+   - **Collisions:** two open PRs whose changed files overlap. List the shared files, because the second PR to merge rebases over them.
    - **Duplicate work:** two PRs closing the same issue.
    - **Ready work with no PR:** the `status:ready` issues that no open PR closes, grouped by `area:*` label. File-level work batches come from issue mode, which PR mode does not run.
 4. **Report** one table with these columns: `#`, title, base, merge state, failing checks, closed issues, labels, notes. Below it, list the collisions, then a merge order: a parent before its child, then P1 first, then `CLEAN` before `BEHIND` or `DIRTY`. Then list the ready issues that have no PR.

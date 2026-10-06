@@ -44,7 +44,7 @@ HEAD is the default branch, so the recommendation is a new branch. The skill ask
 > - **Current branch main** → continue on main
 > - **Main branch** → not recommended; only for trivial fixes
 
-User picks **New branch**. The skill runs `git checkout -b feat/favorite-reports`, then records `BASE_SHA` (`git rev-parse HEAD`).
+User picks **New branch**. The skill runs `git checkout -b feat/favorite-reports`, then records `BASE_SHA` (`git rev-parse HEAD`) and logs it as `Base (feature): <sha>` in the plan's Execution Log. Run files go in the gitignored state directory `.claude/state/implement/favorite-reports/`, which outlives the session.
 
 #### Step 1 — Parse plan → DAG
 
@@ -54,21 +54,21 @@ Parses the Execution Order table: 6 sequential tasks, no barriers between them �
 
 **Plan freshness:** the front-matter carries `planned_against: <sha>`, so the skill fetches the integration branch and diffs the tasks' `Modify:` paths from that SHA to `origin/<integration>` (three-dot, so the branch's own commits are not drift) — never the local branch, which can lag the remote and diff empty. Exit 0 with empty output: no drift. Had a file changed, it would warn, log a `Ruling:`, and tell the affected task's implementer. Had the SHA been squashed away (`git diff` exits 128), it would warn that freshness cannot be verified rather than read the empty output as unchanged — and the same if the fetch itself had failed.
 
-**Setup** also sets the orchestration marker with `.claude/lib/session-event.sh implement start`, which the PostToolUse hook records in the session's state file. Until Step 5 removes it (`implement stop`), the Stop hook reports failing verification checks at controller turn ends as a warning rather than a block — mid-run the tree is red by design, and the controller may not fix code itself.
+**Setup** also sets the orchestration marker with `"${CLAUDE_PLUGIN_ROOT}/lib/session-event.sh" implement start`, which the PostToolUse hook records in the session's state file. Until Step 5 removes it (`implement stop`), the Stop hook reports failing verification checks at controller turn ends as a warning rather than a block — mid-run the tree is red by design, and the controller may not fix code itself.
 
 #### Step 2–3 — Task dispatch loop
 
 For T1 (migration):
 
-1. Flips T1 `[ ]` → `[~]` before dispatching, with `.claude/lib/plan-checkbox.sh <plan> 1 doing` — it edits only the `### Task 1:` section, never the Execution Order row or a milestone heading.
-2. Dispatches one implementer subagent (`implementer-prompt.md`) with the task text inline — it never reads the plan file. The tier is named on the dispatch (`cheap` here: one file plus its test, fully specified in the task text). The dispatch carries the task block's `**Verify at phase review:**` command (`pnpm test migrations/report_favorites`) and the file-scoped static checks (`pnpm eslint <touched files>`). The implementer writes the migration and its test, runs those two, commits with the task block's `**Commit:**` message, self-reviews its own diff, and reports `DONE` with each command it ran and its result. It never runs the full suite, a build, or an install.
+1. Flips T1 `[ ]` → `[~]` before dispatching, with `"${CLAUDE_PLUGIN_ROOT}/lib/plan-checkbox.sh" <plan> 1 doing` — it edits only the `### Task 1:` section, never the Execution Order row or a milestone heading.
+2. Dispatches one implementer subagent (`implementer-prompt.md`) with the task text inline — it never reads the plan file. The tier is named on the dispatch (`cheap` here: one file plus its test, fully specified in the task text). It also carries the commit trailers the controller's own instructions require (a harness attribution line, a project commit rule), verbatim, since the subagent never sees those instructions. The dispatch carries the task block's `**Verify at phase review:**` command (`pnpm test migrations/report_favorites`) and the file-scoped static checks (`pnpm eslint <touched files>`). The implementer writes the migration and its test, runs those two, commits with the task block's `**Commit:**` message and those trailers, self-reviews its own diff, and reports `DONE` with each command it ran and its result. It never runs the full suite, a build, or an install.
 3. The skill leaves T1 at `[~]` — the only route to `[x]` is the phase review.
 
-Repeats for T2–T6 in order, each leaving its checkbox at `[~]`. The implementer never spawns a reviewer of its own: review is the controller's job and is already scheduled.
+Repeats for T2–T6 in order, each leaving its checkbox at `[~]`. The implementer never spawns a reviewer of its own: review is the controller's job and is already scheduled. Had an implementer come back BLOCKED on its environment (a denied command, a missing dependency), the controller would have left that task `[~]`, recorded it as BLOCKED, and asked the user what would unblock it. It never writes a task's files itself, because code it writes skips the phase review.
 
 #### Step 4 — Phase review (once, at the barrier)
 
-After all 6 implementers report `DONE`, the phase hits its barrier. The controller runs the full suite once (`pnpm test`, `pnpm typecheck`, `pnpm lint` from `.claude/verification.json`) and captures it to one log file, each check headed by its command and exit code. The review then runs **once for the whole phase**. The controller writes the package to one temp file — `git log --oneline` + `git diff --stat` + `git diff -U10` over the `PHASE_BASE` recorded before the first dispatch, never `HEAD~1` — and dispatches the phase reviewer (`phase-reviewer-prompt.md`, mid tier) with the package path, the log path, and the spec requirement IDs the phase touches (AC-1, AC-2):
+After all 6 implementers report `DONE`, the phase hits its barrier. The controller runs the full suite once (`pnpm test`, `pnpm typecheck`, `pnpm lint` from `.claude/verification.json`) and captures it to one log file, each check headed by its command and exit code. The review then runs **once for the whole phase**. The controller writes the package to `.claude/state/implement/favorite-reports/phase-1-review.diff` — `git log --oneline` + `git diff --stat` + `git diff -U10` over the `PHASE_BASE` recorded before the first dispatch, never `HEAD~1` — and dispatches the phase reviewer (`phase-reviewer-prompt.md`, mid tier) with the package path, the log path, and the spec requirement IDs the phase touches (AC-1, AC-2). The reviewer prompt also says the plan checkboxes are controller-managed, so the six uncommitted `[~]` marks read as run state rather than a defect:
 
 - plan ↔ spec: the 6 tasks cover AC-1 ("favoriting persists across sessions"), AC-2 (pin-to-top) ✓
 - impl ↔ plan: each task's declared files and interfaces are present ✓
@@ -78,7 +78,7 @@ After all 6 implementers report `DONE`, the phase hits its barrier. The controll
 - naming, pattern conformance, maintainability ✓
 - Verdict: `APPROVED`.
 
-Had the review returned findings instead, they would be triaged, never silently dropped: **Minor** findings park in the plan's `## Execution Log` (`Deferred minor (Phase 1): …`) for the holistic reviewer to triage — they never enter a fix loop. **Critical/Important** findings enter a capped loop: round 1 resumes the same implementer with the findings verbatim (its context is intact), rounds 2–5 dispatch a fresh implementer with the task text, the open findings and a one-paragraph summary of earlier rounds (rounds 4–5 one tier up), and every round ends with a *scoped* re-review — itself a fresh dispatch carrying that summary, never resumed — that verdicts each finding ADDRESSED / NOT ADDRESSED against the fix diff only — never a full phase re-review — running just the checks the finding touches (lint on the touched files for a lint finding, the named test for a test finding). The next barrier or milestone checkpoint runs the full suite over the fix. If round 5 still leaves findings open, the Controller adjudicates each one — parked with a recorded `Ruling:` or carried into the next phase — never a round 6. And the Controller never pre-judges: a dispatch prompt containing "do not flag X" is the bug, not the finding.
+Had the review returned findings instead, they would be triaged, never silently dropped: **Minor** findings park in the plan's `## Execution Log` (`Deferred minor (Phase 1): …`) for the holistic reviewer to triage — they never enter a fix loop. **Critical/Important** findings enter a capped loop: round 1 resumes the same implementer with the findings verbatim (its context is intact), rounds 2–5 dispatch a fresh implementer with the task text, the open findings and a one-paragraph summary of earlier rounds (rounds 4–5 one tier up), and a finding about a rule (say, the overdue boundary) is fixed everywhere the phase states or applies it — code, tests, docs, and the spec text only when the finding says the spec is what is wrong — with each place listed in the fix report, and every round ends with a *scoped* re-review — itself a fresh dispatch carrying that summary, never resumed — that verdicts each finding ADDRESSED / NOT ADDRESSED against the fix diff only — never a full phase re-review — running just the checks the finding touches (lint on the touched files for a lint finding, the named test for a test finding). The next barrier or milestone checkpoint runs the full suite over the fix. If round 5 still leaves findings open, the Controller adjudicates each one — parked with a recorded `Ruling:` or carried into the next phase — never a round 6. And the Controller never pre-judges: a dispatch prompt containing "do not flag X" is the bug, not the finding.
 
 #### Checkboxes close
 
@@ -98,17 +98,17 @@ This is the only milestone, so the skill goes directly to Step 5 (no Milestone C
 #### Step 5 — Completion + review choice
 
 1. Removes the orchestration marker, so the Stop hook blocks on failures again, then runs the plan's Final Verification section.
-2. Writes the full-feature review package to one temp file (`git log --oneline` + `git diff --stat` + `git diff -U10` over `BASE_SHA..HEAD`) and dispatches the holistic reviewer with the package path plus the plan's Execution Log entries to triage. This pass is mandatory and the tier (premium) is named explicitly on the dispatch — an omitted model would silently inherit the session's model. Returns `APPROVED`, no MUST FIX triage items. The controller writes the report to `${aiDir}/features/favorite-reports/holistic-review.md` (frontmatter records `head_sha` and `verdict: ready-to-merge`) and commits it.
+2. Writes the full-feature review package to `feature-review.diff` in the state directory (`git log --oneline` + `git diff --stat` + `git diff -U10` over `BASE_SHA..HEAD`) and dispatches the holistic reviewer with the package path plus the plan's Execution Log entries to triage. This pass is mandatory and the tier (premium) is named explicitly on the dispatch — an omitted model would silently inherit the session's model. Returns `APPROVED`, no MUST FIX triage items. The controller writes the report to `${aiDir}/features/favorite-reports/holistic-review.md` (frontmatter records `head_sha` and `verdict: ready-to-merge`) and commits it with the same trailers.
 3. Prints the completion report — milestone summary, holistic verdict, **Rulings I made: none**, deferred-minors triage — then asks via `AskUserQuestion` — it does **not** auto-hand-off:
 
 > **Implementation complete. What next?**
 >
 > - **feature-complete** → skip the reviews; sync docs, archive plan, merge (Recommended)
 > - **feature-implement-review** → REQ/AC traceability, test trace, scope drift on top of holistic-review.md; persists conformance-report.md
-> - **code-review** → quality, standards, and bug review of the changes
+> - **/code-review** → Claude Code's built-in bug review of the branch diff
 > - **Stop here** → leave the branch as-is; continue later
 
-`feature-complete` carries the recommendation because the holistic verdict is READY TO MERGE, every criterion came back ✅, no probe was waived, and the plan has fewer than 10 tasks — the conformance audit would re-walk criteria the holistic pass just checked. Any one of those failing moves the recommendation to `feature-implement-review`. The two review passes are **complementary, not exclusive** (conformance vs. code quality). After whichever the user picks finishes, the skill offers this same choice again so they can run the other or proceed to `feature-complete`.
+`feature-complete` carries the recommendation because the holistic verdict is READY TO MERGE, every criterion came back ✅, no probe was waived, and the plan has fewer than 10 tasks — the conformance audit would re-walk criteria the holistic pass just checked. Any one of those failing moves the recommendation to `feature-implement-review`. The two review passes are **complementary, not exclusive** (conformance vs. bugs). After whichever the user picks finishes, the skill offers this same choice again so they can run the other or proceed to `feature-complete`.
 
 User picks **feature-implement-review** anyway. The skill invokes `/myspec:feature-implement-review favorite-reports`, which finds `holistic-review.md` with no code changed since its `head_sha` and spends its pass on traceability and test proof only.
 
@@ -155,14 +155,14 @@ Git state: on `main`, clean, no existing worktree, **plan has `[parallel:*]` gro
 > - **Current branch main** → continue on main
 > - **Main branch** → not recommended
 
-User picks **Worktree**. The skill creates `.claude/worktrees/feat-scheduled-reports` on branch `feat/scheduled-reports` (via the EnterWorktree tool, or `git worktree add .claude/worktrees/feat-scheduled-reports -b feat/scheduled-reports`), provisions it with `.claude/lib/worktree-provision.sh <path> --base origin/main`, and records `BASE_SHA`.
+User picks **Worktree**. The skill creates `.claude/worktrees/feat-scheduled-reports` on branch `feat/scheduled-reports` (via the EnterWorktree tool, or `git worktree add .claude/worktrees/feat-scheduled-reports -b feat/scheduled-reports`), provisions it with `"${CLAUDE_PLUGIN_ROOT}/lib/worktree-provision.sh" <path> --base origin/main`, and records `BASE_SHA`.
 
 #### Milestone 1 — parallel dispatch and barrier
 
 The skill walks the DAG. **Phase 2 (`parallel:repos`)** is the showcase: T2 ScheduleRepository, T3 ExportRunRepository, disjoint file lists.
 
-1. Records `PHASE_BASE` (`git rev-parse HEAD`).
-2. Creates one worktree per task from the feature HEAD — `.claude/lib/task-worktree.sh create scheduled-reports-t2` and `create scheduled-reports-t3` — because harness `isolation: "worktree"` would fork from `main` and miss the Phase 1 migration. Each is provisioned from the controller's checkout: the `isolation.provision.symlink` entries (here `node_modules`) linked when the lockfile is unchanged, lint cache copied. Had `.myspec.json` set `isolation.provision.install` (say `composer install` in `api/` and `pnpm install --frozen-lockfile` at the root), each task worktree would run those steps instead of linking the dependency trees, one worktree after another before dispatch. A task whose code generation writes into a linked directory (say, a generator writing into `node_modules`) gets `--no-symlink`, and the controller runs the install in that worktree itself before dispatch, so generated output cannot write through the link (`_shared/worktree-provisioning.md` is the recipe). Only then does it mark T2 and T3 `[~]` — after `create`, so the uncommitted plan edit doesn't trip the dirty-tree warning. Then it dispatches **two implementers in one message**, each told to work from its worktree path with absolute paths and `cd <worktree> && …` in every command (a subagent's shell returns to the controller's checkout between calls), with only its file list and task text inline:
+1. Records `PHASE_BASE` (`git rev-parse HEAD`) and logs it as `Base (Phase 2): <sha>` in the Execution Log.
+2. Creates one worktree per task from the feature HEAD — `"${CLAUDE_PLUGIN_ROOT}/lib/task-worktree.sh" create scheduled-reports-t2` and `create scheduled-reports-t3` — because harness `isolation: "worktree"` would fork from `main` and miss the Phase 1 migration. Each is provisioned from the controller's checkout: the `isolation.provision.symlink` entries (here `node_modules`) linked when the lockfile is unchanged, lint cache copied. Had `.myspec.json` set `isolation.provision.install` (say `composer install` in `api/` and `pnpm install --frozen-lockfile` at the root), each task worktree would run those steps instead of linking the dependency trees, one worktree after another before dispatch. A task whose code generation writes into a linked directory (say, a generator writing into `node_modules`) gets `--no-symlink`, and the controller runs the install in that worktree itself before dispatch, so generated output cannot write through the link (`_shared/worktree-provisioning.md` is the recipe). Only then does it mark T2 and T3 `[~]` — after `create`, so the uncommitted plan edit doesn't trip the dirty-tree warning. Then it dispatches **two implementers in one message**, each told to work from its worktree path with absolute paths and `cd <worktree> && …` in every command (a subagent's shell returns to the controller's checkout between calls), with only its file list and task text inline:
    - Implementer A → `src/features/schedules/repository.ts` (+ test)
    - Implementer B → `src/features/schedules/run-repository.ts` (+ test)
 3. Both write code and tests, run their own task's check plus file-scoped lint and typecheck, commit, and report `DONE`. Neither runs the full suite in its own worktree.
@@ -173,14 +173,14 @@ Had the review returned Critical/Important findings, the fix loop would run: rou
 
 #### Milestone Checkpoint
 
-After every phase in Milestone 1 passes, the skill runs the milestone verification commands. The milestone carries a `**Checkpoint probes:**` block (the tech-spec sets `verification_mode: mixed`), so the controller dispatches one probe executor with that block verbatim and whole, and nothing else — no spec, no phase verdicts, no implementer reports. The executor works through the scratch-isolation checklist (separate database, a second Redis on its own port, a "before" fingerprint of the real database and queue; no bucket in this feature), runs each probe, and reports:
+After every phase in Milestone 1 passes, the skill runs the milestone verification commands. The milestone carries a `**Checkpoint probes:**` block (the tech-spec sets `verification_mode: mixed`), so the controller creates `.claude/state/implement/scheduled-reports/probes/milestone-1/run-1/` and dispatches one `myspec:probe-executor` agent with that block verbatim and whole, the checkout path and base commit, that artifact directory, and nothing else — no spec, no phase verdicts, no implementer reports. The agent has no Edit, Write, NotebookEdit or Agent tool and loads no project CLAUDE.md, so everything it needs to start the target comes from the block's Target and Scratch env lines. The executor works through the scratch-isolation checklist (separate database, a second Redis on its own port, a "before" fingerprint of the real database and queue; no bucket in this feature), runs each probe, and reports:
 
-> P1: PASS — observed: `201`, body `{"id":"sch_1","cadence":"WEEKLY_MONDAY"}` — artifact: `…/probe-artifacts.x7Q/p1.json`
-> P2: BLOCKED — observed: `ECONNREFUSED` on the scratch `REDIS_URL` — artifact: `…/probe-artifacts.x7Q/p2.log`
+> P1: PASS — observed: `201`, body `{"id":"sch_1","cadence":"WEEKLY_MONDAY"}` — artifact: `…/probes/milestone-1/run-1/p1.json`
+> P2: BLOCKED — observed: `ECONNREFUSED` on the scratch `REDIS_URL` — artifact: `…/probes/milestone-1/run-1/p2.log`
 > NEED: the scratch Redis at `$REDIS_URL` running
 > Verdict: PROBES_BLOCKED
 
-The scratch Redis was never started. The controller does not rerun P2 against the default Redis, and does not count the green integration test as a substitute — it puts the `NEED:` line to the user. The user starts the scratch Redis and picks **fix**; nothing in the code needs changing, so the executor is re-dispatched with the same probes, returns `PROBES_PASSED` with the post-run check showing the real database and queue untouched, and each probe line goes into the Execution Log. Then the checkpoint pauses:
+The scratch Redis was never started. The controller does not rerun P2 against the default Redis, and does not count the green integration test as a substitute — it puts the `NEED:` line to the user. The user starts the scratch Redis and picks **fix**; nothing in the code needs changing, so the executor is re-dispatched with the same probes and a fresh `run-2/` artifact directory (run 1's evidence stays where the Execution Log can still point at it), returns `PROBES_PASSED` with the post-run check showing the real database and queue untouched, and each probe line goes into the Execution Log. Then the checkpoint pauses:
 
 > ═══ Milestone 1 complete: Scheduled Reports core CRUD + cron infra ═══
 >
@@ -194,7 +194,7 @@ This plan has 12 tasks, so `fresh` carries the `(Recommended)` marker: one miles
 
 #### Step 5 — Completion
 
-Final Verification runs, then the controller builds the full-feature review package (one temp file: commit list + stat + `git diff -U10` over `BASE_SHA..HEAD`) and dispatches the holistic reviewer on the premium tier with the package path and the plan's Execution Log entries. Per-phase reviews saw one phase's diff each; this one sees the feature — no overlap, and it is never skipped. The completion report surfaces every `Ruling:` line from the Execution Log under **Rulings I made**, then offers the same 4-option choice (feature-implement-review / code-review / feature-complete / Stop here). With 12 tasks, `feature-implement-review` carries the recommendation even on a READY TO MERGE verdict.
+Final Verification runs, then the controller builds the full-feature review package (`feature-review.diff` in the state directory: commit list + stat + `git diff -U10` over `BASE_SHA..HEAD`) and dispatches the holistic reviewer on the premium tier with the package path and the plan's Execution Log entries. Per-phase reviews saw one phase's diff each; this one sees the feature — no overlap, and it is never skipped. The completion report surfaces every `Ruling:` line from the Execution Log under **Rulings I made**, then offers the same 4-option choice (feature-implement-review / /code-review / feature-complete / Stop here). With 12 tasks, `feature-implement-review` carries the recommendation even on a READY TO MERGE verdict.
 
 ### Result
 
@@ -289,11 +289,11 @@ Worktrees still present (git worktree list):
 >
 > Reply `clean` to prune and re-execute, or `inspect` to pause.
 
-User: `clean`. The skill runs `.claude/lib/task-worktree.sh discard scheduled-reports-t5` and `discard scheduled-reports-t6`, which force-remove each worktree and delete its task branch, leaving T5/T6 at `[~]`. Without this, `create` would refuse both slugs as already existing.
+User: `clean`. The skill runs `"${CLAUDE_PLUGIN_ROOT}/lib/task-worktree.sh" discard scheduled-reports-t5` and `discard scheduled-reports-t6`, which force-remove each worktree and delete its task branch, leaving T5/T6 at `[~]`. Without this, `create` would refuse both slugs as already existing.
 
 #### Step 3 — Re-dispatch and continue
 
-T5 and T6 are re-dispatched as fresh implementers in new worktrees from `task-worktree.sh create`, merged at the barrier, and reviewed as one phase. Only after the phase review returns `APPROVED` do they flip `[~]` → `[x]`. Phase 4 completes, the Phase 5 barrier (T7) runs, and the Milestone 1 checkpoint is reached normally.
+`BASE_SHA` and Phase 4's `PHASE_BASE` come back from their `Base (feature)` and `Base (Phase 4)` Execution Log entries rather than from whatever HEAD is now, so the holistic review still spans Milestone 1 from its first commit. The old session's temp directory died with it; the review packages and logs live in `.claude/state/implement/scheduled-reports/`. T5 and T6 are re-dispatched as fresh implementers in new worktrees from `task-worktree.sh create`, merged at the barrier, and reviewed as one phase. Only after the phase review returns `APPROVED` do they flip `[~]` → `[x]`. Phase 4 completes, the Phase 5 barrier (T7) runs, and the Milestone 1 checkpoint is reached normally.
 
 ### Result
 

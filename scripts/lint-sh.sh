@@ -1,9 +1,7 @@
 #!/usr/bin/env bash
 # ShellCheck the shell this plugin ships (#209): hooks/ and lib/, tests
 # included. `bash -n` only proves a script parses; ShellCheck catches unused
-# variables, quoting and $? mistakes. The plugins/myspec/ mirrors are skipped:
-# sync-check.yml keeps them byte-identical, so linting them only doubles every
-# finding.
+# variables, quoting and $? mistakes.
 #
 # Runs at ShellCheck's default severity (style). Suppressions are inline
 # `# shellcheck disable=SCxxxx # reason` directives, plus the .shellcheckrc in
@@ -19,7 +17,10 @@
 # producer still writing dies of SIGPIPE, and pipefail makes the pipeline's
 # status the producer's 141: an `if` reads a match as a miss, and set -e
 # exits mid-hook (#33, #249). Tests are exempt: their fixtures pipe short
-# literals. Opt a line out with a trailing `# lint: sigpipe-ok`.
+# literals. Opt a line out with a trailing `# lint: sigpipe-ok`. A sourced
+# module runs under its caller's options without setting them; a
+# `# lint: sourced under set -euo pipefail` line puts it in scope as if it
+# set both.
 #
 # Usage: scripts/lint-sh.sh [--sigpipe-only] [file...]
 #        default: every *.sh in the trees above. --sigpipe-only runs the
@@ -51,6 +52,7 @@ sigpipe_check() {
     awk -v file="$f" '
       /^[[:space:]]*set[[:space:]]+-[[:alpha:]]*o[[:space:]]+pipefail/ { pipefail = 1 }
       /^[[:space:]]*set[[:space:]]+-[[:alpha:]]*e/ { errexit = 1 }
+      /^# lint: sourced under set -euo pipefail/ { pipefail = 1; errexit = 1 }
       { lines[NR] = $0 }
       END {
         if (!pipefail) exit 0

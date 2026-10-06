@@ -54,7 +54,7 @@ last_updated: 2026-04-30
 Sections produced:
 
 - **Architecture**: "Follows the existing favorites pattern (see dashboards-favorites). New `report_favorites` table, `ReportFavoritesService`, `useReportFavorites` hook."
-- **Reuse audit** (required — the `require-reuse-audit.sh` hook blocks tech-spec writes without it):
+- **Reuse audit** (required — the `require-reuse-audit.sh` hook denies creating a tech-spec without it, and any later edit that breaks the section; a tech-spec with nothing to reuse carries `<!-- myspec:reuse-audit skip: <reason> -->` instead):
 
   | Candidate | Surface | Decision | Reason |
   |-----------|---------|----------|--------|

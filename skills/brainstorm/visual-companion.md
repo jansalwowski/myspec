@@ -53,8 +53,6 @@ Save both `screen_dir` (where you write HTML) and `state_dir` (where you read th
 
 **Note:** Pass the project root as `--project-dir` so mockups persist in `.myspec/brainstorm/` and survive server restarts. Without it, files go to `/tmp` and get cleaned up. Remind the user to add `.myspec/` to `.gitignore` if it's not already there.
 
-**Codex behavior:** In Codex (`CODEX_CI=1`), `start-server.sh` auto-switches to foreground mode by default because background jobs may be reaped. Use `--background` only if your environment reliably preserves detached processes.
-
 **Windows behavior:** the script auto-detects a Windows-like shell (MSYS2/Git Bash/Cygwin) and switches to foreground mode, which blocks the tool call. Run it with `run_in_background: true` on the Bash tool call so the server survives across turns, then read `$STATE_DIR/server-info` on the next turn to get the URL.
 
 **If background processes are reaped in your environment:** run in foreground from a persistent terminal session:

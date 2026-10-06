@@ -23,6 +23,21 @@
 # above the default is ignored, so it can never raise it.
 
 INPUT=$(cat 2>/dev/null)
+
+# The lib is the plugin's lib/, under CLAUDE_PLUGIN_ROOT, which the harness
+# exports to a hook the plugin's hooks.json declares. Without it the hook
+# cannot load hook-core.sh, and approving in silence would hide a gate that
+# is not running (a stale copy wired in .claude/settings.json, a harness that
+# did not export the variable). Say so, naming the variable and the repair.
+# The same preamble sits in every non-Stop hook: hook-core is what is missing.
+# Here it comes before the streams are closed below, or it could not be seen.
+HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
+if [ ! -f "$HOOK_CORE" ]; then
+  LIB_MISSING="myspec lib missing: hook-core.sh not found under \${CLAUDE_PLUGIN_ROOT}/lib (CLAUDE_PLUGIN_ROOT is ${CLAUDE_PLUGIN_ROOT:-unset}). The hook did not run from the plugin's hooks.json; a copy wired in .claude/settings.json is retired by /myspec:update."
+  printf '%s\n' "$LIB_MISSING" >&2
+  exit 0
+fi
+
 exec >/dev/null 2>&1
 
 [ "${MYSPEC_DISABLE_METRICS:-}" = "1" ] && exit 0
@@ -30,11 +45,8 @@ case "${DO_NOT_TRACK:-}" in ''|0|false|FALSE) ;; *) exit 0 ;; esac
 command -v node || exit 0
 command -v jq || exit 0
 
-# The scan and hook-core ship next to this hook: .claude/lib/ in a project
-# (manifest `lib`), lib/ at the plugin root.
-HOOK_CORE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../lib/hook-core.sh"
-[ -f "$HOOK_CORE" ] || HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
-[ -f "$HOOK_CORE" ] || exit 0
+# The scan and hook-core are the plugin's lib/: the hook runs from the
+# plugin's hooks.json, which exports CLAUDE_PLUGIN_ROOT.
 # shellcheck source=lib/hook-core.sh
 . "$HOOK_CORE"
 

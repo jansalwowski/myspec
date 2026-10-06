@@ -18,6 +18,13 @@ Updates framework-owned files in an existing project while preserving project cu
 
 ## Workflow
 
+### Step 0: Preflight
+
+Two checks before anything is read or written:
+
+1. **Host floor** (README "Installation" has the why): Claude Code 2.1.288 or later (`claude --version`; the `myspec:probe-executor` agent's `disallowedTools`, enforced by name in agent teams from 2.1.288) and git 2.31 or later (`git --version`; the memory scripts). When either is older, stop with: "myspec 3.0 needs Claude Code ≥ 2.1.288 and git ≥ 2.31 (found {versions}). Update the host first."
+2. **No session in flight.** Print, once: "Finish open sessions before updating: in-flight 2.x session state is not imported." (`docs/stop-gate.md`, "Session writes": the 2.x ledger and markers are read by nothing in 3.0; `/myspec:session-complete` closes a session cleanly, and the leftover files are deleted by hand.)
+
 ### Step 1: Read Current Version
 
 Read `.myspec.json` from project root. Extract `frameworkVersion` and `aiDir`.
@@ -31,11 +38,8 @@ Resolve the plugin directory in this order:
 
 Compare versions. If they match, tell the user: "Already up to date (v{version}). No changes needed." and stop.
 
-**Upgrade base.** 2.0 migrates from 1.28.0 or later only. If the project's `frameworkVersion` is missing or lower than 1.28.0, stop with:
-
-"This project is on v{version}; myspec 2.0 upgrades from 1.28.0 or later. Run the 1.28 update first: check out the plugin at tag v1.28.0 (`git clone --branch v1.28.0 https://github.com/jansalwowski/myspec`), start Claude with `--plugin-dir <that checkout>`, run `/myspec:update`, then return to this version."
-
-The 1.x updates carried migrations (legacy memory-index headers, hand-written `frameworkFiles` inventories) that 2.0 no longer ships.
+**Upgrade base.** The manifest's `upgradeFrom` is the oldest version this plugin migrates from, and `upgradeChain` lists the earlier majors' floors (RELEASING.md, "Upgrade base"). Run `node "${CLAUDE_PLUGIN_ROOT}/lib/upgrade-route.mjs" --version "<project frameworkVersion>"` (empty when none is recorded). Exit 0 → continue. Exit 3 → stop and print its stdout verbatim: it names every release to update through, oldest first, so the user never learns the route one refusal at a time. Any other exit (2 is a bad manifest or version; 1 is Node itself failing, e.g. a missing script) → stop, tell the user the upgrade floor check could not run and quote its stderr. Never continue the update without a 0, and never print a non-3 output as the route.
+Every migration, rename and removal an older version needed ran in that update; this plugin no longer ships them.
 
 ### Step 1.5: Run One-Shot Migrations
 
@@ -43,10 +47,11 @@ The 1.x updates carried migrations (legacy memory-index headers, hand-written `f
 
 | id | What it does |
 |---|---|
-| `2.0.0-schema` | **`aiDir`:** if the key is missing, decide once from disk — `.ai` if `.ai/` exists, else `ai` if `ai/` exists, else `.ai` — and write it; strip any trailing slash. This replaces the runtime detection the 1.x hooks carried, so it lands before any hook runs against the new lib. **`frameworkFiles`:** drop `version` and `lastUpdated` from every entry (bookkeeping nothing ever read); drop entries left empty; drop the key when no pins remain. Since 2.0 the block holds pins only. |
-| `2.0.0-doctor-rule` | `.claude/rules/ai-setup-audit.md` → `.claude/rules/doctor.md` via `git mv` when only the old name exists (the `doctor` skill reads only the new one). Both present → leave both, report it, and tell the user to merge by hand. |
-| `2.0.0-sessions` | Live session logs move from `{aiDir}/memory/sessions/active/` to `.claude/state/sessions/` in the primary checkout (gitignored). Move every `*.md` there with plain `mv` (they were never tracked), delete `active/` and its `.gitkeep` (`git rm` if tracked), leave `archive/` where it is. A 1.x log lacks a `## Files touched` section; the hook adds it on the next edit. |
-| `2.0.0-base-agents` | The user-scope `worker-base` / `reviewer-base` subagents backed the orchestrator agent-chain mode, retired in 2.0. For each of `~/.claude/agents/`, `~/.cursor/agents/`, `~/.codex/agents/` that exists, list the `worker-base.{md\|toml}` and `reviewer-base.{md\|toml}` files present and ask once: "Delete these N files? They are inert since 2.0. (y/n, default: n)". On `n`, leave them and say so. Delete nothing else in those directories, and never touch project-scope agent dirs. |
+| `3.0.0-code-review` | The `code-review` skill and its `setup` blueprint are gone; Claude Code's built-in `/code-review` takes their place. Delete the `codeReview` key from `.myspec.json` when present (nothing reads it since 3.0). When `.claude/rules/code-review.md` exists, leave it — the blueprint wrote it, no manifest entry ever tracked it, and its bullets are the project's own — and print one line: "`.claude/rules/code-review.md` is yours to keep or delete; the built-in `/code-review` does not read its `## Standards` / `## Suppress` headings". |
+| `3.0.0-plugin-hooks` | Since 3.0 the plugin runs the framework hooks itself (its `hooks.json`) and nothing is copied into `.claude/hooks/` or `.claude/lib/`. This migration runs before the `removed` handling in Step 2, which must not touch what it moves. **(a) Unwire.** Run `node "${CLAUDE_PLUGIN_ROOT}/lib/settings-unwire.mjs"` from the project root (`--dry-run` first to show the plan). It removes from `.claude/settings.json` `hooks` every entry whose `command` runs a hook the plugin's `hooks.json` runs, matched by the script's name whatever precedes it (`"$CLAUDE_PROJECT_DIR"/…/x.sh`, bare, `./…`, `bash "…/x.sh"`, even `"${CLAUDE_PLUGIN_ROOT}"/hooks/x.sh` — the plugin's own entry already runs it; a settings copy runs it twice), leaves every other entry in the same arrays and matcher groups, drops a matcher group, an event array or the `hooks` key only when it empties, and changes nothing else in the file. Report its `removed:` lines. Never touch `settings.local.json`: report a framework entry there with "delete by hand". **(b) Move, never delete.** For each `removed` entry with `since` 3.0.0 or later whose `dest` is under `.claude/hooks/` or `.claude/lib/` and exists: move it (plain `mv`, or `git mv` when tracked) to `.claude/state/retired-3.0/<same path under .claude/>` (`.claude/hooks/x.sh` → `.claude/state/retired-3.0/hooks/x.sh`, `.claude/lib/<dir>/<y>` → `.claude/state/retired-3.0/lib/<dir>/<y>`), creating directories; `git rm --cached` a tracked one so the move leaves the index. Before moving, take its SHA-256 (`shasum -a 256 <dest>` or `sha256sum <dest>`) and look the entry's key up in the plugin's `framework-files/retired-hashes.json` `files` — the hash of each file as the last 2.x release (the upgrade floor, 2.12.0) installed it; the 3.0 plugin copies are no reference, since 3.0 rewrote them all. A match is moved in silence. A mismatch, or a key under `unreleased` (added after the floor, so no 2.x release installed it), is listed as **"locally modified, compare before discarding"** — a hand patch may hold a fix worth an upstream issue or a project hook of its own. Drop the `frameworkFiles` key of every `hooks/*` and `lib/*` entry, pinned or not, and list a dropped pin: the plugin runs its own copy, so a pin no longer keeps anything running; a patched copy the project still wants is re-wired under a project name. Delete `.claude/hooks/` and `.claude/lib/` only when empty afterwards. **(c) Report, don't touch.** Anything left under `.claude/hooks/` or `.claude/lib/` that the manifest never listed (`.claude/hooks/tests/`, `.claude/lib/tests/`, a project's own helper) is listed as "unmanaged, left in place". **(d)** `.gitignore` already covers `.claude/state/` (Step 3 adds the line when it is missing). Print the moved list, the unwired entries and the leftovers under `Hooks` in the Step 6 summary. |
+| `3.0.0-reuse-audit` | The reuse-audit gate on tech-specs is per file since 3.0: `require-reuse-audit.sh` checks a tech-spec when it is created and when a write changes its `## Reuse audit` section, never on an edit elsewhere, and a tech-spec opts out with `<!-- myspec:reuse-audit skip: <reason> -->` in its own text. The repo-global `reuseAudit` key in `.myspec.json` is no longer read. Delete the key (the whole `reuseAudit` object) when present. When it held `enabled: false`, print: "reuseAudit.enabled=false was removed from .myspec.json: since 3.0 each tech-spec opts out of the reuse audit with `<!-- myspec:reuse-audit skip: <reason> -->` in its own text; existing tech-specs without a `## Reuse audit` section are not re-checked, so nothing needs editing now." Nothing else changes. |
+| `3.0.0-memory-registry` | Versions before 1.28 wrote `.claude/state/memory-ids.json` jq pretty-printed, one key per line; since 3.0 `memory-claim-id.sh` reads only the one-line form it writes, and a claim against the old form would restart the other floors at zero. Run `"${CLAUDE_PLUGIN_ROOT}/lib/memory-claim-id.sh" --normalize` from the project root: it rewrites the registry as one line from either form, keeping every floor, and prints what it did (nothing to do without a registry). Idempotent; runs before Step 3.6's health check. |
+| `3.0.0-schema-v2` | `.myspec.json` is schema version 2 (`lib/myspec-config.schema.json`). Delete `project.description` when present: `init` wrote it, nothing read it. Run `node "${CLAUDE_PLUGIN_ROOT}/lib/pin-reconcile.mjs" --backfill` from the project root, print its rows, and say a pin backfilled this way cannot report `review` until the next update. Nothing else: `codeReview` and `reuseAudit` have their own migrations. |
 
 List every migration run under `Migrations` in the Step 6 summary.
 
@@ -59,8 +64,7 @@ From `manifest.json`, collect all files. Each file has a `type`:
 
 For `files` entries: destination is `{aiDir}/{filename}` — **except** `templates/{name}` entries, which install to `{aiDir}/.templates/{name}` (the dot-directory `init` creates; skills read templates from there — never create `{aiDir}/templates/`).
 For `rules` entries: source is `framework-files/rules/{filename}`, destination is the `dest` path (e.g., `.claude/rules/workflow.md`).
-For `hooks` entries: source is `hooks/{filename}`, destination is the `dest` path (e.g., `.claude/hooks/guard-worktree-context.sh`).
-For `lib` entries: source is `lib/{filename}`, destination is the `dest` path (e.g., `.claude/lib/path-normalize.sh`; `friction-scan/scan.mjs` → `.claude/lib/friction-scan/scan.mjs`, creating the directory).
+There are no `hooks` or `lib` entries since 3.0: the plugin runs its hooks and lib from its own directory, and `frameworkVersion` covers the `files` and `rules` blocks only.
 
 **Renamed entries — migrate the destination before applying.** A `files` or `rules` entry may carry `renamedFrom: "<old key>"`. It means the framework changed a file's name, and the project on disk still holds the old one. Before applying such an entry:
 
@@ -73,27 +77,24 @@ Skipping step 2 is what makes this dangerous: `overwrite`/`marker-merge` both tr
 
 Never invent a `renamedFrom`; it comes from the manifest only. A pinned renamed entry is still renamed — move the file and the key, then skip the content apply.
 
-**Pinned files — skip, never overwrite.** A project may carry a locally-customized copy of a framework file. `.myspec.json` records that as `frameworkFiles["<manifest key>"].pinned`, whose value is a short reason string. Before applying any entry, look up its key (`rules/workflow.md`, `hooks/guard-worktree-context.sh`, `lib/branch-cleanup.sh`, `templates/session-log.md`, …) and skip it if `pinned` is set. Collect these for the summary.
+**Pinned files — skip, never overwrite.** A project may carry a locally-customized copy of a framework file. `.myspec.json` records that as `frameworkFiles["<manifest key>"].pinned`, whose value is a short reason string. Before applying any entry, look up its key (`rules/workflow.md`, `templates/session-log.md`, …) and skip it if `pinned` is set. Collect these for the summary.
 
 Without this, a sync silently reverts local edits: the file carries no marker distinguishing "customized" from "stale", so `overwrite` treats deliberate local content as drift. That has happened — a sync reverted four rules whose upstream copies had not changed at all, costing ~690 tokens of always-loaded context until it was noticed.
 
 Pinning is the project's call, not the skill's. Never add or remove a pin on the project's behalf; report pinned files and let the user decide whether the local reason still holds.
 
-**Pin reconciliation.** A pinned rule never receives the plugin copy, so a pin taken to trim always-loaded context outlives the trim upstream. When a pinned entry's plugin copy is now *smaller* than the local one (`wc -c` both), the reason for the pin has probably been absorbed: show both sizes and the pin reason, and ask — keep the pin, take the plugin copy and drop the pin, or see a diff first. Apply the answer; never decide alone. Report the outcome under `Pinned` in the Step 6 summary.
+**Pin reconciliation.** A pinned file never receives the plugin copy, so a pin outlives its reason: the edit it kept is absorbed upstream, or upstream moves under it and a migration never reaches the file (#160). Run `node "${CLAUDE_PLUGIN_ROOT}/lib/pin-reconcile.mjs"` from the project root (`--help` has the table format and every verdict); it compares each pin's file and the plugin copy with the hashes recorded on the pin. Act per verdict, never alone: `drop` → the file equals the plugin copy; offer to drop the pin; when the user keeps it, `--record "<key>"` so an upstream move under it reports `review`. `review` → upstream moved under an unchanged pin; show a diff and ask: keep the pin (then `--record "<key>"`, so it is not raised again until upstream moves) or take the plugin copy and drop the pin. `diverged` → the project and upstream both changed the file since the pin was recorded; show a diff of the file against the plugin copy and ask: keep the pin as it is, merge the upstream change into the file by hand, or take the plugin copy and drop the pin; after either of the first two, `--record "<key>"`. `unrecorded` → run `--backfill` and say such a pin cannot report `review` until the next update. `missing` / `retired` / `unknown` → offer to drop the pin. `keep` → nothing. Report the outcome under `Pinned` in the Step 6 summary.
 
-**Removed entries — delete, then unwire.** The manifest's `removed` block lists files the framework retired: `"<old key>": { "dest": "<path>", "since": "<version>" }`. For each, when `dest` exists (after `${aiDir}` substitution): `git rm` it if tracked, else delete it; drop its `frameworkFiles` key; and when `dest` is under `.claude/hooks/`, delete every `settings.json` hook entry whose `command` names it (Step 3 owns the rest of the wiring). A pinned entry is a deliberate local keep — leave the file and the pin, report it as "retired upstream, kept locally". List deletions under `Removed` in the Step 6 summary.
-
-For `hooks` and `lib`: only process if `.claude/hooks/` directory exists (hooks and their helper lib travel together). If it doesn't exist, skip all hooks AND lib entries and note: "Hooks directory not found — skipping Claude hook + lib updates. Run the `init` skill with Claude hooks enabled to set them up."
+**Removed entries.** The manifest's `removed` block lists files the framework retired: `"<old key>": { "dest": "<path>", "since": "<version>" }`. An entry falls in exactly one of two classes, by `since` and `dest` together — the same rule as the doctor's `retiredCopies` (`lib/setup-doctor.mjs`). **A retired copy**: `since` 3.0.0 or later **and** `dest` under `.claude/hooks/` or `.claude/lib/`. **A deleted file**: everything else — today the 3.0 `${aiDir}/.templates/index-*.md` (the memory index headers nothing read, which `init` scaffolds once and `lib/memory-index.mjs` maintains). For a deleted file: when `dest` exists (after `${aiDir}` substitution), `git rm` it if tracked, else delete it, and drop its `frameworkFiles` key; a pinned one is a deliberate local keep — leave the file and the pin, report it as "retired upstream, kept locally"; list deletions under `Removed` in the Step 6 summary. For a retired copy: the `3.0.0-plugin-hooks` migration's, which Step 1.5 ran first — moved to `.claude/state/retired-3.0/`, never deleted, its pin dropped rather than honoured, its wiring removed by `settings-unwire.mjs`. Nothing to do here when `dest` is gone (the usual case); when it still exists — the migration was recorded on an earlier run and the copy came back — apply the migration's move to that one file, with the same hash comparison, and list it under `Hooks`.
 
 ### Step 3: Apply Updates
 
 For each file in the manifest:
 
 **`overwrite` strategy:**
-1. Read the source file from `framework-files/{filename}` (or `framework-files/rules/{filename}` for rules, `hooks/{filename}` for hooks, `lib/{filename}` for lib)
-2. **`files` and `rules` only:** replace `${aiDir}` placeholders with the configured `aiDir` value. **Copy `hooks` and `lib` byte-for-byte** — see the rule below
+1. Read the source file from `framework-files/{filename}` (or `framework-files/rules/{filename}` for rules)
+2. Replace `${aiDir}` placeholders with the configured `aiDir` value
 3. Write to destination, replacing the existing file entirely
-4. For hooks and lib: run `chmod +x {dest}` after writing. Some helpers are sourced and some are invoked directly (`branch-cleanup.sh`, `memory-claim-id.sh`) — setting the bit on all of them is harmless for the sourced ones and required for the rest.
 
 **`marker-merge` strategy:** the file has two regions. Everything from line 1 through `<!-- myspec:framework-end -->` — frontmatter, title, standing note, and the marked framework section — is framework-owned; everything after the end marker is the project section and is never touched.
 1. Read the source file from `framework-files/{filename}` and replace `${aiDir}` placeholders
@@ -102,7 +103,7 @@ For each file in the manifest:
 4. If the destination has no end marker, do not guess where the project section starts. Show its content (the size, and the first lines when long) beside the plugin copy and ask which of these to do:
    - **Replace**: write the plugin copy over it. The existing content is lost, which suits a redirect stub.
    - **Prepend**: write the source's framework-owned region (line 1 through its end marker), a blank line, then the whole existing file as the project section. Nothing is lost, and future updates merge normally.
-   - **Pin**: leave the file as it is and set `frameworkFiles["<manifest key>"].pinned` to the reason the user gives. Future updates skip it.
+   - **Pin**: leave the file as it is, set `frameworkFiles["<manifest key>"].pinned` to the reason the user gives, and run `node "${CLAUDE_PLUGIN_ROOT}/lib/pin-reconcile.mjs" --record "<manifest key>"` so the pin carries its hashes. Future updates skip it.
 
    Apply the answer and list it under `Preserved` (prepend), `Updated files` (replace) or `Pinned` (pin). Any of the three clears the doctor's `marker-missing`. For a renamed entry the move is already done, so `framework-renamed` is gone too. On no answer, leave the file untouched and report it as `marker-missing`.
 
@@ -110,42 +111,40 @@ Before 2.0 only the marked section was framework-owned, so a title or note corre
 
 If a destination file doesn't exist for `marker-merge`, create it from the source (treat as overwrite for missing files).
 
-**Hook wiring (only if hooks were processed).** Copying a hook file does nothing until it is registered in `.claude/settings.json`, and a registered hook without `+x` never runs either. Since 2.0 `update` owns the `hooks` key of that file — and only that key. Run:
+**Hook wiring.** Since 3.0 the plugin's `hooks.json` runs the framework hooks in every project where the plugin is enabled; `.claude/settings.json` needs no entry for them, and `update` edits its `hooks` key only to remove framework entries (the `3.0.0-plugin-hooks` migration). Run:
 
 ```bash
-node .claude/lib/setup-doctor.mjs --plugin-root "${CLAUDE_PLUGIN_ROOT}" wiring
+node "${CLAUDE_PLUGIN_ROOT}/lib/setup-doctor.mjs" wiring
 ```
 
-For each `wiring-incomplete` finding, add the entry from `templates/settings-hooks.json` under the same event (deep-merge: append to the existing array for that event and matcher, create the event when absent, match existing entries by the hook script the `command` runs, not the raw string — `"$CLAUDE_PROJECT_DIR"/.claude/hooks/x.sh` and a pre-2.2 install's bare `.claude/hooks/x.sh` are the same hook, and a literal comparison would wire it a second time). For each hook deleted by a `removed` entry, delete its `command` entries. If the file has no `hooks` key, add the template's whole block. For each `hook-command-relative` finding on `.claude/settings.json` whose script is under `.claude/hooks/`, rewrite that `command` in place: put `"$CLAUDE_PROJECT_DIR"/` before the script path (drop a leading `./`), keep any interpreter and arguments, and leave the entry where it is. A bare relative command resolves against the session's cwd, so once a session leaves the repo root the hook fails, and a failing Stop hook is non-blocking: the verification gate is skipped silently. Rewrite, never add: if the same event and matcher already run that script in the `"$CLAUDE_PROJECT_DIR"` form, delete the bare entry instead of keeping both, or the hook runs twice. Never add, remove, or reorder anything else outside `hooks`, and never touch `settings.local.json` (report its relative commands with their `fix:` line). Re-run the same command afterwards: `wiring-incomplete` and the `settings.json` `hook-command-relative` findings must be gone; report what remains (`hook-not-executable`, `hook-syntax`) with the `run:` line it carries.
+`hook-wired-locally` and `hook-copy-retired` must be gone (the migration did its work; a leftover means a copy came back — move it the same way). Report what remains with the `run:` or `fix:` line it carries: a project-owned hook that is missing, not executable, fails `bash -n` or runs by a relative path is the project's to fix, and a framework entry in `settings.local.json` is deleted by hand. Never add, remove, or reorder anything else in that file.
 
-**State gitignore (only if hooks were processed).** Ensure `.gitignore` contains a `.claude/state/` line; append it if missing (create `.gitignore` if absent). The hooks write per-checkout state there (session logs, isolation decisions, field metrics in `.claude/state/metrics/`), and the metrics recorder refuses to write while the line is missing.
-
-If the doctor is not on disk yet (this run is what installs it), do the comparison by hand this once: for each `command` in the template, take the `.claude/hooks/*.sh` path it runs and check whether any command under the project's `settings.json` `hooks` key runs that same script — ignoring quotes and a leading `"$CLAUDE_PROJECT_DIR"/` — and add only the ones absent by that test. Comparing the raw strings duplicates every hook on an install that predates the template switch. Then rewrite each bare `.claude/hooks/*.sh` command to the `"$CLAUDE_PROJECT_DIR"/` form by the rule above.
+**State gitignore.** Ensure `.gitignore` contains a `.claude/state/` line; append it if missing (create `.gitignore` if absent). The hooks write per-checkout state there (session logs, isolation decisions, field metrics in `.claude/state/metrics/`, the retired copies under `retired-3.0/`), and the metrics recorder refuses to write while the line is missing.
 
 ### Step 3.6: Check memory health
 
-Only when lib entries were processed and `{aiDir}/memory/` exists. Since v1.23.0 the index tables are generated from the memory files, and `memory-claim-id.sh` refuses to allocate IDs until the doctor passes — so never skip this.
+When `{aiDir}/memory/` exists. Since v1.23.0 the index tables are generated from the memory files, and `memory-claim-id.sh` refuses to allocate IDs until the doctor passes — so never skip this.
 
 1. Verify the indexes — must print `memory indexes are up to date`:
    ```bash
-   node .claude/lib/memory-index.mjs --check
+   node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs" --check
    ```
-   `stale` → regenerate with `node .claude/lib/memory-index.mjs`. Refused because a memory lacks `hook:` → run `node .claude/lib/memory-index.mjs --backfill --dry-run`, show the output (`from heading (review)` means the H1 became the hook — list those for the user to review), apply with `--backfill`, then re-check.
+   `stale` → regenerate with `node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs"`. Refused because a memory lacks `hook:` → run it with `--backfill --dry-run`, show the output (`from heading (review)` means the H1 became the hook — list those for the user to review), apply with `--backfill`, then re-check.
 2. Health:
    ```bash
-   node .claude/lib/memory-doctor.mjs
+   node "${CLAUDE_PLUGIN_ROOT}/lib/memory-doctor.mjs"
    ```
    Report its summary line in Step 6. Remaining errors (duplicate IDs across branches, malformed anchors) are project content: list them, do not fix them silently.
 3. Ensure `.gitignore` contains a `.claude/state/` line — the ID registry is per-checkout state and must never be committed. Append it if missing (create `.gitignore` if absent).
 
-If `node` is unavailable, print: "Memory health check skipped — node not found. Run `node .claude/lib/memory-index.mjs --check` when it is available; ID allocation is blocked until the doctor passes."
+If `node` is unavailable, print: "Memory health check skipped — node not found. Run `node \"${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs\" --check` when it is available; ID allocation is blocked until the doctor passes."
 
 ### Step 3.7: Verify the install
 
 Everything above wrote files; this reads them back. Run the full doctor from the project root:
 
 ```bash
-node .claude/lib/setup-doctor.mjs --plugin-root "${CLAUDE_PLUGIN_ROOT}"
+node "${CLAUDE_PLUGIN_ROOT}/lib/setup-doctor.mjs"
 ```
 
 Step 5 is about to stamp `frameworkVersion` to the new version, so run this **before** it — while the versions still differ, content drift is reported as a warning ("update pending"). After the stamp the same drift is an error, which is the point: a `framework-drift` or `framework-missing` error on the next run means this update half-applied.
@@ -155,10 +154,10 @@ Read the result as a checklist of this run:
 - `framework-missing` / `framework-drift` → a manifest entry did not get written. Re-apply that entry, do not stamp over it. For a `marker-merge` file this covers the header above the start marker too: the framework-owned region is line 1 through the end marker.
 - `marker-missing` → a `marker-merge` file has no `<!-- myspec:framework-start -->` / `<!-- myspec:framework-end -->` markers and the replace / prepend / pin choice in Step 3 was not applied. Either the question was skipped (ask it now) or the user gave no answer (report it; the file stays untouched and does not block the stamp).
 - `framework-renamed` → an old filename is still on disk. Either the Step 2 move did not happen (do it now) or both names exist and the user declined the merge (report it).
-- `shipped-drift` / `shipped-missing` on `.claude/hooks/*` or `.claude/lib/*` → a hook or helper is stale or absent; these are `overwrite` entries, so re-copy.
+- `hook-wired-locally` / `hook-copy-retired` → the `3.0.0-plugin-hooks` migration left a framework entry in `settings.json` or a copy under `.claude/hooks/` or `.claude/lib/`; unwire or move it as the migration does, do not stamp over it.
 - Anything in the `schema` or `features` group → fix before finishing; an unparseable `.myspec.json` or `verification.json` silently disables the surfaces that read it, and an entry the features parser cannot read is invisible to every status audit. Exception: `note-over-cap` / `note-volatile` / `manifest-unknown-key` are project content, not install state — report them and leave the notes alone.
 
-Report the summary line in Step 6. `myspec-schema-stale` cannot appear here: Step 1.5 ran the schema migration first. If it does, that migration did not complete — re-run it before stamping.
+Report the summary line in Step 6.
 
 ### Step 4: Refresh `${aiDir}` binding in project context
 
@@ -207,32 +206,16 @@ Preserved (project-customized sections):
 Pinned (skipped — locally customized):
   {list each pinned file with its reason, or "none"}
 
-Hooks: {updated N scripts / skipped — hooks directory not found}
-Lib:   {updated N helpers / skipped — hooks directory not found}
-Hook wiring: {all N hooks already wired / added M entries, rewrote R to "$CLAUDE_PROJECT_DIR", removed K / N finding(s) remain — see above}
+Hooks: run from the plugin (hooks.json); {unwired N framework entries from .claude/settings.json / none wired locally}
+       {moved M copies to .claude/state/retired-3.0/ — list each; "locally modified, compare before discarding" where it differed from the plugin copy / no copies found}
+       {unmanaged, left in place: .claude/hooks/tests/, … / omit}
+       {N finding(s) remain — see above / omit}
 Memory: {indexes up to date / regenerated N, backfilled M hook: lines (K from heading — review) / skipped — no memory tree}
         doctor: {clean / N error(s), M warning(s) — see above}
 Setup:  {clean / N error(s), M warning(s) — see above / skipped — node not found}
 
 Next: Run the `bootstrap` skill to verify the setup is still correct.
 ```
-
-**2.0 advisory (print only when a `2.0.0-*` migration ran in this session).** The
-mechanical work is done; what remains lives in files this skill is forbidden to
-touch. Append:
-
-```
-2.0 changed things update cannot fix for you:
-  - references to `{aiDir}/memory/sessions/active/` in your own hooks and docs
-  - references to the renamed skills: features-status-audit, worktree-cleanup,
-    docs-sanitize
-  - plans written under 1.x: implementers no longer run tests, so any
-    "Run test — expect FAIL" step now has no owner
-  Full list, with the greps: docs/upgrading-to-2.0.md in the plugin.
-```
-
-Print it once, after the summary, and do not act on any of it — each item is a
-judgment call in a file the project owns.
 
 **Generated-config advisory (print only when `.myspec.json` has a `mockups` block):** blueprint-generated files are project-owned and never auto-updated. Read `{aiDir}/conventions/mockup-design.md` frontmatter `myspec_version` (treat a missing key as "unstamped") and append to the summary:
 
@@ -247,36 +230,36 @@ Do NOT modify the file — this is advisory only.
 
 ## Rules
 
-- **Never substitute `${aiDir}` into a `hooks` or `lib` entry.** Those files resolve `aiDir` at runtime and carry `${aiDir}` as live shell and JS template-literal syntax — `lib/setup-doctor.mjs` alone has eight, including its destination-path computations. Substituting freezes every path to this project's value at install time and leaves helpers ignoring their own `aiDir` argument (`memoryFilesInRefs(root, aiDir)` stops reading its parameter). The corruption is silent: within one project the frozen value is correct, so nothing misbehaves until the value changes. Only the `files` and `rules` blocks carry `${aiDir}` as a placeholder.
-- Never overwrite a file whose `frameworkFiles[...].pinned` is set, and never add or clear a pin yourself
+- **Never copy a hook or lib helper into the project.** Since 3.0 they run from the plugin, and a copy under `.claude/` is dead weight at best and a second, stale run of a gate at worst (a copy is moved to `.claude/state/retired-3.0/`, never written). Only the `files` and `rules` blocks exist, and both carry `${aiDir}` as a placeholder to substitute.
+- Never overwrite a file whose `frameworkFiles[...].pinned` is set, and never add or clear a pin yourself — except the `hooks/*` and `lib/*` pins the `3.0.0-plugin-hooks` migration drops, which it reports
 - Never overwrite content after `<!-- myspec:framework-end -->` in a `marker-merge` file
-- Never modify files not listed in `manifest.json`, with two exceptions this skill owns: the `hooks` key of `.claude/settings.json`, and `.claude/rules/ai-setup-audit.md` for the `2.0.0-doctor-rule` migration
-- Never update `.myspec.json` project fields (`name`, `description`, `techStack`); `aiDir` is written only by the `2.0.0-schema` migration, and only when absent or carrying a trailing slash
+- Never modify files not listed in `manifest.json`, with two exceptions this skill owns: the `hooks` key of `.claude/settings.json` (framework entries removed, nothing added) and `.claude/state/retired-3.0/` (where the migration moves the retired copies)
+- Never update `.myspec.json` project fields (`name`, `techStack`) or `aiDir`. Keys a migration retires are deleted only by it: `codeReview` by `3.0.0-code-review`, `reuseAudit` by `3.0.0-reuse-audit`, `project.description` by `3.0.0-schema-v2`. A pin's `hash` and `upstreamHash` are written only by `pin-reconcile.mjs` (`--backfill`, `--record`)
 - Never run a migration whose id is already in `.myspec.json` `migrations`; record each one the moment it completes
 - If a source file is missing from the plugin, skip it and warn the user — do not delete the destination
-- The plugin ships no subagent definitions. Never write to `~/.{harness}/agents/` outside the `2.0.0-base-agents` migration, and never to project-scope `.claude/agents/`, `.cursor/agents/`, `.codex/agents/`.
+- The plugin ships no subagent definitions. Never write to `~/.{harness}/agents/` or to project-scope `.claude/agents/`, `.cursor/agents/`, `.codex/agents/`.
 
 ## Verification Checklist
 
 After running the skill:
 
-- [ ] `.myspec.json` `frameworkVersion` read and compared to `manifest.json`; stopped early if already current, or with the 1.28 instruction if below 1.28.0
+- [ ] `.myspec.json` `frameworkVersion` read and compared to `manifest.json`; stopped early if already current, or with `upgrade-route.mjs`'s whole route if below the manifest's `upgradeFrom`
 - [ ] Every manifest `migrations` id not yet in `.myspec.json` run in order and recorded as it completed
 - [ ] Every `manifest.json` entry processed with its declared strategy (`overwrite` / `marker-merge`)
 - [ ] Every entry carrying `renamedFrom` checked before applying: destination migrated and its `frameworkFiles` key renamed (kept even when the apply could not merge), a dead old key dropped, or the both-exist case offered a merge (or deletion, for a marker-less old file)
 - [ ] Every `marker-merge` destination without an end marker offered replace / prepend / pin, and the answer applied
 - [ ] Every `removed` entry deleted (or kept when pinned) and, for hooks, unwired from `settings.json`
-- [ ] Entries pinned in `.myspec.json` skipped and listed in the summary; every pin whose plugin copy is now smaller than the local one offered the keep / take / diff choice
+- [ ] Entries pinned in `.myspec.json` skipped and listed in the summary; `pin-reconcile.mjs` run, every `drop`, `review` and `diverged` verdict offered its choice, every `unrecorded` pin backfilled, nothing decided alone
 - [ ] `templates/*` entries written to `{aiDir}/.templates/` (no `{aiDir}/templates/` created)
 - [ ] `marker-merge` files: everything after `<!-- myspec:framework-end -->` left untouched; the region above it taken from the plugin copy
-- [ ] `hooks` and `lib` entries processed only when `.claude/hooks/` exists (else both skipped with the note)
-- [ ] Each updated hook and lib helper had `chmod +x` applied, and was written byte-for-byte with no `${aiDir}` substitution
+- [ ] `3.0.0-plugin-hooks` (first run only): every framework entry unwired from `settings.json` `hooks` by script name, project entries in the same arrays untouched, empty groups and events deleted; every `.claude/hooks/` and `.claude/lib/` copy the manifest lists moved to `.claude/state/retired-3.0/` with "locally modified" named where it differed from the plugin copy; `hooks/*` and `lib/*` pins dropped and reported; unmanaged leftovers listed, not touched; nothing copied into `.claude/hooks/` or `.claude/lib/`
+- [ ] `3.0.0-reuse-audit` (first run only): the `reuseAudit` key deleted from `.myspec.json` when present, the per-file marker named when it held `enabled: false`, no tech-spec edited
 - [ ] Memory health checked when a memory tree exists: `--check` clean (after regeneration or backfill where needed), doctor summary reported, `.claude/state/` gitignored
 - [ ] `${aiDir}` binding refreshed between `myspec:paths` markers; content outside markers unchanged
-- [ ] `.myspec.json` `frameworkVersion` bumped; project fields (`name`, `description`, `techStack`) untouched; `frameworkFiles` holds pins only
-- [ ] Hook wiring run via `setup-doctor.mjs wiring` (or by hand when the doctor was not yet installed): missing template entries added, bare `.claude/hooks/` commands rewritten to `"$CLAUDE_PROJECT_DIR"/` without duplicating an entry, removed hooks unwired under `settings.json` `hooks`, nothing else in that file touched, `wiring-incomplete` and `hook-command-relative` gone on re-run; `.gitignore` has a `.claude/state/` line
+- [ ] `.myspec.json` `frameworkVersion` bumped; project fields (`name`, `techStack`) untouched; `frameworkFiles` holds pins only
+- [ ] `3.0.0-schema-v2` (first run only): `project.description` deleted when present, `--backfill` run and its rows printed with the "cannot report review until the next update" note
+- [ ] `setup-doctor.mjs wiring` run from the plugin: `hook-wired-locally` and `hook-copy-retired` gone, nothing added to `settings.json`, project-hook findings and `settings.local.json` entries reported with their fix line; `.gitignore` has a `.claude/state/` line
 - [ ] Full `setup-doctor.mjs` run in Step 3.7, before the Step 5 version stamp; every `install`-, `schema`- and `features`-group error resolved or reported
-- [ ] No file outside `manifest.json` was modified, except `settings.json` `hooks` and the doctor-rule rename
-- [ ] Summary printed with `Updated files`, `Migrations`, `Removed`, `Preserved`, `Hooks`, `Lib`, and `Hook wiring` lines
+- [ ] No file outside `manifest.json` was modified, except `settings.json` `hooks` (removals only) and `.claude/state/retired-3.0/`
+- [ ] Summary printed with `Updated files`, `Migrations`, `Removed`, `Preserved` and `Hooks` lines
 - [ ] Generated-config advisory printed when a `mockups` block exists (`mockup-design.md` read, never modified)
-- [ ] 2.0 advisory printed when a `2.0.0-*` migration ran this session, pointing at `docs/upgrading-to-2.0.md`; nothing it names was acted on
