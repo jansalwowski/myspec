@@ -173,7 +173,7 @@ content_gates() {
     fi
 
     # The reuse audit, on a tech-spec a Bash write created.
-    if [ "$created" -eq 1 ] && reuse_audit_scope "$rel"; then
+    if [ "$created" -eq 1 ] && reuse_audit_scope "${ai:-$(ai_dir "$root")}" "$rel"; then
       lines=$(reuse_audit_issues "$abs")
       [ -z "$lines" ] || reasons+=("$(reuse_audit_reason "$rel" "$lines")")
     fi

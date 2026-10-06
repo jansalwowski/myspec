@@ -236,6 +236,26 @@ expect_exit 3 "unrecognized format: exit 3"
 run
 expect_exit 1 "no arguments: usage error"
 
+# ── 9b. a resumed session: several ids scanned as one run (#170) ──
+# Two blocks in the first id and one in the resumed id cross the threshold
+# only together; each id's subagents are read from its own directory.
+{ prompt 'fix the bug'; for i in 1 2; do tool_use "r$i" Edit; tool_err "r$i" "PreToolUse:Edit hook error: $ISO"; done; } > "$(session s10-first)"
+{ prompt 'continue'; tool_use r3 Edit; tool_err r3 "PreToolUse:Edit hook error: $ISO"; } > "$(session s10-resumed)"
+F=$(subagent s10-resumed b1); meta s10-resumed b1 'Implement Task 7'
+{ prompt 'Task 7'; say $'**Status:** BLOCKED\nNo credentials.'; } > "$F"
+run --session=s10-first
+expect_empty "first id alone: below threshold"
+run --session=s10-first,s10-resumed
+expect_exit 0 "two ids: exit 0"
+expect_line '^\| hook block: isolation-undecided \| myspec \| 3 \|' "two ids: events counted across the chain"
+expect_line '^\| subagent-blocked \| unknown \| 1 \| - \| Implement Task 7' "two ids: the resumed id's subagents are read"
+expect_line '^friction-scan: session s10-firs' "two ids: header names the first id"
+run --session=s10-first,does-not-exist
+expect_exit 0 "one id of several missing: still scans the rest"
+expect_line 'no transcript found for session does-not-exist' "one id of several missing: named on stderr"
+run --session=nope-1,nope-2
+expect_exit 2 "every id missing: exit 2"
+
 # ── 10. the signature table matches the hook sources ──
 # A hook's messages may live in the modules it sources: verify-before-stop.sh
 # is a shim over lib/stop-gate/, and the three content gates print the

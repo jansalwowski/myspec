@@ -561,6 +561,41 @@ YAML
 run_audit
 expect_line 'HIGH .*workspace member "packages/newpkg"' "a flush-left pnpm-workspace.yaml is still read"
 
+# Keys containing a colon are ordinary in a scripts block (test:ci, dev:frontend)
+# and YAML splits a key from its value at the first colon followed by space or
+# end of line. Splitting at the first colon aborted the whole audit (#159).
+colon_keys() {      # colon_keys <commands-block>
+  build_fixture
+  node -e '
+const fs = require("fs"), d = process.argv[1];
+const pj = JSON.parse(fs.readFileSync(d + "/package.json", "utf8"));
+Object.assign(pj.scripts, { "test:ci": "vitest run", "dev:frontend": "vite", "build:dev": "vite build" });
+fs.writeFileSync(d + "/package.json", JSON.stringify(pj));
+const p = d + "/backbone.yml";
+fs.writeFileSync(p, fs.readFileSync(p, "utf8").replace("  test: \"pnpm test\"\n", "  test: \"pnpm test\"\n" + process.argv[2]));
+' "$REPO" "$1"
+  run_audit
+}
+
+colon_keys $'  test:ci: pnpm test:ci\n'
+expect_exit 0 "an unquoted key containing a colon parses (test:ci:)"
+expect_no_line 'ABORTED' "an unquoted colon key does not abort the audit"
+
+colon_keys $'  "dev:frontend": pnpm dev:frontend\n'
+expect_exit 0 "a double-quoted key containing a colon parses"
+expect_no_line 'ABORTED' "a quoted colon key does not abort the audit"
+
+colon_keys $'  dev:frontend: pnpm build:dev\n'
+expect_exit 0 "an unquoted colon key with a colon in its value parses"
+expect_no_line 'ABORTED' "a colon in both key and value does not abort the audit"
+
+colon_keys $'  \'test:ci\': pnpm missing:script\n'
+expect_line 'HIGH .*commands\.test:ci runs "pnpm missing:script"' "a single-quoted colon key keeps its whole name"
+
+colon_keys $'  "dev:frontend": |\n    pnpm dev\n'
+expect_exit 3 "a block scalar behind a quoted colon key is still refused"
+expect_line 'block scalar' "the refusal names the block scalar"
+
 refuse() {          # refuse <description> <yaml-tail>
   build_fixture
   printf '%s' "$2" >> "$REPO/backbone.yml"
