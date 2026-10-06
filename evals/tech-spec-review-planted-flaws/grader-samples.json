@@ -1,17 +1,17 @@
 {
   "flags-uncovered-req": {
     "pass": [
-      "| REQ-004 | — | — |",
+      "| REQ-004 | \u2014 | \u2014 |",
       "| Critical | Spec Alignment | Uncovered requirement | spec.md | 24 | REQ-004 (drafts never exported) has no implementation step; by_issue_date returns every status. |",
       "REQ-004 is not covered: nothing filters drafts, so they would be exported.",
-      "| REQ-004 — drafts never exported | — | — |"
+      "| REQ-004 \u2014 drafts never exported | \u2014 | \u2014 |"
     ],
     "fail": [
-      "| REQ-004 | 2 | full — drafts excluded by the repository |",
+      "| REQ-004 | 2 | full \u2014 drafts excluded by the repository |",
       "REQ-004 maps to step 2 and is fully covered.",
       "| REQ-004: Draft invoices must never appear in an export | 2 | full |",
-      "| REQ-004 | 2 | — |",
-      "| REQ-004 | 2 | full — nothing is missing |"
+      "| REQ-004 | 2 | \u2014 |",
+      "| REQ-004 | 2 | full \u2014 nothing is missing |"
     ]
   },
   "flags-ignored-reuse": {
@@ -42,7 +42,19 @@
       "1 Critical and 1 High remain, so the tech-spec stays draft and feature-plan is blocked."
     ],
     "fail": [
-      "Review passed — mark tech-spec.md status: approved?"
+      "Review passed \u2014 mark tech-spec.md status: approved?"
+    ]
+  },
+  "flags-no-verification-mode": {
+    "pass": [
+      "| Medium | Testability | No verification mode | tech-spec.md | 1 | The export derives CSV rows from invoice data but sets no `verification_mode`; `verification_mode: data` with Real inputs would add a probe per milestone. |",
+      "**Medium** \u2014 frontmatter has no verification_mode although the design derives output from invoice data.",
+      "verification_mode is missing on a data-deriving export (Medium, does not block planning)."
+    ],
+    "fail": [
+      "verification_mode is not set, so the verification-surface gate is skipped.",
+      "| Medium | Completeness | Edge cases | tech-spec.md | 40 | No case for an empty customer name. |",
+      "No Test Hooks section; none is required without a verification mode."
     ]
   }
 }
