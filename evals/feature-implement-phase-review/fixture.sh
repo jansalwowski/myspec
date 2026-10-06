@@ -29,8 +29,8 @@ PLAN=.ai/features/invoice-due-dates/implementation-plan.md
 # The barrier already ran: the eval sandbox denies the suite and the shell
 # redirect that builds the package, so both are written here, where the
 # prompt names them. .claude/state/ is gitignored.
-STATE=.claude/state/phase-1
+STATE=.claude/state/implement/invoice-due-dates
 mkdir -p "$STATE"
 BASE=$(git rev-parse HEAD~2)
-{ git log --oneline "$BASE"..HEAD; echo; git diff --stat "$BASE"..HEAD; echo; git diff -U10 "$BASE"..HEAD; } > "$STATE/review.diff"
-printf '## ruff check .\nexit: 0\nAll checks passed!\n\n## pytest -q\nexit: 0\n5 passed in 0.04s\n' > "$STATE/verify.log"
+{ git log --oneline "$BASE"..HEAD; echo; git diff --stat "$BASE"..HEAD; echo; git diff -U10 "$BASE"..HEAD; } > "$STATE/phase-1-review.diff"
+printf '## ruff check .\nexit: 0\nAll checks passed!\n\n## pytest -q\nexit: 0\n5 passed in 0.04s\n' > "$STATE/phase-1-verify.log"
