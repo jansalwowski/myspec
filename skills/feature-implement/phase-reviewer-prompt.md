@@ -61,6 +61,18 @@ Task tool (general-purpose):
     re-run the suite. Another suite run in this worktree races the
     controller's and produces timing flakes.
 
+    ## Per-Task Loop Results (workflow mode only; omit otherwise)
+
+    [Per task: status, open findings, notChecked, notEvidenced, from the
+    implement-phase workflow]
+
+    Before this phase review, a workflow ran each task through an
+    independent verify agent and a standards and spec-contract check. Its
+    open findings are claims, not verdicts. Confirm each one against the
+    diff and report it at its true severity, or reject it with the code you
+    read. `notChecked` and `notEvidenced` list checks nobody ran: the
+    barrier log decides them.
+
     Your review is read-only on this checkout, except for running the
     commands named under Test coverage. Never edit files or mutate the
     index, HEAD, or branch state.

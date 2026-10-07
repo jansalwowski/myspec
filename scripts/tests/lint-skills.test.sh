@@ -459,6 +459,26 @@ expect_line "no such file" "a missing --files path is named"
 run --bogus
 expect_exit 2 "an unknown flag exits 2"
 
+# ── PLUGIN-ROOT-REF: the variable outside a SKILL.md body (#313) ────────────
+# Only SKILL.md bodies are substituted. A reference, prompt template or
+# _shared file the model opens with Read keeps the variable literal, and the
+# Bash tool expands it to empty.
+fresh
+{ printf -- '---\nname: demo\n%s\n---\n' "$GOOD"; body; printf '\nRun `"${CLAUDE_PLUGIN_ROOT}/lib/x.sh"`.\n'; } | skill demo
+mkdir -p "$FIX/skills/demo/references" "$FIX/skills/_shared"
+printf '# Ref\n\n```bash\n"${CLAUDE_PLUGIN_ROOT}/lib/x.sh" run\n```\n' > "$FIX/skills/demo/references/ref.md"
+printf '# Shared\n\nThen $CLAUDE_PLUGIN_ROOT/lib/y.sh.\n' > "$FIX/skills/_shared/recipe.md"
+printf '# Clean\n\nRun `<plugin lib>/x.sh`.\n' > "$FIX/skills/demo/clean.md"
+run
+expect_exit 1 "PLUGIN-ROOT-REF fails the run"
+expect_line "skills/demo/references/ref\.md:4: PLUGIN-ROOT-REF" "PLUGIN-ROOT-REF fires in a references/ file, inside a code fence"
+expect_line "skills/_shared/recipe\.md:3: PLUGIN-ROOT-REF" "PLUGIN-ROOT-REF fires in _shared/, unbraced form"
+expect_no_line "skills/demo/SKILL\.md:[0-9]+: PLUGIN-ROOT-REF" "PLUGIN-ROOT-REF is quiet in a SKILL.md body"
+expect_no_line "clean\.md" "PLUGIN-ROOT-REF is quiet on <plugin lib>"
+run --files skills/demo/references/ref.md
+expect_exit 1 "--files routes a reference file to PLUGIN-ROOT-REF"
+expect_line "^skills/demo/references/ref\.md:4: PLUGIN-ROOT-REF" "--files reports the reference finding"
+
 # ── the real repo lints clean ───────────────────────────────────────────────
 OUTPUT=$(cd "$REPO_ROOT" && node "$SCRIPT" 2>&1); STATUS=$?
 expect_exit 0 "the real repo has no error findings"
