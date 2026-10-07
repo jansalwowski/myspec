@@ -304,5 +304,40 @@ else
 fi
 cp "$ROOT/myspec.saved" "$REPO/.myspec.json"
 
+# --- isolation.gateDocs (#329): opt-in, the doc paths are asked too -----------
+cp "$REPO/.myspec.json" "$ROOT/myspec.saved"
+rm -f "$STATE/"*.jsonl
+# false, spelled out, is the default: the doc paths stay exempt.
+printf '{"aiDir":".ai","frameworkVersion":"3.0.0","isolation":{"gateDocs":false}}\n' > "$REPO/.myspec.json"
+check allow "gateDocs false, aiDir doc"      gd-off "$REPO/.ai/features/x/spec.md"
+check allow "gateDocs false, .claude file"   gd-off "$REPO/.claude/settings.json"
+check allow "gateDocs false, docs/ file"     gd-off "$REPO/docs/guide.md"
+check allow "gateDocs false, AGENTS.md"      gd-off "$REPO/AGENTS.md"
+check block "gateDocs false, source file"    gd-off "$REPO/components/Foo.vue"
+# A value of the wrong type is not true: the reader drops it, the default stands.
+printf '{"aiDir":".ai","frameworkVersion":"3.0.0","isolation":{"gateDocs":"yes"}}\n' > "$REPO/.myspec.json"
+check allow "gateDocs \"yes\", aiDir doc"   gd-off "$REPO/.ai/features/x/spec.md"
+
+printf '{"aiDir":".ai","frameworkVersion":"3.0.0","isolation":{"gateDocs":true}}\n' > "$REPO/.myspec.json"
+check block "gateDocs true, aiDir doc"       gd-on "$REPO/.ai/features/x/spec.md"
+check block "gateDocs true, .claude file"    gd-on "$REPO/.claude/settings.json"
+check block "gateDocs true, docs/ file"      gd-on "$REPO/docs/guide.md"
+check block "gateDocs true, CLAUDE.md"       gd-on "$REPO/CLAUDE.md"
+check block "gateDocs true, AGENTS.md"       gd-on "$REPO/AGENTS.md"
+check block "gateDocs true, .mcp.json"       gd-on "$REPO/.mcp.json"
+# The pinned paths keep their exemption.
+check allow "gateDocs true, live session log" gd-on "$REPO/.claude/state/sessions/abc123.md"
+check allow "gateDocs true, archived session" gd-on "$REPO/.ai/memory/sessions/archive/2026-08-31-x.md"
+# Done when: the first aiDir edit in the main checkout is blocked with the ask,
+# and passes once a decision is recorded.
+if run_hook "$REPO" gd-done "$REPO/.ai/features/x/spec.md" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -qF 'no work-isolation decision recorded'; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); echo "FAIL  gateDocs true: the first aiDir edit is not blocked with the ask" >&2
+fi
+mark gd-done develop 60
+check allow "gateDocs true, develop recorded, aiDir doc" gd-done "$REPO/.ai/features/x/spec.md"
+cp "$ROOT/myspec.saved" "$REPO/.myspec.json"
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
