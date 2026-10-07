@@ -316,7 +316,16 @@ User: `clean`. The skill runs `"${CLAUDE_PLUGIN_ROOT}/lib/task-worktree.sh" disc
 
 ## Concurrent phases without a parallel marker
 
-A plan for `report-exports` has no `[parallel:*]` group. Its Execution Order table lets Phases 2 and 3 run at once:
+A plan for `report-exports`, written by `feature-plan` after this feature shipped, has no `[parallel:*]` group. Its front-matter carries `auto_parallel_phases: true`, and its Execution Order table lets Phases 2 and 3 run at once:
+
+```yaml
+---
+title: "Report Exports -- Implementation Plan"
+feature: report-exports
+planned_against: 9b1c…
+auto_parallel_phases: true
+---
+```
 
 ```markdown
 | Phase | Tasks | Mode | Depends On |
@@ -329,7 +338,7 @@ A plan for `report-exports` has no `[parallel:*]` group. Its Execution Order tab
 
 ### Skill flow
 
-1. **Step 1** finds Phases 2 and 3 concurrent. Neither reaches the other through `Depends On`. Neither consumes what the other produces: Task 4's Consumes names only Task 1's `ExportJob`. Their Files and Touch only paths (`src/exports/csv/…` and `web/settings/exports/…`) share nothing, and no task runs a generator or adds a migration. It logs `Ruling: Phases 2 and 3 run concurrently — no Depends On path, no Consumes/Produces link, disjoint Files/Touch only — cost if wrong: a merge conflict at the second phase's barrier`.
+1. **Step 1** sees `auto_parallel_phases: true` and finds Phases 2 and 3 concurrent. Neither reaches the other through `Depends On`. Neither consumes what the other produces: Task 4's Consumes names only Task 1's `ExportJob`. Their Files and Touch only paths (`src/exports/csv/…` and `web/settings/exports/…`) share nothing, and no task runs a generator or adds a migration. It logs `Ruling: Phases 2 and 3 run concurrently — no Depends On path, no Consumes/Produces link, disjoint Files/Touch only — cost if wrong: a merge conflict at the second phase's barrier`.
 2. **Step 3** runs Phase 1 as usual. It then creates `report-exports-p2` and `report-exports-p3` with `task-worktree.sh create`, marks Tasks 2 and 4 `[~]`, and dispatches both implementers in one message. Task 3 follows Task 2 inside the Phase 2 worktree.
 3. Phase 3 finishes first. The controller records its `PHASE_BASE`, merges `report-exports-p3`, runs the full suite, and dispatches the phase reviewer on that phase's package alone. Phase 2's implementers keep working meanwhile.
 4. After Phase 3 is marked complete, Phase 2 gets the same treatment: base, merge, suite, review, and a fix round that runs in the controller's checkout.
@@ -339,7 +348,7 @@ A plan for `report-exports` has no `[parallel:*]` group. Its Execution Order tab
 
 - **`Depends On` is the contract.** The controller never parallelizes two phases the table links, and it never guesses disjointness from code. Only the Files and Touch only lines count.
 - **Review semantics do not change.** Each phase still gets its own barrier suite, review package and fix loop. Only the implementers overlap.
-- **Opting out is one line.** A plan whose author relies on table order adds the missing `Depends On` edge, or sets `auto_parallel_phases: false` in its front-matter to keep every phase serial.
+- **Opt-in per plan.** Only a plan with `auto_parallel_phases: true` runs phases concurrently. `feature-plan` writes the key into every new plan. A plan written before the key existed has none and runs serially, exactly as before. A new plan whose author relies on table order adds the missing `Depends On` edge, or sets the key to `false`.
 
 ## Workflow mode for the per-task loop
 

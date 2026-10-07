@@ -153,7 +153,7 @@ Parse milestones first, then build a DAG within each:
    - Identify phases (task groups separated by barriers).
    - Identify parallel groups (rows with `**parallel:groupName**` in Mode).
    - Identify dual-stream forks (phases with `3a`/`3b` style rows — two simultaneous chains).
-   - Identify concurrent phase sets: phases the `Depends On` column lets run at once whose Files/Touch only paths are disjoint. The six conditions are in [parallel-phases.md](parallel-phases.md). A phase that fails any of them runs serially.
+   - Only when the front-matter sets `auto_parallel_phases: true`: identify concurrent phase sets, meaning phases the `Depends On` column lets run at once whose Files/Touch only paths are disjoint. The conditions are in [parallel-phases.md](parallel-phases.md). Without the key, or when a phase fails any condition, phases run serially as before.
 3. **Cross-milestone dependencies:** If a milestone's first phase says `Depends On: Milestone N`, the entire previous milestone must be complete before this one starts.
 
 **Resume detection (on startup):**
@@ -240,7 +240,7 @@ Task M, Task K as separate Agent calls in the same message → track per-task st
 
 Parallelism pays only when each task outweighs its merge and review overhead; run small parallel groups sequentially in the controller's checkout.
 
-**Concurrent phases** — a set Step 1 found ([parallel-phases.md](parallel-phases.md)) gets one worktree per phase, `"${CLAUDE_PLUGIN_ROOT}/lib/task-worktree.sh" create <feature>-p<N>`, and the phases' implementers are dispatched in one message. Barriers and reviews stay per phase and run one phase at a time in your checkout: record that phase's `PHASE_BASE`, then `task-worktree.sh merge <feature>-p<N>`, then Step 4, exactly as for a serial phase. A plan with `auto_parallel_phases: false` in its front-matter runs every phase serially.
+**Concurrent phases** — a set Step 1 found ([parallel-phases.md](parallel-phases.md)) gets one worktree per phase, `"${CLAUDE_PLUGIN_ROOT}/lib/task-worktree.sh" create <feature>-p<N>`, and the phases' implementers are dispatched in one message. Barriers and reviews stay per phase and run one phase at a time in your checkout: record that phase's `PHASE_BASE`, then `task-worktree.sh merge <feature>-p<N>`, then Step 4, exactly as for a serial phase. A plan without `auto_parallel_phases: true` in its front-matter runs every phase serially.
 
 **Workflow mode** — only when Step 1 chose it. It replaces this step's implementer dispatches for a phase and nothing else. For each phase:
 1. Record `PHASE_BASE`, create the parallel task worktrees, and mark the tasks `[~]`, exactly as above.

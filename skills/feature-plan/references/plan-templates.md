@@ -14,6 +14,7 @@ based_on_spec_version: {spec_version from spec.md}
 spec: ${aiDir}/features/{feature}/spec.md
 tech_spec: ${aiDir}/features/{feature}/tech-spec.md
 planned_against: {full 40-char SHA of HEAD after the Step 1 sync}
+auto_parallel_phases: true
 created: {TODAY}
 last_updated: {TODAY}
 ---
@@ -22,6 +23,8 @@ last_updated: {TODAY}
 `spec` / `tech_spec` are explicit pointers, not decoration: the plan argues from those two documents, so they travel with it — anyone executing or reviewing the plan reads both alongside it.
 
 `planned_against` is the commit every snippet was read from: HEAD once the integration branch is merged in, so the feature branch's own commits are part of the baseline. `feature-implement` diffs each `Modify:` file from it to the integration branch tip (`<sha>...origin/<integration>`, three dots, so only integration-branch changes since the sync count) and warns on a change; re-sync and re-record it whenever the plan is revised against newer code.
+
+`auto_parallel_phases: true` lets `feature-implement` run phases concurrently when `Depends On` and the tasks' file lists prove them independent. Write it into every new plan, and make `Depends On` name every real dependency (Milestone Section notes). A plan without the key runs serially.
 
 Update `last_updated` whenever the plan is edited (including checkbox updates by `feature-implement`).
 
@@ -98,7 +101,7 @@ Resume behavior: A new agent reads the plan, skips `[x]` tasks, re-executes `[~]
 
 Notes:
 - A sequential phase may list several tasks; they run in listed order and share one barrier suite and one phase review (Step 2's phase grouping rule)
-- `Depends On` names only the phases whose output a phase actually uses (data, an interface, a file it modifies). `feature-implement` runs phases with no dependency path between them and disjoint Files/Touch only paths concurrently, so a habitual chain to the previous phase costs throughput, and a missing edge lets two phases race. To keep the whole plan serial, add `auto_parallel_phases: false` to the front-matter
+- `Depends On` names only the phases whose output a phase actually uses (data, an interface, a file it modifies). With `auto_parallel_phases: true` in the front-matter, which every new plan carries, `feature-implement` runs phases with no dependency path between them and disjoint Files/Touch only paths concurrently. A habitual chain to the previous phase then costs throughput, and a missing edge lets two phases race. Set the key to `false` to keep the whole plan serial
 - Phase numbers must be globally unique across the entire plan (Milestone 2 starts at the next available phase number)
 - First phase of Milestone 2+ uses `Milestone N` in Depends On (not a phase number from the previous milestone)
 - Single-milestone plans omit the `### Milestone N:` heading — the Execution Order table stands alone

@@ -58,6 +58,7 @@ based_on_tech_spec_version: 1
 spec: ai/features/favorite-reports/spec.md
 tech_spec: ai/features/favorite-reports/tech-spec.md
 planned_against: 3f9c2a7e1b4d8c6f0a2e5b7d9c1f3a5e7b9d2c4f
+auto_parallel_phases: true
 created: 2026-04-30
 ---
 
