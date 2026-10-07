@@ -255,7 +255,7 @@ PKG="$STATE/phase-N-review.diff"
 ```
 
 - Use the `PHASE_BASE` recorded before the phase's first dispatch — never `HEAD~1`. Never dispatch a phase reviewer without a diff file.
-- Pass `VERIFY_LOG`, and the spec requirement IDs the phase touches (from task spec citations and the plan's `## Spec Coverage` table) with their text. The reviewer checks each as behavior across the whole feature: an invariant spanning tasks otherwise surfaces only at holistic review, after later phases built on it.
+- Pass `VERIFY_LOG`, and the spec requirement IDs the phase touches (from task spec citations and the plan's `## Spec Coverage` table) with their text, plus each one's Test cell when that table has a Test column. The reviewer checks each as behavior across the whole feature: an invariant spanning tasks otherwise surfaces only at holistic review, after later phases built on it.
 - Never pre-judge findings for the reviewer — never instruct it to ignore or not flag a specific issue. If the prompt you are writing contains "do not flag", "don't treat X as a defect", or "at most Minor" — stop: you are pre-judging, usually to spare yourself a fix loop. Let the reviewer raise it and rule on it in triage.
 - Covers ALL tasks in the phase: spec compliance, code quality, test coverage, test-weakening audit, integration, docs.
 - Returns: `APPROVED` or `ISSUES_FOUND` with per-finding severity (Critical / Important / Minor).

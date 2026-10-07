@@ -143,21 +143,21 @@ Step 4.5 runs on every plan, large or small. The skill walks `spec.md` and `tech
 ```markdown
 ## Spec Coverage
 
-| Source | Requirement (verbatim) | Tasks |
-|--------|------------------------|-------|
-| spec.md REQ-001 | "Users can favorite and unfavorite any report they can view." | T2, T4 |
-| spec.md REQ-002 | "The star control is keyboard-operable and announces its state to screen readers." | T5 |
-| … | (REQ-003 → T1, T2; REQ-004 → T6) | |
-| spec.md AC-1 | "A star control appears on every report row." | T5 |
-| spec.md AC-2 | "A user can mark a report as a favorite, and the star reflects the favorited state immediately." | T4, T5 |
-| spec.md AC-3 | "Favorites persist across sessions and devices." | T1, T2 |
-| spec.md AC-4 | "Favorited reports pin to the top of the report list." | T6 |
-| spec.md AC-5 | "Removing a favorite unpins the report without a page reload." | T4, T6 |
-| tech-spec.md step 1 | "Add report_favorites (user_id, report_id, created_at) with a unique pair index." | T1 |
-| … | (steps 2–6 map 1:1 to T2–T6) | |
+| Source | Requirement (verbatim) | Tasks | Test |
+|--------|------------------------|-------|------|
+| spec.md REQ-001 | "Users can favorite and unfavorite any report they can view." | T2, T4 | `favorites.service.test` › toggles for a viewable report, refuses a hidden one |
+| spec.md REQ-002 | "The star control is keyboard-operable and announces its state to screen readers." | T5 | `StarToggle.test` › Space toggles, aria-pressed follows |
+| … | (REQ-003 → T1, T2; REQ-004 → T6) | | |
+| spec.md AC-1 | "A star control appears on every report row." | T5 | `ReportList.test` › every row renders a star |
+| spec.md AC-2 | "A user can mark a report as a favorite, and the star reflects the favorited state immediately." | T4, T5 | `StarToggle.test` › optimistic fill before the request resolves |
+| spec.md AC-3 | "Favorites persist across sessions and devices." | T1, T2 | `favorites.repository.test` › favorite survives a new session |
+| spec.md AC-4 | "Favorited reports pin to the top of the report list." | T6 | `ReportList.test` › favorites sort first |
+| spec.md AC-5 | "Removing a favorite unpins the report without a page reload." | T4, T6 | `ReportList.test` › unfavorite reorders in place |
+| tech-spec.md step 1 | "Add report_favorites (user_id, report_id, created_at) with a unique pair index." | T1 | `favorites.repository.test` › duplicate pair rejected |
+| … | (steps 2–6 map 1:1 to T2–T6) | | |
 ```
 
-Every row lands on a task, so there is nothing to defer. REQ-002 is the row an AC-only walk would miss: no acceptance criterion mentions keyboard or screen-reader behavior, so it reaches T5's Spec contract only because requirements get rows of their own.
+Every row lands on a task and names the test that will prove it, so there is nothing to defer. The Test column is what the phase reviewer later checks per requirement: AC-4's row names a sort test, so a phase that ships pinning without that test gets an Important finding at its own review, not at conformance after every phase passed. REQ-002 is the row an AC-only walk would miss: no acceptance criterion mentions keyboard or screen-reader behavior, so it reaches T5's Spec contract only because requirements get rows of their own.
 
 ### Step 4.6: Plan self-check
 
@@ -337,7 +337,7 @@ Passes.
 The coverage walk finds one criterion no task realizes:
 
 ```markdown
-| spec.md AC-9 | "A failed schedule run notifies the owner by email." | DEFERRED — tech-spec §Non-Goals excludes the notification transport; tracked as idea `run-failure-alerts` |
+| spec.md AC-9 | "A failed schedule run notifies the owner by email." | DEFERRED — tech-spec §Non-Goals excludes the notification transport; tracked as idea `run-failure-alerts` | — |
 ```
 
 The tech-spec deliberately excluded it, so this is a scope cut rather than a planning miss — but it is still the user's call, so the skill carries it into Step 6 rather than dropping it. Had the gap been an oversight, the fix would be a new task plus the AC quoted into its Spec contract block, not a `DEFERRED` row.

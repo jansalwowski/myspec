@@ -135,7 +135,10 @@ does this cover" finds only what is already there:
 2. For each, name the task ID(s) that realize it. Match on the behavior the
    requirement describes, not on shared vocabulary — a task that touches the
    same file as an AC does not thereby cover it.
-3. Write the results to the plan's `## Spec Coverage` table (see
+3. For each mapped row, name the test (file and case) that will prove it —
+   usually the one the task's TDD step writes. A behavior no planned test
+   asserts is a gap: add the test to the task.
+4. Write the results to the plan's `## Spec Coverage` table (see
    [references/plan-templates.md](references/plan-templates.md)).
 
 **A requirement with no task is a blocking gap.** Resolve every one before
@@ -310,7 +313,7 @@ so one is a session's worth of work.
 
 Before presenting the plan:
 
-- [ ] `## Spec Coverage` holds one row per spec.md requirement ID, per spec.md acceptance criterion, and per tech-spec.md implementation step, each mapped to task IDs or explicitly `DEFERRED` with a reason (Step 4.5)
+- [ ] `## Spec Coverage` holds one row per spec.md requirement ID, per spec.md acceptance criterion, and per tech-spec.md implementation step, each mapped to task IDs and the test that proves it, or explicitly `DEFERRED` with a reason (Step 4.5)
 - [ ] Header `spec` / `tech_spec` keys point at the feature's `spec.md` and `tech-spec.md`; `planned_against` holds HEAD's SHA after the Step 1 sync
 - [ ] `## Global Constraints` holds every project-wide exact (versions, limits, naming, invariants) verbatim with source refs; no task text re-derives one
 - [ ] Task boundaries are right-sized — each task independently rejectable by a reviewer; trivial same-shape changes batched into one task

@@ -41,7 +41,7 @@ Task tool (general-purpose):
 
     ## Spec Requirements This Phase Touches
 
-    [Each requirement ID (R-number / AC ID) the phase's tasks implement or change, with its text verbatim]
+    [Each requirement ID (R-number / AC ID) the phase's tasks implement or change, with its text verbatim, and the test its `## Spec Coverage` row names when the plan's table has a Test column]
 
     ## Diff Under Review
 
@@ -112,6 +112,15 @@ Task tool (general-purpose):
     - Do tests exist for new functionality?
     - Do tests verify behavior (not just that code runs)?
     - Are edge cases covered?
+    - Requirement → test mapping, only when the requirements above carry a
+      named test (the plan's Spec Coverage table has a Test column): for
+      each, open the named test and confirm it exists and asserts the
+      requirement's behavior, so it would fail without that behavior —
+      name the assertion. A named test that is missing, asserts something
+      else, or covers only part of the requirement (one input of several
+      the requirement names) is Important. So is an empty Test cell on a
+      row this phase touches. When no test is named because the plan has
+      no Test column, skip this check: an older plan is not a finding.
     - Do all tests pass? Every failure in the barrier log is attributed
       below. Then run each task's `Verify at phase review:` command
       yourself, plus any further check needed to prove a risk you name —
@@ -196,7 +205,7 @@ Task tool (general-purpose):
     **Per-task verdict:**
     - Task N: ✅ APPROVED | ❌ ISSUES: [specific problems with file:line references]
 
-    **Spec requirements:** one line per listed ID — holds | violated (file:line)
+    **Spec requirements:** one line per listed ID — holds | violated (file:line); where a test is named, add `test: proves (file:line of the assertion)` or `test: gap (why)`
 
     **Test-weakening audit:** each hit with file:line, or "none found"
 

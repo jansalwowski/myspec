@@ -73,7 +73,7 @@ After all 6 implementers report `DONE`, the phase hits its barrier. The controll
 - plan ↔ spec: the 6 tasks cover AC-1 ("favoriting persists across sessions"), AC-2 (pin-to-top) ✓
 - impl ↔ plan: each task's declared files and interfaces are present ✓
 - spec requirements: AC-1 and AC-2 each checked as behavior across the whole feature, not only in the task that cites them — AC-2's pin-to-top also holds on the empty-favorites path ✓
-- test coverage: each in-scope acceptance criterion has a test in the diff. The reviewer reads the barrier log (all green) and reruns each task's `Verify at phase review:` command itself; the implementers' reported greens count as claims, not evidence. It never reruns the whole suite ✓
+- test coverage: each in-scope acceptance criterion has a test in the diff, and the test its Spec Coverage row names (`ReportList.test` › favorites sort first for AC-2's pinning) exists and asserts the behavior. A plan without a Test column skips this per-requirement check. The reviewer reads the barrier log (all green) and reruns each task's `Verify at phase review:` command itself; the implementers' reported greens count as claims, not evidence. It never reruns the whole suite ✓
 - test-weakening audit: no deleted or loosened assertions, skips, disables, `as any`, or fixtures off their production values — "none found" ✓
 - naming, pattern conformance, maintainability ✓
 - Verdict: `APPROVED`.
