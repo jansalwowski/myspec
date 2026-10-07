@@ -193,6 +193,16 @@ expect "1	/Users/alice
 3	-Users-alice-work" "$(absolute_path_findings "$CUR")" "findings carry the line and the stripped match"
 printf 'clean\n' > "$CUR"
 expect "" "$(absolute_path_findings "$CUR")" "a clean file has no findings"
+# The encoded forms need a left boundary (#325): a flag, a branch name or a
+# kebab-case word holding `-home-` is not one; after `/`, a space, a quote or a
+# backtick it is, reported without the boundary character.
+printf 'run --home-dir x\nfeat/remove-home-tab\nnav-home-link\n' > "$CUR"
+expect "" "$(absolute_path_findings "$CUR")" "a -home- inside a word, flag or branch name is no finding"
+printf '%s\n' 'projects/-Users-alice-proj' 'see -home-bob-x' '"-Users-a-b"' "\`-Users-c-d\`" > "$CUR"
+expect "1	-Users-alice-proj
+2	-home-bob-x
+3	-Users-a-b
+4	-Users-c-d" "$(absolute_path_findings "$CUR")" "an encoded form after a boundary is found and stripped of it"
 expect "replace with <repo_root>/src/a.ts" "$(absolute_path_hint /r/src/a.ts /r)" "a repo-internal path suggests <repo_root>"
 expect "replace with <repo_root>" "$(absolute_path_hint /r /r)" "the root itself suggests <repo_root>"
 expect "replace with <config_dir>/projects/<encoded_cwd>/memory" "$(HOME=/Users/h absolute_path_hint /Users/h/.claude-personal/projects/-Users-h-proj/memory /r)" "a ~/.claude-personal memory path suggests <config_dir>"
