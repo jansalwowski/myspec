@@ -105,7 +105,7 @@ A browser-based companion for showing mockups, diagrams, and visual options duri
 - **Use the terminal** for content that is text — requirements questions, conceptual choices, tradeoff lists, scope decisions
 
 If they agree to the companion, read the detailed guide before proceeding:
-`skills/brainstorm/visual-companion.md` (OPTIONAL — only when visual companion is accepted)
+[visual-companion.md](visual-companion.md) (OPTIONAL — only when visual companion is accepted). It names the server scripts under `<plugin lib>`, which is `${CLAUDE_PLUGIN_ROOT}/lib`, resolved here. The Bash tool does not export the variable, so use this path.
 
 ## Verification Checklist
 

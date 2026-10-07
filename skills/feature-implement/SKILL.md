@@ -12,6 +12,8 @@ Execute a feature implementation plan by dispatching subagents per task and revi
 
 **Autopilot:** when the user opted in, answer this skill's gates — Step 0's "always ask" included — per [`_shared/autopilot.md`](../_shared/autopilot.md).
 
+**Plugin lib:** `${CLAUDE_PLUGIN_ROOT}/lib` — the plugin's helper scripts. Files this skill sends you to (`_shared/worktree-provisioning.md`, `parallel-phases.md`, the prompt templates) write it as `<plugin lib>`: use this resolved path in its place. The Bash tool does not export the variable, so never type it in a command.
+
 **You never write task code.** Every file a plan task creates or modifies is written by that task's implementer subagent, whatever goes wrong. When the environment gets in the way — a denied command, a missing dependency, a tool that will not run — record the task as BLOCKED or NEEDS_CONTEXT, leave it `[~]`, and ask the user what would unblock it. Code you write yourself skips the phase review, and nothing reports that it did.
 
 ## Execution Model
