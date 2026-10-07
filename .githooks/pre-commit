@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# pre-commit: static skill lint on staged SKILL.md files, `bash -n` and
+# pre-commit: static skill lint on staged SKILL.md files (PLUGIN-ROOT-REF on
+# other staged skills/ Markdown), `bash -n` and
 # ShellCheck on staged hooks/ and lib/ shell scripts, eslint
-# (scripts/lint-js.sh) on staged lib/ JS. Nothing runs when none of those is
+# (scripts/lint-js.sh) on staged lib/ and workflows/ JS. Nothing runs when none of those is
 # staged. When shellcheck is not installed, or eslint cannot run through npx
 # (offline, no node), that check is skipped with a notice, not blocked.
 #
@@ -24,11 +25,12 @@ skills=()
 shells=()
 jsfiles=()
 while IFS= read -r -d '' f; do
-  if [[ "$f" =~ ^(\.claude/)?skills/[^/]+/SKILL\.md$ ]]; then
+  # A non-SKILL.md file under skills/ gets only PLUGIN-ROOT-REF (#313).
+  if [[ "$f" =~ ^(\.claude/)?skills/[^/]+/SKILL\.md$ || ( "$f" =~ ^skills/.+\.md$ && ! "$f" =~ /SKILL\.md$ ) ]]; then
     skills+=("$f")
   elif [[ "$f" =~ ^(hooks|lib)/.*\.sh$ ]]; then
     shells+=("$f")
-  elif [[ "$f" =~ ^lib/.*\.(mjs|cjs|js)$ ]]; then
+  elif [[ "$f" =~ ^lib/.*\.(mjs|cjs|js)$ || "$f" =~ ^workflows/[^/]+\.js$ ]]; then
     jsfiles+=("$f")
   fi
 done < <(git diff --cached --name-only --diff-filter=ACMR -z)

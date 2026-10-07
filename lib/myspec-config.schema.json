@@ -155,7 +155,7 @@
       "type": ["string"],
       "default": "controller",
       "issue": ["#247"],
-      "description": "\"controller\" (the default: feature-implement runs every per-task step itself, as it does today) or \"workflow\" (opt in to the per-task loop run by the host's Workflow tool, where present). Recorded by the schema since 3.0; the workflow mode itself is #247."
+      "description": "\"controller\" (the default: feature-implement runs every per-task step itself) or \"workflow\" (opt in to the per-task loop run by the plugin workflow myspec:implement-phase through the host's Workflow tool, where present; without it feature-implement runs controller mode)."
     },
     "probes.portSource": {
       "file": "project",

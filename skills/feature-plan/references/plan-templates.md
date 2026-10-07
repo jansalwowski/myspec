@@ -14,6 +14,7 @@ based_on_spec_version: {spec_version from spec.md}
 spec: ${aiDir}/features/{feature}/spec.md
 tech_spec: ${aiDir}/features/{feature}/tech-spec.md
 planned_against: {full 40-char SHA of HEAD after the Step 1 sync}
+auto_parallel_phases: true
 created: {TODAY}
 last_updated: {TODAY}
 ---
@@ -22,6 +23,8 @@ last_updated: {TODAY}
 `spec` / `tech_spec` are explicit pointers, not decoration: the plan argues from those two documents, so they travel with it — anyone executing or reviewing the plan reads both alongside it.
 
 `planned_against` is the commit every snippet was read from: HEAD once the integration branch is merged in, so the feature branch's own commits are part of the baseline. `feature-implement` diffs each `Modify:` file from it to the integration branch tip (`<sha>...origin/<integration>`, three dots, so only integration-branch changes since the sync count) and warns on a change; re-sync and re-record it whenever the plan is revised against newer code.
+
+`auto_parallel_phases: true` lets `feature-implement` run phases concurrently when `Depends On` and the tasks' file lists prove them independent. Write it into every new plan, and make `Depends On` name every real dependency (Milestone Section notes). A plan without the key runs serially.
 
 Update `last_updated` whenever the plan is edited (including checkbox updates by `feature-implement`).
 
@@ -48,16 +51,18 @@ Written by Step 4.5 after every task exists, directly before the closing `## Pla
 ```markdown
 ## Spec Coverage
 
-| Source | Requirement (verbatim) | Tasks |
-|--------|------------------------|-------|
-| spec.md REQ-003 | "Imports reject files over 10 MB before parsing" | T3 |
-| spec.md AC-1 | "Import fails with a message naming the regen command" | T4 |
-| spec.md AC-2 | "Existing callers keep working with the field omitted" | T2, T7 |
-| tech-spec.md step 17 | "Collect syntax errors before type errors" | T11 |
-| spec.md AC-6 | "Usage is reported to the billing dashboard" | DEFERRED — out of scope per tech-spec §Non-Goals; billing lands in feature `usage-metering` |
+| Source | Requirement (verbatim) | Tasks | Test |
+|--------|------------------------|-------|------|
+| spec.md REQ-003 | "Imports reject files over 10 MB before parsing" | T3 | `tests/import/limits.test` › rejects an 11 MB file before the parser runs |
+| spec.md AC-1 | "Import fails with a message naming the regen command" | T4 | `tests/import/errors.test` › message names the regen command |
+| spec.md AC-2 | "Existing callers keep working with the field omitted" | T2, T7 | `tests/api/compat.test` › request without the field; `tests/cli/compat.test` › legacy flags |
+| tech-spec.md step 17 | "Collect syntax errors before type errors" | T11 | `tests/check/order.test` › syntax errors listed first |
+| spec.md AC-6 | "Usage is reported to the billing dashboard" | DEFERRED — out of scope per tech-spec §Non-Goals; billing lands in feature `usage-metering` | — |
 ```
 
 One row per requirement ID and per acceptance criterion in `spec.md`, and per implementation step in `tech-spec.md` — no source line is absent from the table. The requirement column is the source's own wording, quoted, so a reader can check the mapping without opening the spec. The Tasks column holds task IDs (several where a requirement spans tasks; the same task may appear in several rows) or the single word `DEFERRED` followed by an em dash and the reason.
+
+The Test column names the test file and the case that will prove the row's behavior — the test the task's TDD step writes, or an existing test the task extends. Several tests are separated by `;`. A deferred row gets `—`. The phase reviewer checks each named test exists and fails without the behavior, so a vague cell ("unit tests") is a gap the same as an empty one. A plan written before the column existed is still valid: `feature-implement` then skips the per-requirement test check.
 
 The table lives in the plan, not beside it: the plan is what `feature-implement` and `feature-complete` read, and a coverage file kept separately drifts from the tasks it describes.
 
@@ -96,10 +101,11 @@ Resume behavior: A new agent reads the plan, skips `[x]` tasks, re-executes `[~]
 
 Notes:
 - A sequential phase may list several tasks; they run in listed order and share one barrier suite and one phase review (Step 2's phase grouping rule)
+- `Depends On` names only the phases whose output a phase actually uses (data, an interface, a file it modifies). With `auto_parallel_phases: true` in the front-matter, which every new plan carries, `feature-implement` runs phases with no dependency path between them and disjoint Files/Touch only paths concurrently. A habitual chain to the previous phase then costs throughput, and a missing edge lets two phases race. Set the key to `false` to keep the whole plan serial
 - Phase numbers must be globally unique across the entire plan (Milestone 2 starts at the next available phase number)
 - First phase of Milestone 2+ uses `Milestone N` in Depends On (not a phase number from the previous milestone)
 - Single-milestone plans omit the `### Milestone N:` heading — the Execution Order table stands alone
-- `**Checkpoint probes:**` is required on every milestone when tech-spec.md sets `verification_mode` to anything but `none`, and absent otherwise. At the milestone checkpoint `feature-implement` hands this block, verbatim and alone, to a separate probe executor — so each probe is a literal command or assertion in the medium's own language with its expected value, never a description ("check the list renders"). Probes reference only the tech-spec's `### Test Hooks` *Contract surface*; Target and Scratch env are copied from its *Target* and *Scratch environment* lines, and Scratch setup from its migrate and seed commands. Write Scratch setup out on every milestone whose probes read the database, never "as Milestone 1": a later milestone's migrations and fixtures exist only after its own setup runs. When the project's `probes.scratchEnvScript` already migrates and seeds, Scratch setup names that script. The line is optional; a block without it runs as before, and a probe addresses the target by the Target line's address, never a different host or port. When `"${CLAUDE_PLUGIN_ROOT}/lib/myspec-config.sh" get probes.portSource` prints a value, the project keeps per-checkout port slots there: add a Ports line naming that source and the slot names, and write every port in Target and the probes as `$<slot name>`, never a literal port another checkout may hold. Unset (`null`), omit the Ports line and address the Target as before. Tags: `[visual]` / `[api]` / `[data]` pick the medium; `[real-input]` runs the *Real inputs* corpus through the real engine (required on a milestone touching that path); `[demo]` serves the milestone on scratch data for the user to click through (recommended for `visual` / `mixed`). A single-milestone plan puts the block after its Execution Order table
+- `**Checkpoint probes:**` is required on every milestone when tech-spec.md sets `verification_mode` to anything but `none`, and absent otherwise. At the milestone checkpoint `feature-implement` hands this block, verbatim and alone, to a separate probe executor — so each probe is a literal command or assertion in the medium's own language with its expected value, never a description ("check the list renders"). Probes reference only the tech-spec's `### Test Hooks` *Contract surface*; Target and Scratch env are copied from its *Target* and *Scratch environment* lines, and Scratch setup from its migrate and seed commands. Write Scratch setup out on every milestone whose probes read the database, never "as Milestone 1": a later milestone's migrations and fixtures exist only after its own setup runs. When the project's `probes.scratchEnvScript` already migrates and seeds, Scratch setup names that script. The line is optional; a block without it runs as before, and a probe addresses the target by the Target line's address, never a different host or port. When `"<plugin lib>/myspec-config.sh" get probes.portSource` (`<plugin lib>`: the path feature-plan's SKILL.md resolves) prints a value, the project keeps per-checkout port slots there: add a Ports line naming that source and the slot names, and write every port in Target and the probes as `$<slot name>`, never a literal port another checkout may hold. Unset (`null`), omit the Ports line and address the Target as before. Tags: `[visual]` / `[api]` / `[data]` pick the medium; `[real-input]` runs the *Real inputs* corpus through the real engine (required on a milestone touching that path); `[demo]` serves the milestone on scratch data for the user to click through (recommended for `visual` / `mixed`). A single-milestone plan puts the block after its Execution Order table
 
 ## Sequential Task
 

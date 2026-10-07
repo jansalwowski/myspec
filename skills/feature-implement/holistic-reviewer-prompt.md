@@ -2,12 +2,7 @@
 
 Dispatch after ALL phases complete. Reviews the entire implementation as a whole.
 
-Before dispatching, write the full-feature review package to one file and substitute its path below — same shape as the phase review package, over `BASE_SHA..HEAD`:
-
-```bash
-PKG="$STATE/feature-review.diff"   # $STATE: SKILL.md Step 2
-{ git log --oneline "$BASE_SHA"..HEAD; echo; git diff --stat "$BASE_SHA"..HEAD; echo; git diff -U10 "$BASE_SHA"..HEAD; } > "$PKG"
-```
+Before dispatching, write the full-feature review package to one file and substitute its path below: `review-diff.sh` over `BASE_SHA..HEAD` as `$STATE/feature-review.diff` (SKILL.md Step 5 gives the call; Step 4b says what its exit 2 means).
 
 `BASE_SHA` is the sha recorded in Step 2 before any implementation — never `HEAD~1`. Also paste in the plan's Execution Log entries (deferred minors and parked findings) — this reviewer is where they get triaged; a roll-up nobody reads is a silent discard.
 

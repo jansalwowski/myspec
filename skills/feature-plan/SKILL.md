@@ -10,6 +10,8 @@ description: "Use when a feature has an approved spec.md and tech-spec.md and ne
 
 **Autopilot:** when the user opted in, answer this skill's gates per [`_shared/autopilot.md`](../_shared/autopilot.md).
 
+**Plugin lib:** `${CLAUDE_PLUGIN_ROOT}/lib` — the plugin's helper scripts. Files this skill sends you to (`references/plan-templates.md`) write it as `<plugin lib>`: use this resolved path in its place. The Bash tool does not export the variable, so never type it in a command.
+
 ## When to Use
 
 Check these gates in order. Read each document's `status:` frontmatter before writing anything; a gate that says Stop means no plan file is written and nothing is handed off.
@@ -33,12 +35,12 @@ All gates pass → proceed to Workflow Step 1.
 
 1. Read `${aiDir}/features/{feature}/tech-spec.md` — note implementation steps, file inventory, interfaces
 2. Read `${aiDir}/features/{feature}/spec.md` — note requirement IDs, acceptance criteria, edge cases
-3. **Sync the base**, so snippets match the code implementers will see. `$INTEGRATION` is the branch feature work merges into: the topology file's `branches.integration`, else the default branch ([`_shared/git-helpers.md`](../_shared/git-helpers.md)). Set `BASE=origin/$INTEGRATION` and run `git fetch origin "$INTEGRATION"` (no remote configured: `BASE=$INTEGRATION`, skip the fetch; fetch exits non-zero: stop and report). Then `git merge-base --is-ancestor "$BASE" HEAD`:
+3. **Sync the base**, so snippets match the code implementers will see. `$INTEGRATION` is the branch feature work merges into: the topology file's `branches.integration`, else the default branch ([`_shared/git-helpers.md`](../_shared/git-helpers.md)). Resolve the ref with `BASE=$("${CLAUDE_PLUGIN_ROOT}/lib/plan-freshness.sh" base "$INTEGRATION")`: it fetches and prints `origin/$INTEGRATION`, or `$INTEGRATION` when there is no remote. Exit 2 (fetch failed, or the branch does not exist): stop and report. Then `git merge-base --is-ancestor "$BASE" HEAD`:
    - exit 0 — HEAD already contains it
    - exit 1 — HEAD lags: `git merge --no-edit "$BASE"`; if the merge exits non-zero, `git merge --abort` and stop for the user
    - any other exit (bad ref) — stop and report; never plan against an unverified base
 
-   After the sync, record `git rev-parse HEAD` (full 40-char SHA) as the plan header's `planned_against`: it is the tree Step 4 reads snippets from, so a branch's own earlier commits are not later mistaken for drift. `feature-implement` warns when a `Modify:` file changed after it.
+   After the sync, record `git rev-parse HEAD` (full 40-char SHA) as the plan header's `planned_against`: it is the tree Step 4 reads snippets from, so a branch's own earlier commits are not later mistaken for drift. `feature-implement` warns when a `Modify:` file changed after it. Also write `auto_parallel_phases: true`, which lets independent phases run concurrently, so the Execution Order table's `Depends On` must name every real dependency.
 4. Read existing code referenced in tech-spec (patterns to follow, files to modify) from the synced tree
 
 While reading, collect every project-wide exact value (version floors, size/perf limits, naming rules, invariants) — these become the plan's Global Constraints section in Step 3.
@@ -135,7 +137,10 @@ does this cover" finds only what is already there:
 2. For each, name the task ID(s) that realize it. Match on the behavior the
    requirement describes, not on shared vocabulary — a task that touches the
    same file as an AC does not thereby cover it.
-3. Write the results to the plan's `## Spec Coverage` table (see
+3. For each mapped row, name the test (file and case) that will prove it —
+   usually the one the task's TDD step writes. A behavior no planned test
+   asserts is a gap: add the test to the task.
+4. Write the results to the plan's `## Spec Coverage` table (see
    [references/plan-templates.md](references/plan-templates.md)).
 
 **A requirement with no task is a blocking gap.** Resolve every one before
@@ -310,8 +315,8 @@ so one is a session's worth of work.
 
 Before presenting the plan:
 
-- [ ] `## Spec Coverage` holds one row per spec.md requirement ID, per spec.md acceptance criterion, and per tech-spec.md implementation step, each mapped to task IDs or explicitly `DEFERRED` with a reason (Step 4.5)
-- [ ] Header `spec` / `tech_spec` keys point at the feature's `spec.md` and `tech-spec.md`; `planned_against` holds HEAD's SHA after the Step 1 sync
+- [ ] `## Spec Coverage` holds one row per spec.md requirement ID, per spec.md acceptance criterion, and per tech-spec.md implementation step, each mapped to task IDs and the test that proves it, or explicitly `DEFERRED` with a reason (Step 4.5)
+- [ ] Header `spec` / `tech_spec` keys point at the feature's `spec.md` and `tech-spec.md`; `planned_against` holds HEAD's SHA after the Step 1 sync; `auto_parallel_phases: true` is set
 - [ ] `## Global Constraints` holds every project-wide exact (versions, limits, naming, invariants) verbatim with source refs; no task text re-derives one
 - [ ] Task boundaries are right-sized — each task independently rejectable by a reviewer; trivial same-shape changes batched into one task
 - [ ] Every task has exact file paths matching tech-spec file inventory

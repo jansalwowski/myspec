@@ -47,8 +47,8 @@ jobs:
         with:
           node-version: '20'
 
-      # Pinned versions live in the script; it covers lib/.
-      - name: eslint:recommended on lib/
+      # Pinned versions live in the script; it covers lib/ and workflows/.
+      - name: eslint:recommended on lib/ and workflows/
         run: scripts/lint-js.sh
 
   shellcheck:

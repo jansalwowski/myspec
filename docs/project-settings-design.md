@@ -136,7 +136,7 @@ Written by the `setup` skill's `mockup` blueprint (`blueprints/mockup.md`, Post-
 
 | Key | Type | Default | Issue | Effect |
 |---|---|---|---|---|
-| `featureImplement` | `"controller"` or `"workflow"` | `"controller"` | #247 | How `feature-implement` runs the per-task loop. `controller` is today's behaviour; `workflow` opts in to the host's Workflow tool where it exists. The schema records the key since 3.0; the mode itself is #247. |
+| `featureImplement` | `"controller"` or `"workflow"` | `"controller"` | #247 | How `feature-implement` runs the per-task loop. `controller` is today's behaviour; `workflow` runs it through the plugin workflow `myspec:implement-phase` (`workflows/implement-phase.js`) where the host has the Workflow tool, and falls back to controller mode where it does not. |
 
 ### Probes: `.myspec.json` `probes`
 

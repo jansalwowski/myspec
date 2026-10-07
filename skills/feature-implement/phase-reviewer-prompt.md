@@ -2,12 +2,7 @@
 
 Dispatch this reviewer after ALL tasks in a phase complete and worktrees are merged.
 
-Before dispatching, write the review package to one file and substitute its path below. A pasted diff parks itself permanently in the controller's context, and a reviewer without one rebuilds it by hand — the single biggest reviewer cost:
-
-```bash
-PKG="$STATE/phase-N-review.diff"   # $STATE: SKILL.md Step 2
-{ git log --oneline "$PHASE_BASE"..HEAD; echo; git diff --stat "$PHASE_BASE"..HEAD; echo; git diff -U10 "$PHASE_BASE"..HEAD; } > "$PKG"
-```
+Before dispatching, write the review package to one file and substitute its path below. A pasted diff parks itself permanently in the controller's context, and a reviewer without one rebuilds it by hand — the single biggest reviewer cost. Write it with `review-diff.sh` over `PHASE_BASE..HEAD` as `$STATE/phase-N-review.diff` (SKILL.md Step 4b gives the call and what its exit 2 means).
 
 `PHASE_BASE` is the sha recorded before the phase's first dispatch — never `HEAD~1`, which silently drops all but the last commit of a multi-commit phase.
 
@@ -41,7 +36,7 @@ Task tool (general-purpose):
 
     ## Spec Requirements This Phase Touches
 
-    [Each requirement ID (R-number / AC ID) the phase's tasks implement or change, with its text verbatim]
+    [Each requirement ID (R-number / AC ID) the phase's tasks implement or change, with its text verbatim, and the test its `## Spec Coverage` row names when the plan's table has a Test column]
 
     ## Diff Under Review
 
@@ -65,6 +60,18 @@ Task tool (general-purpose):
     log holds each check's command, exit code, and output. Read it — do not
     re-run the suite. Another suite run in this worktree races the
     controller's and produces timing flakes.
+
+    ## Per-Task Loop Results (workflow mode only; omit otherwise)
+
+    [Per task: status, open findings, notChecked, notEvidenced, from the
+    implement-phase workflow]
+
+    Before this phase review, a workflow ran each task through an
+    independent verify agent and a standards and spec-contract check. Its
+    open findings are claims, not verdicts. Confirm each one against the
+    diff and report it at its true severity, or reject it with the code you
+    read. `notChecked` and `notEvidenced` list checks nobody ran: the
+    barrier log decides them.
 
     Your review is read-only on this checkout, except for running the
     commands named under Test coverage. Never edit files or mutate the
@@ -112,6 +119,15 @@ Task tool (general-purpose):
     - Do tests exist for new functionality?
     - Do tests verify behavior (not just that code runs)?
     - Are edge cases covered?
+    - Requirement → test mapping, only when the requirements above carry a
+      named test (the plan's Spec Coverage table has a Test column): for
+      each, open the named test and confirm it exists and asserts the
+      requirement's behavior, so it would fail without that behavior —
+      name the assertion. A named test that is missing, asserts something
+      else, or covers only part of the requirement (one input of several
+      the requirement names) is Important. So is an empty Test cell on a
+      row this phase touches. When no test is named because the plan has
+      no Test column, skip this check: an older plan is not a finding.
     - Do all tests pass? Every failure in the barrier log is attributed
       below. Then run each task's `Verify at phase review:` command
       yourself, plus any further check needed to prove a risk you name —
@@ -196,7 +212,7 @@ Task tool (general-purpose):
     **Per-task verdict:**
     - Task N: ✅ APPROVED | ❌ ISSUES: [specific problems with file:line references]
 
-    **Spec requirements:** one line per listed ID — holds | violated (file:line)
+    **Spec requirements:** one line per listed ID — holds | violated (file:line); where a test is named, add `test: proves (file:line of the assertion)` or `test: gap (why)`
 
     **Test-weakening audit:** each hit with file:line, or "none found"
 

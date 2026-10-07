@@ -12,6 +12,8 @@ Execute a feature implementation plan by dispatching subagents per task and revi
 
 **Autopilot:** when the user opted in, answer this skill's gates — Step 0's "always ask" included — per [`_shared/autopilot.md`](../_shared/autopilot.md).
 
+**Plugin lib:** `${CLAUDE_PLUGIN_ROOT}/lib` — the plugin's helper scripts. Files this skill sends you to (`_shared/worktree-provisioning.md`, `parallel-phases.md`, the prompt templates) write it as `<plugin lib>`: use this resolved path in its place. The Bash tool does not export the variable, so never type it in a command.
+
 **You never write task code.** Every file a plan task creates or modifies is written by that task's implementer subagent, whatever goes wrong. When the environment gets in the way — a denied command, a missing dependency, a tool that will not run — record the task as BLOCKED or NEEDS_CONTEXT, leave it `[~]`, and ask the user what would unblock it. Code you write yourself skips the phase review, and nothing reports that it did.
 
 ## Execution Model
@@ -52,6 +54,7 @@ Durable decisions live in the plan file, next to the checkboxes — the plan is 
 - `Probe (Milestone N): <P|D><n> <verdict> — observed: <value> — artifact: <path>` (copied from the probe executor's report)
 - `Waiver (Milestone N): <P|D><n> — <the user's reason, in their words>`
 - `Base (feature): <sha>`, `Base (Phase N): <sha>`, `Fix base (Phase N, round R): <sha>` — the `BASE_SHA`, `PHASE_BASE` and `FIX_BASE` a review diffs from, logged when recorded (Steps 2, 3, 4d) so a restarted session can recover them. A plan from before these entries has none; resume then records the base afresh, as it always did
+- `Timing (Phase N): implement <d> · barrier <d> · review <d> · fixes <R> rounds <d> · total <d>` — written at 4f, so slow stages show across a run
 
 Everything else a restarted session needs — review packages, verification logs — goes in the run's state directory, `$STATE` (Step 2), under a fixed name. Never `mktemp` and never a session scratchpad: a restart starts a new session with a new temp directory, and an implementer or reviewer dispatched with a path that no longer exists comes back NEEDS_CONTEXT.
 
@@ -140,6 +143,8 @@ Read the implementation plan. **Check front-matter first.**
 
 **Retired front-matter.** A plan carrying `orchestration: agent-chain` was authored for the orchestrator agent-chain mode, retired in 2.0 and no longer run. Stop with one line: "Plan carries retired `orchestration: agent-chain` front-matter — re-plan with /myspec:feature-plan." No run-mode prompt exists.
 
+**Run mode.** `"${CLAUDE_PLUGIN_ROOT}/lib/myspec-config.sh" get orchestration.featureImplement` prints `"controller"` (the default, also used for any value it does not recognise and when the read itself fails) or `"workflow"`. Choose `"workflow"` only when this session has the Workflow tool. Without it (another harness, or workflows disabled), print one line, "Workflow mode is unavailable in this session (no Workflow tool), so feature-implement runs in controller mode.", and run controller mode. The setting loosens no gate.
+
 Parse milestones first, then build a DAG within each:
 
 1. **Identify milestones:** Each `### Milestone N:` heading scopes a milestone. A plan with no milestone heading is a single-milestone plan (the `feature-plan` template omits the heading then): the whole plan is its one milestone.
@@ -148,6 +153,7 @@ Parse milestones first, then build a DAG within each:
    - Identify phases (task groups separated by barriers).
    - Identify parallel groups (rows with `**parallel:groupName**` in Mode).
    - Identify dual-stream forks (phases with `3a`/`3b` style rows — two simultaneous chains).
+   - Only when the front-matter sets `auto_parallel_phases: true`: identify concurrent phase sets, meaning phases the `Depends On` column lets run at once whose Files/Touch only paths are disjoint. The conditions are in [parallel-phases.md](parallel-phases.md). Without the key, or when a phase fails any condition, phases run serially as before.
 3. **Cross-milestone dependencies:** If a milestone's first phase says `Depends On: Milestone N`, the entire previous milestone must be complete before this one starts.
 
 **Resume detection (on startup):**
@@ -164,14 +170,13 @@ Parse milestones first, then build a DAG within each:
 - Parallel tasks have zero file overlap (check file lists — if they share a file, treat as sequential).
 - Phase numbers are globally unique (no duplicates across milestones).
 
-**Plan freshness** — only when the front-matter has `planned_against: <sha>`; skip silently without it (older plans). Collect the `Modify:` paths of every task not yet `[x]`. `$INTEGRATION` is the branch feature work merges into: the one CLAUDE.md or the topology file names, else the default branch ([`_shared/git-helpers.md`](../_shared/git-helpers.md)) — the same resolution `feature-plan` used to record the SHA. Set `BASE=origin/$INTEGRATION` and run `git fetch origin "$INTEGRATION"` (no remote configured: `BASE=$INTEGRATION`, skip the fetch). A local branch name is never the ref when a remote exists: the fetch moves only `origin/$INTEGRATION`, so the local branch can lag and diff empty. Then run `git diff --name-only <sha>..."$BASE" -- <paths>` — three dots, so the diff runs from the merge base of the two: `feature-plan` records HEAD after merging the integration branch in, and a two-dot diff would list every file the feature branch itself changed:
+**Plan freshness** — only when the front-matter has `planned_against: <sha>`; skip silently without it (older plans). Collect the `Modify:` paths of every task not yet `[x]`. `$INTEGRATION` is the branch feature work merges into: the one CLAUDE.md or the topology file names, else the default branch ([`_shared/git-helpers.md`](../_shared/git-helpers.md)) — the same resolution `feature-plan` used to record the SHA. Run `"${CLAUDE_PLUGIN_ROOT}/lib/plan-freshness.sh" check <sha> "$INTEGRATION" <paths>`. It fetches and diffs three-dot against `origin/$INTEGRATION` (the local branch when there is no remote), so the branch's own commits are not drift and a lagging local branch never reads as unchanged. Act on its exit status:
 
-| Result | Action |
-|--------|--------|
-| exits 0, empty output | Fresh — proceed |
-| exits 0, lists files | Warn with the list, log `Ruling: run despite <files> changed on $INTEGRATION since planned_against — implementers read current code — cost if wrong: a stale task snippet costs a fix round`, and tell each task that modifies a listed file that it changed after the plan was written |
-| non-zero exit (128: the SHA was rebased or squashed away) | Warn "cannot verify plan freshness — planned_against <sha> not found" — never read as unchanged — and proceed |
-| the fetch exits non-zero | Warn "cannot verify plan freshness — fetch of $INTEGRATION failed" and proceed without running the diff — a diff against the unfetched ref is never read as unchanged |
+| Exit | First line | Action |
+|------|-----------|--------|
+| 0 | `fresh` | Proceed |
+| 1 | `stale`, then the changed paths | Warn with the list, log `Ruling: run despite <files> changed on $INTEGRATION since planned_against — implementers read current code — cost if wrong: a stale task snippet costs a fix round`, and tell each task that modifies a listed file that it changed after the plan was written |
+| 2 | `unknown: <reason>` (sha rebased or squashed away, fetch failed) | Warn "cannot verify plan freshness — <reason>" and proceed. Never read it as fresh |
 
 It warns rather than blocks: implementers already work from the current code and `Touch only` scopes their edits, while the fix for real drift — re-planning — is the user's call, which the warning and the logged ruling put in front of them.
 
@@ -200,7 +205,7 @@ It warns rather than blocks: implementers already work from the current code and
 
 Walk milestones in order. For each milestone, walk its DAG topologically. For each phase:
 
-**Before the phase's first dispatch:** refresh the orchestration marker (Step 2.5) and record `PHASE_BASE=$(git rev-parse HEAD)`, logging `Base (Phase N): <sha>` (a resumed phase keeps the base its entry holds). The phase review package (Step 4b) diffs `PHASE_BASE..HEAD`. Never substitute `HEAD~1` — it silently drops all but the last commit of a multi-commit phase.
+**Before the phase's first dispatch:** refresh the orchestration marker (Step 2.5) and record `PHASE_BASE=$(git rev-parse HEAD)`, logging `Base (Phase N): <sha>` (a resumed phase keeps the base its entry holds). Append a stage timestamp to `$STATE/phase-N.times` as each stage starts and once at 4e, so 4f can report wall-clock time per stage after a restart: `echo "implement $(date -u +%s)" >> "$STATE/phase-N.times"`, then `barrier` (4a), `review` (4b), `fix-R` (each 4d round), and `done` (4e). The phase review package (Step 4b) diffs `PHASE_BASE..HEAD`. Never substitute `HEAD~1` — it silently drops all but the last commit of a multi-commit phase.
 
 **Verification tiers.** Each check runs at the narrowest scope that catches what it targets:
 
@@ -235,6 +240,16 @@ Task M, Task K as separate Agent calls in the same message → track per-task st
 
 Parallelism pays only when each task outweighs its merge and review overhead; run small parallel groups sequentially in the controller's checkout.
 
+**Concurrent phases** — a set Step 1 found ([parallel-phases.md](parallel-phases.md)) gets one worktree per phase, `"${CLAUDE_PLUGIN_ROOT}/lib/task-worktree.sh" create <feature>-p<N>`, and the phases' implementers are dispatched in one message. Barriers and reviews stay per phase and run one phase at a time in your checkout: record that phase's `PHASE_BASE`, then `task-worktree.sh merge <feature>-p<N>`, then Step 4, exactly as for a serial phase. A plan without `auto_parallel_phases: true` in its front-matter runs every phase serially.
+
+**Workflow mode** — only when Step 1 chose it. It replaces this step's implementer dispatches for a phase and nothing else. For each phase:
+1. Record `PHASE_BASE`, create the parallel task worktrees, and mark the tasks `[~]`, exactly as above.
+2. Start `Workflow({name: "myspec:implement-phase", args})`. Build `args` from the contract in [workflow-args.md](workflow-args.md), with `reviewDiff: "${CLAUDE_PLUGIN_ROOT}/lib/review-diff.sh"`.
+3. Wait for the result, and dispatch nothing for that phase meanwhile.
+4. Act on each task's status per the table in workflow-args.md, then continue at Step 4.
+
+The workflow runs each task through implement, independent verify, a cheap-tier check with a mid-tier re-judge, and at most two fix rounds. It never flips a checkbox, merges, runs the barrier, or reviews the phase. A concurrent phase set launches one workflow per phase. If the call is refused, run that phase in controller mode and log a `Ruling:`.
+
 **Dual-stream fork** — dispatch both stream heads simultaneously, each in its own task worktree. Each stream proceeds independently (with its own sequential/parallel phases). Join waits for both streams.
 
 ### Step 4: Phase Review
@@ -251,11 +266,13 @@ Write the phase diff to one file and hand the reviewer the path. A pasted diff p
 
 ```bash
 PKG="$STATE/phase-N-review.diff"
-{ git log --oneline "$PHASE_BASE"..HEAD; echo; git diff --stat "$PHASE_BASE"..HEAD; echo; git diff -U10 "$PHASE_BASE"..HEAD; } > "$PKG"
+"${CLAUDE_PLUGIN_ROOT}/lib/review-diff.sh" "$PHASE_BASE" "$PKG"
 ```
 
-- Use the `PHASE_BASE` recorded before the phase's first dispatch — never `HEAD~1`. Never dispatch a phase reviewer without a diff file.
-- Pass `VERIFY_LOG`, and the spec requirement IDs the phase touches (from task spec citations and the plan's `## Spec Coverage` table) with their text. The reviewer checks each as behavior across the whole feature: an invariant spanning tasks otherwise surfaces only at holistic review, after later phases built on it.
+The helper writes the commit list, stat and `-U10` diff over `PHASE_BASE..HEAD`, then lists uncommitted files (an implementer that forgot to commit shows there, without touching the index). Every review package in this skill comes from it: the fix round's over `FIX_BASE` (4d), the holistic one over `BASE_SHA` (Step 5).
+
+- Use the `PHASE_BASE` recorded before the phase's first dispatch — never `HEAD~1`. Never dispatch a phase reviewer without a diff file: exit 2 means the base is not a commit (rebased or squashed away) and no package was written — recover the base from the Execution Log entry, or stop for the user.
+- Pass `VERIFY_LOG`, and the spec requirement IDs the phase touches (from task spec citations and the plan's `## Spec Coverage` table) with their text, plus each one's Test cell when that table has a Test column. In workflow mode, also pass the per-task loop results (workflow-args.md). The reviewer checks each as behavior across the whole feature: an invariant spanning tasks otherwise surfaces only at holistic review, after later phases built on it.
 - Never pre-judge findings for the reviewer — never instruct it to ignore or not flag a specific issue. If the prompt you are writing contains "do not flag", "don't treat X as a defect", or "at most Minor" — stop: you are pre-judging, usually to spare yourself a fix loop. Let the reviewer raise it and rule on it in triage.
 - Covers ALL tasks in the phase: spec compliance, code quality, test coverage, test-weakening audit, integration, docs.
 - Returns: `APPROVED` or `ISSUES_FOUND` with per-finding severity (Critical / Important / Minor).
@@ -272,7 +289,7 @@ PKG="$STATE/phase-N-review.diff"
 - **Rounds 2–5 — fresh implementer.** A resumed context grows by a whole transcript per round and carries the last round's stale hypotheses, while each round usually chases a different root cause (one run's implementer grew from 194k to 430k tokens over three resumed rounds). Dispatch with the task text, the open findings verbatim, and the rounds summary below; it reads the current code itself. Frame it: "A prior implementer attempted this fix N times; you own it now." Rounds 4–5 go one tier up: a loop that survives three rounds usually needs more capability, not more context.
 - **A finding about a rule** — an invariant, a boundary, a format, a requirement's wording — is fixed everywhere the rule is stated or applied, not only at the cited line: say so in the fix dispatch, next to the finding. A rule fixed in the code but still stated the old way in a test, a doc or the tech-spec comes back NOT ADDRESSED and costs a whole extra round.
 - A parallel task's worktree was merged and removed at 4a: every fix implementer works from your checkout, since fixes are sequential.
-- **Every round ends with a scoped re-review** (`./re-review-prompt.md`) — a fresh dispatch every round, never a resumed re-reviewer and never a full phase re-review. Record `FIX_BASE` (the HEAD the previous review saw) and log `Fix base (Phase N, round R): <sha>`, build a fix-diff package over `FIX_BASE..HEAD` the same way as 4b, as `$STATE/phase-N-fix-R.diff`, and dispatch with the open findings list and the rounds summary: one paragraph naming each earlier round's findings closed, your rulings on them, and approaches already rejected ("none" in round 1). The re-reviewer verdicts each finding ADDRESSED / NOT ADDRESSED against the fix diff only, running just the checks each finding touches; the next barrier or milestone checkpoint runs the full suite over the fix. New Critical/Important breakage in the fix diff joins the open findings; out-of-scope observations go to the Execution Log as deferred minors — they never extend the loop.
+- **Every round ends with a scoped re-review** (`./re-review-prompt.md`) — a fresh dispatch every round, never a resumed re-reviewer and never a full phase re-review. Record `FIX_BASE` (the HEAD the previous review saw) and log `Fix base (Phase N, round R): <sha>`, build the fix-diff package with `"${CLAUDE_PLUGIN_ROOT}/lib/review-diff.sh" "$FIX_BASE" "$STATE/phase-N-fix-R.diff"`, and dispatch with the open findings list and the rounds summary: one paragraph naming each earlier round's findings closed, your rulings on them, and approaches already rejected ("none" in round 1). The re-reviewer verdicts each finding ADDRESSED / NOT ADDRESSED against the fix diff only, running just the checks each finding touches; the next barrier or milestone checkpoint runs the full suite over the fix. New Critical/Important breakage in the fix diff joins the open findings; out-of-scope observations go to the Execution Log as deferred minors — they never extend the loop.
 - Never fix findings yourself in the controller session — your context stays clean for coordination, and controller fixes skip review.
 
 **The breaker.** When round 5's re-review still leaves findings open, stop dispatching and adjudicate each open finding yourself — you hold the plan and cross-phase context the reviewer lacks:
@@ -288,9 +305,11 @@ Adjudicate only at the cap — adjudicating earlier to end a loop is pre-judging
 **f) Inter-phase progress note** (within a milestone, no pause — proceed immediately):
 
 ```
-✓ Phase N complete: [phase name]
+✓ Phase N complete: [phase name] — 41m (implement 17m · barrier 6m · review 9m · fixes 2 rounds 9m)
   Next: Phase N+1 — [phase name] ([N tasks])
 ```
+
+Take the durations from `$STATE/phase-N.times` (each stage runs until the next stamp), and write the same line to the Execution Log as `Timing (Phase N)`. A stage with no stamp, such as one that ran before a restart in an older run, shows as `?`.
 
 After all phases in a milestone complete → proceed to **Step 4b: Milestone Checkpoint**.
 
@@ -344,7 +363,7 @@ milestones.
 ### Step 5: Completion
 
 1. Remove the orchestration marker (Step 2.5) so the Stop hook blocks again, then run the Final Verification section from the plan.
-2. Build the full-feature review package (same commands as Step 4b, over `BASE_SHA..HEAD`, as `$STATE/feature-review.diff`) and dispatch the holistic reviewer (`./holistic-reviewer-prompt.md`) on the `premium` tier with the package path plus the plan's Execution Log entries (deferred minors and parked findings) so it can triage which must be fixed before merge. This pass is mandatory — never skipped, never downgraded to a cheaper tier. Write its report to `${aiDir}/features/{feature}/holistic-review.md` (frontmatter in the prompt file) and commit it with the commit trailers (Step 3): `/myspec:feature-implement-review` reads it and skips what it already covers.
+2. Build the full-feature review package: `"${CLAUDE_PLUGIN_ROOT}/lib/review-diff.sh" "$BASE_SHA" "$STATE/feature-review.diff"` and dispatch the holistic reviewer (`./holistic-reviewer-prompt.md`) on the `premium` tier with the package path plus the plan's Execution Log entries (deferred minors and parked findings) so it can triage which must be fixed before merge. This pass is mandatory — never skipped, never downgraded to a cheaper tier. Write its report to `${aiDir}/features/{feature}/holistic-review.md` (frontmatter in the prompt file) and commit it with the commit trailers (Step 3): `/myspec:feature-implement-review` reads it and skips what it already covers.
 3. Print the completion report. It contains, in order: the milestone summary, with probe results and any live demo URL; the holistic verdict; **"Rulings I made"** — every `Ruling:` line from the Execution Log, in the order made, each with its cost-if-wrong ("none" if the log holds no rulings); every `Waiver:` line; and the deferred-minors triage outcome. This report is the only place the decisions taken on the user's behalf reach them.
 4. **Ask the user what to do next** via `AskUserQuestion` — do not auto-hand-off:
 

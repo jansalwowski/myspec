@@ -64,7 +64,9 @@ Agent tool (general-purpose):
     2. REVERSE TRACE (scope drift): for each changed file/symbol, find the plan item it serves.
        Flag code that serves no plan item, and plan steps marked done with no code behind them.
     3. TEST TRACE (no proof): each criterion must map to a test that proves the behavior (not
-       just that the code runs). An empty test mapping is a finding.
+       just that the code runs). An empty test mapping is a finding. When the
+       plan's Spec Coverage table has a Test column, start from the test it
+       names; a named test is still a claim until you read it.
     4. BEHAVIORAL (doesn't actually work): run scenarios.md / the test suite where executable
        and record pass/fail per criterion. Where you CANNOT run it (no env, external deps),
        report that criterion as `not-verifiable`. NEVER infer "works" from reading code.

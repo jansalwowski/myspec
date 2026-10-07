@@ -1,4 +1,4 @@
-// ESLint config for the JS this plugin ships (lib/), held to eslint:recommended
+// ESLint config for the JS this plugin ships (lib/, workflows/), held to eslint:recommended
 // (#208). The hooks and skills run lib/ from the plugin in every consumer's
 // sessions (since 3.0 it is no longer copied into projects, #272), so a defect
 // here ships everywhere.
@@ -24,6 +24,20 @@ export default [
   {
     files: ['**/*.cjs'],
     languageOptions: { ecmaVersion: 'latest', sourceType: 'commonjs', globals: { ...globals.node } },
+  },
+  {
+    // Plugin Workflow scripts (#247). scripts/lint-js.sh feeds each one
+    // wrapped in an async function; these are the globals the Workflow
+    // runtime provides, and it has no Node API.
+    files: ['**/workflows/*.js'],
+    languageOptions: {
+      sourceType: 'module',
+      globals: {
+        args: 'readonly', agent: 'readonly', parallel: 'readonly', pipeline: 'readonly',
+        phase: 'readonly', log: 'readonly', budget: 'readonly', workflow: 'readonly',
+        meta: 'writable', // the shim turns `export const meta =` into `meta =`
+      },
+    },
   },
   {
     // Served to the browser as a classic script by the brainstorm server.
