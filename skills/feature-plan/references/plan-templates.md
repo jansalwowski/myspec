@@ -98,6 +98,7 @@ Resume behavior: A new agent reads the plan, skips `[x]` tasks, re-executes `[~]
 
 Notes:
 - A sequential phase may list several tasks; they run in listed order and share one barrier suite and one phase review (Step 2's phase grouping rule)
+- `Depends On` names only the phases whose output a phase actually uses (data, an interface, a file it modifies). `feature-implement` runs phases with no dependency path between them and disjoint Files/Touch only paths concurrently, so a habitual chain to the previous phase costs throughput, and a missing edge lets two phases race. To keep the whole plan serial, add `auto_parallel_phases: false` to the front-matter
 - Phase numbers must be globally unique across the entire plan (Milestone 2 starts at the next available phase number)
 - First phase of Milestone 2+ uses `Milestone N` in Depends On (not a phase number from the previous milestone)
 - Single-milestone plans omit the `### Milestone N:` heading — the Execution Order table stands alone

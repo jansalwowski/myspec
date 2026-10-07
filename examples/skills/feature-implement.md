@@ -93,6 +93,12 @@ feat(favorite-reports): add StarButton component
 feat(favorite-reports): pin favorited reports to top of list
 ```
 
+The progress note carries the phase's wall-clock time per stage, read from the timestamps the controller appended to `.claude/state/implement/favorite-reports/phase-1.times`, and the same line goes to the Execution Log as `Timing (Phase 1)`:
+
+```
+✓ Phase 1 complete: Favorites end to end — 52m (implement 31m · barrier 5m · review 16m · fixes 0 rounds 0m)
+```
+
 This is the only milestone, so the skill goes directly to Step 5 (no Milestone Checkpoint prompt).
 
 #### Step 5 — Completion + review choice
@@ -307,3 +313,30 @@ User: `clean`. The skill runs `"${CLAUDE_PLUGIN_ROOT}/lib/task-worktree.sh" disc
 - **`[~]` never silently becomes `[x]`.** The only route to `[x]` is completing the task *and* passing review in the current run, so an interruption always re-runs the in-flight task — it never accidentally skips work.
 - **Stale worktrees are a real failure mode** and the skill checks for them under `.claude/worktrees/`. Left behind, they collide with new dispatches or leak half-finished code into the merge. Pruning before re-dispatch is the safe default.
 - **`stop` / `fresh` at a milestone checkpoint is the clean way to preempt this.** A user who expects to be interrupted can exit at a milestone boundary, leaving no `[~]` markers and a fully committed tree to resume from.
+
+## Concurrent phases without a parallel marker
+
+A plan for `report-exports` has no `[parallel:*]` group. Its Execution Order table lets Phases 2 and 3 run at once:
+
+```markdown
+| Phase | Tasks | Mode | Depends On |
+|-------|-------|------|------------|
+| 1 | Task 1: export_jobs table | sequential | — |
+| 2 | Task 2: CSV writer, Task 3: CSV writer tests for unicode | sequential | Phase 1 |
+| 3 | Task 4: export settings page | sequential | Phase 1 |
+| 4 | Task 5: wire settings to the writer | sequential | Phase 2, Phase 3 |
+```
+
+### Skill flow
+
+1. **Step 1** finds Phases 2 and 3 concurrent. Neither reaches the other through `Depends On`. Neither consumes what the other produces: Task 4's Consumes names only Task 1's `ExportJob`. Their Files and Touch only paths (`src/exports/csv/…` and `web/settings/exports/…`) share nothing, and no task runs a generator or adds a migration. It logs `Ruling: Phases 2 and 3 run concurrently — no Depends On path, no Consumes/Produces link, disjoint Files/Touch only — cost if wrong: a merge conflict at the second phase's barrier`.
+2. **Step 3** runs Phase 1 as usual. It then creates `report-exports-p2` and `report-exports-p3` with `task-worktree.sh create`, marks Tasks 2 and 4 `[~]`, and dispatches both implementers in one message. Task 3 follows Task 2 inside the Phase 2 worktree.
+3. Phase 3 finishes first. The controller records its `PHASE_BASE`, merges `report-exports-p3`, runs the full suite, and dispatches the phase reviewer on that phase's package alone. Phase 2's implementers keep working meanwhile.
+4. After Phase 3 is marked complete, Phase 2 gets the same treatment: base, merge, suite, review, and a fix round that runs in the controller's checkout.
+5. Phase 4 depends on both, so it waits for both and runs serially.
+
+### Why this example matters
+
+- **`Depends On` is the contract.** The controller never parallelizes two phases the table links, and it never guesses disjointness from code. Only the Files and Touch only lines count.
+- **Review semantics do not change.** Each phase still gets its own barrier suite, review package and fix loop. Only the implementers overlap.
+- **Opting out is one line.** A plan whose author relies on table order adds the missing `Depends On` edge, or sets `auto_parallel_phases: false` in its front-matter to keep every phase serial.

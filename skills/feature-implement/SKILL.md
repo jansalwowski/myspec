@@ -52,6 +52,7 @@ Durable decisions live in the plan file, next to the checkboxes — the plan is 
 - `Probe (Milestone N): <P|D><n> <verdict> — observed: <value> — artifact: <path>` (copied from the probe executor's report)
 - `Waiver (Milestone N): <P|D><n> — <the user's reason, in their words>`
 - `Base (feature): <sha>`, `Base (Phase N): <sha>`, `Fix base (Phase N, round R): <sha>` — the `BASE_SHA`, `PHASE_BASE` and `FIX_BASE` a review diffs from, logged when recorded (Steps 2, 3, 4d) so a restarted session can recover them. A plan from before these entries has none; resume then records the base afresh, as it always did
+- `Timing (Phase N): implement <d> · barrier <d> · review <d> · fixes <R> rounds <d> · total <d>` — written at 4f, so slow stages show across a run
 
 Everything else a restarted session needs — review packages, verification logs — goes in the run's state directory, `$STATE` (Step 2), under a fixed name. Never `mktemp` and never a session scratchpad: a restart starts a new session with a new temp directory, and an implementer or reviewer dispatched with a path that no longer exists comes back NEEDS_CONTEXT.
 
@@ -148,6 +149,7 @@ Parse milestones first, then build a DAG within each:
    - Identify phases (task groups separated by barriers).
    - Identify parallel groups (rows with `**parallel:groupName**` in Mode).
    - Identify dual-stream forks (phases with `3a`/`3b` style rows — two simultaneous chains).
+   - Identify concurrent phase sets: phases the `Depends On` column lets run at once whose Files/Touch only paths are disjoint. The six conditions are in [parallel-phases.md](parallel-phases.md). A phase that fails any of them runs serially.
 3. **Cross-milestone dependencies:** If a milestone's first phase says `Depends On: Milestone N`, the entire previous milestone must be complete before this one starts.
 
 **Resume detection (on startup):**
@@ -199,7 +201,7 @@ It warns rather than blocks: implementers already work from the current code and
 
 Walk milestones in order. For each milestone, walk its DAG topologically. For each phase:
 
-**Before the phase's first dispatch:** refresh the orchestration marker (Step 2.5) and record `PHASE_BASE=$(git rev-parse HEAD)`, logging `Base (Phase N): <sha>` (a resumed phase keeps the base its entry holds). The phase review package (Step 4b) diffs `PHASE_BASE..HEAD`. Never substitute `HEAD~1` — it silently drops all but the last commit of a multi-commit phase.
+**Before the phase's first dispatch:** refresh the orchestration marker (Step 2.5) and record `PHASE_BASE=$(git rev-parse HEAD)`, logging `Base (Phase N): <sha>` (a resumed phase keeps the base its entry holds). Append a stage timestamp to `$STATE/phase-N.times` as each stage starts and once at 4e, so 4f can report wall-clock time per stage after a restart: `echo "implement $(date -u +%s)" >> "$STATE/phase-N.times"`, then `barrier` (4a), `review` (4b), `fix-R` (each 4d round), and `done` (4e). The phase review package (Step 4b) diffs `PHASE_BASE..HEAD`. Never substitute `HEAD~1` — it silently drops all but the last commit of a multi-commit phase.
 
 **Verification tiers.** Each check runs at the narrowest scope that catches what it targets:
 
@@ -233,6 +235,8 @@ Task M, Task K as separate Agent calls in the same message → track per-task st
 ```
 
 Parallelism pays only when each task outweighs its merge and review overhead; run small parallel groups sequentially in the controller's checkout.
+
+**Concurrent phases** — a set Step 1 found ([parallel-phases.md](parallel-phases.md)) gets one worktree per phase, `"${CLAUDE_PLUGIN_ROOT}/lib/task-worktree.sh" create <feature>-p<N>`, and the phases' implementers are dispatched in one message. Barriers and reviews stay per phase and run one phase at a time in your checkout: record that phase's `PHASE_BASE`, then `task-worktree.sh merge <feature>-p<N>`, then Step 4, exactly as for a serial phase. A plan with `auto_parallel_phases: false` in its front-matter runs every phase serially.
 
 **Dual-stream fork** — dispatch both stream heads simultaneously, each in its own task worktree. Each stream proceeds independently (with its own sequential/parallel phases). Join waits for both streams.
 
@@ -289,9 +293,11 @@ Adjudicate only at the cap — adjudicating earlier to end a loop is pre-judging
 **f) Inter-phase progress note** (within a milestone, no pause — proceed immediately):
 
 ```
-✓ Phase N complete: [phase name]
+✓ Phase N complete: [phase name] — 41m (implement 17m · barrier 6m · review 9m · fixes 2 rounds 9m)
   Next: Phase N+1 — [phase name] ([N tasks])
 ```
+
+Take the durations from `$STATE/phase-N.times` (each stage runs until the next stamp), and write the same line to the Execution Log as `Timing (Phase N)`. A stage with no stamp, such as one that ran before a restart in an older run, shows as `?`.
 
 After all phases in a milestone complete → proceed to **Step 4b: Milestone Checkpoint**.
 
