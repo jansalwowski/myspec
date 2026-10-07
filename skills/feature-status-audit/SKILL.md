@@ -57,6 +57,7 @@ The script outputs:
 | `status=complete but implementation-plan.md is k/N [x]` | finish or defer the open tasks, then `/myspec:feature-complete`; or revert status |
 | `archived plans/... is 0/N [x]` | `/myspec:feature-verify <name>` — the plan was archived without being ticked, or the work never happened |
 | `spec.md` / `tech-spec.md frontmatter status: draft` under `complete` | bump the doc's frontmatter `status` |
+| `spec.md` / `tech-spec.md frontmatter status: X is not a doc status` | `complete`/`implemented`/`superseded` (the message names the target): `/myspec:update` runs the `3.1.0-doc-status` migration, or set it by hand; any other value: ask what it meant, then set `draft`, `approved` or `deprecated` |
 | `all N sub-features complete but spec.md acceptance criteria are k/M [x]` | `/myspec:feature-verify <parent>` — tick delivered ACs or split the rest into a new sub-feature |
 | Orphan directory | register in manifest or delete |
 
@@ -102,6 +103,7 @@ Beyond file presence, the script compares the manifest status against what the d
 |-------|-----------|
 | Plan ratio | Non-complete status with `implementation-plan.md` 100% `[x]`; `complete` with an unarchived plan holding `[ ]`/`[~]`; `complete` with any `plans/*.md` at 0/N |
 | Doc status | `spec.md` or `tech-spec.md` frontmatter `status: draft` while the manifest says `complete` |
+| Doc vocabulary | `spec.md` or `tech-spec.md` frontmatter `status` outside `draft \| approved \| deprecated`, under any manifest status (Medium: report-only, but `feature-plan` refuses a spec that is not `approved`) |
 | Parent ACs | Every sub-feature `complete` while the parent `spec.md` *Acceptance Criteria* section has unticked boxes; skipped when the spec ticks none (it does not use checkbox ACs) |
 
 Counting takes list-item checkboxes (`[ ]`, `[~]`, `[x]`) only; table cells and fenced code are ignored. For a fully ticked plan under a non-complete status, the script adds up to three `git log --grep=<feature>` matches as a hint; nothing is printed outside a git repo. JSON output carries `planProgress`, `archivedPlans`, `specStatus`, `techSpecStatus`, and `gitHint` per feature. Symbols cited in review reports are not checked — that is `/myspec:feature-implement-review`'s job.

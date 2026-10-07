@@ -89,6 +89,10 @@ features:
     status: complete
   - name: complete-draft-docs
     status: complete
+  - name: offvocab-docs
+    status: complete
+  - name: unknown-doc-status
+    status: in-progress
   - name: parent-ticked
     status: in-progress
     subfeatures: true
@@ -127,6 +131,12 @@ status: superseded/' "$F/complete-superseded-archive/plans/2026-02-01-v1-plan.md
 
   doc "$F/complete-draft-docs/spec.md" draft
   doc "$F/complete-draft-docs/tech-spec.md" '"draft"'
+
+  feature offvocab-docs
+  doc "$F/offvocab-docs/spec.md" complete
+  doc "$F/offvocab-docs/tech-spec.md" "'superseded'"
+  feature unknown-doc-status
+  doc "$F/unknown-doc-status/spec.md" shipped
 
   for p in parent-ticked parent-unticked parent-mixed; do
     feature "$p"
@@ -175,6 +185,18 @@ expect_line 'complete-draft-docs .*spec.md frontmatter status: draft but manifes
   "spec.md status: draft under a complete manifest entry is flagged"
 expect_line 'complete-draft-docs .*tech-spec.md frontmatter status: draft' \
   "quoted tech-spec.md status is read too"
+
+# ═══ doc status outside the vocabulary (#261) ═══════════════════════════════
+
+expect_line 'offvocab-docs .*MEDI spec.md frontmatter status: complete is not a doc status \(draft \| approved \| deprecated\) — set approved' \
+  "spec.md status: complete is flagged with its migration target"
+expect_line 'offvocab-docs .*MEDI tech-spec.md frontmatter status: superseded is not a doc status .*— set deprecated' \
+  "a quoted tech-spec.md status: superseded is flagged with its migration target"
+expect_line 'unknown-doc-status .*MEDI spec.md frontmatter status: shipped is not a doc status \(draft \| approved \| deprecated\)$' \
+  "an unknown doc status is flagged without a target"
+expect_no_line '(healthy-complete|complete-draft-docs|parent-ticked) .*is not a doc status' \
+  "draft and approved doc statuses are not flagged"
+if (cd "$REPO" && node "$SCRIPT" >/dev/null 2>&1); then ok; else fail "off-vocabulary findings alone do not set a non-zero exit"; fi
 
 # ═══ sub-features complete vs parent spec ACs ════════════════════════════════
 
