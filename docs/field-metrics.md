@@ -79,11 +79,11 @@ A `.myspec.json` that does not parse also counts as opted out, so a hand-edited 
 ## Running it by hand
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/lib/friction-scan/scan.mjs" --session=<session_id> --emit
+node "${CLAUDE_PLUGIN_ROOT}/lib/friction-scan/scan.mjs" --session=<session_id>[,<resumed_session_id>...] --emit
 node "${CLAUDE_PLUGIN_ROOT}/lib/friction-scan/scan.mjs" --transcript=<path/to/session.jsonl> --emit=<file.jsonl> --json
 ```
 
-`--emit` with no path writes the default file, and only in a project that has `.myspec.json`. `--emit=<path>` writes to that path. It always exits 0. A skipped or failed run prints one line on stderr, and `--json` prints `{"written","skipped","path"}`.
+A resumed session continues under a new id. Give every id of the chain, comma-separated, and the chain is recorded as one session under the first id, with an entry repeated across transcripts counted once. `--emit` with no path writes the default file, and only in a project that has `.myspec.json`. `--emit=<path>` writes to that path. It always exits 0. A skipped or failed run prints one line on stderr, and `--json` prints `{"written","skipped","path"}`.
 
 ## Limits
 
