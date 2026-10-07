@@ -1,7 +1,7 @@
 ---
 title: "Agent Memory System"
 purpose: "Prevent debugging loops and preserve knowledge across sessions"
-updated: 2026-10-06
+updated: 2026-10-07
 ---
 
 # Agent Memory System
@@ -32,7 +32,7 @@ Governs the project-level memory under `${aiDir}/memory/`. User-level auto-memor
 | Layer | Loaded | Budget | Where |
 |-------|--------|--------|-------|
 | 1 | Always | ~200 tokens | `${aiDir}/memory/index.md` — critical anti-patterns, one line per type index |
-| 2 | Per task | ~500 tokens per index | `${aiDir}/memory/{procedural,semantic,episodic}/index.md` |
+| 2 | Per task | ~40 tokens per row | `${aiDir}/memory/{procedural,semantic,episodic}/index.md` |
 | 3 | On demand | Unlimited | Individual memory files, `${aiDir}/memory/sessions/archive/` |
 
 Episodic memories older than 30 days consolidate into semantic facts; `/myspec:memory-preflight` flags the candidates.
