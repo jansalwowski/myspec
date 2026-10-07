@@ -33,7 +33,7 @@ All gates pass → proceed to Workflow Step 1.
 
 1. Read `${aiDir}/features/{feature}/tech-spec.md` — note implementation steps, file inventory, interfaces
 2. Read `${aiDir}/features/{feature}/spec.md` — note requirement IDs, acceptance criteria, edge cases
-3. **Sync the base**, so snippets match the code implementers will see. `$INTEGRATION` is the branch feature work merges into: the topology file's `branches.integration`, else the default branch ([`_shared/git-helpers.md`](../_shared/git-helpers.md)). Set `BASE=origin/$INTEGRATION` and run `git fetch origin "$INTEGRATION"` (no remote configured: `BASE=$INTEGRATION`, skip the fetch; fetch exits non-zero: stop and report). Then `git merge-base --is-ancestor "$BASE" HEAD`:
+3. **Sync the base**, so snippets match the code implementers will see. `$INTEGRATION` is the branch feature work merges into: the topology file's `branches.integration`, else the default branch ([`_shared/git-helpers.md`](../_shared/git-helpers.md)). Resolve the ref with `BASE=$("${CLAUDE_PLUGIN_ROOT}/lib/plan-freshness.sh" base "$INTEGRATION")`: it fetches and prints `origin/$INTEGRATION`, or `$INTEGRATION` when there is no remote. Exit 2 (fetch failed, or the branch does not exist): stop and report. Then `git merge-base --is-ancestor "$BASE" HEAD`:
    - exit 0 — HEAD already contains it
    - exit 1 — HEAD lags: `git merge --no-edit "$BASE"`; if the merge exits non-zero, `git merge --abort` and stop for the user
    - any other exit (bad ref) — stop and report; never plan against an unverified base

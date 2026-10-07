@@ -34,7 +34,7 @@ The skill reads `references/plan-templates.md` before drafting.
 
 The skill loads `tech-spec.md` (6 steps, file inventory, interfaces) and `spec.md` (5 acceptance criteria).
 
-Before reading any code it syncs the base. `backbone.yml` has no `branches` section, so the integration branch is the default branch, `main`. After `git fetch origin main`, `git merge-base --is-ancestor origin/main HEAD` exits 1: a teammate's merge changed `listReports()`, the query Task 6 modifies. The skill merges `origin/main`, reads `listReports()` from the merged tree, and records `git rev-parse HEAD` as `planned_against`.
+Before reading any code it syncs the base. `backbone.yml` has no `branches` section, so the integration branch is the default branch, `main`. `plan-freshness.sh base main` fetches and prints `origin/main`, and `git merge-base --is-ancestor origin/main HEAD` exits 1: a teammate's merge changed `listReports()`, the query Task 6 modifies. The skill merges `origin/main`, reads `listReports()` from the merged tree, and records `git rev-parse HEAD` as `planned_against`.
 
 #### 2. Build dependency graph
 

@@ -2,12 +2,7 @@
 
 Dispatch this reviewer after ALL tasks in a phase complete and worktrees are merged.
 
-Before dispatching, write the review package to one file and substitute its path below. A pasted diff parks itself permanently in the controller's context, and a reviewer without one rebuilds it by hand — the single biggest reviewer cost:
-
-```bash
-PKG="$STATE/phase-N-review.diff"   # $STATE: SKILL.md Step 2
-{ git log --oneline "$PHASE_BASE"..HEAD; echo; git diff --stat "$PHASE_BASE"..HEAD; echo; git diff -U10 "$PHASE_BASE"..HEAD; } > "$PKG"
-```
+Before dispatching, write the review package to one file and substitute its path below. A pasted diff parks itself permanently in the controller's context, and a reviewer without one rebuilds it by hand — the single biggest reviewer cost. Write it with `review-diff.sh` over `PHASE_BASE..HEAD` as `$STATE/phase-N-review.diff` (SKILL.md Step 4b gives the call and what its exit 2 means).
 
 `PHASE_BASE` is the sha recorded before the phase's first dispatch — never `HEAD~1`, which silently drops all but the last commit of a multi-commit phase.
 
