@@ -1,6 +1,6 @@
 # Disjoint Phases Run Together
 
-Read from SKILL.md Step 1 (detection) and Step 3 (execution). Plans rarely declare `[parallel:*]` groups, so a run otherwise walks every phase in sequence even when two of them share nothing. Two phases run concurrently when the plan already allows it and their files prove they cannot collide.
+Read from SKILL.md Step 1 (detection) and Step 3 (execution). Plans rarely declare `[parallel:*]` groups, so a run otherwise walks every phase in sequence even when two of them share nothing. Two phases run concurrently only when the plan opts in (`auto_parallel_phases: true` in its front-matter, which `feature-plan` writes into every new plan) and their files prove they cannot collide. A plan without the key was written when table order was execution order, so it runs serially as before.
 
 ## When phases are concurrent
 
@@ -11,7 +11,7 @@ Within one milestone, a set of phases runs together only when all of these hold.
 3. **Disjoint files.** Collect each phase's paths from its tasks' `**Files:**` (Create, Modify, Test) and `**Touch only:**` lines. The two sets share no path, and no path in one set is a directory that contains a path in the other. Only these two lines count. A path you infer from a snippet or the tech-spec does not prove anything.
 4. **No writes outside the listed paths.** Exclude a phase if any of its tasks, by design, writes a file it does not list: code generation, a dependency install, a lockfile change, or a migration whose name or number comes from a shared sequence.
 5. **Sequential mode.** Every phase in the set is `sequential` in the Mode column. A phase holding a `[parallel:*]` group or a dual-stream fork keeps its own handling and runs alone.
-6. **Not opted out.** The plan front-matter does not set `auto_parallel_phases: false`.
+6. **Opted in.** The plan front-matter sets `auto_parallel_phases: true`. Absent or `false`: every phase runs serially, and none of the checks above runs.
 
 Log the decision once per set, before the first dispatch: `Ruling: Phases 3 and 4 run concurrently — no Depends On path, no Consumes/Produces link, disjoint Files/Touch only — cost if wrong: a merge conflict at the second phase's barrier`.
 
@@ -26,6 +26,6 @@ Log the decision once per set, before the first dispatch: `Ruling: Phases 3 and 
 - The other phase's implementers keep working in their worktree during this. Its merge waits until the current phase is marked complete (4e), so each review package and each fix loop covers exactly one phase.
 - Resume: when a concurrent phase still has `[~]` tasks, discard its worktree with `task-worktree.sh discard <feature>-p<N>` and run the phase again from scratch, as with a parallel task.
 
-## Opting out
+## Opting in and out
 
-A plan that relies on table order where `Depends On` does not record it is opting out. Add the missing `Depends On` edge if one phase really needs the other. To keep a whole plan serial, set `auto_parallel_phases: false` in its front-matter.
+`feature-plan` writes `auto_parallel_phases: true` into each plan it creates, together with the rule that `Depends On` names every real dependency. An older plan opts in by adding the key, once its `Depends On` column is checked. A new plan whose author relies on table order adds the missing `Depends On` edge, or sets the key to `false` to keep every phase serial.
