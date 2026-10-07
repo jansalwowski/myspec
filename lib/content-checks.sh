@@ -71,13 +71,16 @@ proposed_content() {
 # The detected shapes. The absolute forms (/Users, /home) must stand at a
 # path ROOT, preceded by start-of-line or a non-path character, so a relative
 # segment such as `components/home/HomeFoo.vue` (a `home/` directory followed
-# by a Capitalized name) is not one. grep ERE has no lookbehind, so the
-# boundary is captured and stripped by absolute_path_findings.
+# by a Capitalized name) is not one. The encoded forms need a left boundary
+# too (#325), so `--home-dir`, `feat/remove-home-tab` and `nav-home-link` are
+# not ones; their boundary also admits `/`, as the encoded cwd follows
+# `projects/`. grep ERE has no lookbehind, so the boundary is captured and
+# stripped by absolute_path_findings.
 #   /Users/<name>...        e.g. /Users/alice/work/foo   (root only)
 #   /home/<name>...         e.g. /home/alice/work/foo     (root only)
 #   -Users-<name>-...       the encoded form of /Users/<name>/... (leading - kept)
 #   -home-<name>-...        the encoded form of /home/<name>/...   (leading - kept)
-ABSOLUTE_PATH_RE='(^|[^A-Za-z0-9._/-])(/Users/[A-Za-z][A-Za-z0-9._-]*|/home/[A-Za-z][A-Za-z0-9._-]*)|(-Users-[A-Za-z][A-Za-z0-9._-]+|-home-[A-Za-z][A-Za-z0-9._-]+)'
+ABSOLUTE_PATH_RE='(^|[^A-Za-z0-9._/-])(/Users/[A-Za-z][A-Za-z0-9._-]*|/home/[A-Za-z][A-Za-z0-9._-]*)|(^|[^A-Za-z0-9._-])(-Users-[A-Za-z][A-Za-z0-9._-]+|-home-[A-Za-z][A-Za-z0-9._-]+)'
 
 # absolute_paths_scope <repo root> <repo-relative path> [aiDir] -> 0 when the
 # file is one the rule covers (#163): a doc kind anywhere (*.md, *.mdx,
@@ -129,7 +132,7 @@ absolute_path_findings() {
     n="${line%%:*}"
     m="${line#*:}"
     case "$m" in
-      /*|-Users-*|-home-*) : ;;
+      /Users/*|/home/*|-Users-*|-home-*) : ;;
       *) m="${m#?}" ;;
     esac
     printf '%s\t%s\n' "$n" "$m"
