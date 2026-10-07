@@ -214,7 +214,10 @@ expect_exit 0 "a SKILL.md deeper than skills/<name>/ is not treated as a skill"
 # ShellCheck (#209). A stub stands in for shellcheck through $SHELLCHECK, so no
 # case depends on which version (if any) the machine has: it flags any file
 # containing SC_BAD, printing the path it was given, and exits 1; a file
-# containing SC_UNREADABLE makes it exit 2 the way an unopenable file does.
+# containing SC_UNREADABLE makes it exit 2 the way an unopenable file does; a
+# file containing SC_SOURCES gets SC1091 unless SHELLCHECK_OPTS carries
+# --external-sources, the way a source of a non-input file does (#308).
+REAL_SHELLCHECK=$(command -v "${SHELLCHECK:-shellcheck}" 2>/dev/null || true)
 mkdir -p "$TMP/scbin"
 cat > "$TMP/scbin/shellcheck" <<'STUB'
 #!/bin/sh
@@ -223,6 +226,10 @@ rc=0
 for f in "$@"; do
   if grep -q SC_BAD "$f"; then echo "In $f line 2: SC_BAD is unused"; [ "$rc" -gt 1 ] || rc=1; fi
   if grep -q SC_UNREADABLE "$f"; then echo "$f: openBinaryFile: does not exist" >&2; rc=2; fi
+  case " ${SHELLCHECK_OPTS:-} " in
+    *" --external-sources "*) ;;
+    *) if grep -q SC_SOURCES "$f"; then echo "In $f line 3: SC1091 (info): Not following"; [ "$rc" -gt 1 ] || rc=1; fi ;;
+  esac
 done
 exit $rc
 STUB
@@ -267,6 +274,34 @@ printf '#!/usr/bin/env bash\necho fine\n' > lib/lintme.sh
 git add lib/lintme.sh
 in_repo git commit -qm "clean again"
 expect_exit 0 "the cleaned script passes"
+
+# #308: only the staged scripts are ShellCheck inputs, so a staged script that
+# sources an unstaged lib must have its sources followed, or it gets SC1091
+# (and SC2034 for a variable only the lib reads) where CI's full tree is clean.
+printf '#!/usr/bin/env bash\n# SC_SOURCES\n. lib/lintme.sh\n' > lib/sources.sh
+git add lib/sources.sh
+in_repo git commit -qm "sources an unstaged lib"
+expect_exit 0 "a staged script sourcing an unstaged lib is linted with its sources followed"
+expect_no_line "SC1091" "no SC1091 for a lib that is not staged"
+
+if [ -n "$REAL_SHELLCHECK" ]; then
+  printf '#!/usr/bin/env bash\necho "$SHARED"\n' > lib/dep.sh
+  git add lib/dep.sh
+  SHELLCHECK="$REAL_SHELLCHECK" in_repo git commit -qm "dep"
+  printf '#!/usr/bin/env bash\nSHARED=1\n# shellcheck source=lib/dep.sh\n. "$(dirname "${BASH_SOURCE[0]}")/dep.sh"\n' > lib/user.sh
+  git add lib/user.sh
+  SHELLCHECK="$REAL_SHELLCHECK" in_repo git commit -qm "user of an unstaged lib"
+  expect_exit 0 "real shellcheck: a staged script sourcing an unstaged lib passes, as on the full tree"
+  expect_no_line "SC1091|SC2034" "real shellcheck: no SC1091 or SC2034 from the unstaged lib"
+  printf '#!/usr/bin/env bash\nSHARED=1\n# shellcheck source=lib/dep.sh\n. "$(dirname "${BASH_SOURCE[0]}")/dep.sh"\nunused_here=1\n' > lib/user.sh
+  git add lib/user.sh
+  SHELLCHECK="$REAL_SHELLCHECK" in_repo git commit -qm "real finding"
+  expect_exit 1 "real shellcheck: a genuine finding in the staged script still blocks"
+  expect_line "SC2034" "real shellcheck: the genuine finding is shown"
+  git reset -q HEAD lib/user.sh; rm lib/user.sh
+else
+  echo "NOTE  no shellcheck on PATH; real-shellcheck #308 cases skipped" >&2
+fi
 
 # JS lint (#208). A stub stands in for scripts/lint-js.sh so the suite stays
 # offline: it flags any file containing unusedVar the way eslint does (absolute

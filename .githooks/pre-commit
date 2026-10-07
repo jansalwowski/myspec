@@ -64,9 +64,15 @@ if [ ${#shells[@]} -gt 0 ]; then
   elif [ ! -f "$shlint" ]; then
     echo "pre-commit: scripts/lint-sh.sh not found; shell lint skipped" >&2
   else
+    # Only the staged scripts are inputs, so a `source` of an unstaged lib
+    # would be SC1091 ("not specified as input"), and a variable it reads
+    # SC2034 (#308). --external-sources follows each source in the export the
+    # way CI's full-tree run does, and still reports findings only in the
+    # inputs, so a staged script fails only where CI would. A full-tree run
+    # filtered to the staged files would match too, but takes ~20s a commit.
     # Any non-zero exit blocks: ShellCheck exits 2 when one file cannot be
     # read but still reports findings in the rest.
-    if ! (cd "$tmp" && bash "$shlint" "${shells[@]}") >&2; then
+    if ! (cd "$tmp" && SHELLCHECK_OPTS="--external-sources${SHELLCHECK_OPTS:+ $SHELLCHECK_OPTS}" bash "$shlint" "${shells[@]}") >&2; then
       echo "pre-commit: shellcheck failed on staged shell scripts" >&2
       status=1
     fi
