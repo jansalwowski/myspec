@@ -52,6 +52,7 @@ Every migration, rename and removal an older version needed ran in that update; 
 | `3.0.0-reuse-audit` | The reuse-audit gate on tech-specs is per file since 3.0: `require-reuse-audit.sh` checks a tech-spec when it is created and when a write changes its `## Reuse audit` section, never on an edit elsewhere, and a tech-spec opts out with `<!-- myspec:reuse-audit skip: <reason> -->` in its own text. The repo-global `reuseAudit` key in `.myspec.json` is no longer read. Delete the key (the whole `reuseAudit` object) when present. When it held `enabled: false`, print: "reuseAudit.enabled=false was removed from .myspec.json: since 3.0 each tech-spec opts out of the reuse audit with `<!-- myspec:reuse-audit skip: <reason> -->` in its own text; existing tech-specs without a `## Reuse audit` section are not re-checked, so nothing needs editing now." Nothing else changes. |
 | `3.0.0-memory-registry` | Versions before 1.28 wrote `.claude/state/memory-ids.json` jq pretty-printed, one key per line; since 3.0 `memory-claim-id.sh` reads only the one-line form it writes, and a claim against the old form would restart the other floors at zero. Run `"${CLAUDE_PLUGIN_ROOT}/lib/memory-claim-id.sh" --normalize` from the project root: it rewrites the registry as one line from either form, keeping every floor, and prints what it did (nothing to do without a registry). Idempotent; runs before Step 3.6's health check. |
 | `3.0.0-schema-v2` | `.myspec.json` is schema version 2 (`lib/myspec-config.schema.json`). Delete `project.description` when present: `init` wrote it, nothing read it. Run `node "${CLAUDE_PLUGIN_ROOT}/lib/pin-reconcile.mjs" --backfill` from the project root, print its rows, and say a pin backfilled this way cannot report `review` until the next update. Nothing else: `codeReview` and `reuseAudit` have their own migrations. |
+| `3.1.0-doc-status` | Doc status in `spec.md` / `tech-spec.md` frontmatter is `draft \| approved \| deprecated` (`.claude/rules/workflow.md`, "Status State Machine"), and `feature-plan` refuses a spec that is not `approved`; projects wrote manifest words into it. Run `node "${CLAUDE_PLUGIN_ROOT}/lib/doc-status-normalize.mjs"` from the project root: under `{aiDir}/features/` it rewrites the frontmatter `status:` line alone, `complete` and `implemented` → `approved`, `superseded` → `deprecated`, and prints a `rewrote:` line per file and an `off-vocabulary:` line per other value it left alone. Idempotent. List every rewritten file under `Migrations` in the Step 6 summary, and every off-vocabulary one with "set by hand": only the project knows whether `shipped` meant approved or deprecated. |
 
 List every migration run under `Migrations` in the Step 6 summary.
 
@@ -196,6 +197,7 @@ Renamed (framework changed the filename; project content preserved):
 
 Migrations (one-shot, recorded in .myspec.json):
   {each migration id run this time with one line of what it did; or "none pending"}
+  {3.1.0-doc-status: each rewritten doc as "{path}: {old} → {new}", each off-vocabulary one as "{path}: {value} — set by hand"}
 
 Removed (retired by the framework):
   {each deleted file; "kept locally (pinned)" for pinned ones; or omit the block}
@@ -233,7 +235,7 @@ Do NOT modify the file — this is advisory only.
 - **Never copy a hook or lib helper into the project.** Since 3.0 they run from the plugin, and a copy under `.claude/` is dead weight at best and a second, stale run of a gate at worst (a copy is moved to `.claude/state/retired-3.0/`, never written). Only the `files` and `rules` blocks exist, and both carry `${aiDir}` as a placeholder to substitute.
 - Never overwrite a file whose `frameworkFiles[...].pinned` is set, and never add or clear a pin yourself — except the `hooks/*` and `lib/*` pins the `3.0.0-plugin-hooks` migration drops, which it reports
 - Never overwrite content after `<!-- myspec:framework-end -->` in a `marker-merge` file
-- Never modify files not listed in `manifest.json`, with two exceptions this skill owns: the `hooks` key of `.claude/settings.json` (framework entries removed, nothing added) and `.claude/state/retired-3.0/` (where the migration moves the retired copies)
+- Never modify files not listed in `manifest.json`, with three exceptions this skill owns: the `hooks` key of `.claude/settings.json` (framework entries removed, nothing added), `.claude/state/retired-3.0/` (where the migration moves the retired copies), and the frontmatter `status:` line of feature docs the `3.1.0-doc-status` migration rewrites
 - Never update `.myspec.json` project fields (`name`, `techStack`) or `aiDir`. Keys a migration retires are deleted only by it: `codeReview` by `3.0.0-code-review`, `reuseAudit` by `3.0.0-reuse-audit`, `project.description` by `3.0.0-schema-v2`. A pin's `hash` and `upstreamHash` are written only by `pin-reconcile.mjs` (`--backfill`, `--record`)
 - Never run a migration whose id is already in `.myspec.json` `migrations`; record each one the moment it completes
 - If a source file is missing from the plugin, skip it and warn the user — do not delete the destination
@@ -260,6 +262,7 @@ After running the skill:
 - [ ] `3.0.0-schema-v2` (first run only): `project.description` deleted when present, `--backfill` run and its rows printed with the "cannot report review until the next update" note
 - [ ] `setup-doctor.mjs wiring` run from the plugin: `hook-wired-locally` and `hook-copy-retired` gone, nothing added to `settings.json`, project-hook findings and `settings.local.json` entries reported with their fix line; `.gitignore` has a `.claude/state/` line
 - [ ] Full `setup-doctor.mjs` run in Step 3.7, before the Step 5 version stamp; every `install`-, `schema`- and `features`-group error resolved or reported
-- [ ] No file outside `manifest.json` was modified, except `settings.json` `hooks` (removals only) and `.claude/state/retired-3.0/`
+- [ ] `3.1.0-doc-status` (first run only): `doc-status-normalize.mjs` run, every rewritten doc listed under `Migrations`, every off-vocabulary value reported and left alone
+- [ ] No file outside `manifest.json` was modified, except `settings.json` `hooks` (removals only), `.claude/state/retired-3.0/`, and the doc `status:` lines `3.1.0-doc-status` rewrote
 - [ ] Summary printed with `Updated files`, `Migrations`, `Removed`, `Preserved` and `Hooks` lines
 - [ ] Generated-config advisory printed when a `mockups` block exists (`mockup-design.md` read, never modified)

@@ -46,7 +46,7 @@ The standard path: implementation finished, verify is green, the user runs compl
 
    User: yes. ADR-2 added: *"StarButton uses optimistic UI for star/unstar."* Context: instant feedback on a low-stakes mutation; rollback on API error.
 
-5. **Update frontmatter**: `tech-spec.md` `last_updated: 2026-04-30`, `status: complete`. `based_on_spec_version: 1` already aligned.
+5. **Update frontmatter**: `tech-spec.md` `last_updated: 2026-04-30`. Its `status:` stays `approved`: doc status is the review state (`draft | approved | deprecated`), and "complete" belongs to the manifest in step 6. `based_on_spec_version: 1` already aligned.
 
 6. **Update Feature Manifest**: edits `ai/features/index.yaml`:
 
