@@ -65,7 +65,7 @@ CMD="$1"; shift
 
 case "$CMD" in
   base)
-    [ $# -eq 1 ] && [ -n "$1" ] || usage
+    if [ $# -ne 1 ] || [ -z "$1" ]; then usage; fi
     if ! integration_ref "$1"; then
       echo "plan-freshness: $REASON" >&2
       exit 2
@@ -73,7 +73,7 @@ case "$CMD" in
     printf '%s\n' "$REF"
     ;;
   check)
-    [ $# -ge 2 ] && [ -n "$1" ] && [ -n "$2" ] || usage
+    if [ $# -lt 2 ] || [ -z "$1" ] || [ -z "$2" ]; then usage; fi
     SHA="$1"; BRANCH="$2"; shift 2
     if ! integration_ref "$BRANCH"; then
       echo "unknown: $REASON"
