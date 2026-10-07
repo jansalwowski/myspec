@@ -37,7 +37,7 @@ usage() {
   exit 64
 }
 
-[ $# -ge 2 ] && [ $# -le 3 ] || usage
+if [ $# -lt 2 ] || [ $# -gt 3 ]; then usage; fi
 BASE="$1"
 OUT="$2"
 HEAD_REF="${3:-HEAD}"
