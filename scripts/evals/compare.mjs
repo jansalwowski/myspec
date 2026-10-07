@@ -41,13 +41,19 @@
 // Overall verdict: regressed if any model regressed, insufficient-data if every
 // model is, else improved if any improved, else no-change.
 //
+// Capability cases are report-only: a case the new set's evals.tiers marks
+// capability (a baseline file; results directories carry no tiers) is shown
+// with its diff and any drop, but stays out of the paired statistics, the
+// regressed-case count, pass@k/pass^k and the verdict. The release suite runs
+// capability cases once (`runs: 1`), regression cases 3 times.
+//
 // Exit status: 0 improved, no-change or insufficient-data · 1 regressed ·
 // 2 bad input (unreadable set, no model or no case in common, --k above the
 // run count).
 
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { filterCases, loadSet } from './results.mjs';
+import { filterCases, loadSet, reportOnlyCases } from './results.mjs';
 
 export const DEFAULTS = { seed: 42, resamples: 10000, minPaired: 5, minFlagged: 2, caseDrop: 0.67, signAlpha: 0.05, stablePassMax: 0 };
 
@@ -119,35 +125,53 @@ export function summarize(cases, k) {
   };
 }
 
+// Mean score and pass rate over every run of the named cases (no k: report-only
+// cases run once, so pass^k means nothing there).
+function looseSummary(cases, names) {
+  const runs = names.flatMap((n) => cases[n].passed);
+  return {
+    cases: names.length,
+    mean_score: names.length ? r4(mean(names.map((n) => mean(cases[n].scores)))) : null,
+    pass_rate: runs.length ? r4(runs.filter(Boolean).length / runs.length) : null,
+  };
+}
+
 export function compareModel(oldM, newM, opts) {
+  const reportOnly = opts.reportOnly ?? new Set();
   const oldNames = Object.keys(oldM.cases);
   const newNames = Object.keys(newM.cases);
-  const paired = oldNames.filter((n) => n in newM.cases).sort();
+  const all = oldNames.filter((n) => n in newM.cases).sort();
   const onlyOld = oldNames.filter((n) => !(n in newM.cases)).sort();
   const onlyNew = newNames.filter((n) => !(n in oldM.cases)).sort();
-  if (paired.length === 0) throw new Error('no cases in common');
-  const minRuns = Math.min(...paired.flatMap((n) => [oldM.cases[n].passed.length, newM.cases[n].passed.length]));
+  if (all.length === 0) throw new Error('no cases in common');
+  // Paired cases are the gating ones; capability cases are listed apart.
+  const paired = all.filter((n) => !reportOnly.has(n));
+  const side = all.filter((n) => reportOnly.has(n));
+  const runCounts = (paired.length ? paired : all).flatMap((n) => [oldM.cases[n].passed.length, newM.cases[n].passed.length]);
+  const minRuns = Math.min(...runCounts);
   const k = opts.k ?? minRuns;
   if (!(k >= 1) || k > minRuns) throw new Error(`k=${k} but some paired case has only ${minRuns} run(s)`);
 
-  const cases = paired.map((name) => {
+  const row = (name) => {
     const o = oldM.cases[name];
     const n = newM.cases[name];
     const oldMean = mean(o.scores);
     const newMean = mean(n.scores);
     return { name, old_mean: oldMean, new_mean: newMean, diff: newMean - oldMean, old_passed: o.passed, new_passed: n.passed };
-  });
+  };
+  const cases = paired.map(row);
+  const sideCases = side.map(row);
   const diffs = cases.map((c) => c.diff);
-  const ci = bootstrapCI(diffs, opts);
-  const pick = (m) => Object.fromEntries(paired.map((n) => [n, m.cases[n]]));
-  const oldS = summarize(pick(oldM), k);
-  const newS = summarize(pick(newM), k);
+  const ci = diffs.length ? bootstrapCI(diffs, opts) : [0, 0];
+  const pick = (m, names) => Object.fromEntries(names.map((n) => [n, m.cases[n]]));
+  const oldS = paired.length ? summarize(pick(oldM, paired), k) : looseSummary(oldM.cases, []);
+  const newS = paired.length ? summarize(pick(newM, paired), k) : looseSummary(newM.cases, []);
 
   // Per-case regression flags. A case counts when it was stable in the
   // baseline (every run passed, at least 2 runs) and now fails at least 2
   // more runs, or when its mean score fell by at least caseDrop.
   const flagged = [];
-  for (const c of cases) {
+  const flagCase = (c) => {
     const no = c.old_passed.length;
     const nn = c.new_passed.length;
     const co = c.old_passed.filter(Boolean).length;
@@ -157,8 +181,12 @@ export function compareModel(oldM, newM, opts) {
     } else if (-c.diff >= opts.caseDrop - EPS) {
       c.flag = `mean score ${c.old_mean.toFixed(2)} -> ${c.new_mean.toFixed(2)}`;
     }
+  };
+  for (const c of cases) {
+    flagCase(c);
     if (c.flag) flagged.push(c.name);
   }
+  for (const c of sideCases) flagCase(c);
   const sign = signTest(diffs);
 
   const reasons = [];
@@ -168,6 +196,7 @@ export function compareModel(oldM, newM, opts) {
     verdict = 'insufficient-data';
     reasons.push(`${paired.length} paired case(s), fewer than ${opts.minPaired}: no verdict`);
   } else {
+    for (const c of sideCases) if (c.flag) warnings.push(`capability case ${c.name}: ${c.flag} (report-only, not counted)`);
     if (flagged.length >= opts.minFlagged) {
       reasons.push(`${flagged.length} case(s) regressed (at least ${opts.minFlagged}): ${flagged.join(', ')}`);
     } else if (flagged.length) {
@@ -193,7 +222,7 @@ export function compareModel(oldM, newM, opts) {
     regressed_cases: flagged,
     k,
     n_paired: paired.length,
-    mean_delta: r4(mean(diffs)),
+    mean_delta: diffs.length ? r4(mean(diffs)) : 0,
     ci: [r4(ci[0]), r4(ci[1])],
     sign: { ...sign, p: r4(sign.p) },
     old: oldS,
@@ -201,6 +230,11 @@ export function compareModel(oldM, newM, opts) {
     only_old: onlyOld,
     only_new: onlyNew,
     cases: cases.map((c) => ({ ...c, old_mean: r4(c.old_mean), new_mean: r4(c.new_mean), diff: r4(c.diff) })),
+    report_only: {
+      old: looseSummary(oldM.cases, side),
+      new: looseSummary(newM.cases, side),
+      cases: sideCases.map((c) => ({ ...c, old_mean: r4(c.old_mean), new_mean: r4(c.new_mean), diff: r4(c.diff) })),
+    },
   };
 }
 
@@ -211,9 +245,10 @@ export function compare(oldSet, newSet, options = {}) {
   const common = oldModels.filter((m) => newModels.includes(m));
   if (common.length === 0) throw new Error(`no model in common (old: ${oldModels.join(',') || '-'}; new: ${newModels.join(',') || '-'})`);
   const models = {};
+  const reportOnly = opts.reportOnly ?? reportOnlyCases(newSet);
   for (const m of common) {
     try {
-      models[m] = compareModel(oldSet.models[m], newSet.models[m], opts);
+      models[m] = compareModel(oldSet.models[m], newSet.models[m], { ...opts, reportOnly });
     } catch (err) {
       throw new Error(`${m}: ${err.message}`);
     }
@@ -255,17 +290,24 @@ export function formatText(res) {
     out.push('', `== ${model}: ${r.verdict} ==`);
     const rows = [['CASE', 'OLD', 'NEW', 'DIFF', 'OLD RUNS', 'NEW RUNS', 'REGRESSED']];
     for (const c of r.cases) rows.push([c.name, c.old_mean.toFixed(2), c.new_mean.toFixed(2), fmt(c.diff, 2), pf(c.old_passed), pf(c.new_passed), c.flag ?? '']);
+    for (const c of r.report_only?.cases ?? []) {
+      rows.push([c.name, c.old_mean.toFixed(2), c.new_mean.toFixed(2), fmt(c.diff, 2), pf(c.old_passed), pf(c.new_passed), `capability, report-only${c.flag ? `: ${c.flag}` : ''}`]);
+    }
     const w = rows[0].map((_, i) => Math.max(...rows.map((row) => row[i].length)));
     for (const row of rows) out.push(row.map((v, i) => v.padEnd(w[i])).join('  ').trimEnd());
     out.push(
       `paired cases ${r.n_paired} · mean delta ${fmt(r.mean_delta)}  95% CI [${fmt(r.ci[0])}, ${fmt(r.ci[1])}]` +
         ` · sign test +${r.sign.pos}/-${r.sign.neg} (${r.sign.ties} ties) p=${r.sign.p.toFixed(4)}`,
     );
-    out.push(
+    if (r.n_paired) out.push(
       `pass@${r.k} ${r.old.pass_at_k.toFixed(2)} -> ${r.new.pass_at_k.toFixed(2)} · pass^${r.k} ${r.old.pass_hat_k.toFixed(2)} -> ${r.new.pass_hat_k.toFixed(2)}` +
         ` · mean score ${r.old.mean_score.toFixed(2)} -> ${r.new.mean_score.toFixed(2)}`,
     );
-    out.push(`flaky: old [${r.old.flaky.join(', ')}] · new [${r.new.flaky.join(', ')}]`);
+    out.push(`flaky: old [${(r.old.flaky ?? []).join(', ')}] · new [${(r.new.flaky ?? []).join(', ')}]`);
+    const ro = r.report_only;
+    if (ro?.cases.length) {
+      out.push(`report-only (capability) ${ro.cases.length} case(s), not in the verdict · mean score ${ro.old.mean_score.toFixed(2)} -> ${ro.new.mean_score.toFixed(2)} · pass rate ${ro.old.pass_rate.toFixed(2)} -> ${ro.new.pass_rate.toFixed(2)}`);
+    }
     if (r.only_old.length) out.push(`only in old (excluded): ${r.only_old.join(', ')}`);
     if (r.only_new.length) out.push(`only in new (excluded): ${r.only_new.join(', ')}`);
     for (const reason of r.reasons) out.push(`  ${reason}`);

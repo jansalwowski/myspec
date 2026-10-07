@@ -1,6 +1,7 @@
 ---
 description: "Grooming Claude Code's own per-project auto-memory (under ~/.claude/projects, the default config dir): memory-sanitize, not memory-optimize."
 tags: [skill:memory-sanitize, skill:memory-optimize, trigger, capability]
+runs: 1
 max_turns: 6
 timeout_seconds: 300
 allowed_tools: [Read, Glob, Grep, Skill]

@@ -1,8 +1,9 @@
 ---
 description: "Approved single-milestone plan for invoice-due-dates with both tasks [x] and committed, a passing phase review in the Execution Log, and a Checkpoint probes block with no Probe lines yet. Resume must land on the Step 4b probe gate and dispatch the plugin agent myspec:probe-executor (Agent, subagent_type myspec:probe-executor), never a general-purpose subagent carrying the executor prompt (#171). The project declares no verification checks, so Step 4b's full-suite step has nothing to run, and the fixture pre-creates the run-1 artifact directory the gate's mkdir would make. Graded on the dispatch only; Bash is limited to run.sh's read-only git grant, so the executor cannot run the probes and max_turns stops the run soon after."
 tags: [skill:feature-implement, capability]
-max_turns: 18
-timeout_seconds: 600
+runs: 1
+max_turns: 12
+timeout_seconds: 360
 allowed_tools: [Read, Glob, Grep, Skill, Write, Edit, Agent, Bash]
 ---
 
