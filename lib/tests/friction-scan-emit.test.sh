@@ -274,5 +274,43 @@ RSS_MB=$(cd "$WORK" && node -e '
 [ "$(lines "$ROOT/metrics-big.jsonl")" -eq 1 ] && ok || fail "large transcript recorded"
 [ -n "$RSS_MB" ] && [ "$RSS_MB" -lt 250 ] && ok || fail "peak memory on an 80 MB transcript stays under 250 MB (got ${RSS_MB:-?} MB)"
 
+# ── 10. a resumed session: several ids, one record for the chain (#297) ──
+# The resumed transcript repeats the entries before it (same uuid); they count
+# once. Each id's subagents are read. The record is keyed by the first id.
+uuid() { jq -c --arg u "$1" '. + {uuid: $u}'; }
+CA=emit-chain-a
+CB=emit-chain-b
+mkdir -p "$PROJECTS/-enc-proj/$CA/subagents" "$PROJECTS/-enc-proj/$CB/subagents"
+HEAD_LINES=$(prompt 'start the chain' | uuid u1; amsg c1 10 '[{"type":"text","text":"first"}]' | uuid u2)
+printf '%s\n' "$HEAD_LINES" > "$PROJECTS/-enc-proj/$CA.jsonl"
+{
+  printf '%s\n' "$HEAD_LINES"
+  prompt 'continue after resume' | uuid u3
+  amsg c2 20 '[{"type":"text","text":"second"}]' | uuid u4
+} > "$PROJECTS/-enc-proj/$CB.jsonl"
+amsg ca1 3 '[{"type":"text","text":"a"}]' > "$PROJECTS/-enc-proj/$CA/subagents/agent-ca.jsonl"
+amsg cb1 4 '[{"type":"text","text":"b"}]' > "$PROJECTS/-enc-proj/$CB/subagents/agent-cb.jsonl"
+
+CHAIN="$ROOT/metrics-chain.jsonl"
+emit --session=$CA,$CB --emit="$CHAIN" --json
+[ "$STATUS" -eq 0 ] && ok || fail "chain: exit 0"
+check '.written == 1' "$OUTPUT" "chain: one session record written (got $OUTPUT; stderr: $ERR)"
+R=$(record '.kind == "session"' "$CHAIN")
+check '.id == "emit-chain-a:session" and .session == "emit-chain-a"' "$R" "chain: keyed by the first id"
+check '.turns == 2' "$R" "chain: the repeated prompt counts once, the resumed one counts (got $(jq -c .turns <<<"$R"))"
+check '.tokens.out == 37 and .subagents == 2' "$R" "chain: both links and both links' subagents (got $(jq -c '[.tokens.out, .subagents]' <<<"$R"))"
+
+# The SessionEnd hook passes its own transcript: it stands for the id it is named after.
+CHAIN2="$ROOT/metrics-chain2.jsonl"
+emit --session=$CA,$CB --transcript="$PROJECTS/-enc-proj/$CB.jsonl" --emit="$CHAIN2" --json
+R2=$(record '.kind == "session"' "$CHAIN2")
+[ -n "$R2" ] && [ "$(jq -c 'del(.start, .end)' <<<"$R2")" = "$(jq -c 'del(.start, .end)' <<<"$R")" ] && ok || fail "chain: --transcript for one link gives the same record"
+
+# One id without a transcript is named on stderr; the rest is still recorded.
+CHAIN3="$ROOT/metrics-chain3.jsonl"
+emit --session=$CA,emit-chain-gone --emit="$CHAIN3" --json
+check '.written == 1' "$OUTPUT" "chain: a missing id does not stop the others"
+grep -q 'no transcript for emit-chain-gone' <<<"$ERR" && ok || fail "chain: the missing id is named on stderr (got: $ERR)"
+
 printf 'friction-scan-emit: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
