@@ -34,10 +34,12 @@ The server watches a directory for HTML files and serves the newest one to the b
 
 ## Starting a Session
 
+`<plugin lib>` below is the resolved path the brainstorm skill gave you. This file is not substituted, and the Bash tool does not export the plugin-root variable.
+
 ```bash
 # Start AFTER the user approves the companion. --open auto-opens their browser on
 # the first screen; --project-dir persists mockups and enables same-port restart.
-${CLAUDE_PLUGIN_ROOT}/lib/brainstorm-server/start-server.sh --project-dir /path/to/project --open
+<plugin lib>/brainstorm-server/start-server.sh --project-dir /path/to/project --open
 
 # Returns: {"type":"server-started","port":52341,
 #           "url":"http://localhost:52341/?key=ab12…",
@@ -58,7 +60,7 @@ Save both `screen_dir` (where you write HTML) and `state_dir` (where you read th
 **If background processes are reaped in your environment:** run in foreground from a persistent terminal session:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/lib/brainstorm-server/start-server.sh --project-dir /path/to/project --foreground
+<plugin lib>/brainstorm-server/start-server.sh --project-dir /path/to/project --foreground
 ```
 
 In `--foreground` mode, the command stays attached and serves until interrupted.
@@ -66,7 +68,7 @@ In `--foreground` mode, the command stays attached and serves until interrupted.
 If the URL is unreachable from your browser (common in remote/containerized setups), bind a non-loopback host:
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/lib/brainstorm-server/start-server.sh \
+<plugin lib>/brainstorm-server/start-server.sh \
   --project-dir /path/to/project \
   --host 0.0.0.0 \
   --url-host localhost
@@ -260,13 +262,13 @@ If the `events` file doesn't exist, the user didn't interact with the browser �
 
 ```bash
 # Pass the SESSION directory — the parent of screen_dir/state_dir, not either of them.
-${CLAUDE_PLUGIN_ROOT}/lib/brainstorm-server/stop-server.sh $SESSION_DIR
+<plugin lib>/brainstorm-server/stop-server.sh $SESSION_DIR
 ```
 
 If the session used `--project-dir`, mockup files persist in `.myspec/brainstorm/` for later reference. Only `/tmp` sessions get deleted on stop.
 
 ## Reference
 
-- Server engine (Node, no dependencies): `${CLAUDE_PLUGIN_ROOT}/lib/brainstorm-server/server.cjs`
-- Frame template (CSS reference): `${CLAUDE_PLUGIN_ROOT}/lib/brainstorm-server/frame-template.html`
-- Helper script (client-side): `${CLAUDE_PLUGIN_ROOT}/lib/brainstorm-server/helper.js`
+- Server engine (Node, no dependencies): `<plugin lib>/brainstorm-server/server.cjs`
+- Frame template (CSS reference): `<plugin lib>/brainstorm-server/frame-template.html`
+- Helper script (client-side): `<plugin lib>/brainstorm-server/helper.js`

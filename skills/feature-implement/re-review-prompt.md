@@ -2,12 +2,7 @@
 
 Dispatch after each fix round (SKILL.md Step 4d). The re-reviewer verifies the findings were addressed and checks the fix diff for new breakage. It is not a fresh phase review — the full review already happened. Dispatch a new re-reviewer every round, never resume the last one: a resumed reviewer carries every earlier round's transcript (one reached 251k tokens), and the rounds summary below carries all it needs from them.
 
-Build the fix-diff package first. `FIX_BASE` is the HEAD the previous review saw — never `HEAD~1`:
-
-```bash
-PKG="$STATE/phase-N-fix-R.diff"   # $STATE: SKILL.md Step 2
-{ git log --oneline "$FIX_BASE"..HEAD; echo; git diff --stat "$FIX_BASE"..HEAD; echo; git diff -U10 "$FIX_BASE"..HEAD; } > "$PKG"
-```
+Build the fix-diff package first: `review-diff.sh` over `FIX_BASE..HEAD` as `$STATE/phase-N-fix-R.diff` (SKILL.md Step 4d gives the call; Step 4b says what its exit 2 means). `FIX_BASE` is the HEAD the previous review saw — never `HEAD~1`.
 
 ```
 Task tool (general-purpose):

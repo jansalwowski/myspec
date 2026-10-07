@@ -2,12 +2,7 @@
 
 Dispatch this reviewer after ALL tasks in a phase complete and worktrees are merged.
 
-Before dispatching, write the review package to one file and substitute its path below. A pasted diff parks itself permanently in the controller's context, and a reviewer without one rebuilds it by hand — the single biggest reviewer cost:
-
-```bash
-PKG="$STATE/phase-N-review.diff"   # $STATE: SKILL.md Step 2
-{ git log --oneline "$PHASE_BASE"..HEAD; echo; git diff --stat "$PHASE_BASE"..HEAD; echo; git diff -U10 "$PHASE_BASE"..HEAD; } > "$PKG"
-```
+Before dispatching, write the review package to one file and substitute its path below. A pasted diff parks itself permanently in the controller's context, and a reviewer without one rebuilds it by hand — the single biggest reviewer cost. Write it with `review-diff.sh` over `PHASE_BASE..HEAD` as `$STATE/phase-N-review.diff` (SKILL.md Step 4b gives the call and what its exit 2 means).
 
 `PHASE_BASE` is the sha recorded before the phase's first dispatch — never `HEAD~1`, which silently drops all but the last commit of a multi-commit phase.
 
@@ -65,6 +60,18 @@ Task tool (general-purpose):
     log holds each check's command, exit code, and output. Read it — do not
     re-run the suite. Another suite run in this worktree races the
     controller's and produces timing flakes.
+
+    ## Per-Task Loop Results (workflow mode only; omit otherwise)
+
+    [Per task: status, open findings, notChecked, notEvidenced, from the
+    implement-phase workflow]
+
+    Before this phase review, a workflow ran each task through an
+    independent verify agent and a standards and spec-contract check. Its
+    open findings are claims, not verdicts. Confirm each one against the
+    diff and report it at its true severity, or reject it with the code you
+    read. `notChecked` and `notEvidenced` list checks nobody ran: the
+    barrier log decides them.
 
     Your review is read-only on this checkout, except for running the
     commands named under Test coverage. Never edit files or mutate the
