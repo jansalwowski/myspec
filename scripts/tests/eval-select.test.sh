@@ -172,12 +172,35 @@ expect_has "--base is honoured" "$out" "base=${BASE:0:12}"
 out=$(MYSPEC_EVALS_DRY_RUN=1 "$RUN" --mode full --out "$TMP/out-full" 2>&1)
 expect_has "full: sonnet arm" "$out" "--model sonnet"
 expect_has "full: haiku arm" "$out" "--model haiku"
-expect_has "full: 3 runs" "$out" "--runs 3"
+expect_lacks "full: no --runs, so each case runs its own count" "$out" "--runs"
+expect_has "full: header says per-case runs" "$out" "runs=per-case"
+out3=$(MYSPEC_EVALS_DRY_RUN=1 "$RUN" --mode full --runs 3 --out "$TMP/out-full3" 2>&1)
+expect_has "full --runs 3: passed through" "$out3" "--runs 3"
 expect_has "full: judge pinned to sonnet" "$out" "--judge-model sonnet"
 expect_has "full: per-model output dir" "$out" "$TMP/out-full/haiku"
 for flag in --trust-plugin --scaffold --no-publish --max-cost-usd --allow-tools; do
   expect_has "full: passes $flag" "$out" "$flag"
 done
+
+echo "# --model-tags (#310)"
+out=$(MYSPEC_EVALS_DRY_RUN=1 "$RUN" --mode full --model-tags haiku=near-miss,planted-flaw --out "$TMP/out-mt1" 2>&1)
+expect_has "full: the tagged model gets one --tag per tag" "$(printf '%s\n' "$out" | grep -- '--model haiku')" "--tag near-miss --tag planted-flaw"
+expect_lacks "full: other models are not filtered" "$(printf '%s\n' "$out" | grep -- '--model sonnet')" "--tag"
+expect_has "full: says how many cases the filter keeps" "$out" "haiku: only cases tagged near-miss or planted-flaw (1 of 3)"
+out=$(MYSPEC_EVALS_DRY_RUN=1 "$RUN" --mode full --model-tags haiku=planted-flaw --out "$TMP/out-mt2" 2>&1); rc=$?
+expect_eq "full: a model no case is tagged for is skipped, exit 0" "$rc $(printf '%s\n' "$out" | grep -c -- '--model haiku')" "0 0"
+expect_has "full: and says so" "$out" "haiku: no selected case is tagged planted-flaw; skipped"
+out=$(MYSPEC_EVALS_DRY_RUN=1 "$RUN" --mode full --models haiku --model-tags haiku=planted-flaw --out "$TMP/out-mt3" 2>&1); rc=$?
+expect_eq "full: nothing left to run at all: exit 0, no command" "$rc $(printf '%s\n' "$out" | grep -c '^dry-run')" "0 0"
+out=$(MYSPEC_EVALS_DRY_RUN=1 "$RUN" --mode full --case 'case-beta' --model-tags haiku=near-miss --out "$TMP/out-mt4" 2>&1)
+expect_eq "full: the filter applies after --case" "$(printf '%s\n' "$out" | grep -c -- '--model haiku')" 0
+git checkout -q s7   # lib.sh change: selects all three cases
+out=$(MYSPEC_EVALS_DRY_RUN=1 "$RUN" --mode changed --models sonnet,haiku --model-tags haiku=near-miss --out "$TMP/out-mt5" 2>&1)
+expect_eq "changed: the tagged model runs only its cases, one invocation each" \
+  "$(printf '%s\n' "$out" | grep -- '--model haiku' | grep -oE -- '--case [a-z-]+' | tr '\n' ' ')" "--case case-alpha-gamma "
+expect_eq "changed: the other model runs every selected case" "$(printf '%s\n' "$out" | grep -c -- '--model sonnet')" 3
+out=$("$RUN" --mode full --model-tags haiku 2>&1); rc=$?
+expect_eq "--model-tags without =tags: exit 2" "$rc" 2
 
 echo "# exit-code contract (stub claude)"
 git checkout -q s1
@@ -376,6 +399,12 @@ for (const name of fs.readdirSync(E)) {
   const tags = tagLine.split(',').map((t) => t.trim()).filter(Boolean);
   const skillTags = new Set(tags.filter((t) => t.startsWith('skill:')).map((t) => t.slice(6)));
   if (!tags.includes('regression') && !tags.includes('capability')) problems.push(`${name}: no tier tag (regression|capability)`);
+  if (tags.includes('regression') && tags.includes('capability')) problems.push(`${name}: two tier tags`);
+  // The release suite runs a capability case once and a regression case the
+  // default 3 times (evals/README.md, "Tiers"); the run count lives in the case.
+  const runs = (prompt.match(/^runs:\s*(\S+)\s*$/m) || [])[1];
+  if (tags.includes('capability') && runs !== '1') problems.push(`${name}: capability case without runs: 1`);
+  if (tags.includes('regression') && runs !== undefined) problems.push(`${name}: regression case sets runs: ${runs} (the default 3 applies)`);
   if (skillTags.size === 0) problems.push(`${name}: no skill:<name> tag`);
   const gdir = path.join(dir, 'graders');
   const graders = fs.existsSync(gdir) ? fs.readdirSync(gdir).map((g) => fs.readFileSync(path.join(gdir, g), 'utf8')) : [];
@@ -391,7 +420,7 @@ for (const name of fs.readdirSync(E)) {
 console.log(problems.join('\n'));
 JS
 lint=$(cd "$SRC_ROOT" && node "$TMP/lint.cjs")
-expect_eq "every case: tier tag, skill tags matching its graders, a deterministic grader" "$lint" ""
+expect_eq "every case: one tier tag and its run count, skill tags matching its graders, a deterministic grader" "$lint" ""
 
 # The tag exemption is the bare built-in shape alone: a sibling grader in the
 # group form still needs its tag even though its pattern never says "myspec".
@@ -405,6 +434,20 @@ printf -- "---\ntype: tool_used\ntool: Skill\ninput_match: '\"skill\"\\\\s*:\\\\
 printf -- "---\ntype: tool_used\ntool: Skill\ninput_match: '\"skill\"\\\\s*:\\\\s*\"code-review\"'\nmin: 0\nmax: 0\n---\n" > "$TMP/lint-evals/bare-builtin/graders/not-code-review.md"
 lint=$(cd "$SRC_ROOT" && node "$TMP/lint.cjs" "$TMP/lint-evals")
 expect_eq "a group-form sibling grader without its tag fails the lint; a bare built-in grader needs none" "$lint" "group-sibling: grader names skill feature-plan but tags lack skill:feature-plan"
+
+# The tier sets the run count: capability cases run once, regression cases 3 times.
+rm -rf "$TMP/lint-evals"
+mkdir -p "$TMP/lint-evals/cap-no-runs/graders" "$TMP/lint-evals/reg-runs/graders" "$TMP/lint-evals/cap-ok/graders"
+printf -- '---\ntags: [skill:feature-spec, capability]\n---\n\nprompt\n' > "$TMP/lint-evals/cap-no-runs/prompt.md"
+printf -- '---\ntags: [skill:feature-spec, regression]\nruns: 1\n---\n\nprompt\n' > "$TMP/lint-evals/reg-runs/prompt.md"
+printf -- '---\ntags: [skill:feature-spec, capability]\nruns: 1\n---\n\nprompt\n' > "$TMP/lint-evals/cap-ok/prompt.md"
+for c in cap-no-runs reg-runs cap-ok; do
+  printf 'context:\n  scaffold_script: fixture.sh\n' > "$TMP/lint-evals/$c/case.yaml"
+  printf -- "---\ntype: file_exists\npath: x\n---\n" > "$TMP/lint-evals/$c/graders/g.md"
+done
+lint=$(cd "$SRC_ROOT" && node "$TMP/lint.cjs" "$TMP/lint-evals" | sort | tr '\n' '|')
+expect_eq "a capability case needs runs: 1, a regression case keeps the default" "$lint" \
+  "cap-no-runs: capability case without runs: 1|reg-runs: regression case sets runs: 1 (the default 3 applies)|"
 
 echo
 echo "$pass passed, $fail failed"

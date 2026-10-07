@@ -6,8 +6,10 @@
 #
 # Placeholder convention:
 #   <repo_root>                       — the current git toplevel
-#   ~/.claude-personal/projects/<encoded_cwd>
-#                                     — the harness-managed per-project memory dir
+#   <config_dir>/projects/<encoded_cwd>
+#                                     — the harness-managed per-project memory
+#                                       store; <config_dir> is
+#                                       $CLAUDE_CONFIG_DIR, default ~/.claude
 #
 # Any other absolute path under $HOME (or starting with /Users//home) cannot
 # be auto-converted and is treated as an error by callers.
@@ -26,7 +28,6 @@ fi
 normalize_path() {
   local abs="$1"
   local repo_root="${2:-}"
-  local home="${HOME:-}"
 
   [ -n "$abs" ] || return 1
 
@@ -49,23 +50,39 @@ normalize_path() {
     esac
   fi
 
-  # Harness per-project memory dir → ~/.claude-personal/projects/<encoded_cwd>/...
-  if [ -n "$home" ]; then
+  # Harness per-project memory store → <config_dir>/projects/<encoded_cwd>/...
+  local rest
+  if rest=$(config_projects_rest "$abs"); then
+    printf '<config_dir>/projects/<encoded_cwd>%s\n' "$rest"
+    return 0
+  fi
+
+  return 1
+}
+
+# config_projects_rest <abs-path> -> for a path under a Claude config dir's
+# projects/ tree, what follows the encoded-cwd segment ("" or "/..."); exit 1
+# for any other path. The config dirs: $CLAUDE_CONFIG_DIR, ~/.claude, and
+# ~/.claude-personal (a common CLAUDE_CONFIG_DIR, recognised when the
+# variable is not exported to this process).
+config_projects_rest() {
+  local abs="$1" dir rest first
+  for dir in "${CLAUDE_CONFIG_DIR:-}" "${HOME:+$HOME/.claude}" "${HOME:+$HOME/.claude-personal}"; do
+    dir="${dir%/}"
+    [ -n "$dir" ] || continue
     case "$abs" in
-      "$home"/.claude-personal/projects/*)
-        local rest="${abs#"$home"/.claude-personal/projects/}"
-        local first="${rest%%/*}"
-        local tail=""
-        if [ "$first" != "$rest" ]; then
-          tail="/${rest#"$first"/}"
+      "$dir"/projects/?*)
+        rest="${abs#"$dir"/projects/}"
+        first="${rest%%/*}"
+        if [ "$first" = "$rest" ]; then
+          printf '\n'
+        else
+          printf '/%s\n' "${rest#"$first"/}"
         fi
-        # shellcheck disable=SC2088 # prints a literal ~ on purpose: the portable form of the path
-        printf '~/.claude-personal/projects/<encoded_cwd>%s\n' "$tail"
         return 0
         ;;
     esac
-  fi
-
+  done
   return 1
 }
 

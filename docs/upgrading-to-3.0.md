@@ -13,7 +13,7 @@ breaking changes are tracked in the
 | Requirement | Why |
 |---|---|
 | **myspec 2.12.0 or later** | 3.0 upgrades only from the last 2.x minor (RELEASING.md, "Upgrade base"). `update` refuses a lower version and names the whole route from the recorded one: below 1.28.0, update with `v1.28.0`, then `v2.12.0`, then 3.0; from 1.28.0 up to 2.12.0, `v2.12.0`, then 3.0. For each release, check out the plugin at its tag, start Claude with `--plugin-dir` pointing at that checkout and run `/myspec:update`. [upgrading-to-2.0.md](upgrading-to-2.0.md) covers the 1.x step. The route is the manifest's `upgradeChain` plus `upgradeFrom`, read by `lib/upgrade-route.mjs`. |
-| **Claude Code 2.0.12 or later** | The hooks run from the plugin's `hooks.json` with `${CLAUDE_PLUGIN_ROOT}`, which arrived in 2.0.12. README "Installation" lists the sources. |
+| **Claude Code 2.1.288 or later** | The milestone probe gate dispatches the plugin agent `myspec:probe-executor`, whose `disallowedTools` removes the edit tools. 2.1.288 is the release where a plugin agent spawned by name in agent teams runs with its own `disallowedTools` ("Fixed agent teams: a plugin-defined agent spawned by name now runs with its own prompt, tools, disallowedTools and effort instead of the defaults"); Agent-tool dispatch enforced it from 2.1.78 (2.1.119 for `--print`), and `omitClaudeMd` needs 2.1.271. The hooks' own needs top out at 2.0.12. README "Installation" lists the sources. |
 | **git 2.31 or later** | `git rev-parse --path-format=absolute`, which the memory scripts and the friction scan need. |
 | **jq 1.6 or later** | Unchanged from 2.x. |
 | **Claude Code, not Codex** | Codex support is gone (see [Codex support removed](#codex-support-removed)). |
@@ -126,7 +126,10 @@ marker never makes a pin look changed.
 
 `update` now asks per pin instead of comparing sizes. A pin whose file equals
 the plugin copy is offered for dropping; when you keep it, `update` records it
-(`--record "<key>"`) so the next upstream change under it is raised. When you
+(`--record "<key>"`) so the next upstream change under it is raised. When both
+you and upstream changed a pinned file since its pin was recorded, `update`
+reports it as `diverged` and offers to keep the pin, merge the upstream change
+by hand, or take the plugin copy. When you
 pin a framework file by hand, run
 `node "<plugin>/lib/pin-reconcile.mjs" --record "<key>"` afterwards.
 
@@ -135,8 +138,10 @@ pin a framework file by hand, run
 `.myspec.json` is schema version 2. Every key it may hold is in
 `lib/myspec-config.schema.json`, and `/myspec:doctor` reports any other as
 `setting-unknown-key`. A `mockups` block is a setting now, so the doctor stops
-warning on it. `orchestration.featureImplement`, `probes.portSource` and
-`probes.scratchEnvScript` are recorded by the schema but not read yet.
+warning on it. `probes.scratchEnvScript` names a script the probe executor
+runs before the first probe that writes, and `probes.portSource` is where
+probe blocks take their ports from. `orchestration.featureImplement` is
+recorded by the schema but not read yet.
 
 ### 8. Old skill names
 

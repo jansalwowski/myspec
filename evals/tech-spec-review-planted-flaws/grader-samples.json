@@ -44,5 +44,17 @@
     "fail": [
       "Review passed — mark tech-spec.md status: approved?"
     ]
+  },
+  "flags-no-verification-mode": {
+    "pass": [
+      "| Medium | Testability | No verification mode | tech-spec.md | 1 | The export derives CSV rows from invoice data but sets no `verification_mode`; `verification_mode: data` with Real inputs would add a probe per milestone. |",
+      "**Medium** — frontmatter has no verification_mode although the design derives output from invoice data.",
+      "verification_mode is missing on a data-deriving export (Medium, does not block planning)."
+    ],
+    "fail": [
+      "verification_mode is not set, so the verification-surface gate is skipped.",
+      "| Medium | Completeness | Edge cases | tech-spec.md | 40 | No case for an empty customer name. |",
+      "No Test Hooks section; none is required without a verification mode."
+    ]
   }
 }

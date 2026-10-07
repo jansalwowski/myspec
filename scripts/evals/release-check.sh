@@ -12,7 +12,11 @@
 #
 #   --version       the version being released (names the baseline file)
 #   --prev-tag      default: the latest tag reachable from HEAD
-#   --runs/--models default: 3 runs, sonnet,haiku (the full release suite)
+#   --runs          default: each case's own count (`runs:` in prompt.md, else
+#                   3; capability cases run once). N runs every case N times.
+#   --models        default: sonnet,haiku. quality/release-check.json
+#                   "modelTags" limits a model to the cases carrying one of
+#                   its tags (haiku: trigger, near-miss), on both sides.
 #   --case          restrict to a case glob: a partial run, never recordable,
 #                   never exit 1
 #   --head-results  reuse an earlier run.sh results dir for HEAD, spend nothing on it
@@ -26,12 +30,15 @@
 #   1. run.sh --mode full on HEAD           → <out>/head/
 #   2. resolve each model alias to its model id (one tiny `claude -p` call per
 #      model; MYSPEC_EVAL_RESOLVE_MODELS=0 skips it, which forces step 3 to
-#      re-run the previous tag next time: an unresolved id is never reused)
+#      re-run the previous tag next time: an unresolved id is never reused),
+#      and hash the workspace each case's fixture builds (workspaces.mjs)
 #   3. previous release: reuse quality/baselines/<prev-tag>.json where it still
 #      holds (baseline.mjs check). Otherwise run the same evals/ against a
 #      temporary git worktree of <prev-tag> with HEAD's evals/ copied in
 #      (same cases, old plugin): the whole suite for models that need it,
-#      single cases whose evals/<case>/ changed for the rest.
+#      single cases whose inputs changed for the rest. After an
+#      evals/_fixtures/ change, the worktree's workspace hashes decide which
+#      cases those are.
 #   4. compare.mjs previous vs HEAD         → report, <out>/compare.json
 #   5. stage baselines and the trend line in <out>/staged/. Nothing touches
 #      quality/ until --record.
@@ -60,9 +67,9 @@ CONFIG="$QUALITY_DIR/release-check.json"
 CLAUDE_BIN="${MYSPEC_EVAL_CLAUDE:-claude}"
 
 die() { echo "release-check: $*" >&2; exit 2; }
-usage() { sed -n '2,52p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; }
 
-VERSION="" PREV_TAG="" RUNS=3 MODELS="sonnet,haiku" CASE_GLOB="" OUT="" HEAD_RESULTS="" SKIP_REASON="" SKIP=0
+VERSION="" PREV_TAG="" RUNS="" MODELS="sonnet,haiku" CASE_GLOB="" OUT="" HEAD_RESULTS="" SKIP_REASON="" SKIP=0
 RECORD_FROM="" CC_MATCH="exact"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -103,7 +110,7 @@ if [ -n "$RECORD_FROM" ]; then
 fi
 
 [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || die "--version X.Y.Z is required"
-case "$RUNS" in ''|*[!0-9]*|0) die "--runs must be a positive integer" ;; esac
+case "$RUNS" in *[!0-9]*|0|0*) die "--runs must be a positive integer" ;; esac
 case "$CC_MATCH" in exact|minor) ;; *) die "--cc-match exact|minor" ;; esac
 
 if [ "$SKIP" = 1 ]; then
@@ -113,18 +120,30 @@ if [ "$SKIP" = 1 ]; then
   exit 0
 fi
 
-# gate seed resamples gate-models: "*" when gateModels is absent (every model
-# gates), "-" for an empty list (none does).
-read -r GATE SEED RESAMPLES GATE_MODELS < <(node -e '
+# gate seed resamples gate-models model-tags: gate-models is "*" when
+# gateModels is absent (every model gates), "-" for an empty list (none does);
+# model-tags is "<model>=<tag>,<tag>;<model>=..." from modelTags, "-" for none.
+read -r GATE SEED RESAMPLES GATE_MODELS MODEL_TAGS < <(node -e '
   const fs = require("fs");
   const c = fs.existsSync(process.argv[1]) ? JSON.parse(fs.readFileSync(process.argv[1], "utf8")) : {};
   const g = c.gateModels;
   if (g !== undefined && !(Array.isArray(g) && g.every((m) => typeof m === "string" && /^[\w.-]+$/.test(m)))) {
     throw new Error("gateModels must be an array of model aliases");
   }
-  console.log([c.gate === true, c.seed ?? 42, c.resamples ?? 10000, g === undefined ? "*" : g.join(",") || "-"].join(" "));
+  const t = c.modelTags ?? {};
+  const okTags = (v) => Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === "string" && /^[\w:.-]+$/.test(x));
+  if (typeof t !== "object" || Array.isArray(t) || !Object.entries(t).every(([m, v]) => /^[\w.-]+$/.test(m) && okTags(v))) {
+    throw new Error("modelTags must map model aliases to non-empty arrays of tags");
+  }
+  const mt = Object.entries(t).map(([m, v]) => `${m}=${v.join(",")}`).join(";") || "-";
+  console.log([c.gate === true, c.seed ?? 42, c.resamples ?? 10000, g === undefined ? "*" : g.join(",") || "-", mt].join(" "));
 ' "$CONFIG") || die "unreadable $CONFIG"
-[ -n "${GATE_MODELS:-}" ] || die "unreadable $CONFIG"
+[ -n "${MODEL_TAGS:-}" ] || die "unreadable $CONFIG"
+TAG_ARGS=()
+if [ "$MODEL_TAGS" != - ]; then
+  IFS=';' read -r -a _mt <<< "$MODEL_TAGS"
+  for e in "${_mt[@]}"; do TAG_ARGS+=(--model-tags "$e"); done
+fi
 
 # gate_models_check <models csv> <where they come from> <verb>: the one rule
 # that keeps the gate from switching off silently. With the gate on and a gateModels
@@ -174,7 +193,9 @@ trap 'echo "release-check: interrupted" >&2; exit 2' INT TERM HUP
 # 0 or 2. run.sh runs in its own process group, in the background, so an
 # interrupt kills it and every eval under it at once instead of waiting.
 run_suite() {
-  local args=(--mode full --runs "$RUNS" --models "$2" --out "$1") glob="${4:-$CASE_GLOB}" rc
+  local args=(--mode full --models "$2" --out "$1") glob="${4:-$CASE_GLOB}" rc
+  [ -n "$RUNS" ] && args+=(--runs "$RUNS")
+  args+=(${TAG_ARGS[@]+"${TAG_ARGS[@]}"})
   [ -n "$glob" ] && args+=(--case "$glob")
   [ -n "${3:-}" ] && args+=(--plugin-dir "$3")
   set -m
@@ -214,7 +235,7 @@ resolve_model_id() {
 json_field() { node -e 'try { console.log(JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))[process.argv[2]] ?? "") } catch { console.log("") }' "$1" "$2"; }
 
 gate_models_check "$MODELS" "--models" run
-echo "release-check: v$VERSION vs ${PREV_TAG:-<no previous tag>} · runs=$RUNS models=$MODELS${CASE_GLOB:+ case=$CASE_GLOB} · gate=$([ "$GATE" = true ] && echo "on ($([ "$GATE_MODELS" = '*' ] && echo "every model: $MODELS" || echo "$GATE_MODELS"))" || echo 'off (report-only)')"
+echo "release-check: v$VERSION vs ${PREV_TAG:-<no previous tag>} · runs=${RUNS:-per-case} models=$MODELS${TAG_ARGS[*]:+ (${MODEL_TAGS//;/, })}${CASE_GLOB:+ case=$CASE_GLOB} · gate=$([ "$GATE" = true ] && echo "on ($([ "$GATE_MODELS" = '*' ] && echo "every model: $MODELS" || echo "$GATE_MODELS"))" || echo 'off (report-only)')"
 echo "release-check: output in $OUT"
 
 # ------------------------------------------------------------------ 1. HEAD
@@ -238,9 +259,13 @@ for m in "${model_list[@]}"; do
   echo "release-check: model $m -> ${id#!}$([ "${id:0:1}" = '!' ] && echo ' (unresolved: the next release re-runs this one)')"
 done
 
+# The workspace each case's fixture builds from this plugin: the next release
+# compares them with its own after an evals/_fixtures/ change.
+node "$SCRIPT_DIR/workspaces.mjs" "$REPO_ROOT" --out "$OUT/head-workspaces.json" || die "cannot hash HEAD's fixture workspaces"
+
 node "$SCRIPT_DIR/baseline.mjs" write "$HEAD_DIR" --out "$OUT/head-baseline.json" --version "$VERSION" \
   --commit "$(git rev-parse HEAD)" --source release --evals-dir "$REPO_ROOT/evals" "${MID_ARGS[@]}" \
-  || die "cannot read HEAD results"
+  --workspaces "$OUT/head-workspaces.json" || die "cannot read HEAD results"
 
 # stage <compare.json or empty>: baselines and trend line into $STAGE.
 stage() {
@@ -267,9 +292,36 @@ fi
 
 # --------------------------------------------------- 3. previous release
 PREV_FILE="$QUALITY_DIR/baselines/$PREV_TAG.json"
-decisions=$(node "$SCRIPT_DIR/baseline.mjs" check "$PREV_FILE" "$OUT/head-baseline.json" --models "$MODELS" \
-  --evals-dir "$REPO_ROOT/evals" --cc-match "$CC_MATCH" ${CASE_GLOB:+--case "$CASE_GLOB"}) \
-  || die "cannot check $PREV_FILE"
+PREV_WS="$OUT/prev-workspaces.json"
+
+# make_prev_worktree: the previous tag in a temporary worktree with HEAD's
+# evals/ copied in (same cases, old plugin), once.
+make_prev_worktree() {
+  [ -z "$WT" ] || return 0
+  git rev-parse --verify --quiet "$PREV_TAG^{commit}" >/dev/null || die "tag not found: $PREV_TAG"
+  local tmp_root="${TMPDIR:-/tmp}"
+  WT_PARENT=$(mktemp -d "${tmp_root%/}/myspec-release-check.XXXXXX") || die "mktemp failed"
+  WT="$WT_PARENT/${PREV_TAG//\//-}"
+  echo "release-check: checking out $PREV_TAG in a temporary worktree $WT"
+  git -C "$REPO_ROOT" worktree add --detach --quiet "$WT" "$PREV_TAG" >/dev/null 2>&1 \
+    || { WT=""; die "git worktree add $PREV_TAG failed"; }
+  rm -rf "$WT/evals" && cp -R "$REPO_ROOT/evals" "$WT/evals" && rm -rf "$WT/evals/results" \
+    || die "cannot copy evals/ into the $PREV_TAG worktree"
+}
+
+check_baseline() {
+  node "$SCRIPT_DIR/baseline.mjs" check "$PREV_FILE" "$OUT/head-baseline.json" --models "$MODELS" \
+    --evals-dir "$REPO_ROOT/evals" --cc-match "$CC_MATCH" ${CASE_GLOB:+--case "$CASE_GLOB"} "$@"
+}
+decisions=$(check_baseline) || die "cannot check $PREV_FILE"
+if printf '%s\n' "$decisions" | grep -q '^WORKSPACES '; then
+  # evals/_fixtures/ changed: hash the workspaces the previous tag's plugin
+  # builds from HEAD's fixtures, and re-run only the cases whose changed.
+  printf '%s\n' "$decisions" | sed 's/^/release-check: baseline /'
+  make_prev_worktree
+  node "$SCRIPT_DIR/workspaces.mjs" "$WT" --out "$PREV_WS" || die "cannot hash $PREV_TAG's fixture workspaces"
+  decisions=$(check_baseline --workspaces "$PREV_WS") || die "cannot check $PREV_FILE"
+fi
 printf '%s\n' "$decisions" | sed 's/^/release-check: baseline /'
 rerun_models=$(printf '%s\n' "$decisions" | awk '$1 == "RERUN" { printf "%s%s", sep, $2; sep = "," }')
 reuse_models=$(printf '%s\n' "$decisions" | awk '$1 == "REUSE" { printf "%s%s", sep, $2; sep = "," }')
@@ -277,15 +329,11 @@ rerun_cases=$(printf '%s\n' "$decisions" | awk '$1 == "RERUN-CASE" { print $2 }'
 
 PREV_SET="$PREV_FILE" PREV_SOURCE="stored baseline" PREV_REFRESHED=""
 if [ -n "$rerun_models" ] || { [ -n "$rerun_cases" ] && [ -n "$reuse_models" ]; }; then
-  git rev-parse --verify --quiet "$PREV_TAG^{commit}" >/dev/null || die "tag not found: $PREV_TAG"
-  tmp_root="${TMPDIR:-/tmp}"
-  WT_PARENT=$(mktemp -d "${tmp_root%/}/myspec-release-check.XXXXXX") || die "mktemp failed"
-  WT="$WT_PARENT/${PREV_TAG//\//-}"
-  echo "release-check: re-running $PREV_TAG in a temporary worktree $WT"
-  git -C "$REPO_ROOT" worktree add --detach --quiet "$WT" "$PREV_TAG" >/dev/null 2>&1 \
-    || { WT=""; die "git worktree add $PREV_TAG failed"; }
-  rm -rf "$WT/evals" && cp -R "$REPO_ROOT/evals" "$WT/evals" && rm -rf "$WT/evals/results" \
-    || die "cannot copy evals/ into the $PREV_TAG worktree"
+  make_prev_worktree
+  echo "release-check: re-running $PREV_TAG in $WT"
+  if [ ! -f "$PREV_WS" ]; then
+    node "$SCRIPT_DIR/workspaces.mjs" "$WT" --out "$PREV_WS" || die "cannot hash $PREV_TAG's fixture workspaces"
+  fi
   if [ -n "$rerun_models" ]; then
     echo "release-check: $PREV_TAG, whole suite: $rerun_models"
     run_suite "$OUT/prev/suite" "$rerun_models" "$WT" || die "$PREV_TAG eval run failed (run.sh exit $?); no verdict"
@@ -298,13 +346,18 @@ if [ -n "$rerun_models" ] || { [ -n "$rerun_cases" ] && [ -n "$reuse_models" ]; 
     done <<< "$rerun_cases"
   fi
   cleanup
-  merge_args=()
-  [ -f "$PREV_FILE" ] && merge_args=(--merge-into "$PREV_FILE" --replace-models "$rerun_models")
-  node "$SCRIPT_DIR/baseline.mjs" write "$OUT/prev" --out "$OUT/prev-baseline.json" --version "${PREV_TAG#v}" \
-    --tag "$PREV_TAG" --commit "$(git rev-parse "$PREV_TAG^{commit}")" --source rerun --evals-dir "$REPO_ROOT/evals" \
-    "${MID_ARGS[@]}" ${merge_args[@]+"${merge_args[@]}"} || die "cannot read $PREV_TAG results"
-  PREV_SET="$OUT/prev-baseline.json" PREV_SOURCE="re-run" PREV_REFRESHED=1
-  [ -z "$rerun_models" ] && PREV_SOURCE="stored baseline, changed cases re-run"
+  if [ -z "$rerun_models" ] && ! find "$OUT/prev" -name aggregate-result.json 2>/dev/null | grep -q .; then
+    # Every changed case was outside the reused models' modelTags.
+    echo "release-check: no changed case runs on $reuse_models; the stored baseline stands"
+  else
+    merge_args=()
+    [ -f "$PREV_FILE" ] && merge_args=(--merge-into "$PREV_FILE" --replace-models "$rerun_models")
+    node "$SCRIPT_DIR/baseline.mjs" write "$OUT/prev" --out "$OUT/prev-baseline.json" --version "${PREV_TAG#v}" \
+      --tag "$PREV_TAG" --commit "$(git rev-parse "$PREV_TAG^{commit}")" --source rerun --evals-dir "$REPO_ROOT/evals" \
+      "${MID_ARGS[@]}" --workspaces "$PREV_WS" ${merge_args[@]+"${merge_args[@]}"} || die "cannot read $PREV_TAG results"
+    PREV_SET="$OUT/prev-baseline.json" PREV_SOURCE="re-run" PREV_REFRESHED=1
+    [ -z "$rerun_models" ] && PREV_SOURCE="stored baseline, changed cases re-run"
+  fi
 fi
 
 # ------------------------------------------------------------ 4. compare

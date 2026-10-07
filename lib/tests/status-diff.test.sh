@@ -62,7 +62,7 @@ eq "$(changes "$ROOT/cap2")" "docs/a.md=$A_BEFORE " \
   "a file dirty before and written again is one; one only staged (content unchanged) is not"
 
 # --- deletion, revert, commit -----------------------------------------------------
-status_capture "$REPO" > "$ROOT/cap3"
+status_capture "$REPO" keep_md > "$ROOT/cap3"
 NEW_BEFORE=$(blob docs/new.md)
 A_DIRTY=$(blob docs/a.md)
 rm "$REPO/docs/new.md"
@@ -71,6 +71,57 @@ printf 'c2\n' >> "$REPO/docs/c.md"
 git -C "$REPO" commit -qam "commit c"
 eq "$(changes "$ROOT/cap3")" "docs/a.md=$A_DIRTY docs/new.md=$NEW_BEFORE " \
   "a deleted file and a reverted one are writes; a file changed and committed in the call is not seen"
+
+# --- files outside the keep set: compared by stat, never read (#305 review) ------
+# field <capture> <rel> -> the state the capture holds for <rel>.
+field() {
+  tr '\0' '\n' < "$1" | awk -v r="$2" 'NR > 3 && (NR - 3) % 2 == 1 && $0 == r { getline; print; exit }'
+}
+printf 'data1\n' > "$REPO/big.bin"
+printf 'kept\n' > "$REPO/docs/k.md"
+status_capture "$REPO" keep_md > "$ROOT/cap8"
+case "$(field "$ROOT/cap8" big.bin)" in
+  s:*) ok ;;
+  *) fail "an unkept file is captured as its stat signature (got '$(field "$ROOT/cap8" big.bin)')" ;;
+esac
+case "$(field "$ROOT/cap8" docs/k.md)" in
+  "$(blob docs/k.md) s:"*) ok ;;
+  *) fail "a kept file is captured as its blob and its signature (got '$(field "$ROOT/cap8" docs/k.md)')" ;;
+esac
+eq "$(changes "$ROOT/cap8")" "" "files dirty before and untouched by the call are not written"
+touch "$REPO/docs/k.md"
+eq "$(changes "$ROOT/cap8")" "" "a kept file whose stat moved but whose content did not is not written"
+printf 'data2\n' > "$REPO/big.bin"
+eq "$(changes "$ROOT/cap8")" "big.bin= " "an unkept file rewritten with the same size is written, with no before blob"
+status_capture "$REPO" keep_md > "$ROOT/cap9"
+touch "$REPO/big.bin"
+eq "$(changes "$ROOT/cap9")" "big.bin= " "an unkept file is not read: a touch counts as a write"
+
+# --- a kept file above the byte cap: stat only, no blob written ---------------------
+printf 'a long doc\n' > "$REPO/docs/k.md"
+K_BLOB=$(blob docs/k.md)
+STATUS_DIFF_KEEP_MAX_BYTES=4 status_capture "$REPO" keep_md > "$ROOT/cap10"
+case "$(field "$ROOT/cap10" docs/k.md)" in
+  s:*) ok ;;
+  *) fail "a kept file above STATUS_DIFF_KEEP_MAX_BYTES is captured by stat (got '$(field "$ROOT/cap10" docs/k.md)')" ;;
+esac
+git -C "$REPO" cat-file -e "$K_BLOB" 2>/dev/null && fail "a kept file above the cap is not written to the object store" || ok
+printf 'more\n' >> "$REPO/docs/k.md"
+eq "$(changes "$ROOT/cap10")" "docs/k.md= " "a write to a kept file above the cap is found, with no before blob"
+
+# --- a stat that cannot answer: the paths are hashed instead ----------------------
+STATUS_STAT=(false)
+status_capture "$REPO" keep_md > "$ROOT/cap11"
+eq "$(field "$ROOT/cap11" big.bin)" "$(blob big.bin)" "stat fallback: an unkept file is hashed"
+K_BLOB=$(blob docs/k.md)
+git -C "$REPO" cat-file -e "$K_BLOB" 2>/dev/null && ok || fail "stat fallback: a kept file's blob is still written"
+eq "$(changes "$ROOT/cap11")" "" "stat fallback: nothing written, nothing found"
+printf 'x\n' >> "$REPO/docs/k.md"
+eq "$(changes "$ROOT/cap11")" "docs/k.md=$K_BLOB " "stat fallback: a write to a kept file is found with its blob"
+unset STATUS_STAT
+# shellcheck source=lib/status-diff.sh
+. "$HERE/../status-diff.sh"
+rm -f "$REPO/big.bin" "$REPO/docs/k.md"
 
 # --- nothing changed --------------------------------------------------------------
 status_capture "$REPO" > "$ROOT/cap4"

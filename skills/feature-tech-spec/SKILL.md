@@ -108,10 +108,10 @@ type Entity {
 
 ### Test Hooks (required when `verification_mode` is set and not `none`)
 The only handles a checkpoint probe may reference. Keep the four line labels exactly — `feature-tech-spec-review` and `feature-plan` read them by name.
-- **Target:** how to serve what the probes hit — the project's own serve command on scratch config and the URL or entry point it exposes (`[scratch serve command]` → `[base URL or entry point]`; name an address the project's everyday dev server does not use)
+- **Target:** how to serve what the probes hit — the project's own serve command on scratch config and the URL or entry point it exposes (`[scratch serve command]` → `[base URL or entry point]`; name an address the project's everyday dev server does not use; when `.myspec.json` sets `probes.portSource`, name the port by its slot in that source instead of a literal port)
 - **Contract surface:** stable, refactor-tolerant handles — `visual`: the UI test tool's stable element identifiers and state attributes on the public surface (on the web `data-testid="report-row"`, `data-state="loading"`; in a native or terminal UI its accessibility identifiers or widget keys); `api`: request/response shapes; `data`: schema expectations. Never style classes, internal element structure, or private state.
 - **Real inputs** (optional): a real corpus the feature's engine must handle, and the invariant it must hold (`fixtures/corpus/*.pdf` — rendered output byte-identical to base). Named here, every milestone touching that path gets a real-input probe.
-- **Scratch environment** (required when `verification_mode` is `visual` or `mixed`, when *Real inputs* is named, or when any probe will mutate data): the concrete database, bucket (every bucket variable), and queue overrides the probes run under. The checklist they must satisfy is [`_shared/scratch-isolation.md`](../_shared/scratch-isolation.md).
+- **Scratch environment** (required when `verification_mode` is `visual` or `mixed`, when *Real inputs* is named, or when any probe will mutate data): the concrete database, bucket (every bucket variable), and queue overrides the probes run under, plus the commands that migrate and seed the scratch database when the probes read it (feature-plan copies them into each milestone's Scratch setup line). The checklist they must satisfy is [`_shared/scratch-isolation.md`](../_shared/scratch-isolation.md).
 
 ### Decisions
 Document key architectural decisions as ADRs:

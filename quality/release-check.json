@@ -1,6 +1,7 @@
 {
   "gate": true,
   "gateModels": ["sonnet"],
+  "modelTags": { "haiku": ["trigger", "near-miss"] },
   "seed": 42,
   "resamples": 10000
 }
