@@ -170,7 +170,7 @@ expect_line 'complete-open .*status=complete but implementation-plan.md is 1/3 \
   "complete with an unarchived plan holding [ ] and [~] tasks is flagged"
 expect_line 'complete-done-plan .*LOW .*should be archived' \
   "complete with a fully ticked unarchived plan keeps the low archive notice"
-expect_no_line 'complete-done-plan .*MEDIUM' \
+expect_no_line 'complete-done-plan .*MEDI' \
   "a fully ticked unarchived plan is not reported as open tasks"
 expect_line 'complete-zero-archive .*archived plans/2026-02-01-plan.md is 0/4 \[x\]' \
   "complete with an archived plan at 0/N is flagged"

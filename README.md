@@ -132,7 +132,8 @@ See [evals/README.md](evals/README.md) and the Quality gates section of [AGENTS.
     "3.0.0-plugin-hooks",
     "3.0.0-reuse-audit",
     "3.0.0-memory-registry",
-    "3.0.0-schema-v2"
+    "3.0.0-schema-v2",
+    "3.1.0-doc-status"
   ]
 }
 ```
