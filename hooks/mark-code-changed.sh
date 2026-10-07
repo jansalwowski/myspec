@@ -1038,14 +1038,33 @@ diff_log() {
   printf '%s %s %s %s\n' "$NOW" "$1" "$SESSION_ID" "$TOOL_USE_ID" >> "$log" 2>/dev/null || true
 }
 
-# diff_capture <dir>...: logs the call's start, then captures the checkout of
-# each directory that files with a tracked home, once each, as
-# <CALL>.0, <CALL>.1, ... in the session's .bash directory (made once per
-# session, not per call).
+# diff_enabled <root> -> 1 when the checkout turns the status diff off,
+# `hooks.markCodeChanged.statusDiff: false`, read from the checkout, else
+# its primary checkout when it has no .myspec.json (as load_settings). The
+# settings reader runs only when the file names the key: this runs at every
+# Bash call, and a process costs it milliseconds.
+diff_enabled() {
+  local src="$1" txt=""
+  if [ ! -f "$src/.myspec.json" ]; then
+    src=$(main_worktree_root "$1" 2>/dev/null) || return 0
+    [ -f "$src/.myspec.json" ] || return 0
+  fi
+  IFS= read -r -d '' txt < "$src/.myspec.json" || true
+  case "$txt" in *'"statusDiff"'*) ;; *) return 0 ;; esac
+  read_setting hooks.markCodeChanged.statusDiff "$src" || return 0
+  [ -z "$SETTING_NOTES" ] || printf '%s\n' "$SETTING_NOTES" | sed 's/^/myspec-config: /' >&2
+  [ "$SETTING" != false ]
+}
+
+# diff_capture <dir>...: captures the checkout of each directory that files
+# with a tracked home and has the status diff on (diff_enabled), once each,
+# as <CALL>.0, <CALL>.1, ... in the session's .bash directory (made once per
+# session, not per call). The call's start is logged before its first
+# capture; a call that captured nothing logs its end at once, so it never
+# stands open in the log for other sessions' diffs.
 diff_capture() {
-  local d root home n=0 done_roots=$'\n' done_dirs=$'\n'
+  local d root home n=0 started=0 done_roots=$'\n' done_dirs=$'\n'
   [ -d "${CALL%/*}" ] || mkdir -p "${CALL%/*}" 2>/dev/null || return 0
-  diff_log start
   for d in "$@"; do
     # Each directory once: a command writing many files in one directory
     # asks git about it once.
@@ -1060,12 +1079,18 @@ diff_capture() {
     case "$done_roots" in *$'\n'"$root"$'\n'*) continue ;; esac
     done_roots="$done_roots$root"$'\n'
     ledger_home_to home "$root" || continue
+    diff_enabled "$root" || continue
+    if [ "$started" = 0 ]; then
+      diff_log start
+      started=1
+    fi
     if ! status_capture "$root" diff_keep > "${CALL:?}.$n" 2>/dev/null; then
       rm -f -- "${CALL:?}.$n"
       continue
     fi
     n=$((n + 1))
   done
+  [ "$started" = 0 ] || [ "$n" -gt 0 ] || diff_log end
 }
 
 # diff_overlap -> 0 when another session ran a Bash call in this repository

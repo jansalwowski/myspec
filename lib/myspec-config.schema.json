@@ -346,6 +346,14 @@
       "issue": ["#231"],
       "description": "Extensions treated as code in addition to the framework's CODE_EXT."
     },
+    "hooks.markCodeChanged.statusDiff": {
+      "file": "project",
+      "type": ["boolean"],
+      "default": true,
+      "issue": ["#276"],
+      "loosens": true,
+      "description": "false stops mark-code-changed.sh reading Bash writes from a git status diff around each Bash call; only the command scanner then names them. For a checkout where `git status --untracked-files=all` is slow."
+    },
     "hooks.markCodeChanged.ignorePaths": {
       "file": "project",
       "type": ["array"],

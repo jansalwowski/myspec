@@ -5,8 +5,8 @@
 # command scanner reads. Covers the issue's repro through the Stop gate, the
 # forms the scanner cannot read, the files a call leaves alone, a checkout
 # reached by `cd`, what stays out of reach (a gitignored file, a call without
-# a tool_use_id, a tree too dirty to capture), and another session's Bash
-# call overlapping this one.
+# a tool_use_id, a tree too dirty to capture, a project that turns the diff
+# off), and another session's Bash call overlapping this one.
 #
 # Usage: mark-code-changed-status-diff.test.sh [path-to-hook]
 
@@ -127,6 +127,17 @@ for i in 1 2 3; do printf 'u\n' > "$REPO/u$i.txt"; done
 STATUS_DIFF_MAX=2 bashcall "$SID-9" "f=docs/n.md; printf 'n\n' > \"\$f\""
 [ -z "$(written "$SID-9")" ] && ok || fail "a tree above STATUS_DIFF_MAX is not diffed (got: $(written "$SID-9"))"
 rm -f "$REPO"/u?.txt "$REPO/docs/n.md"
+
+# --- a project that turns the status diff off -------------------------------------
+cp "$REPO/.myspec.json" "$ROOT/myspec.json.bak"
+printf '{"aiDir":".ai","frameworkVersion":"3.0.0","hooks":{"markCodeChanged":{"statusDiff":false}}}\n' > "$REPO/.myspec.json"
+bashcall "$SID-18" "f=docs/n.md; printf 'n\n' > \"\$f\"; printf 'm\n' > docs/m.md"
+[ "$(written "$SID-18")" = "file docs/m.md," ] && ok \
+  || fail "hooks.markCodeChanged.statusDiff false leaves the scanner's targets only (got: $(written "$SID-18"))"
+grep -q " $SID-18 " "$STATE/bash-calls.log" 2>/dev/null && fail "a call with the status diff off is not in the call log" || ok
+ls "$STATE/$SID-18.bash/$CALL".* >/dev/null 2>&1 && fail "a call with the status diff off leaves no capture" || ok
+cp "$ROOT/myspec.json.bak" "$REPO/.myspec.json"
+rm -f "$REPO/docs/n.md" "$REPO/docs/m.md"
 
 # --- another session's Bash call overlapping this one ---------------------------------
 LOG="$STATE/bash-calls.log"
