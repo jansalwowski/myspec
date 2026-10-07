@@ -224,5 +224,30 @@ expect approve "$(stop 90 "$MAIN_M")" "stale-ref duplicate IDs do not block a st
 mem semantic/S002-z.md S002 ""
 expect block "$(stop 91 "$MAIN_M")" "a memory error the session made still blocks"
 
+# --- a dependency directory with nothing installed (#239) ---------------------------
+# The repo tracks node_modules/.gitkeep (a container's bind mount needs the
+# directory), so a fresh tree has the directory and nothing in it.
+DEPS="$ROOT/deps-repo"
+mkdir -p "$DEPS/node_modules" "$DEPS/.claude"
+git -C "$ROOT" init -q -b main "$DEPS"
+git -C "$DEPS" config user.email t@t
+git -C "$DEPS" config user.name t
+: > "$DEPS/node_modules/.gitkeep"
+printf '{}\n' > "$DEPS/package.json"
+printf '.claude/state/\n' > "$DEPS/.gitignore"
+printf '{"checks":[{"name":"Lint","command":"test -d node_modules/dep || { echo state file missing; exit 1; }","required":true}]}\n' > "$DEPS/.claude/verification.json"
+git -C "$DEPS" add -A
+git -C "$DEPS" commit -q -m init
+R=$(stop_reason 92 "$DEPS")
+expect_in "Dependencies not installed in this tree: $DEPS/node_modules holds node_modules/.gitkeep" "$R" \
+  "a failing check over a placeholder-only node_modules names it first"
+expect_in "[Lint]" "$R" "the check's own failure is still listed"
+printf '{"checks":[{"name":"Lint","command":"true","required":true}]}\n' > "$DEPS/.claude/verification.json"
+expect approve "$(stop 93 "$DEPS")" "a check that passes without the dependencies still passes: the gate does not block on the directory alone"
+printf '{"checks":[{"name":"Lint","command":"false","required":true}]}\n' > "$DEPS/.claude/verification.json"
+mkdir -p "$DEPS/node_modules/dep"
+R=$(stop_reason 94 "$DEPS")
+case "$R" in *"Dependencies not installed"*) fail "installed dependencies get no note" ;; *) ok ;; esac
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

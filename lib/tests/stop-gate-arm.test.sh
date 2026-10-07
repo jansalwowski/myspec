@@ -213,5 +213,45 @@ eq "$(provision_check "$P")" "" "the main checkout is never compared"
 rm "$PW/.claude/state/provision.json"
 eq "$(provision_check "$PW")" "" "a worktree without a record is not compared"
 
+# --- deps_not_installed and deps_note (#239) ------------------------------------------------
+D="$ROOT/deps"
+mkdir -p "$D/node_modules" "$D/vendor" "$D/apps/web/node_modules" "$D/.venv"
+git_ init -q -b main "$D"
+printf '{}\n' > "$D/package.json"
+printf '{}\n' > "$D/composer.json"
+printf '{}\n' > "$D/apps/web/package.json"
+printf 'x\n' > "$D/requirements.txt"
+: > "$D/node_modules/.gitkeep"
+: > "$D/apps/web/node_modules/.keep"
+git_ -C "$D" add -A && git_ -C "$D" commit -q -m init
+eq "$(deps_not_installed "$D" | cut -f1,2 | tr '\t\n' ':|')" "node_modules:node_modules/.gitkeep|vendor:nothing|.venv:nothing|" \
+  "placeholder-only and empty dependency directories beside their manifests"
+: > "$D/node_modules/.package-lock.json"
+: > "$D/vendor/autoload.php"
+: > "$D/.venv/pyvenv.cfg"
+eq "$(deps_not_installed "$D")" "" "an install-state marker means installed (npm, Composer, a venv)"
+rm "$D/node_modules/.package-lock.json" "$D/vendor/autoload.php" "$D/.venv/pyvenv.cfg"
+mkdir -p "$D/node_modules/dep"
+: > "$D/vendor/untracked.php"
+mkdir -p "$D/.venv/bin"
+eq "$(deps_not_installed "$D")" "" "an installed package (a directory or an untracked file) means installed, marker or not"
+rm -r "$D/node_modules/dep" "$D/vendor/untracked.php" "$D/.venv/bin"
+rm "$D/composer.json" "$D/requirements.txt"
+eq "$(deps_not_installed "$D" | cut -f1)" "node_modules" "a directory without its manifest is not a dependency directory"
+mv "$D/node_modules" "$D/nm-real" && ln -s "$D/nm-real" "$D/node_modules"
+eq "$(deps_not_installed "$D")" "" "a link is provision's, not this check's"
+rm "$D/node_modules" && mv "$D/nm-real" "$D/node_modules"
+FAILED_CWDS=("" "apps/web")
+DEPS_NOTES=()
+deps_note "$D" 1
+eq "${#DEPS_NOTES[@]}" 2 "deps_note: the root and a failed check's cwd"
+case "${DEPS_NOTES[1]:-}" in
+  "Dependencies not installed in this tree: $D/apps/web/node_modules holds node_modules/.keep (tracked by git)"*) ok ;;
+  *) fail "deps_note names the cwd's directory and its placeholder (got: ${DEPS_NOTES[1]:-})" ;;
+esac
+DEPS_NOTES=()
+deps_note "$D" 2
+eq "${#DEPS_NOTES[@]}" 0 "deps_note: no failed check, no note"
+
 printf '\nstop-gate-arm: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
