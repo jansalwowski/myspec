@@ -93,6 +93,12 @@ feat(favorite-reports): add StarButton component
 feat(favorite-reports): pin favorited reports to top of list
 ```
 
+The progress note carries the phase's wall-clock time per stage, read from the timestamps the controller appended to `.claude/state/implement/favorite-reports/phase-1.times`, and the same line goes to the Execution Log as `Timing (Phase 1)`:
+
+```
+✓ Phase 1 complete: Favorites end to end — 52m (implement 31m · barrier 5m · review 16m · fixes 0 rounds 0m)
+```
+
 This is the only milestone, so the skill goes directly to Step 5 (no Milestone Checkpoint prompt).
 
 #### Step 5 — Completion + review choice
@@ -307,3 +313,72 @@ User: `clean`. The skill runs `"${CLAUDE_PLUGIN_ROOT}/lib/task-worktree.sh" disc
 - **`[~]` never silently becomes `[x]`.** The only route to `[x]` is completing the task *and* passing review in the current run, so an interruption always re-runs the in-flight task — it never accidentally skips work.
 - **Stale worktrees are a real failure mode** and the skill checks for them under `.claude/worktrees/`. Left behind, they collide with new dispatches or leak half-finished code into the merge. Pruning before re-dispatch is the safe default.
 - **`stop` / `fresh` at a milestone checkpoint is the clean way to preempt this.** A user who expects to be interrupted can exit at a milestone boundary, leaving no `[~]` markers and a fully committed tree to resume from.
+
+## Concurrent phases without a parallel marker
+
+A plan for `report-exports`, written by `feature-plan` after this feature shipped, has no `[parallel:*]` group. Its front-matter carries `auto_parallel_phases: true`, and its Execution Order table lets Phases 2 and 3 run at once:
+
+```yaml
+---
+title: "Report Exports -- Implementation Plan"
+feature: report-exports
+planned_against: 9b1c…
+auto_parallel_phases: true
+---
+```
+
+```markdown
+| Phase | Tasks | Mode | Depends On |
+|-------|-------|------|------------|
+| 1 | Task 1: export_jobs table | sequential | — |
+| 2 | Task 2: CSV writer, Task 3: CSV writer tests for unicode | sequential | Phase 1 |
+| 3 | Task 4: export settings page | sequential | Phase 1 |
+| 4 | Task 5: wire settings to the writer | sequential | Phase 2, Phase 3 |
+```
+
+### Skill flow
+
+1. **Step 1** sees `auto_parallel_phases: true` and finds Phases 2 and 3 concurrent. Neither reaches the other through `Depends On`. Neither consumes what the other produces: Task 4's Consumes names only Task 1's `ExportJob`. Their Files and Touch only paths (`src/exports/csv/…` and `web/settings/exports/…`) share nothing, and no task runs a generator or adds a migration. It logs `Ruling: Phases 2 and 3 run concurrently — no Depends On path, no Consumes/Produces link, disjoint Files/Touch only — cost if wrong: a merge conflict at the second phase's barrier`.
+2. **Step 3** runs Phase 1 as usual. It then creates `report-exports-p2` and `report-exports-p3` with `task-worktree.sh create`, marks Tasks 2 and 4 `[~]`, and dispatches both implementers in one message. Task 3 follows Task 2 inside the Phase 2 worktree.
+3. Phase 3 finishes first. The controller records its `PHASE_BASE`, merges `report-exports-p3`, runs the full suite, and dispatches the phase reviewer on that phase's package alone. Phase 2's implementers keep working meanwhile.
+4. After Phase 3 is marked complete, Phase 2 gets the same treatment: base, merge, suite, review, and a fix round that runs in the controller's checkout.
+5. Phase 4 depends on both, so it waits for both and runs serially.
+
+### Why this example matters
+
+- **`Depends On` is the contract.** The controller never parallelizes two phases the table links, and it never guesses disjointness from code. Only the Files and Touch only lines count.
+- **Review semantics do not change.** Each phase still gets its own barrier suite, review package and fix loop. Only the implementers overlap.
+- **Opt-in per plan.** Only a plan with `auto_parallel_phases: true` runs phases concurrently. `feature-plan` writes the key into every new plan. A plan written before the key existed has none and runs serially, exactly as before. A new plan whose author relies on table order adds the missing `Depends On` edge, or sets the key to `false`.
+
+## Workflow mode for the per-task loop
+
+The project opted in with `.myspec.json` → `"orchestration": {"featureImplement": "workflow"}`, and the session has the Workflow tool. The plan is `invoice-due-dates`: one sequential phase, Task 1 (due-date rules, `mid`) and Task 2 (API fields, `cheap`).
+
+### Skill flow
+
+1. **Step 1** reads the key with `myspec-config.sh get orchestration.featureImplement`, which prints `"workflow"`, and the Workflow tool is present. Had it been missing, the skill would print "Workflow mode is unavailable in this session (no Workflow tool), so feature-implement runs in controller mode." and carry on as usual.
+2. **Step 3** records `PHASE_BASE` and marks both tasks `[~]`, as in controller mode. It fills `implementer-prompt.md` for each task, but instead of dispatching them it starts one workflow:
+
+   ```
+   Workflow({ name: "myspec:implement-phase",
+              args: { feature: "invoice-due-dates", phase: 1, mode: "sequential",
+                      phaseBase: "<PHASE_BASE>", stateDir: "<checkout>/.claude/state/implement/invoice-due-dates",
+                      planPath: ".ai/features/invoice-due-dates/implementation-plan.md",
+                      models: { cheap: "<small model>", mid: "<mid model>", premium: "<top model>" },
+                      reviewDiff: "<plugin>/lib/review-diff.sh", standards: [".claude/rules/conventions.md"],
+                      tasks: [ { id: 1, tier: "mid", workdir: "<checkout>", implementerPrompt: "…",
+                                 files: ["src/billing/due_dates.py", "tests/test_due_dates.py"],
+                                 verifyCommand: "pytest tests/test_due_dates.py", scopedChecks: ["ruff check src/billing/due_dates.py"],
+                                 specContract: "- spec.md REQ-005: \"A paid invoice is never overdue, whatever its due date.\"" },
+                               { id: 2, tier: "cheap", … } ] } })
+   ```
+
+3. **Inside the workflow**, Task 1's implementer reports DONE. The verify agent never saw the implementation. It runs `pytest tests/test_due_dates.py`, which exits 1: a paid invoice past its due date is reported overdue. That costs fix round 1 on the `mid` tier, and the second verify passes. The cheap check then claims a function name breaks the conventions file. The mid-tier re-judge reads the rule and rejects the claim, so it costs nothing. Task 2 diffs from the head Task 1's last verify saw and passes on its first run. Its implementer also reported running `mypy src`, which the verify agent never ran, so that claim lands in `notEvidenced`.
+4. **The result** is `DONE` for both tasks, and Task 2 carries one `notEvidenced` entry. The controller runs the barrier suite, builds the review package with `review-diff.sh`, and dispatches the phase reviewer. The prompt's "Per-Task Loop Results" section tells the reviewer that `mypy src` was claimed but never verified. The barrier log, not the claim, decides it.
+5. Phase review, fix loop, checkbox flips, Execution Log, probes and the milestone checkpoint all run exactly as in controller mode.
+
+### Why this example matters
+
+- **A better diff before the phase review.** The failing pytest was caught and fixed inside the task loop by an agent that did not write the code. The phase reviewer gets a green phase, not a fix round.
+- **Every gate stays with the controller.** The workflow returns statuses. It never flips a checkbox, merges, runs the barrier, or rules on a finding.
+- **Opt-in, and it falls back.** The default `"controller"`, an unknown value, or a session without the Workflow tool all run controller mode, so no plan or project needs to change.

@@ -31,6 +31,10 @@ Use [Conventional Commits](https://www.conventionalcommits.org/) — `<type>(<sc
 
 Since 3.0 the repo is a Claude Code plugin only: the Codex `plugins/myspec/` mirror and `.codex-plugin/` are gone (#143), so every tree has one copy. The root `hooks.json` stays: `.claude-plugin/plugin.json` declares it as the plugin hook manifest.
 
+## Workflow scripts are Claude Code only
+
+`workflows/*.js` are plugin Workflow scripts, run by Claude Code's Workflow tool: `feature-implement` starts `myspec:implement-phase` when `orchestration.featureImplement` is `"workflow"` (#247). No other harness has the tool, and none needs a port: the skill checks for the tool and otherwise prints one line and runs controller mode, which is complete on its own. So a workflow script may only add a way to run a step, never hold a gate. The controller keeps every checkbox, barrier, review and ruling, so a session without workflows loses speed, not checks. The runtime evaluates a script as a module body with top-level `await` and `return`, its globals (`args`, `agent`, `parallel`, `phase`, `log`, …), no Node API, and no `Date.now()` or `Math.random()`. `scripts/lint-js.sh` lints each script wrapped the same way, and a stub runtime in `scripts/tests/` tests its control flow.
+
 ## Examples track skills
 
 `examples/` is human documentation of skill behavior and drifts silently (the Reuse-audit section shipped in v1.14.0 and reached the examples only in the 2026-07 audit). When a PR changes a skill's workflow, outputs, or gates, update the matching `examples/skills/*.md` / `examples/flows/*.md` in the same PR or state in the PR body that examples were checked and unaffected.
@@ -60,7 +64,7 @@ Each check sits in the cheapest layer that can catch its failure. The reasoning 
 | Layer | What | Where it runs |
 |-------|------|---------------|
 | Static lint | `node scripts/lint-skills.mjs`: frontmatter, "Use when" + "Do NOT" description rules, dead links and anchors, step pointers, size budget | pre-commit (staged content), CI |
-| JS lint | `scripts/lint-js.sh`: pinned `eslint:recommended` on `lib/`, the JS the plugin runs in every consumer's sessions (nothing is copied into projects since 3.0, #272) | pre-commit (staged lib JS, skipped when eslint can't run), CI |
+| JS lint | `scripts/lint-js.sh`: pinned `eslint:recommended` on `lib/` and `workflows/`, the JS the plugin runs in every consumer's sessions (nothing is copied into projects since 3.0, #272) | pre-commit (staged lib and workflow JS, skipped when eslint can't run), CI |
 | Shell lint | `scripts/lint-sh.sh`: ShellCheck at default severity on `hooks/` and `lib/` (tests included). Suppress with an inline `# shellcheck disable=SCxxxx # reason`; the `tests/.shellcheckrc` files cover only the assertion idioms | pre-commit (staged scripts, skipped when shellcheck is absent), CI (pinned version) |
 | Deterministic tests | `lib/tests`, `hooks/tests`, `scripts/tests` | CI; run locally with `TZ=UTC` |
 | Behavioural evals | `evals/` via `scripts/evals/run.sh` (`claude plugin eval`) | pre-push (changed skills only, 1 run, Sonnet, report-only), `/release` (full suite) |

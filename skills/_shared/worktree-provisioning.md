@@ -2,6 +2,8 @@
 
 A linked worktree is a bare checkout: no installed dependencies (`node_modules`, `vendor`, `.venv`), no lint cache, no generated config. Lint and tests fail there on a branch that is otherwise clean (issue #11), and every agent used to re-invent the same workaround inside its own prompt. The recipe lives here once; `feature-implement`, `work-isolation.md`, and `promote-to-worktree.sh` point at it.
 
+`<plugin lib>` below is the plugin's `lib` directory. The skill that sent you here states its resolved path, and a hook's block message prints the commands already resolved. The plugin-root variable is not substituted in this file and the Bash tool does not export it, so a command typed with it runs `/lib/…`.
+
 ## Create
 
 ```bash
@@ -13,7 +15,7 @@ Base on `origin/<default-branch>`, not the local branch: a PR based on a local b
 ## Provision
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/lib/worktree-provision.sh" <worktree-path> --base origin/<default-branch>
+"<plugin lib>/worktree-provision.sh" <worktree-path> --base origin/<default-branch>
 ```
 
 Read from `.myspec.json` `isolation.provision` in the worktree (the branch's own settings), or in the main checkout when the worktree has none. The steps run in this order:
@@ -57,9 +59,9 @@ Rules the script enforces or the recipe relies on:
 Harness `isolation: "worktree"` forks from the default branch, so a parallel task after the first phase cannot see the feature commits it builds on. The controller creates each task's worktree itself, from its own checkout on the feature branch, with its work committed:
 
 ```bash
-"${CLAUDE_PLUGIN_ROOT}/lib/task-worktree.sh" create <slug> [--no-symlink]   # prints the worktree path
-"${CLAUDE_PLUGIN_ROOT}/lib/task-worktree.sh" merge <slug>                   # at the barrier, one task at a time
-"${CLAUDE_PLUGIN_ROOT}/lib/task-worktree.sh" discard <slug>                 # stale worktree from an interrupted run
+"<plugin lib>/task-worktree.sh" create <slug> [--no-symlink]   # prints the worktree path
+"<plugin lib>/task-worktree.sh" merge <slug>                   # at the barrier, one task at a time
+"<plugin lib>/task-worktree.sh" discard <slug>                 # stale worktree from an interrupted run
 ```
 
 `create` branches `<feature-branch>--<slug>` at the controller's HEAD and provisions it with the controller's checkout as the link source, whose linked dependency directories already match the feature's lockfiles. `merge` merges into the controller's branch, then removes the worktree and branch; on a conflict it stops mid-merge — resolve, commit, and rerun it to clean up. Worktrees land under `isolation.worktreeRoot` (default `.claude/worktrees`), and a `create` that fails midway removes what it made, including a worktree whose install step failed.

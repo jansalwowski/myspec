@@ -183,6 +183,18 @@ in_repo git commit -qm "clean staged, bad on disk"
 expect_exit 0 "a clean staged blob passes even when the disk copy is bad"
 git checkout -q -- skills/sneaky/SKILL.md
 
+# A staged reference file gets PLUGIN-ROOT-REF only (#313).
+mkdir -p skills/sneaky/references
+printf '# Ref\n\nRun "${CLAUDE_PLUGIN_ROOT}/lib/x.sh".\n' > skills/sneaky/references/ref.md
+git add skills/sneaky/references/ref.md
+in_repo git commit -qm "reference names the plugin root"
+expect_exit 1 "a staged reference file naming the plugin root blocks the commit"
+expect_line "skills/sneaky/references/ref\.md:3: PLUGIN-ROOT-REF" "the reference finding is shown"
+printf '# Ref\n\nRun "<plugin lib>/x.sh".\n' > skills/sneaky/references/ref.md
+git add skills/sneaky/references/ref.md
+in_repo git commit -qm "reference uses plugin lib"
+expect_exit 0 "a clean staged reference file passes"
+
 bad_skill skills/partial/SKILL.md partial
 git add skills/partial/SKILL.md && git commit -q --no-verify -m "seed partial"
 good_skill skills/partial/SKILL.md partial
@@ -306,6 +318,13 @@ git add lib/ok.mjs
 PATH="$TMP/bin:$PATH" in_repo git commit -qm "clean lib js"
 expect_exit 0 "a clean staged lib JS file passes"
 expect_no_line "lib/bad\.mjs" "an unstaged lib JS file is not linted"
+mkdir -p workflows
+echo 'const unusedVar = 1' > workflows/bad.js
+git add workflows/bad.js
+PATH="$TMP/bin:$PATH" in_repo git commit -qm "bad workflow js"
+expect_exit 1 "a staged workflow script with an eslint finding blocks the commit"
+expect_line "^workflows/bad\.js$" "the workflow finding is shown with a repo-relative path"
+git reset -q
 
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

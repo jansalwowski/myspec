@@ -9,7 +9,8 @@
 // and a hook that cries wolf teaches `--no-verify`.
 //
 // Usage:
-//   node scripts/lint-skills.mjs                      lint <root>/skills/*/SKILL.md
+//   node scripts/lint-skills.mjs                      lint <root>/skills/*/SKILL.md, plus
+//                                                     PLUGIN-ROOT-REF on every other skills/**/*.md
 //   node scripts/lint-skills.mjs --files a.md b.md    lint only these files
 //   options: --root <dir>  repo root (default: this script's repo)
 //            --json        machine-readable output on stdout
@@ -445,6 +446,39 @@ function lintFile(absPath, ctx) {
 
 // ── main ─────────────────────────────────────────────────────────────────────
 
+// A non-SKILL.md file under skills/ (references/, prompt templates, _shared/)
+// reaches the model through Read, where `${CLAUDE_PLUGIN_ROOT}` stays literal,
+// and the Bash tool does not export it: the command runs `/lib/x.sh` (#313,
+// reproduced on Claude Code 2.1.292). Only a SKILL.md body and a plugin agent
+// body are substituted. Such a file names `<plugin lib>/x.sh`, and the SKILL.md
+// that routes there states the resolved path.
+const PLUGIN_ROOT_RE = /\$\{?CLAUDE_PLUGIN_ROOT\b/;
+
+function lintReference(absPath) {
+  const findings = [];
+  fs.readFileSync(absPath, 'utf8').split('\n').forEach((l, i) => {
+    if (PLUGIN_ROOT_RE.test(l)) {
+      findings.push({
+        line: i + 1,
+        rule: 'PLUGIN-ROOT-REF',
+        message: '${CLAUDE_PLUGIN_ROOT} is substituted only in SKILL.md bodies; a file read with Read keeps it literal and Bash expands it to empty. Write `<plugin lib>/…` and state the resolved path in the routing SKILL.md (#313)',
+        severity: 'error',
+      });
+    }
+  });
+  return findings;
+}
+
+function referenceFiles(dir) {
+  const out = [];
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) out.push(...referenceFiles(p));
+    else if (e.isFile() && e.name.endsWith('.md') && e.name !== 'SKILL.md') out.push(p);
+  }
+  return out;
+}
+
 function main() {
   const opts = parseArgs(process.argv.slice(2));
   let files;
@@ -463,10 +497,15 @@ function main() {
       .sort();
   }
 
+  // Default mode also walks every other Markdown file under skills/, _shared/
+  // included, for PLUGIN-ROOT-REF; --files routes a non-SKILL.md path there.
+  if (!opts.files) files = files.concat(referenceFiles(path.join(opts.root, 'skills')).sort());
+
   const results = [];
   for (const f of files) {
     const rel = path.relative(process.cwd(), f) || f;
-    for (const x of lintFile(f, opts)) results.push({ path: rel, ...x });
+    const found = path.basename(f) === 'SKILL.md' ? lintFile(f, opts) : lintReference(f);
+    for (const x of found) results.push({ path: rel, ...x });
   }
   const errors = results.filter((r) => r.severity === 'error').length;
   const warnings = results.length - errors;
