@@ -180,7 +180,7 @@ eq "$CF_ROOT|$CF_MAIN|$CF_LINKED" "||0" "a failed call clears the facts"
 
 # Cache: a second call for the same place is answered without git.
 checkout_facts "$ROOT/plain/src"
-# shellcheck disable=SC2317 # the stub runs only if the cache misses
+# shellcheck disable=SC2317,SC2329 # the stub runs only if the cache misses
 eq "$(git() { return 1; }; checkout_facts "$ROOT/plain/src" && printf '%s' "${CF_ROOT#"$ROOT"/}")" "plain" "a repeated call is answered from the cache"
 
 # The superproject lookup runs `git ls-files` in the parent repository: asked
@@ -206,7 +206,7 @@ old_git() {
   command git "${args[@]}"
 }
 old_facts() {  # old_facts <path> [git-dirs] -> facts, or the dirs, under old_git
-  # shellcheck disable=SC2317 # called through checkout_facts
+  # shellcheck disable=SC2317,SC2329 # called through checkout_facts
   git() { old_git "$@"; }
   CF_KEY=""
   if [ -n "${2:-}" ]; then
