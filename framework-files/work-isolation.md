@@ -1,7 +1,7 @@
 ---
 title: "Work Isolation Procedure"
 purpose: "How to ask, record, and carry out the develop-vs-worktree decision once an isolation hook blocks"
-updated: 2026-10-01
+updated: 2026-10-07
 ---
 
 # Work Isolation Procedure (develop vs worktree)
@@ -10,7 +10,9 @@ updated: 2026-10-01
 
 Where code gets written is the user's call, not the agent's. `require-isolation-decision.sh` (PreToolUse `Write|Edit`) blocks the first source edit in the main checkout until the answer is recorded; `guard-worktree-context.sh` (PreToolUse `Bash`) blocks branch mutations on the main checkout always, and tree-specific commands there once a session has chosen a worktree.
 
-Edits under `${aiDir}/`, `.claude/`, `docs/` and the root agent files never trigger the **question** — doc work is not gated on an isolation decision. They are *not* exempt from an answer already given: once a session is in worktree mode, a doc edit aimed at the main checkout is blocked like any other. Two paths are pinned to the main checkout whatever the answer: `.claude/state/` (live session logs, session-state files, the ID registry) and `${aiDir}/memory/sessions/` (the session archive).
+Edits under `${aiDir}/`, `.claude/`, `docs/` and the root agent files never trigger the **question** — doc work is not gated on an isolation decision — unless `.myspec.json` sets `isolation.gateDocs: true`, which asks it for them too. They are *not* exempt from an answer already given: once a session is in worktree mode, a doc edit aimed at the main checkout is blocked like any other. Two paths are pinned to the main checkout whatever the answer: `.claude/state/` (live session logs, session-state files, the ID registry) and `${aiDir}/memory/sessions/` (the session archive); `isolation.gateDocs` never gates them.
+
+The question is asked on the file-edit tools (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`) only. A file written through `Bash` (a redirect, `sed -i`, `tee`) is recorded by `mark-code-changed.sh` but never blocked, so an agent that writes source that way skips the question: ask it before such a write the same way.
 
 ## At the start
 

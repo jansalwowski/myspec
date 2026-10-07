@@ -23,6 +23,7 @@
 # the defaults are its schema's):
 #   aiDir                       doc tree; edits there never trigger the prompt
 #   isolation.worktreeRoot      where worktrees live
+#   isolation.gateDocs          true: the exempt doc paths are asked too (#329)
 #
 # Output contract: a block prints the PreToolUse deny form (pretool_deny in
 # lib/hook-core.sh). An allowed edit prints NOTHING.
@@ -175,6 +176,15 @@ for EXEMPT in "${EXEMPT_FILES[@]}"; do
     IS_EXEMPT=1
   fi
 done
+
+# isolation.gateDocs (#329, opt-in): the exempt paths are asked too. Read only
+# for an exempt path, so a source edit's path through the hook is unchanged.
+# Anything but a literal true keeps the default; the pinned paths above
+# returned before this point and stay exempt.
+if [ "$IS_EXEMPT" -eq 1 ] && read_setting isolation.gateDocs "$REPO_ROOT"; then
+  [ -z "$SETTING_NOTES" ] || printf '%s\n' "$SETTING_NOTES" | sed 's/^/myspec-config: /' >&2
+  [ "$SETTING" != "true" ] || IS_EXEMPT=0
+fi
 
 DEFAULT_BRANCH=$(git -C "$REPO_ROOT" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || printf '')
 DEFAULT_BRANCH="${DEFAULT_BRANCH#origin/}"

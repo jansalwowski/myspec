@@ -117,6 +117,7 @@ The framework never names a container runtime: the command is the project's, and
 | `blockInMain` | list of anchored ERE | the built-in list (see schema) | exists; default #250 | Commands blocked in the main checkout while a session is in worktree mode. The default is the guard's former `HEAVY_PATTERNS`: builds, installs, e2e runs, `lint:fix`, `docker compose exec`, `git push`, `git worktree prune`, for the JS, PHP, Python, Ruby, Rust, Go, JVM (Maven, Gradle), .NET and Make stacks. A project's entries extend it. |
 | `ignoreBlockInMain` | list of anchored ERE | `[]` | #250 | Default `blockInMain` entries, by their exact text, that the guard drops. Loosens the gate, so doctor lists it. |
 | `allowLinkedModules` | bool | `false` | exists | Read by `worktree-provision.sh` only (#239): link a dependency tree even when its lockfiles differ from the main checkout's, and record it without lockfile hashes, so the Stop gate does not compare them. Loosens the gate. |
+| `gateDocs` | bool | `false` | #329 | `require-isolation-decision.sh` asks the develop-vs-worktree question for edits under `aiDir`, `.claude/`, `docs/` and the root agent files too, which are otherwise exempt from it. The paths pinned to the main checkout stay exempt. Only Write/Edit are gated; a Bash write is recorded, never blocked. |
 | `worktreeRoot` | repo-relative path | `.claude/worktrees` | exists | Where worktrees are created. |
 
 ### Mockups: `.myspec.json` `mockups`

@@ -99,7 +99,7 @@ BLOCK_DEFAULT=$(jq -c '.keys["isolation.blockInMain"].default' "$SCHEMA")
 # Objects merge key by key: a project value replaces one leaf, defaults keep the rest.
 D=$(fixture objects '{"isolation":{"worktreeRoot":"wt","provision":{"clean":["**/*.tsbuildinfo"]}},"custom":{"a":1}}')
 read_both "$D" isolation
-expect "object merge" '{"blockInMain":'"$BLOCK_DEFAULT"',"ignoreBlockInMain":[],"allowLinkedModules":false,"worktreeRoot":"wt","provision":{"symlink":["node_modules"],"copy":[".eslintcache"],"clean":["**/*.tsbuildinfo"]}}'
+expect "object merge" '{"blockInMain":'"$BLOCK_DEFAULT"',"ignoreBlockInMain":[],"allowLinkedModules":false,"gateDocs":false,"worktreeRoot":"wt","provision":{"symlink":["node_modules"],"copy":[".eslintcache"],"clean":["**/*.tsbuildinfo"]}}'
 read_both "$D" custom.a; expect "unknown keys pass through" '1'
 
 # A replace list (existing keys, principle 2) drops the default; an extend list keeps it.

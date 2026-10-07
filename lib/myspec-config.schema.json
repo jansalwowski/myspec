@@ -227,6 +227,13 @@
       "loosens": true,
       "description": "Read by worktree-provision.sh only: link a dependency tree even when its lockfiles differ from the main checkout's, and record it without lockfile hashes, so the Stop gate does not compare them."
     },
+    "isolation.gateDocs": {
+      "file": "project",
+      "type": ["boolean"],
+      "default": false,
+      "issue": ["#329"],
+      "description": "Read by require-isolation-decision.sh: ask the develop-vs-worktree question for edits under aiDir, .claude/, docs/ and the root agent files too, which are otherwise exempt from it. The paths pinned to the main checkout stay exempt."
+    },
     "isolation.worktreeRoot": {
       "file": "project",
       "type": ["string"],
