@@ -306,6 +306,13 @@ git add lib/ok.mjs
 PATH="$TMP/bin:$PATH" in_repo git commit -qm "clean lib js"
 expect_exit 0 "a clean staged lib JS file passes"
 expect_no_line "lib/bad\.mjs" "an unstaged lib JS file is not linted"
+mkdir -p workflows
+echo 'const unusedVar = 1' > workflows/bad.js
+git add workflows/bad.js
+PATH="$TMP/bin:$PATH" in_repo git commit -qm "bad workflow js"
+expect_exit 1 "a staged workflow script with an eslint finding blocks the commit"
+expect_line "^workflows/bad\.js$" "the workflow finding is shown with a repo-relative path"
+git reset -q
 
 printf '\n%s passed, %s failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
