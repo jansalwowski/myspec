@@ -92,7 +92,7 @@ results lint='app.ts:1 BROKEN'
 attribute_failures
 eq "$ATTRIBUTION|$ATTRIBUTION_WARN" "|0" "rule 1: every change is the session's, no paragraph, no warning"
 # T is the list arm_root exported, not a second read of the state file (#254 review).
-# shellcheck disable=SC2317 # session_files is called by attribute_failures, if at all
+# shellcheck disable=SC2317,SC2329 # session_files is called by attribute_failures, if at all
 eq "$(session_files() { :; }; attribute_failures; printf '%s|%s' "$ATTRIBUTION" "$ATTRIBUTION_WARN")" "|0" "T comes from MYSPEC_SESSION_FILES, read once"
 
 printf 'BROKEN\n' >> "$REPO/other.ts"
