@@ -141,6 +141,8 @@ Read the implementation plan. **Check front-matter first.**
 
 **Retired front-matter.** A plan carrying `orchestration: agent-chain` was authored for the orchestrator agent-chain mode, retired in 2.0 and no longer run. Stop with one line: "Plan carries retired `orchestration: agent-chain` front-matter — re-plan with /myspec:feature-plan." No run-mode prompt exists.
 
+**Run mode.** `"${CLAUDE_PLUGIN_ROOT}/lib/myspec-config.sh" get orchestration.featureImplement` prints `"controller"` (the default, also used for any value it does not recognise and when the read itself fails) or `"workflow"`. Choose `"workflow"` only when this session has the Workflow tool. Without it (another harness, or workflows disabled), print one line, "Workflow mode is unavailable in this session (no Workflow tool), so feature-implement runs in controller mode.", and run controller mode. The setting loosens no gate.
+
 Parse milestones first, then build a DAG within each:
 
 1. **Identify milestones:** Each `### Milestone N:` heading scopes a milestone. A plan with no milestone heading is a single-milestone plan (the `feature-plan` template omits the heading then): the whole plan is its one milestone.
@@ -238,6 +240,14 @@ Parallelism pays only when each task outweighs its merge and review overhead; ru
 
 **Concurrent phases** — a set Step 1 found ([parallel-phases.md](parallel-phases.md)) gets one worktree per phase, `"${CLAUDE_PLUGIN_ROOT}/lib/task-worktree.sh" create <feature>-p<N>`, and the phases' implementers are dispatched in one message. Barriers and reviews stay per phase and run one phase at a time in your checkout: record that phase's `PHASE_BASE`, then `task-worktree.sh merge <feature>-p<N>`, then Step 4, exactly as for a serial phase. A plan with `auto_parallel_phases: false` in its front-matter runs every phase serially.
 
+**Workflow mode** — only when Step 1 chose it. It replaces this step's implementer dispatches for a phase and nothing else. For each phase:
+1. Record `PHASE_BASE`, create the parallel task worktrees, and mark the tasks `[~]`, exactly as above.
+2. Start `Workflow({name: "myspec:implement-phase", args})`. Build `args` from the contract in [workflow-args.md](workflow-args.md), with `reviewDiff: "${CLAUDE_PLUGIN_ROOT}/lib/review-diff.sh"`.
+3. Wait for the result, and dispatch nothing for that phase meanwhile.
+4. Act on each task's status per the table in workflow-args.md, then continue at Step 4.
+
+The workflow runs each task through implement, independent verify, a cheap-tier check with a mid-tier re-judge, and at most two fix rounds. It never flips a checkbox, merges, runs the barrier, or reviews the phase. A concurrent phase set launches one workflow per phase. If the call is refused, run that phase in controller mode and log a `Ruling:`.
+
 **Dual-stream fork** — dispatch both stream heads simultaneously, each in its own task worktree. Each stream proceeds independently (with its own sequential/parallel phases). Join waits for both streams.
 
 ### Step 4: Phase Review
@@ -260,7 +270,7 @@ PKG="$STATE/phase-N-review.diff"
 The helper writes the commit list, stat and `-U10` diff over `PHASE_BASE..HEAD`, then lists uncommitted files (an implementer that forgot to commit shows there, without touching the index). Every review package in this skill comes from it: the fix round's over `FIX_BASE` (4d), the holistic one over `BASE_SHA` (Step 5).
 
 - Use the `PHASE_BASE` recorded before the phase's first dispatch — never `HEAD~1`. Never dispatch a phase reviewer without a diff file: exit 2 means the base is not a commit (rebased or squashed away) and no package was written — recover the base from the Execution Log entry, or stop for the user.
-- Pass `VERIFY_LOG`, and the spec requirement IDs the phase touches (from task spec citations and the plan's `## Spec Coverage` table) with their text, plus each one's Test cell when that table has a Test column. The reviewer checks each as behavior across the whole feature: an invariant spanning tasks otherwise surfaces only at holistic review, after later phases built on it.
+- Pass `VERIFY_LOG`, and the spec requirement IDs the phase touches (from task spec citations and the plan's `## Spec Coverage` table) with their text, plus each one's Test cell when that table has a Test column. In workflow mode, also pass the per-task loop results (workflow-args.md). The reviewer checks each as behavior across the whole feature: an invariant spanning tasks otherwise surfaces only at holistic review, after later phases built on it.
 - Never pre-judge findings for the reviewer — never instruct it to ignore or not flag a specific issue. If the prompt you are writing contains "do not flag", "don't treat X as a defect", or "at most Minor" — stop: you are pre-judging, usually to spare yourself a fix loop. Let the reviewer raise it and rule on it in triage.
 - Covers ALL tasks in the phase: spec compliance, code quality, test coverage, test-weakening audit, integration, docs.
 - Returns: `APPROVED` or `ISSUES_FOUND` with per-finding severity (Critical / Important / Minor).

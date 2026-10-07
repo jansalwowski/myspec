@@ -340,3 +340,36 @@ A plan for `report-exports` has no `[parallel:*]` group. Its Execution Order tab
 - **`Depends On` is the contract.** The controller never parallelizes two phases the table links, and it never guesses disjointness from code. Only the Files and Touch only lines count.
 - **Review semantics do not change.** Each phase still gets its own barrier suite, review package and fix loop. Only the implementers overlap.
 - **Opting out is one line.** A plan whose author relies on table order adds the missing `Depends On` edge, or sets `auto_parallel_phases: false` in its front-matter to keep every phase serial.
+
+## Workflow mode for the per-task loop
+
+The project opted in with `.myspec.json` → `"orchestration": {"featureImplement": "workflow"}`, and the session has the Workflow tool. The plan is `invoice-due-dates`: one sequential phase, Task 1 (due-date rules, `mid`) and Task 2 (API fields, `cheap`).
+
+### Skill flow
+
+1. **Step 1** reads the key with `myspec-config.sh get orchestration.featureImplement`, which prints `"workflow"`, and the Workflow tool is present. Had it been missing, the skill would print "Workflow mode is unavailable in this session (no Workflow tool), so feature-implement runs in controller mode." and carry on as usual.
+2. **Step 3** records `PHASE_BASE` and marks both tasks `[~]`, as in controller mode. It fills `implementer-prompt.md` for each task, but instead of dispatching them it starts one workflow:
+
+   ```
+   Workflow({ name: "myspec:implement-phase",
+              args: { feature: "invoice-due-dates", phase: 1, mode: "sequential",
+                      phaseBase: "<PHASE_BASE>", stateDir: "<checkout>/.claude/state/implement/invoice-due-dates",
+                      planPath: ".ai/features/invoice-due-dates/implementation-plan.md",
+                      models: { cheap: "<small model>", mid: "<mid model>", premium: "<top model>" },
+                      reviewDiff: "<plugin>/lib/review-diff.sh", standards: [".claude/rules/conventions.md"],
+                      tasks: [ { id: 1, tier: "mid", workdir: "<checkout>", implementerPrompt: "…",
+                                 files: ["src/billing/due_dates.py", "tests/test_due_dates.py"],
+                                 verifyCommand: "pytest tests/test_due_dates.py", scopedChecks: ["ruff check src/billing/due_dates.py"],
+                                 specContract: "- spec.md REQ-005: \"A paid invoice is never overdue, whatever its due date.\"" },
+                               { id: 2, tier: "cheap", … } ] } })
+   ```
+
+3. **Inside the workflow**, Task 1's implementer reports DONE. The verify agent never saw the implementation. It runs `pytest tests/test_due_dates.py`, which exits 1: a paid invoice past its due date is reported overdue. That costs fix round 1 on the `mid` tier, and the second verify passes. The cheap check then claims a function name breaks the conventions file. The mid-tier re-judge reads the rule and rejects the claim, so it costs nothing. Task 2 diffs from the head Task 1's last verify saw and passes on its first run. Its implementer also reported running `mypy src`, which the verify agent never ran, so that claim lands in `notEvidenced`.
+4. **The result** is `DONE` for both tasks, and Task 2 carries one `notEvidenced` entry. The controller runs the barrier suite, builds the review package with `review-diff.sh`, and dispatches the phase reviewer. The prompt's "Per-Task Loop Results" section tells the reviewer that `mypy src` was claimed but never verified. The barrier log, not the claim, decides it.
+5. Phase review, fix loop, checkbox flips, Execution Log, probes and the milestone checkpoint all run exactly as in controller mode.
+
+### Why this example matters
+
+- **A better diff before the phase review.** The failing pytest was caught and fixed inside the task loop by an agent that did not write the code. The phase reviewer gets a green phase, not a fix round.
+- **Every gate stays with the controller.** The workflow returns statuses. It never flips a checkbox, merges, runs the barrier, or rules on a finding.
+- **Opt-in, and it falls back.** The default `"controller"`, an unknown value, or a session without the Workflow tool all run controller mode, so no plan or project needs to change.
