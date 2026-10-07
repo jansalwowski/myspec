@@ -10,7 +10,7 @@ Evals run **locally only**, on the maintainer's Claude Code login. There is no C
 |---|---|---|---|
 | pre-commit | static skill lint (no model) | `.githooks/pre-commit` | yes |
 | pre-push | cases for the skills changed on the branch, 1 run each, Sonnet | `.githooks/pre-push` → `run.sh --mode changed` | no (report-only) |
-| release | every case, 3 runs, two agent models (Sonnet, Haiku), judge Sonnet, compared with the previous release | `scripts/evals/release-check.sh` (RELEASING.md) | yes: a Sonnet regression exits 1; Haiku is report-only (`quality/release-check.json` `gate`, `gateModels`) |
+| release | Sonnet: every case, 3 runs per `regression` case and 1 per `capability` case. Haiku: the same, on the `trigger` and `near-miss` cases only. Judge Sonnet, compared with the previous release | `scripts/evals/release-check.sh` (RELEASING.md) | yes: a Sonnet regression exits 1; Haiku is report-only (`quality/release-check.json` `gate`, `gateModels`) |
 
 Enable the hooks once per clone with `scripts/install-git-hooks.sh`. That script and `.githooks/pre-commit` come from PR #137 (requires #137). Skip the pre-push evals with `MYSPEC_SKIP_EVALS=1 git push` or `git push --no-verify`. Make a below-threshold result block the push with `MYSPEC_EVALS_STRICT=1`.
 
@@ -21,14 +21,21 @@ Each case also carries a **stability tier** tag:
 - `regression`: passed every run so far. A failure is news.
 - `capability`: may fail. Either it measures something the plugin does not do reliably yet (the failure is the finding), or it has not been run often enough to trust. A capability case moves to `regression` once it passes reliably across releases.
 
-Tiers are calibrated on Sonnet, the pre-push model. Haiku invokes skills far less often (2 of 15 cases fired in the first full run), so read its column as data about Haiku, not as a regression.
+The tier sets how the release suite treats a case (#310):
+
+- A `capability` case carries `runs: 1` in its `prompt.md` frontmatter, so `run.sh --mode full` and the release suite run it once. A `regression` case sets no `runs:` and gets claude's default of 3. The suite lint in `scripts/tests/eval-select.test.sh` fails a case whose tier and run count disagree, so promoting a case means changing its tag and dropping its `runs: 1` together.
+- The release comparison lists capability cases with their scores and any drop, but keeps them out of the paired statistics, pass^k and the verdict (`compare.mjs`). One run cannot show a stable pass, and a case that may fail cannot gate a release.
+- A changed `runs:` line changes the case's hash, so the release check re-runs that case on the previous tag too, and both sides always run a case the same number of times.
+
+Tiers are calibrated on Sonnet, the pre-push model. Haiku invokes skills far less often (2 of 15 cases fired in the first full run), so read its column as data about Haiku, not as a regression. Haiku is report-only (`gateModels`), so the release suite runs it only where its column says something: the routing cases, those tagged `trigger` or `near-miss` (`"modelTags"` in `quality/release-check.json`, passed to `run.sh --model-tags`). The other families (`planted-flaw`, `artifact-contract`, the orchestration cases without `trigger`) measure what a skill does once it fired, which Haiku rarely gets to. `feature-implement-attribution`, `feature-implement-dispatch` and `feature-plan-gate` carry `trigger` because they grade whether the skill fires, so Haiku runs them.
 
 ## Running
 
 ```bash
 scripts/evals/run.sh --mode changed                      # skills changed since the merge base with origin/main
 scripts/evals/run.sh --mode changed --base v2.7.0        # ... since a tag
-scripts/evals/run.sh --mode full                         # every case, 3 runs, sonnet + haiku
+scripts/evals/run.sh --mode full                         # every case, sonnet + haiku, each case's own run count
+scripts/evals/run.sh --mode full --model-tags haiku=trigger,near-miss   # the release suite's selection
 scripts/evals/run.sh --mode full --runs 1 --models sonnet --case 'trigger-*'
 MYSPEC_EVALS_DRY_RUN=1 scripts/evals/run.sh --mode changed   # show the selection and the command, spend nothing
 ```
@@ -43,6 +50,8 @@ route-spec-review          sonnet  1.00   1/1    0/1    -       $0.14  33s
 `FIRED` counts runs in which the expected skill was invoked; `WRONG` counts runs in which a sibling that should have stayed quiet was invoked. `ERRORS` counts runs that ended in an error; they are left out of the other columns. `NOTES` names the other failing graders and any run error.
 
 Every run passes `--trust-plugin --scaffold --no-publish --judge-model sonnet --ablation none`, a tool grant (`Write`, `Edit`, and read-only `git` verbs), and a cost ceiling.
+
+The plugin under test is a temporary copy of the repo's tracked and untracked, not-ignored files, removed when the run ends, so uncommitted edits are evaluated and ignored local state is not. `claude plugin eval` refuses a plugin directory of more than 20000 entries, and the agent worktrees under `.claude/worktrees/` passed that on the 3.0.0 release (#311).
 
 | Variable | Default | Effect |
 |---|---|---|
@@ -80,6 +89,7 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 | `route-spec-review` | trigger, near-miss | "before the technical design, check the requirements doc" → feature-spec-review, not tech-spec-review or the built-in /code-review |
 | `trigger-memorize` | trigger | a named fact to keep → memorize, not memorify or session-complete |
 | `nearmiss-personal-preference` | near-miss | "remember that I prefer short answers" → auto-memory, not memorize or memorify |
+| `trigger-memory-sanitize` | trigger, near-miss | "clean up the auto-memory under ~/.claude/projects" (the default config dir, #161) → memory-sanitize, not memory-optimize |
 | `trigger-memorify` | trigger | "anything from this debugging worth keeping?" → memorify |
 | `trigger-memory-lookup` | trigger, near-miss | "have we run into this before?" → memory-lookup, not a capture skill |
 | `trigger-session-complete` | trigger | "that's it for today, wrap up the session" → session-complete, not memorify |
@@ -90,21 +100,30 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 | `trigger-feature-status-audit` | trigger | "does index.yaml match the features folder?" → feature-status-audit |
 | `trigger-feature-spec-scenarios` | trigger, near-miss | "write the test scenarios in Gherkin for the approved spec" → feature-spec (its `scenarios` argument; feature-scenario is gone in 3.0), not feature-tech-spec, feature-spec-review or feature-plan; scenarios.md written beside the spec |
 | `spec-review-planted-flaws` | planted flaw | feature-spec-review fires and flags an untestable AC, a REQ-002/REQ-004 contradiction, and missing error states; does not pass the review |
-| `tech-spec-review-planted-flaws` | planted flaw | feature-tech-spec-review flags a requirement with no step (REQ-004) and an ignored shared CSV writer the conventions mandate; reports a Critical and does not pass |
+| `tech-spec-review-planted-flaws` | planted flaw | feature-tech-spec-review flags a requirement with no step (REQ-004) and an ignored shared CSV writer the conventions mandate; reports a Critical and does not pass; flags the data-deriving export's missing `verification_mode` as Medium (#169) |
 | `feature-spec-contract` | artifact contract | feature-spec writes spec.md with every section and frontmatter key feature-spec-review checks, plus dependencies.md and a manifest entry |
-| `feature-plan-coverage` | artifact contract | feature-plan (Python fixture) writes implementation-plan.md whose Spec Coverage table maps every REQ ID to a task, including two no AC restates (837f68d), plus the Execution Order table feature-implement parses |
+| `feature-plan-coverage` | artifact contract | feature-plan (Python fixture) writes implementation-plan.md whose Spec Coverage table maps every REQ ID to a task, including two no AC restates (837f68d), plus the Execution Order table feature-implement parses, and closes with the Step 4.6 `## Plan Self-Check` (#188) |
 | `feature-plan-gate` | procedure | spec and tech-spec still `status: draft` → feature-plan stops at its gate: no plan written, the reply says they are not approved (a3562ed) |
 | `feature-implement-dispatch` | orchestration | approved 2-task plan → feature-implement dispatches the Task 1 implementer Agent (matched on its prompt, not any Agent) before any `app/` or `tests/` Write (9ed2ed9); graded on the start of the run |
+| `feature-implement-attribution` | orchestration | a CLAUDE.md rule names a commit trailer → the Task 1 implementer dispatch carries it verbatim, since subagents never see CLAUDE.md (#191) |
+| `feature-implement-fix-round` | orchestration | Phase 1 committed, one Important finding about a rule the phase states in four places → the fix dispatch asks for every place the rule is stated, not only the cited line (#168) |
+| `feature-implement-phase-review` | orchestration | Phase 1 committed, both tasks `[~]` and uncommitted → the phase reviewer dispatch says plan checkboxes are controller-managed (#167) |
+| `feature-implement-restart-state` | orchestration | approved 2-task plan → before Phase 1's first dispatch the plan's Execution Log gets a `Base (Phase 1): <sha>` entry a restarted session can recover (#166) |
+| `feature-implement-probe-gate` | orchestration | both tasks `[x]`, Checkpoint probes not yet run → the Step 4b probe gate dispatches the plugin agent `myspec:probe-executor`, never a general-purpose subagent carrying the executor prompt (#171) |
 
-`nearmiss-personal-preference` is a `capability` case until it has been run across releases, and so is `trigger-feature-spec-scenarios` (added with #264, not yet run). So are the three feature-plan and feature-implement cases (Sonnet, 2026-09-29):
+`nearmiss-personal-preference` is a `capability` case until it has been run across releases, and so are `trigger-feature-spec-scenarios` (added with #264, not yet run) and `trigger-memory-sanitize` (added with #161, not yet run). So are two of the three feature-plan and feature-implement cases (Sonnet, 2026-09-29), and `feature-implement-probe-gate`:
 
 - `feature-plan-coverage` passed 6 of 6.
-- `feature-plan-gate` wrote a plan from draft documents in 4 of 4 (#173).
 - `feature-implement-dispatch` dispatched the implementer in 5 of 6. In the sixth, the controller wrote both tasks itself (#174). `dispatch-before-source-write` also fails when the implementer writes no file at all: in 1 of 3 runs its Bash heredoc was denied and it reported BLOCKED.
-- None of the three is graded on more than read-only git. Listing `Bash` in `allowed_tools` grants only what `run.sh --allow-tools` grants every case: the git read verbs, including `git merge-base`, plus read-only shell commands. Prototypes, `pytest`, commits and the orchestration marker are denied.
+- After the controller-never-implements rule (#174, Sonnet, 2026-10-06) it dispatched in 7 of 10 runs, and the case stays `capability`. The one kept failing trace stopped at Step 2 after a denied Bash call and reported BLOCKED: that is what the rule asks for, but it fails both dispatch graders, which cannot tell a correct stop from a skipped dispatch. On the branch before the rule, one of 6 kept runs wrote `tests/invoices/test_due_dates.py` in the controller without dispatching; the work-isolation hook stopped it.
+- `feature-implement-restart-state` (#166, Sonnet, 2026-10-06) logged `Base (Phase 1)` in 3 of 8 runs, against 0 of 3 before the change. Every failing run that was kept stopped at Step 2 on a denied Bash call, before any plan edit, so the case measures sandbox friction as much as the entry. It is `capability`.
+- `feature-implement-probe-gate` (Sonnet, 2026-10-06) dispatched `myspec:probe-executor` in 3 of 3 runs. On v3, where the executor was a general-purpose template, it did so in 0 of 3: the skill fired once and dispatched general-purpose, and the other two runs ran the probes in the controller. One branch run dispatched the agent without loading the skill, so `skill-fired` failed there. The prompt says only read-only git runs; without that line the controller stopped at the denied `pytest` before the gate. For the same reason the fixture pre-creates the gate's `probes/milestone-1/run-1/` artifact directory: with the gate's `mkdir` denied, 0 of 3 runs dispatched; with the directory in place, 3 of 3 did, each passing it in the payload.
+- None of these is graded on more than read-only git. Listing `Bash` in `allowed_tools` grants only what `run.sh --allow-tools` grants every case: the git read verbs, including `git merge-base`, plus read-only shell commands. Prototypes, `pytest`, commits and the orchestration marker are denied.
 - feature-plan's base check (`git merge-base --is-ancestor`) is therefore not graded. 5 of 6 coverage runs skipped it; the sixth ran it inside a compound command that was denied, then planned anyway.
+- Each feature-implement prompt except `feature-implement-probe-gate` ends where its graders stop looking: "Do Task 1 only for now, and stop once its implementer reports back", or stop once the fix implementer or the phase reviewer reports back (#310). Their `max_turns` is 10 and `timeout_seconds` 360; `feature-plan-coverage` caps at 24 turns. A run's cost is mostly the controller's work before its first dispatch (loading the skill, Step 2 setup), so the stop line saves little where the subagent already comes back BLOCKED, and most where the controller would go on: the phase-review case fell from $0.58 to $0.40 a run (Sonnet, 2 runs). On probe-gate the stop line made the controller dispatch the executor without loading the skill (1 of 1 run), so that prompt is unchanged.
 
-One case started in `capability` and moved to `regression` once a description fix made it fire:
+Two cases started in `capability` and moved to `regression` once a skill fix made them pass:
+- `feature-plan-gate`: feature-plan wrote a plan from draft documents in 4 of 4 runs on v3 (#173). Once its gates refused a draft spec and asked about a draft tech-spec with no recommended option, it stopped in 6 of 6.
 - `trigger-memorize`: Claude Code's built-in auto-memory took "remember this" prompts (0 of 7 runs fired). Once memorize's description claimed project facts over auto-memory, it fired in 10 of 10.
 
 ## Project instructions
@@ -133,7 +152,7 @@ Limits:
 - Files are sorted. Claude Code uses directory-listing order, which varies by filesystem.
 - A block comment nested in a list item or a blockquote may be removed here; Claude Code keeps it.
 - A `paths:` rule, which a real session loads once the agent reads a matching file, never loads here.
-- **Release-check cannot see a routing change in an always-loaded rule.** It re-runs the previous tag with HEAD's `evals/`, so both sides get HEAD's rule text. To measure such a change, run the affected cases on the old and the new rule text within one release (regenerate the blocks on each), or add a pair of cases, one with the rule and one tagged `description-only`.
+- **Release-check sees a rule change only on the cases it reuses.** The previous tag re-runs with HEAD's `evals/`, so a case that re-runs gets HEAD's rule text on both sides and the comparison cannot see the change. A case whose only change is its regenerated block is no longer re-run: its stored result, from the previous tag with that tag's rule text, is compared with HEAD's (RELEASING.md, "Eval comparison"). That pairs the two releases as shipped, but the rule change and the plugin change then count together. To measure a rule change on its own, run the affected cases on the old and the new rule text within one release (regenerate the blocks on each), or add a pair of cases, one with the rule and one tagged `description-only`.
 - **Cost:** the block adds about 10 KB (~2.5k tokens) per run. Sonnet's mean cost per run went from $0.129 (v2.8.0 baseline) to $0.145, about 13% more.
 
 A canary codeword in `CLAUDE.md` and in the last-sorted rule was quoted back in 3 of 3 Sonnet runs, and absent in 3 of 3 under `description-only`; a codeword in a `paths:` rule stayed absent (2026-09-29).
@@ -145,7 +164,7 @@ Mechanisms that don't work on 2.1.284, so nobody retries them: copying the files
 1. Create `evals/<case>/` with `case.yaml`, `prompt.md`, `fixture.sh`, `graders/`, and `grader-samples.json` if it has regex graders.
 2. Phrase the prompt the way a user types it. Never name the skill.
 3. Give it **at least one deterministic grader** (`tool_used`, `regex`, `file_exists`, `tool_order`). An `llm` grader may add to it but never replace it: a judge's verdict varies between runs, and the default Haiku judge voted FAIL three times on a review that plainly passed.
-4. Tag it: `skill:<name>` for every skill its graders name, the family (`trigger`, `near-miss`, `planted-flaw`, `artifact-contract`), and `capability`. Add `description-only` only for the opt-out in [Project instructions](#project-instructions).
+4. Tag it: `skill:<name>` for every skill its graders name, the family (`trigger`, `near-miss`, `planted-flaw`, `artifact-contract`), and `capability`, with `runs: 1` beside the tags. Add `description-only` only for the opt-out in [Project instructions](#project-instructions).
 5. Run `evals/_fixtures/project-instructions.sh <case>` to append the generated project instructions to its `case.yaml`.
 6. Prove each grader can fail (next section), then run it a few times before promoting it to `regression`.
 
@@ -168,6 +187,7 @@ execution:
 ---
 description: "One sentence: what must happen, and what must not."
 tags: [skill:<right-skill>, skill:<sibling>, trigger, capability]
+runs: 1
 max_turns: 8
 timeout_seconds: 300
 allowed_tools: [Read, Glob, Grep, Skill]

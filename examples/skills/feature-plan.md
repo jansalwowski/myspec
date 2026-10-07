@@ -157,7 +157,22 @@ Step 4.5 runs on every plan, large or small. The skill walks `spec.md` and `tech
 | … | (steps 2–6 map 1:1 to T2–T6) | |
 ```
 
-Every row lands on a task, so there is nothing to defer and the plan proceeds to Step 5. REQ-002 is the row an AC-only walk would miss: no acceptance criterion mentions keyboard or screen-reader behavior, so it reaches T5's Spec contract only because requirements get rows of their own.
+Every row lands on a task, so there is nothing to defer. REQ-002 is the row an AC-only walk would miss: no acceptance criterion mentions keyboard or screen-reader behavior, so it reaches T5's Spec contract only because requirements get rows of their own.
+
+### Step 4.6: Plan self-check
+
+Before saving, the skill reads the written plan against both documents and runs the four checks in `references/plan-self-check.md`. Two findings are fixed in the plan, and the result closes the plan:
+
+```markdown
+## Plan Self-Check
+
+- Snippets vs spec contract: 1 fixed — T4's `unfavorite` snippet only cleared the star; AC-5 says the report also unpins without a reload, so it now refetches the pinned order
+- Steps agree: 1 fixed — T5 Step 1 asserted `aria-pressed="false"` after a click that favorites; now `"true"`, matching Step 2
+- Reader-visible strings: clean
+- Probe lint: not applicable (no checkpoint probes)
+```
+
+Either defect would have reached the implementer as a mandate and come back as a phase-review finding.
 
 ### User confirms
 
@@ -186,6 +201,7 @@ Plan is ready. Commit before /feature-implement to avoid dangling files.
 ### Why this example matters
 
 - **The Spec contract block is non-negotiable.** Every task quotes the spec/tech-spec sentence that constrains it. If a task has no such passage, that's the signal the task shouldn't exist.
+- **The self-check moves fix loops to plan time.** A snippet narrower than its spec quote, or a test step that contradicts the implementation step, passes the implementer, who copies it, and surfaces only at phase review.
 - **Spec Coverage is the same check run backwards.** Spec contract proves every task has a requirement; Step 4.5 proves every requirement has a task. Only the second one catches a requirement that never became a task at all — which no downstream reader can see, because the implementer gets task text and the phase reviewer gets a diff.
 - **Global Constraints and Interfaces are the anti-drift rails.** Project-wide exacts live once in the header section (every task implicitly includes them); exact signatures live in each task's Interfaces block. Task 4's hook calls `list(userId)` because Task 2's Produces line says so — an implementer who sees only their task text never guesses a name.
 - **Touch only lands wherever a task modifies an existing file.** Without it, a reviewer flags adjacent pre-existing code as a regression. Task 6 touches the list query, so it scopes the diff explicitly.
@@ -244,13 +260,14 @@ The skill reads the tech-spec and finds three parallel-safe seams:
 **Checkpoint probes:**
 - Target: `bin/serve-scratch` → API at `$SCRATCH_API_URL`, settings page at `$SCRATCH_WEB_URL/settings/schedules` (an address the everyday dev server does not use, so it cannot answer the probes)
 - Scratch env: `DATABASE_URL` → the `reports_scratch` database, `REDIS_URL` → a second Redis instance, `SMTP_HOST`/`SMTP_PORT` → a local mail catcher
+- Scratch setup: `bin/migrate` (Milestone 1's schedules and export_runs tables), then `bin/seed fixtures/schedules-empty.json`
 - P1 [visual]: `test ID schedule-form → click its Save button; data-state = "saved"`
 - P2 [visual]: `test ID schedule-row count = 1`
 - P3 [api]: `curl -s "$SCRATCH_API_URL/api/schedules" | jq '.items | length'` → `1`
 - D1 [demo]: open `/settings/schedules`; create a weekly schedule; open its run history — screenshot each step
 ```
 
-The tech-spec sets `verification_mode: mixed`, so every milestone gets a `**Checkpoint probes:**` block — Milestone 1's carries only `[api]` probes, since nothing renders yet. Each probe is a literal assertion against a `### Test Hooks` handle with its expected value, written now, before the code exists.
+The tech-spec sets `verification_mode: mixed`, so every milestone gets a `**Checkpoint probes:**` block — Milestone 1's carries only `[api]` probes, since nothing renders yet. Each probe is a literal assertion against a `### Test Hooks` handle with its expected value, written now, before the code exists. Milestone 2 spells out its own Scratch setup rather than "as Milestone 1": the executor starts from whatever the scratch database holds, and P2's count of 1 holds only on a freshly seeded empty table. The project sets no `probes.portSource`, so there is no Ports line and the Target keeps its `$SCRATCH_API_URL` / `$SCRATCH_WEB_URL` addresses. Had it set one (say `.dev-ports`, holding this checkout's `API_PORT` and `WEB_PORT` slots), the block would add `- Ports: .dev-ports → API_PORT, WEB_PORT` and write each address with `$API_PORT` / `$WEB_PORT`, which the executor resolves in its own checkout.
 
 A task in a parallel group carries an isolation note, because its implementer runs in its own worktree and cannot see a sibling's files:
 

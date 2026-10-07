@@ -161,13 +161,13 @@
       "file": "project",
       "type": ["string"],
       "issue": ["#196"],
-      "description": "Where a probe takes its dev-server ports from instead of literal ports in the plan: a repo-relative file holding the per-checkout port slots, or $NAME for an environment variable that holds them. Recorded by the schema since 3.0; reading it in feature-plan and the probe executor is #196."
+      "description": "Where a probe takes its dev-server ports from instead of literal ports in the plan: a repo-relative file holding the per-checkout port slots, or $NAME for an environment variable that holds them. feature-plan names it on the probe block's Ports line, and the probe executor resolves the ports from it."
     },
     "probes.scratchEnvScript": {
       "file": "project",
       "type": ["string"],
       "issue": ["#197"],
-      "description": "Repo-relative script that provisions the scratch environment a probe run needs (database, cache, buckets), reused across probe runs instead of rebuilt by each one. Recorded by the schema since 3.0; running it from feature-implement is #197."
+      "description": "Repo-relative script that provisions the scratch environment a probe run needs (database, cache, buckets), reused across probe runs instead of rebuilt by each one. feature-implement passes it to the probe executor, which runs it before the first probe that writes."
     },
     "feedback.metrics": {
       "file": "project",

@@ -5,27 +5,40 @@
 //   write <results-dir> --out <file> --version X.Y.Z --evals-dir <evals/>
 //         [--tag T] [--commit SHA] [--source release|rerun]
 //         [--model-id alias=<id>|alias=!<why unresolved>]...
+//         [--workspaces <workspaces.mjs output>]
 //         [--merge-into <file> [--replace-models a,b]]
-//       Normalise a run.sh results dir into a baseline file, with a content
-//       hash of every case directory in it and of evals/_fixtures/. A model
-//       whose id could not be resolved is stored with model_id_unresolved:
-//       <why>, never a null id. --merge-into keeps that baseline's other models
-//       and, for models not in --replace-models, its other cases (a rerun of
-//       only the changed cases).
+//       Normalise a run.sh results dir into a baseline file. Its evals block
+//       holds, per case that ran: the content hash of its directory (cases),
+//       the same hash without case.yaml's generated project-instructions
+//       block (inputs), its stability tier (tiers) and, with --workspaces,
+//       the hash of the workspace its fixture builds against the plugin that
+//       ran (workspaces); plus the hash of evals/_fixtures/. A model whose id
+//       could not be resolved is stored with model_id_unresolved: <why>,
+//       never a null id. --merge-into keeps that baseline's other models and,
+//       for models not in --replace-models, its other cases (a rerun of only
+//       the changed cases).
 //
 //   check <baseline-file> <head-baseline> --evals-dir <evals/> [--models a,b]
-//         [--case <glob>] [--cc-match exact|minor]
+//         [--case <glob>] [--cc-match exact|minor] [--workspaces <file>]
 //       Can the stored baseline stand in for re-running the previous tag?
 //       Prints one line per decision:
 //         RERUN <model> <reason>       re-run the whole suite for that model
 //         RERUN-CASE <case> <reason>   re-run that case for the reused models
 //         REUSE <model> <note>
-//       Whole-suite rerun: no baseline file, no case hashes in it,
-//       evals/_fixtures/ changed, or the Claude Code version differs (any
-//       change; --cc-match minor ignores patch releases). Per model: no
-//       results in the baseline, a model id unresolved now or then, or a
-//       different resolved id. Per case: its directory hash differs, or the
-//       baseline lacks it. Exit 0 on any decision, 2 on bad input.
+//         WORKSPACES <reason>          evals/_fixtures/ changed: run again with
+//                                      --workspaces, the previous tag's
+//                                      workspace hashes with HEAD's evals/
+//       Whole-suite rerun: no baseline file, no case hashes in it, the Claude
+//       Code version differs (any change; --cc-match minor ignores patch
+//       releases), or evals/_fixtures/ changed and the baseline has no
+//       workspace hashes. Per model: no results in the baseline, a model id
+//       unresolved now or then, or a different resolved id. Per case: its
+//       inputs hash differs (its directory hash, for a baseline without
+//       inputs hashes), the baseline lacks it, or, after a _fixtures/ change,
+//       its workspace hash differs. A case whose only change is its
+//       regenerated project-instructions block keeps its stored results
+//       (RELEASING.md, "Eval comparison"). Exit 0 on any decision, 2 on bad
+//       input.
 //
 //   trend --head <head-baseline> --out <trend.jsonl> [--compare <compare.json>]
 //         [--gate true|false]
@@ -43,7 +56,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { summarize } from './compare.mjs';
-import { evalsHashes, formatBaseline, globToRegExp, loadBaseline, loadResultsDir } from './results.mjs';
+import { caseTiers, evalsHashes, formatBaseline, globToRegExp, loadBaseline, loadResultsDir } from './results.mjs';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const majorMinor = (v) => (v ? String(v).split('.').slice(0, 2).join('.') : null);
@@ -71,6 +84,8 @@ function need(o, ...keys) {
 }
 
 const list = (s) => (s ? s.split(',').filter(Boolean) : []);
+const readJson = (f) => JSON.parse(fs.readFileSync(f, 'utf8'));
+const pickKeys = (obj, keys) => Object.fromEntries(keys.filter((k) => obj && k in obj).map((k) => [k, obj[k]]));
 
 function write(pos, o) {
   if (pos.length !== 1) throw new Error('write <results-dir> --out <file> --version X.Y.Z --evals-dir <dir>');
@@ -89,8 +104,16 @@ function write(pos, o) {
     } else m.model_id_unresolved = id.slice(1) || 'unknown';
   }
   const hashes = evalsHashes(o.evalsDir);
-  const ran = new Set(Object.values(set.models).flatMap((m) => Object.keys(m.cases)));
-  const evals = { fixtures: hashes.fixtures, cases: Object.fromEntries([...ran].filter((c) => c in hashes.cases).map((c) => [c, hashes.cases[c]])) };
+  const ran = [...new Set(Object.values(set.models).flatMap((m) => Object.keys(m.cases)))].filter((c) => c in hashes.cases);
+  const evals = {
+    fixtures: hashes.fixtures,
+    cases: pickKeys(hashes.cases, ran),
+    inputs: pickKeys(hashes.inputs, ran),
+    tiers: pickKeys(caseTiers(o.evalsDir), ran),
+  };
+  // Every case's workspace hash, not only the ones that ran: a merge below
+  // keeps stored results for the others, and they were built the same way.
+  if (o.workspaces) evals.workspaces = readJson(o.workspaces);
 
   let models = set.models;
   if (o.mergeInto && fs.existsSync(o.mergeInto)) {
@@ -111,7 +134,8 @@ function write(pos, o) {
         cases,
       };
     }
-    evals.cases = { ...(stored.evals?.cases ?? {}), ...evals.cases };
+    for (const key of ['cases', 'inputs', 'tiers']) evals[key] = { ...(stored.evals?.[key] ?? {}), ...evals[key] };
+    if (!evals.workspaces && stored.evals?.workspaces) evals.workspaces = stored.evals.workspaces;
   }
   const doc = {
     schema: set.schema,
@@ -140,7 +164,6 @@ function check(pos, o) {
   const base = loadBaseline(pos[0]);
   const now = evalsHashes(o.evalsDir);
   if (!base.evals?.cases) return all('baseline has no case hashes');
-  if (base.evals.fixtures !== now.fixtures) return all('evals/_fixtures/ changed since the baseline');
   if (!base.claude_code || !head.claude_code) {
     return all(`Claude Code version unknown (baseline ${base.claude_code ?? '?'}, now ${head.claude_code ?? '?'})`);
   }
@@ -148,6 +171,17 @@ function check(pos, o) {
   if (ccMatch === 'minor' ? majorMinor(base.claude_code) !== majorMinor(head.claude_code) : base.claude_code !== head.claude_code) {
     return all(`Claude Code ${base.claude_code} -> ${head.claude_code}${ccMatch === 'minor' ? ' (major.minor changed)' : ''}`);
   }
+  // A _fixtures/ change matters only where it changed the workspace a case
+  // starts from. Without workspace hashes on both sides, re-run everything.
+  let workspaces = null;
+  if (base.evals.fixtures !== now.fixtures) {
+    if (!base.evals.workspaces) return all('evals/_fixtures/ changed since the baseline, which has no workspace hashes');
+    if (!o.workspaces) return ['WORKSPACES evals/_fixtures/ changed since the baseline; compare each case\'s workspace'];
+    workspaces = readJson(o.workspaces);
+  }
+  // Compare inputs hashes when the baseline has them (the generated
+  // project-instructions block left out), else whole-directory hashes.
+  const [stored, current, what] = base.evals.inputs ? [base.evals.inputs, now.inputs, ' (project instructions aside)'] : [base.evals.cases, now.cases, ''];
 
   const lines = [];
   let reused = 0;
@@ -167,10 +201,15 @@ function check(pos, o) {
   }
   if (reused) {
     const re = o.case ? globToRegExp(o.case) : null;
-    for (const [c, h] of Object.entries(now.cases).sort()) {
+    for (const [c, h] of Object.entries(current).sort()) {
       if (re && !re.test(c)) continue;
-      if (!(c in base.evals.cases)) lines.push(`RERUN-CASE ${c} not in the baseline`);
-      else if (base.evals.cases[c] !== h) lines.push(`RERUN-CASE ${c} evals/${c}/ changed since the baseline`);
+      if (!(c in stored)) lines.push(`RERUN-CASE ${c} not in the baseline`);
+      else if (stored[c] !== h) lines.push(`RERUN-CASE ${c} evals/${c}/ changed since the baseline${what}`);
+      else if (workspaces && (workspaces[c] !== base.evals.workspaces[c] || /^!/.test(workspaces[c] ?? '!'))) {
+        // A workspace that failed to build ("!<why>") never counts as unchanged.
+        const why = /^!./.test(workspaces[c] ?? '') ? `: ${workspaces[c].slice(1)}` : '';
+        lines.push(`RERUN-CASE ${c} its fixture workspace changed since the baseline${why}`);
+      }
     }
   }
   return lines;
@@ -198,16 +237,22 @@ function trend(o) {
   const head = loadBaseline(o.head);
   const cmp = o.compare && fs.existsSync(o.compare) ? JSON.parse(fs.readFileSync(o.compare, 'utf8')) : null;
   const models = {};
+  const tiers = head.evals?.tiers ?? {};
   for (const [alias, m] of Object.entries(head.models)) {
-    const k = Math.min(...Object.values(m.cases).map((c) => c.passed.length));
+    // pass^k over the gating cases only: capability cases run once.
+    const gating = Object.keys(m.cases).filter((c) => tiers[c] !== 'capability');
+    const kc = gating.length ? gating : Object.keys(m.cases);
+    const k = Math.min(...kc.map((c) => m.cases[c].passed.length));
     const s = summarize(m.cases, k);
+    const g = summarize(Object.fromEntries(kc.map((c) => [c, m.cases[c]])), k);
     const c = cmp?.models?.[alias];
     models[alias] = {
       ...(m.model_id ? { model_id: m.model_id } : { model_id_unresolved: m.model_id_unresolved ?? 'not recorded' }),
       cases: s.cases,
       pass_rate: s.pass_rate,
-      'pass^k': s.pass_hat_k,
+      'pass^k': g.pass_hat_k,
       k,
+      capability_cases: Object.keys(m.cases).length - gating.length,
       mean_score: s.mean_score,
       cost_usd: Math.round(m.cost_usd * 100) / 100,
       duration_s: m.duration_s,

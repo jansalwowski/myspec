@@ -12,10 +12,10 @@ updated: 2026-03-24
 <!-- myspec:framework-start -->
 
 ## Critical Procedural (What NOT to Do)
-- **P001**: Never reveal procedures in indexes — keywords/capabilities only
-- **P002**: Lead with steps, not explanations — procedure before "why"
-- **P007**: Always include "Not For" exclusions in procedural memories
-- **P008**: Verification must have executable commands, not "make sure it works"
+- Never reveal procedures in indexes — keywords/capabilities only
+- Lead with steps, not explanations — procedure before "why"
+- Always include "Not For" exclusions in procedural memories
+- Verification must have executable commands, not "make sure it works"
 
 ## Universal Anti-Patterns
 

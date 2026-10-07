@@ -59,22 +59,28 @@ It:
 
 `scripts/evals/release-check.sh --version X.Y.Z` answers "did this release make the plugin worse than the last one?" It runs locally on the maintainer's Claude Code login (see `evals/README.md`); there is no CI job.
 
-1. Runs the full eval suite on HEAD: every case, 3 runs, Sonnet and Haiku agents, Sonnet judge (`run.sh --mode full`).
-2. Resolves each model alias to the model id it maps to today, with one tiny `claude -p` call per model (about $0.03 in total). An id that cannot be resolved is stored with the reason, never as null.
-3. Gets the previous release's scores from `quality/baselines/v<prev>.json` where they still hold. Otherwise it re-runs the previous tag in a temporary `git worktree` with HEAD's `evals/` copied in (same cases, old plugin). The worktree is removed, and a running eval killed, on every exit path.
-   - **Whole suite** when the file is missing, `evals/_fixtures/` changed, or the Claude Code version differs. Any version change counts, because patch releases change skill triggering; `--cc-match minor` relaxes this to major.minor.
+1. Runs the release suite on HEAD with a Sonnet judge (`run.sh --mode full`, evals/README.md "Tiers"):
+   - Sonnet runs every case: 3 runs of each `regression` case, 1 of each `capability` case (`runs: 1` in its `prompt.md`).
+   - Haiku runs only the routing cases, those tagged `trigger` or `near-miss` (`"modelTags"` in `quality/release-check.json`), with the same run counts. It is report-only, and the planted-flaw, artifact-contract and orchestration cases say little about a model that rarely fires the skill.
+   - `--runs N` runs every case N times instead.
+2. Resolves each model alias to the model id it maps to today, with one tiny `claude -p` call per model (about $0.03 in total). An id that cannot be resolved is stored with the reason, never as null. It also hashes the workspace each case's fixture builds (`workspaces.mjs`, no model call), for the next release's fixture check.
+3. Gets the previous release's scores from `quality/baselines/v<prev>.json` where they still hold. Otherwise it re-runs the previous tag in a temporary `git worktree` with HEAD's `evals/` copied in (same cases, same run counts, same `modelTags`, old plugin). The worktree is removed, and a running eval killed, on every exit path.
+   - **Whole suite** when the file is missing or the Claude Code version differs. Any version change counts, because patch releases change skill triggering; `--cc-match minor` relaxes this to major.minor. Kept as it was in #310: a CLI patch can move triggering, and the comparison is only as good as its pairing.
    - **One model** when its resolved id differs, or is unresolved now or in the baseline.
-   - **One case** when its `evals/<case>/` directory changed or is new (the baseline stores a content hash per case).
+   - **One case** when its inputs changed or it is new. The baseline stores, per case, a hash of `evals/<case>/` with `case.yaml`'s generated project-instructions block left out. A baseline recorded before #310 has only whole-directory hashes, and those are compared instead.
+   - **After an `evals/_fixtures/` change**, one case when the workspace its fixture builds changed. The check builds every case's workspace from the previous tag's plugin with HEAD's fixtures and compares its hash with the stored one. The hash covers every file, the branch and the tree and subject of each commit, with commit ids masked. A comment-only edit to `lib.sh`, or a helper no case's output depends on, re-runs nothing. A baseline without workspace hashes (before #310) still re-runs the whole suite.
 4. Compares the two case by case (`scripts/evals/compare.mjs`) and prints the report. It covers:
    - the mean paired score delta, with a paired-bootstrap 95% CI (seeded, 10,000 resamples)
    - a sign test
-   - pass@k and pass^k
+   - pass@k and pass^k (k is the run count of the paired regression cases)
    - flaky cases
    - cases present in only one set (listed, left out of the statistics)
-5. Stages `quality/baselines/vX.Y.Z.json`, the re-run previous baseline (if any) and a trend line in `<out>/staged/`. **Nothing touches `quality/` yet.** The baseline holds per-case run scores, model ids, the Claude Code version, case hashes, cost and duration.
+5. Stages `quality/baselines/vX.Y.Z.json`, the re-run previous baseline (if any) and a trend line in `<out>/staged/`. **Nothing touches `quality/` yet.** The baseline holds per-case run scores, model ids, the Claude Code version, case and inputs hashes, tiers, fixture workspace hashes, cost and duration.
 6. After a go decision, `release-check.sh --record <out>` copies the staged files into `quality/`. It refuses a `--case` run.
 
-**Verdict**, per model. A case **regressed** when either:
+**Verdict**, per model, over the paired `regression` cases. `capability` cases (the new side's tiers, stored in the baseline) are listed with their scores and any drop as a report-only warning, and stay out of every number below.
+
+A case **regressed** when either:
 
 - it passed every run in the baseline and now passes none, or
 - its mean score fell by at least 0.67.
@@ -105,7 +111,22 @@ The release verdict is the worst model's.
 
 "Broken" means the case fails one grader on every run, the way a skill that stopped triggering would. The previous rule (a CI below 0, or pass^3 dropping by more than 0.10) cried regression in 8–17% of A/A trials per model. Haiku's cases are too noisy to catch one or two broken cases reliably, so the gate (below) does not block on a Haiku `regressed`, and a Haiku pass is only a signal. These rates were checked against five recorded releases before the gate went on (2.8.0–2.11.0 in `quality/trend.jsonl`: one `improved`, four `no-change`, no false regression).
 
-**Cost.** HEAD's full run costs about $8 and takes about 7 minutes (Sonnet ≈ $5.8 and Haiku ≈ $2.0 at 3 runs; at 1 run the Sonnet suite measured $1.94 and 109 s). A whole-suite re-run of the previous tag doubles that. A changed case adds only that case's cost. The first release after this lands has no stored baseline, so it pays the double once. `--head-results <dir>` reuses a finished HEAD run on a retry.
+**Reused results and pairing.** Two of the rules above keep stored results where an earlier version re-ran the case (#310):
+
+- A regenerated project-instructions block alone, which every `framework-files/rules/` edit causes in all 25 cases. The stored result ran the previous plugin with its own rule text; HEAD runs with the new text. That compares the two releases as shipped, but the rule change and the plugin change are no longer told apart, and a re-run case still sees HEAD's rules on both sides (evals/README.md, "Project instructions").
+- A `_fixtures/` change whose workspaces hash the same. The stored result ran on an identical workspace, so only the session differs, as with any reuse. The hash sees files and git history, not the environment a fixture ran in.
+
+**Cost** (2026-10, Claude Code 2.1.292, from the v3.0.0 per-case costs; 25 cases: 15 `regression`, 10 `capability`, 17 of them routing):
+
+| Side | Before #310 | Now |
+|---|---|---|
+| Sonnet | 25 cases × 3 runs: $14.69 | 15 × 3 ($6.53) + 10 × 1 ($8.16 / 3 = $2.72): about $9.3 |
+| Haiku | 25 cases × 3 runs: $5.01 | 12 routing `regression` × 3 ($1.89) + 5 routing `capability` × 1 ($0.93 / 3 = $0.31): about $2.2 |
+| HEAD | $19.70 | about $11.5, about 13 minutes |
+| Previous tag, whole suite (any Claude Code version change) | $20.74 | about $12 |
+| Previous tag, reused (same Claude Code; changed cases only) | $0 plus each changed case | the same |
+
+So a release check costs about $11.5 with a reusable baseline and about $23.5 when the Claude Code version moved, against $40.44 for 3.0.0. Both fit `run.sh`'s $20 ceiling per side. Claude Code ships often, so the whole-suite re-run is the usual case. `--head-results <dir>` reuses a finished HEAD run on a retry.
 
 **Skip.** `release-check.sh --version X.Y.Z --skip "<reason>"` runs nothing and records `{"version", "date", "skipped": "<reason>"}` in `quality/trend.jsonl`. Commit it the same way.
 
@@ -122,7 +143,7 @@ The release verdict is the worst model's.
 - 1: a model in `gateModels` regressed with the gate on.
 - 2: infrastructure error: usage limit, logged out, eval run failed, or interrupted; or a `gateModels` list that would gate nothing (below). An exit 2 says nothing about the plugin.
 
-**The gate.** `quality/release-check.json` sets `"gate": true` (#267): a `regressed` release verdict exits 1 and `/release` aborts; the maintainer no longer decides. It was report-only until five recorded releases (2.8.0–2.11.0 in `quality/trend.jsonl`) showed no false regression against the calibration above. It blocks only on the models `"gateModels"` lists, `["sonnet"]` (maintainer decision, 2026-10-05): the suite still runs and reports both models and the baseline records both, but a Haiku-only `regressed` prints a report-only warning and exits 0. A Haiku verdict says too little to block a release on: its pass catches 2 broken cases only 37% of the time, so read its column as a signal. With no `gateModels` key every model that ran gates. With the gate on, a `gateModels` list that would gate nothing exits 2 instead of passing: an empty list, or an entry (matched exactly, so `Sonnet` is not `sonnet`) that `--models` does not run, checked before any eval, or that the comparison does not hold, checked after it. A `--case` run, `insufficient-data`, and an exit 2 never block. The same file holds `seed` and `resamples`; `"gate": false` returns the check to report-only.
+**The gate.** `quality/release-check.json` sets `"gate": true` (#267): a `regressed` release verdict exits 1 and `/release` aborts; the maintainer no longer decides. It was report-only until five recorded releases (2.8.0–2.11.0 in `quality/trend.jsonl`) showed no false regression against the calibration above. It blocks only on the models `"gateModels"` lists, `["sonnet"]` (maintainer decision, 2026-10-05): the suite still runs and reports both models and the baseline records both, but a Haiku-only `regressed` prints a report-only warning and exits 0. A Haiku verdict says too little to block a release on: its pass catches 2 broken cases only 37% of the time, so read its column as a signal. With no `gateModels` key every model that ran gates. With the gate on, a `gateModels` list that would gate nothing exits 2 instead of passing: an empty list, or an entry (matched exactly, so `Sonnet` is not `sonnet`) that `--models` does not run, checked before any eval, or that the comparison does not hold, checked after it. A `--case` run, `insufficient-data`, and an exit 2 never block. The same file holds `seed`, `resamples` and `modelTags` (a model mapped to the tags a case needs one of for that model to run it; `haiku: [trigger, near-miss]`, #310); `"gate": false` returns the check to report-only.
 
 **A release that renames or folds skills** compares only partially, by construction: the baseline keys cases by name and stores a content hash per case, and selection uses `skill:<name>` tags, so every case whose directory or tags changed with the rename re-runs on the previous tag against HEAD's `evals/` (an old plugin without the new skill), and cases present in only one set are listed and left out of the statistics. Read such a report for the unchanged cases only, and expect `insufficient-data` on a large rename. The release records itself as the new baseline (`--record` as usual), and its notes say so, so the next release compares against a complete one.
 

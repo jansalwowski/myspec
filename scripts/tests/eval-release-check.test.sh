@@ -7,7 +7,10 @@
 # an aggregate-result.json with one case per <plugin-dir>/evals/*/prompt.md
 # (filtered by --case), every run scoring the number in
 # <plugin-dir>/STUB_SCORE_<model> if present, else <plugin-dir>/STUB_SCORE,
-# and logs "EVAL HEAD|PREV <dir> <model> <case glob>". `-p` answers the
+# and logs "EVAL HEAD|PREV <dir> <model> <case glob>". HEAD is the run whose
+# plugin dir holds STUB_HEAD, an untracked file only the fixture's working
+# tree has (run.sh evaluates a snapshot of it, #311), and "IGNORED" is logged
+# when the plugin dir holds the fixture's gitignored local/ directory. `-p` answers the
 # model-id probe with stub-<model>-$STUB_MODEL_REV_<model> (default a), or
 # fails when STUB_PROBE_FAIL is set.
 #
@@ -49,7 +52,8 @@ if (a[0] === '-p') {
 }
 if (a[0] === 'plugin' && a[1] === 'eval') {
   const dir = a[2];
-  const isHead = dir === env.STUB_HEAD_ROOT;
+  const isHead = fs.existsSync(path.join(dir, 'STUB_HEAD'));
+  if (fs.existsSync(path.join(dir, 'local'))) log('IGNORED');
   const glob = opt('--case');
   log(`EVAL ${isHead ? 'HEAD' : 'PREV'} ${dir} ${opt('--model')} ${glob || '-'}`);
   const nap = isHead ? env.STUB_SLEEP_HEAD : env.STUB_SLEEP_PREV;
@@ -57,16 +61,22 @@ if (a[0] === 'plugin' && a[1] === 'eval') {
   if ((isHead && env.STUB_FAIL_HEAD) || (!isHead && env.STUB_FAIL_PREV)) { console.error('boom'); process.exit(2); }
   const perModel = path.join(dir, `STUB_SCORE_${opt('--model')}`);
   const q = Number(fs.readFileSync(fs.existsSync(perModel) ? perModel : path.join(dir, 'STUB_SCORE'), 'utf8'));
-  const runs = Number(opt('--runs'));
+  // Run count: --runs, else the case's `runs:` line, else 3 (as claude does).
+  // --tag (repeatable) keeps the cases whose tags line names any of them.
+  const prompt = (c) => fs.readFileSync(path.join(dir, 'evals', c, 'prompt.md'), 'utf8');
+  const runsOf = (c) => Number(opt('--runs') ?? (prompt(c).match(/^runs: *(\d+)/m) || [, 3])[1]);
+  const tags = a.flatMap((x, i) => (a[i - 1] === '--tag' ? [x] : []));
+  if (tags.length) log(`TAGS ${opt('--model')} ${tags.join(',')}`);
   const cases = fs.readdirSync(path.join(dir, 'evals')).filter((c) => fs.existsSync(path.join(dir, 'evals', c, 'prompt.md')))
-    .filter((c) => !glob || new RegExp('^' + glob.replace(/\*/g, '.*').replace(/\[!/g, '[^') + '$').test(c)).sort();
+    .filter((c) => !glob || new RegExp('^' + glob.replace(/\*/g, '.*').replace(/\[!/g, '[^') + '$').test(c))
+    .filter((c) => !tags.length || tags.some((t) => new RegExp(`^tags:.*\\b${t}\\b`, 'm').test(prompt(c)))).sort();
   const out = opt('--output-dir');
   fs.mkdirSync(out, { recursive: true });
   fs.writeFileSync(path.join(out, 'aggregate-result.json'), JSON.stringify({
     schemaVersion: 1, claudeVersion: env.STUB_CC_VERSION || '2.1.284', durationSeconds: 20, partial: false,
     suite: { modelOverride: opt('--model'), judgeModel: 'sonnet' },
     cases: cases.map((name) => ({ name, graders: [], aggregates: { score: q },
-      arms: { with: Array.from({ length: runs }, () => ({ score: q, costUsd: 0.1, judgeCostUsd: 0, durationSeconds: 5, error: null,
+      arms: { with: Array.from({ length: runsOf(name) }, () => ({ score: q, costUsd: 0.1, judgeCostUsd: 0, durationSeconds: 5, error: null,
         graders: [{ name: 'g', passed: q >= 1, scored: true }] })) } })),
   }));
   process.exit(0);
@@ -90,15 +100,18 @@ git config user.email t@t
 git config user.name t
 git config commit.gpgsign false
 mkdir -p scripts/evals quality evals/_fixtures
-cp "$SRC_ROOT"/scripts/evals/{run.sh,summary.mjs,compare.mjs,baseline.mjs,results.mjs,release-check.sh} scripts/evals/
+cp "$SRC_ROOT"/scripts/evals/{run.sh,summary.mjs,compare.mjs,baseline.mjs,results.mjs,release-check.sh,workspaces.mjs} scripts/evals/
 # set_config <gate> [gateModels JSON]: the repo's release-check.json with gate
 # set and gateModels replaced, or dropped when no second argument is given.
+# modelTags is dropped too, or set from $SET_MODEL_TAGS (JSON).
 set_config() {
   node -e '
     const fs = require("fs");
     const c = JSON.parse(fs.readFileSync(process.argv[1], "utf8"));
     c.gate = process.argv[2] === "true";
     delete c.gateModels;
+    delete c.modelTags;
+    if (process.env.SET_MODEL_TAGS) c.modelTags = JSON.parse(process.env.SET_MODEL_TAGS);
     if (process.argv[3]) c.gateModels = JSON.parse(process.argv[3]);
     fs.writeFileSync(process.argv[4], JSON.stringify(c, null, 2) + "\n");
   ' "$SRC_ROOT/quality/release-check.json" "$1" "${2:-}" "$REPO/quality/release-check.json"
@@ -113,8 +126,10 @@ echo "# v1.1" >> evals/case-a/prompt.md
 git commit -qam v1.1.0 && git tag v1.1.0
 mkdir -p evals/case-f && echo "prompt f" > evals/case-f/prompt.md
 echo 0.5 > STUB_SCORE
+echo local/ > .gitignore
 git add -A && git commit -qm head
-export STUB_HEAD_ROOT="$REPO"
+touch STUB_HEAD
+mkdir -p local && touch local/clutter
 RC_SH="$REPO/scripts/evals/release-check.sh"
 B11="$REPO/quality/baselines/v1.1.0.json"
 B12="$REPO/quality/baselines/v1.2.0.json"
@@ -138,6 +153,12 @@ rc_run first --version 1.2.0 --models sonnet --runs 2
 expect_eq "exit 0: regressed but the gate is off" "$RC" 0
 expect_has "reason for the rerun is printed" "$OUTPUT" "baseline RERUN sonnet no stored baseline (v1.1.0.json)"
 expect_eq "HEAD ran once, the previous tag's whole suite once" "$(grep -c '^EVAL HEAD' "$STUB_LOG") $(prevs)" "1 sonnet:- "
+# #311: HEAD runs on a snapshot of the working tree, never the tree itself,
+# without its gitignored files, and the snapshot is gone afterwards.
+HEAD_DIR=$(grep '^EVAL HEAD' "$STUB_LOG" | head -1 | cut -d' ' -f3)
+expect_eq "HEAD evaluates a snapshot, not the working tree" "$([ "$HEAD_DIR" != "$REPO" ] && [ -n "$HEAD_DIR" ] && echo snapshot)" "snapshot"
+expect_eq "the snapshot leaves gitignored files out" "$(grep -c '^IGNORED' "$STUB_LOG")" "0"
+expect_eq "the snapshot is removed after the run" "$([ -e "$HEAD_DIR" ] && echo left || echo gone)" "gone"
 PREV_DIR=$(sed -n 's/^EVAL PREV \([^ ]*\) .*/\1/p' "$STUB_LOG")
 expect_has "previous tag ran from a temporary worktree" "$PREV_DIR" "myspec-release-check."
 expect_eq "the worktree is gone afterwards" "$([ -e "$PREV_DIR" ] && echo present || echo gone) $(worktrees) $(leftovers)" "gone 1 0"
@@ -191,8 +212,9 @@ rc_run casechg2 --version 1.2.0 --models sonnet --runs 2
 expect_eq "after recording, the changed case is reused" "$(grep -c '^EVAL PREV' "$STUB_LOG")" 0
 echo "lib v2" > "$REPO/evals/_fixtures/lib.sh"
 rc_run fixchg --version 1.2.0 --models sonnet --runs 2
-expect_has "a _fixtures/ change re-runs the whole suite" "$OUTPUT" "RERUN sonnet evals/_fixtures/ changed since the baseline"
-expect_eq "whole suite re-ran" "$(prevs)" "sonnet:- "
+expect_has "a _fixtures/ change compares the previous tag's fixture workspaces first" "$OUTPUT" "baseline WORKSPACES evals/_fixtures/ changed since the baseline"
+expect_eq "no workspace changed: nothing of the previous tag re-ran, its worktree is gone" "$(prevs)|$(worktrees) $(leftovers)" "|1 0"
+expect_has "and the stored baseline is reused" "$OUTPUT" "v1.1.0 (stored baseline)"
 record fixchg
 
 echo "# Claude Code version changed: re-run the previous tag"
@@ -319,6 +341,69 @@ expect_eq "TERM during HEAD's run: exit 2 within 2 s, the eval killed" "$RC $([ 
 interrupt term-prev STUB_SLEEP_PREV=30
 expect_eq "TERM during the previous tag's run: exit 2 within 2 s, eval killed, worktree removed" \
   "$RC $([ "$ELAPSED" -le 2 ] && echo fast || echo "slow:${ELAPSED}s") $STUB_ALIVE $(worktrees) $(leftovers)" "2 fast dead 1 0"
+
+echo "# release suite: per-case runs, modelTags, workspaces, project instructions (#310)"
+rm -rf "$REPO/quality/baselines" "$TREND"
+cd "$REPO" || exit 1
+printf -- '---\ntags: [trigger, regression]\n---\nprompt a\n' > evals/case-a/prompt.md
+printf -- '---\ntags: [near-miss, regression]\n---\nprompt b\n' > evals/case-b/prompt.md
+printf -- '---\ntags: [planted-flaw, capability]\nruns: 1\n---\nprompt c\n' > evals/case-c/prompt.md
+printf -- '---\ntags: [artifact-contract, regression]\n---\nprompt d\n' > evals/case-d/prompt.md
+printf -- '---\ntags: [trigger, capability]\nruns: 1\n---\nprompt e\n' > evals/case-e/prompt.md
+printf -- '---\ntags: [trigger, regression]\n---\nprompt f\n' > evals/case-f/prompt.md
+# Fixtures: case-c and case-d build a workspace through lib.sh; case-e carries
+# a generated project-instructions block.
+printf 'ws() { echo base > ws.txt; }\n' > evals/_fixtures/lib.sh
+for c in c d; do
+  printf 'context:\n  scaffold_script: fixture.sh\n' > "evals/case-$c/case.yaml"
+  # shellcheck disable=SC2016 # the fixture script expands it, not this one
+  printf '. "$(dirname "${BASH_SOURCE[0]}")/../_fixtures/lib.sh"\nws %s\n' "$c" > "evals/case-$c/fixture.sh"
+done
+block() { printf 'name: case-e\n\n# BEGIN project-instructions: generated by evals/_fixtures/project-instructions.sh, do not edit\nexecution:\n  append_system_prompt: |-\n    %s\n# END project-instructions\n' "$1" > evals/case-e/case.yaml; }
+block "rules v1"
+git add -A && git commit -qm "release suite fixtures"
+SET_MODEL_TAGS='{"haiku": ["trigger", "near-miss"]}' set_config true '["sonnet"]'
+rc_run suite1 --version 1.2.0 --models sonnet,haiku
+H="$TMP/out-suite1/staged/baselines/v1.2.0.json"
+expect_eq "no --runs: no --runs flag reaches run.sh or claude" "$(grep -c -- '--runs' "$STUB_LOG")" 0
+expect_eq "each case runs its own count: capability cases once, the rest 3 times" \
+  "$(jf "$H" 'Object.entries(d.models.sonnet.cases).map(([c, v]) => c.slice(5) + v.scores.length).join(" ")')" "a3 b3 c1 d3 e1 f3"
+expect_has "haiku gets the modelTags filter as --tag flags" "$(cat "$STUB_LOG")" "TAGS haiku trigger,near-miss"
+expect_eq "sonnet runs unfiltered" "$(grep -c '^TAGS sonnet' "$STUB_LOG")" 0
+expect_eq "haiku ran only the trigger and near-miss cases, on both sides" \
+  "$(jf "$H" 'Object.keys(d.models.haiku.cases).join(" ")') | $(jf "$TMP/out-suite1/staged/baselines/v1.1.0.json" 'Object.keys(d.models.haiku.cases).join(" ")')" \
+  "case-a case-b case-e case-f | case-a case-b case-e case-f"
+expect_eq "the previous tag ran the same run counts per case" \
+  "$(jf "$TMP/out-suite1/staged/baselines/v1.1.0.json" 'Object.entries(d.models.sonnet.cases).map(([c, v]) => c.slice(5) + v.scores.length).join(" ")')" "a3 b3 c1 d3 e1 f3"
+expect_eq "baselines record tiers and every case's workspace hash" \
+  "$(jf "$H" '[d.evals.tiers["case-c"], d.evals.tiers["case-d"], /^[0-9a-f]{16}$/.test(d.evals.workspaces["case-c"]), d.evals.workspaces["case-a"]]')" \
+  '["capability","regression",true,"none"]'
+expect_eq "capability cases are report-only in the comparison" \
+  "$(jf "$TMP/out-suite1/compare.json" '[d.models.sonnet.n_paired, d.models.sonnet.report_only.cases.map((c) => c.name).join(" ")]')" '[4,"case-c case-e"]'
+record suite1
+
+echo "lib comment" >> evals/_fixtures/lib.sh
+block "rules v2, regenerated"
+git commit -qam "fixtures: comment only; regenerated project instructions"
+rc_run suite2 --version 1.2.0 --models sonnet,haiku
+expect_has "_fixtures/ changed: the workspaces are compared" "$OUTPUT" "baseline WORKSPACES"
+expect_eq "no workspace changed and only case-e's generated block did: nothing of the previous tag re-ran" "$(prevs)" ""
+expect_eq "every reused case kept its stored results" "$(jf "$TMP/out-suite2/compare.json" 'd.old.label')" "v1.1.0 (stored baseline)"
+record suite2
+
+# shellcheck disable=SC2016 # lib.sh expands it, not this script
+printf 'ws() { echo base > ws.txt; if [ "$1" = c ]; then echo extra > c.txt; fi; }\n' > evals/_fixtures/lib.sh
+git commit -qam "fixtures: case-c's workspace grows a file"
+rc_run suite3 --version 1.2.0 --models sonnet,haiku
+expect_has "the changed workspace is named" "$OUTPUT" "RERUN-CASE case-c its fixture workspace changed since the baseline"
+expect_eq "only case-c re-ran, on sonnet only (haiku's modelTags exclude it)" "$(prevs)" "sonnet:case-c "
+expect_eq "the staged previous baseline carries the new workspace hashes" \
+  "$(jf "$TMP/out-suite3/staged/baselines/v1.1.0.json" 'd.evals.workspaces["case-c"] === JSON.parse(require("fs").readFileSync(process.argv[1].replace(/staged.*/, "prev-workspaces.json"), "utf8"))["case-c"]')" true
+set_config false
+SET_MODEL_TAGS='{"haiku": "trigger"}' set_config true
+rc_run badtags --version 1.2.0 --models sonnet,haiku
+expect_eq "modelTags not a map of tag lists: exit 2 before any eval" "$RC $(grep -c '^EVAL' "$STUB_LOG")" "2 0"
+set_config false
 
 echo "# skip and bad arguments"
 rc_run skip --version 1.2.0 --skip "usage limit hit"

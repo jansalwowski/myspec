@@ -9,14 +9,23 @@
 #   --mode changed  cases whose skill:<name> tags name a skill changed between
 #                   --base and HEAD (selection rules: evals/README.md).
 #                   Defaults: --runs 1 --models sonnet.
-#   --mode full     every case. Defaults: --runs 3 --models sonnet,haiku.
+#   --mode full     every case. Defaults: --models sonnet,haiku, and each
+#                   case's own run count: `runs:` in its prompt.md, else 3
+#                   (capability cases set `runs: 1`; evals/README.md).
+#   --runs N        run every selected case N times, whatever its `runs:`.
+#   --model-tags M=T[,T...]
+#                   run model M only on the selected cases that carry at least
+#                   one of the tags T; M is skipped when none does. Repeatable.
+#                   release-check.sh passes quality/release-check.json
+#                   "modelTags" this way.
 #   --base          default: git merge-base origin/main HEAD (then main).
 #   --out           default: .eval-results/<UTC timestamp>-<mode>/
 #                   Results land in <out>/<model>/ (full) or
 #                   <out>/<model>/<case>/ (changed: one invocation per case).
 #   --case          shell glob on case names, applied after selection.
-#   --plugin-dir    plugin under test, default: this repo. Its evals/ must hold
-#                   the same cases (release-check.sh copies them in).
+#   --plugin-dir    plugin under test, default: a snapshot of this repo's
+#                   tracked and untracked, not-ignored files (#311). Its evals/
+#                   must hold the same cases (release-check.sh copies them in).
 #
 # Environment:
 #   MYSPEC_EVALS_STRICT=1          exit 1 when a case scores below threshold (default: report only)
@@ -42,11 +51,15 @@ EVALS_DIR="$REPO_ROOT/evals"
 SCRIPT_DIR="$REPO_ROOT/scripts/evals"
 
 die() { echo "evals: $*" >&2; exit 2; }
-usage() { sed -n '2,37p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; }
 
 MODE="" BASE="" OUT="" RUNS="" MODELS="" CASE_GLOB="" PLUGIN_DIR="$REPO_ROOT"
+MODEL_TAGS=()   # "<model>=<tag>,<tag>" entries from --model-tags
 while [ $# -gt 0 ]; do
   case "$1" in
+    --model-tags)
+      [[ "${2:-}" =~ ^[A-Za-z0-9._-]+=[A-Za-z0-9:._-]+(,[A-Za-z0-9:._-]+)*$ ]] || { echo "evals: --model-tags needs <model>=<tag>[,<tag>...]" >&2; exit 2; }
+      MODEL_TAGS+=("$2"); shift 2 ;;
     --mode) MODE="${2:-}"; shift 2 ;;
     --base) BASE="${2:-}"; shift 2 ;;
     --out) OUT="${2:-}"; shift 2 ;;
@@ -61,10 +74,10 @@ done
 
 case "$MODE" in
   changed) : "${RUNS:=1}" "${MODELS:=sonnet}" ;;
-  full) : "${RUNS:=3}" "${MODELS:=sonnet,haiku}" ;;
+  full) : "${MODELS:=sonnet,haiku}" ;;   # no --runs: each case's own count
   *) echo "evals: --mode changed|full is required" >&2; usage >&2; exit 2 ;;
 esac
-case "$RUNS" in ''|*[!0-9]*) die "--runs must be a positive integer" ;; esac
+case "$RUNS" in *[!0-9]*|0|0*) die "--runs must be a positive integer" ;; esac
 
 CLAUDE_BIN="${MYSPEC_EVAL_CLAUDE:-claude}"
 THRESHOLD="${MYSPEC_EVAL_THRESHOLD:-0.8}"
@@ -88,6 +101,32 @@ all_cases() {
     d="${d%/}"
     [ -f "$d/prompt.md" ] || [ -f "$d/case.yaml" ] || continue
     basename "$d"
+  done
+}
+
+# Every tag of one case, one per line (the inline `tags: [...]` form the suite
+# lint requires).
+case_tags() {
+  grep -E '^tags:' "$EVALS_DIR/$1/prompt.md" 2>/dev/null | head -1 | sed 's/^tags:[[:space:]]*//' \
+    | tr -d '[]"'"'" | tr ',' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | grep -v '^$'
+}
+
+# The --model-tags tags for a model, comma-separated; empty when it has none.
+model_tags() {
+  local e
+  for e in ${MODEL_TAGS[@]+"${MODEL_TAGS[@]}"}; do
+    if [ "${e%%=*}" = "$1" ]; then echo "${e#*=}"; return; fi
+  done
+}
+
+# keep_tagged <tags csv>: the case names on stdin that carry one of the tags.
+keep_tagged() {
+  local c t
+  while IFS= read -r c; do
+    [ -n "$c" ] || continue
+    for t in ${1//,/ }; do
+      if case_tags "$c" | grep -qxF -- "$t"; then echo "$c"; break; fi
+    done
   done
 }
 
@@ -227,7 +266,7 @@ run_eval() {
   local cmd=("$CLAUDE_BIN" plugin eval "$PLUGIN_DIR"
     --trust-plugin --scaffold --no-publish
     --model "$model" --judge-model sonnet
-    --runs "$RUNS" --ablation "$ABLATION" --threshold "$THRESHOLD"
+    ${RUNS:+--runs "$RUNS"} --ablation "$ABLATION" --threshold "$THRESHOLD"
     --concurrency "$CONCURRENCY" --max-cost-usd "$cost"
     --output-dir "$outdir" --report "$outdir/report.html"
     "$@"
@@ -289,7 +328,7 @@ if [ -z "$selected" ]; then
 fi
 
 n=$(printf '%s\n' "$selected" | grep -c .)
-echo "evals: mode=$MODE runs=$RUNS models=$MODELS ablation=$ABLATION cases=$n${base:+ base=${base:0:12}}"
+echo "evals: mode=$MODE runs=${RUNS:-per-case} models=$MODELS ablation=$ABLATION cases=$n${base:+ base=${base:0:12}}"
 printf '  %s\n' $selected
 
 if [ "${MYSPEC_EVALS_DRY_RUN:-0}" != 1 ]; then preflight; fi
@@ -299,6 +338,24 @@ if [ "${MYSPEC_EVALS_DRY_RUN:-0}" != 1 ]; then preflight; fi
 mkdir -p "$OUT" || die "cannot create $OUT"
 echo "evals: results in $OUT"
 
+# The plugin under test is a copy of this repo's tracked and untracked,
+# not-ignored files, never the working tree itself (#311): `claude plugin
+# eval` refuses a directory of more than 20000 entries, and ignored local
+# state (.claude/worktrees/ from agent sessions, .eval-results/) grows past
+# that. Uncommitted edits are kept, so a local run still evaluates them.
+SNAPSHOT=""
+cleanup_snapshot() { [ -z "$SNAPSHOT" ] || rm -rf "$SNAPSHOT"; }
+if [ "$PLUGIN_DIR" = "$REPO_ROOT" ]; then
+  SNAPSHOT=$(mktemp -d "${TMPDIR:-/tmp}/myspec-eval-plugin.XXXXXX") || die "cannot create a plugin snapshot directory"
+  trap cleanup_snapshot EXIT
+  trap 'cleanup_snapshot; exit 2' INT TERM HUP
+  git -C "$REPO_ROOT" ls-files -z --cached --others --exclude-standard \
+    | (cd "$REPO_ROOT" && while IFS= read -r -d '' f; do { [ -e "$f" ] || [ -L "$f" ]; } && printf '%s\0' "$f"; done) \
+    | (cd "$REPO_ROOT" && tar --null -T - -cf -) | (cd "$SNAPSHOT" && tar -xf -) \
+    || die "cannot copy the plugin to $SNAPSHOT"
+  PLUGIN_DIR="$SNAPSHOT"
+fi
+
 worst=0
 note() { if [ "$1" -gt "$worst" ]; then worst="$1"; fi; }
 
@@ -306,18 +363,28 @@ note() { if [ "$1" -gt "$worst" ]; then worst="$1"; fi; }
 # `claude plugin eval --case` takes one glob, so --mode changed runs one
 # invocation per case, $CONCURRENCY at a time; --mode full runs one
 # invocation per model, one after the other (each parallelises its own runs).
+# A model with --model-tags gets only the selected cases carrying one of its
+# tags: in full mode through `--tag` (claude plugin eval ORs repeated tags and
+# ANDs them with --case), in changed mode by dropping the other cases.
 jobs_list=""
 IFS=',' read -r -a model_list <<< "$MODELS"
 for model in "${model_list[@]}"; do
   [ -n "$model" ] || continue
+  tags=$(model_tags "$model") mine="$selected"
+  if [ -n "$tags" ]; then
+    mine=$(printf '%s\n' "$selected" | keep_tagged "$tags")
+    if [ -z "$mine" ]; then echo "evals: $model: no selected case is tagged ${tags//,/ or }; skipped"; continue; fi
+    echo "evals: $model: only cases tagged ${tags//,/ or } ($(printf '%s\n' "$mine" | grep -c .) of $n)"
+  fi
   if [ "$MODE" = full ]; then
-    jobs_list="$jobs_list$OUT/$model|$model|$CASE_GLOB"$'\n'
+    jobs_list="$jobs_list$OUT/$model|$model|$CASE_GLOB|$tags"$'\n'
   else
     while IFS= read -r c; do
-      [ -n "$c" ] && jobs_list="$jobs_list$OUT/$model/$c|$model|$c"$'\n'
-    done <<< "$selected"
+      [ -n "$c" ] && jobs_list="$jobs_list$OUT/$model/$c|$model|$c|"$'\n'
+    done <<< "$mine"
   fi
 done
+if [ -z "$jobs_list" ]; then echo "evals: no model has a case to run; nothing to run."; exit 0; fi
 if [ "$MODE" = full ]; then slots=1; else slots="$CONCURRENCY"; fi
 
 started=$(date +%s)
@@ -347,8 +414,10 @@ while :; do
     fi
     if LC_ALL=C awk -v l="$left" 'BEGIN { exit !(l <= 0) }'; then stopped="cost ceiling \$$MAX_COST reached"; break; fi
     job=$(printf '%s' "$jobs_list" | sed -n "$((launched + 1))p")
-    IFS='|' read -r j_out j_model j_case <<< "$job"
-    run_eval "$j_out" "$j_model" "$left" ${j_case:+--case "$j_case"} &
+    IFS='|' read -r j_out j_model j_case j_tags <<< "$job"
+    tag_args=()
+    for t in ${j_tags//,/ }; do tag_args+=(--tag "$t"); done
+    run_eval "$j_out" "$j_model" "$left" ${j_case:+--case "$j_case"} ${tag_args[@]+"${tag_args[@]}"} &
     running="$running $!:$j_out"
     launched=$((launched + 1)); n_running=$((n_running + 1))
   done
@@ -359,7 +428,7 @@ if [ -n "$stopped" ]; then
   echo "evals: $stopped; $((total - launched)) of $total invocation(s) not started, in-flight ones stopped" >&2
   note 2
 fi
-while IFS='|' read -r j_out _ _; do
+while IFS='|' read -r j_out _ _ _; do
   [ -n "$j_out" ] && [ -f "$j_out/exit-code" ] && note "$(classify "$j_out")"
 done <<< "$jobs_list"
 
