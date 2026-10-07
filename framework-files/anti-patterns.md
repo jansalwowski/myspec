@@ -1,13 +1,12 @@
 ---
-title: Anti-Pattern Index — Always Loaded
-purpose: Always-loaded framework + project anti-patterns. Distinct from ${aiDir}/memory/index.md, the Layer 1 index of typed memories.
-updated: 2026-03-24
+title: Anti-Pattern Index
+purpose: Framework + project anti-patterns, read before any work (CLAUDE.md and index.md route here). Distinct from ${aiDir}/memory/index.md, the Layer 1 index of typed memories.
+updated: 2026-10-07
 ---
 
-# Anti-Pattern Index (Always Loaded)
+# Anti-Pattern Index
 
-> **Budget**: ~200 tokens. Only the most critical entries belong here.
-> **Agent**: This file is always in context. The Layer 1 *memory* index is `${aiDir}/memory/index.md`; for full memory indexes, run `/myspec:memory-preflight`.
+> **Agent**: Read this file before starting any work; it is not auto-loaded. Only the most critical entries belong here. The Layer 1 *memory* index is `${aiDir}/memory/index.md`; for full memory indexes, run `/myspec:memory-preflight`.
 
 <!-- myspec:framework-start -->
 
@@ -54,5 +53,5 @@ Memory anchors (file paths, grep patterns) that no longer match indicate potenti
 
 ---
 
-*Full indexes: `procedural/index.md` | `semantic/index.md` | `episodic/index.md`*
+*Full indexes: `memory/procedural/index.md` | `memory/semantic/index.md` | `memory/episodic/index.md`*
 *Loaded via `/myspec:memory-preflight` at task start.*
