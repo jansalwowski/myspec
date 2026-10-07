@@ -9,7 +9,7 @@ Audit the user-level auto-memory store for this project, triage each entry, and 
 
 **Critical constraints:** never auto-promote (always show destination + exact insertion text); never delete a still-cited memory (grep first); skip DROP for entries <7 days old (COMPRESS is allowed at any age); do not touch project `${aiDir}/memory/`. See [Rules](#rules) for full set.
 
-**Companion rule:** `.claude/rules/auto-memory-style.md` defines the length budget, cut list, and worked example that COMPRESS rewrites must conform to.
+**Companion rule:** `.claude/rules/auto-memory-style.md` defines the length budget and cut list that COMPRESS rewrites must conform to.
 
 ## Scope
 
