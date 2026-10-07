@@ -38,12 +38,14 @@ fixture() {
   printf '%s\n' "$repo"
 }
 
-# timed <event> <repo> <command> -> runs the hook once; ELAPSED is the
-# whole seconds it took.
+# timed <event> <repo> <command> [tool_use_id] -> runs the hook once;
+# ELAPSED is the whole seconds it took. With a tool_use_id the status diff
+# runs too (#276).
 timed() {
   local start=$SECONDS
-  jq -nc --arg e "$1" --arg c "$2" --arg cmd "$3" \
-    '{hook_event_name: $e, session_id: "perf", tool_name: "Bash", cwd: $c, tool_input: {command: $cmd}}' \
+  jq -nc --arg e "$1" --arg c "$2" --arg cmd "$3" --arg id "${4:-}" \
+    '{hook_event_name: $e, session_id: "perf", tool_name: "Bash", cwd: $c, tool_input: {command: $cmd}}
+     + (if $id != "" then {tool_use_id: $id} else {} end)' \
     | bash "$HOOK" >/dev/null 2>&1
   ELAPSED=$((SECONDS - start))
 }
@@ -91,6 +93,34 @@ for i in $(seq 1 200); do printf 'x\n' >> "$REPO/docs/g$i.md"; done
 timed PostToolUse "$REPO" "$CMD"
 within 5 "200 appends to 200 docs, PostToolUse"
 [ "$(events "$REPO" write)" = 200 ] && ok || fail "200 appends to 200 docs: one write event per file"
+
+# The same 200 appends to 200 docs with the status diff on: a capture before,
+# a diff after, and the writes still recorded once each.
+REPO=$(fixture diffed)
+timed PreToolUse "$REPO" "$CMD" toolu_perf
+within 5 "200 appends to 200 docs with the status diff, PreToolUse"
+for i in $(seq 1 200); do printf 'x\n' >> "$REPO/docs/g$i.md"; done
+timed PostToolUse "$REPO" "$CMD" toolu_perf
+within 5 "200 appends to 200 docs with the status diff, PostToolUse"
+[ "$(events "$REPO" write)" = 200 ] && ok || fail "200 appends to 200 docs with the status diff: one write event per file"
+
+# A large untracked file (#305 review): the status diff compares it by stat
+# and never reads it, so a Bash call costs the same as without it. Hashing
+# its 2 GiB at Pre and Post took several seconds each. Sparse, so it is
+# instant to make and takes no disk. The variable-path write is one only the
+# diff can find, so a hook that skipped the diff cannot pass.
+REPO=$(fixture large)
+dd if=/dev/null of="$REPO/dump.bin" bs=1048576 seek=2048 count=0 2>/dev/null
+# shellcheck disable=SC2016 # the command's own $f, expanded by its shell
+CMD='f=docs/a.md; printf "x\n" >> "$f"'
+timed PreToolUse "$REPO" "$CMD" toolu_large
+within 2 "a 2 GiB untracked file, PreToolUse"
+printf 'x\n' >> "$REPO/docs/a.md"
+timed PostToolUse "$REPO" "$CMD" toolu_large
+within 2 "a 2 GiB untracked file, PostToolUse"
+[ "$(jq -r 'select(.t == "write") | .rel' "$REPO/.claude/state/sessions/perf.jsonl" 2>/dev/null)" = docs/a.md ] && ok \
+  || fail "a 2 GiB untracked file: the variable-path write is recorded, the large file is not"
+rm -f "$REPO/dump.bin"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

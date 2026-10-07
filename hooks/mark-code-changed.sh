@@ -51,15 +51,18 @@
 # its log in this one.
 #
 # Bash writes: `sed -i`, redirects, `tee` and the like never fire the
-# Write|Edit matcher, so this hook is registered under a Bash matcher too. It
-# scans the command (quoted spans and heredoc bodies blanked by
-# lib/command-scan.sh) and records only what the command writes: a redirect
+# Write|Edit matcher, so this hook is registered under a Bash matcher too.
+# Two sources name what a Bash call wrote (docs/stop-gate.md, Session
+# writes). The status diff (lib/status-diff.sh, #276) captures `git status`
+# of the checkouts the call reaches at PreToolUse and takes what changed by
+# PostToolUse: a variable path, an interpreter's write, `git apply`. The
+# command scanner (quoted spans and heredoc bodies blanked by
+# lib/command-scan.sh) reads the targets the command names: a redirect
 # target other than /dev/null or a descriptor, the operands of `tee`, `sed -i`
 # and `perl -i`, every operand of `mv`, the destination of `cp`, `rsync` and
-# `install`, and the files `patch` edits and writes. Reading, grepping or
-# running a file records nothing. A quoted literal path is read; a variable
-# path, `git apply`, and a script that writes from inside a heredoc body are
-# not seen — run it as `python3 script.py` or use the Write tool.
+# `install`, and the files `patch` edits and writes. It alone sees a
+# gitignored file, a project without git, and a call the diff could not
+# take. Reading, grepping or running a file records nothing.
 #
 # `## Files touched` is how a skill finds ITS OWN session among several: the
 # harness never exposes the session id to the model, but the paths it edited
@@ -416,6 +419,8 @@ bash_write_targets() {
       [ "${#words[@]}" -lt 2 ] || decode_word_to dw "${kwords[1]}"
       if [ "${#words[@]}" -ge 2 ] && next=$(cd "$BASE_DIR" 2>/dev/null && cd "$dw" 2>/dev/null && pwd -P); then
         BASE_DIR="$next"
+        # Not a target: a checkout this command reaches, for the status diff.
+        printf 'cd:%s\n' "$next"
       fi
       continue
     fi
@@ -587,11 +592,23 @@ ledger_home_to() {
   printf -v "$1" '%s' "$LH_HOME"
 }
 
+# root_ai_to <var> <root> -> <root>'s aiDir (ai_dir), "" without a
+# .myspec.json, read once per run and root: the content checks' scope.
+AI_ROOT="" AI_DIR=""
+root_ai_to() {
+  if [ "$2" != "$AI_ROOT" ] || [ -z "$AI_ROOT" ]; then
+    AI_ROOT="$2" AI_DIR=""
+    [ ! -f "$2/.myspec.json" ] || AI_DIR=$(ai_dir "$2")
+  fi
+  printf -v "$1" '%s' "$AI_DIR"
+}
+
 # The writes of this run, one per target in order (pend_write), recorded by
 # record_pending: PEND_KIND is "" at PreToolUse, PEND_HOME the ledger home;
 # snapshot_pending sets PEND_SNAP (0: PEND_BLOB is the snapshot, 1: not
 # judged, 2: judged but neither hashed nor kept) and PEND_SEEN marks a write
-# already recorded.
+# already recorded. PEND_BEFORE is the file's content before the call when
+# the status diff found the write (a blob id, "-" for no file), else "".
 PEND_ROOT=()
 PEND_REL=()
 PEND_KIND=()
@@ -599,9 +616,10 @@ PEND_HOME=()
 PEND_SNAP=()
 PEND_BLOB=()
 PEND_SEEN=()
+PEND_BEFORE=()
 
-# pend_write <kind> <root> <rel>: queues the write for record_pending,
-# unless <root> files with no tracked home.
+# pend_write <kind> <root> <rel> [before]: queues the write for
+# record_pending, unless <root> files with no tracked home.
 pend_write() {
   local home
   ledger_home_to home "$2" || return 0
@@ -612,6 +630,7 @@ pend_write() {
   PEND_SNAP+=(1)
   PEND_BLOB+=("")
   PEND_SEEN+=(0)
+  PEND_BEFORE+=("${4:-}")
 }
 
 # is_binary <file> -> 0 when a NUL is in its first 8000 bytes, git's own
@@ -649,8 +668,7 @@ snapshot_pending() {
     for ((j = i; j < ${#PEND_ROOT[@]}; j++)); do
       [ "${PEND_ROOT[$j]}" != "$root" ] || idx+=("$j")
     done
-    ai=""
-    [ ! -f "$root/.myspec.json" ] || ai=$(ai_dir "$root")
+    root_ai_to ai "$root"
     ignored=$'\034'
     while IFS= read -r -d '' x; do
       ignored="$ignored$x"$'\034'
@@ -727,8 +745,10 @@ mark_seen_pending() {
 # file. A Bash write to a file the content checks judge carries its snapshot,
 # or "@" when it could be neither hashed nor kept (the Stop gate then reads
 # the file as it is), and is recorded every time, since each one is a new
-# before/after pair for the Stop gate. Any other write is recorded once
-# since its root's last `verified` event.
+# before/after pair for the Stop gate; when the status diff found it, a
+# `pre` event from the capture taken at PreToolUse comes first (the command
+# scanner may not have named the file then). Any other write is recorded
+# once since its root's last `verified` event.
 record_pending() {
   local i
   [ "$VIA" != bash ] || snapshot_pending
@@ -741,7 +761,14 @@ record_pending() {
     mark_seen_pending
     for ((i = 0; i < ${#PEND_ROOT[@]}; i++)); do
       case "${PEND_SNAP[$i]}" in
-        0) queue_event "${PEND_HOME[$i]}" write "${PEND_ROOT[$i]}" "${PEND_REL[$i]}" "${PEND_KIND[$i]}" bash "${PEND_BLOB[$i]}" 1 ;;
+        0)
+          case "${PEND_BEFORE[$i]}" in
+            '') ;;
+            -) queue_event "${PEND_HOME[$i]}" pre "${PEND_ROOT[$i]}" "${PEND_REL[$i]}" "" "" "" 1 ;;
+            *) queue_event "${PEND_HOME[$i]}" pre "${PEND_ROOT[$i]}" "${PEND_REL[$i]}" "" "" "${PEND_BEFORE[$i]}" 1 ;;
+          esac
+          queue_event "${PEND_HOME[$i]}" write "${PEND_ROOT[$i]}" "${PEND_REL[$i]}" "${PEND_KIND[$i]}" bash "${PEND_BLOB[$i]}" 1
+          ;;
         2) queue_event "${PEND_HOME[$i]}" write "${PEND_ROOT[$i]}" "${PEND_REL[$i]}" "${PEND_KIND[$i]}" bash "@" 1 ;;
         *)
           [ "${PEND_SEEN[$i]}" = 0 ] || continue
@@ -966,9 +993,184 @@ SESSION
   done
 }
 
+# The status diff (lib/status-diff.sh, #276): at PreToolUse each checkout a
+# Bash call reaches is captured, under
+# <session dir>/<session_id>.bash/<tool_use_id>.<n> in the cwd's home; at
+# PostToolUse (or PostToolUseFailure) what changed since is added to what the
+# command scanner read. The scanner stays for what the diff cannot see: a
+# gitignored file, a project without git, a call with no capture.
+
+# diff_keep <root> <rel> -> 0 for a file the content checks would judge, so
+# its capture is written to the object store as a before side. Called by
+# name from status_capture.
+# shellcheck disable=SC2317,SC2329
+diff_keep() {
+  local ai
+  [ "$SNAPSHOTS" = 1 ] || return 1
+  # "/" stands for an aiDir no path is under: a doc kind, .claude/ or docs/
+  # is in scope without it, so the settings reader runs only for a file
+  # that needs the aiDir to decide.
+  if ! absolute_paths_scope_unignored "$1" "$2" /; then
+    [ -f "$1/.myspec.json" ] || return 1
+    root_ai_to ai "$1"
+    absolute_paths_scope_unignored "$1" "$2" "$ai" || return 1
+  fi
+  ! is_binary "$1/$2"
+}
+
+# diff_log <start|end>: appends this call to the repository's Bash call log,
+# <session dir>/bash-calls.log, one short O_APPEND line (`<epoch> <event>
+# <session_id> <tool_use_id>`), so concurrent sessions' lines never
+# interleave. The order of the lines is the order of the calls, with no clock
+# to compare: that is what diff_overlap reads. Past 256 KiB the log becomes
+# bash-calls.log.old (a rename, atomic) and a new one starts; then, too,
+# captures older than an hour go (calls whose PostToolUse never came), so
+# the sweep costs no process on every call. <epoch> is NOW.
+diff_log() {
+  local log="$BASH_DIRS/bash-calls.log" size
+  if [ "$1" = start ] && [ -f "$log" ]; then
+    size=$(wc -c < "$log" 2>/dev/null || printf 0)
+    if [ "${size// /}" -gt 262144 ]; then
+      mv -f -- "$log" "$log.old" 2>/dev/null || true
+      find "${BASH_DIRS:?}" -mindepth 2 -maxdepth 2 -path '*.bash/*' -mmin +60 -exec rm -f {} + 2>/dev/null || true
+    fi
+  fi
+  printf '%s %s %s %s\n' "$NOW" "$1" "$SESSION_ID" "$TOOL_USE_ID" >> "$log" 2>/dev/null || true
+}
+
+# diff_enabled <root> -> 1 when the checkout turns the status diff off,
+# `hooks.markCodeChanged.statusDiff: false`, read from the checkout, else
+# its primary checkout when it has no .myspec.json (as load_settings). The
+# settings reader runs only when the file names the key: this runs at every
+# Bash call, and a process costs it milliseconds.
+diff_enabled() {
+  local src="$1" txt=""
+  if [ ! -f "$src/.myspec.json" ]; then
+    src=$(main_worktree_root "$1" 2>/dev/null) || return 0
+    [ -f "$src/.myspec.json" ] || return 0
+  fi
+  IFS= read -r -d '' txt < "$src/.myspec.json" || true
+  case "$txt" in *'"statusDiff"'*) ;; *) return 0 ;; esac
+  read_setting hooks.markCodeChanged.statusDiff "$src" || return 0
+  [ -z "$SETTING_NOTES" ] || printf '%s\n' "$SETTING_NOTES" | sed 's/^/myspec-config: /' >&2
+  [ "$SETTING" != false ]
+}
+
+# diff_capture <dir>...: captures the checkout of each directory that files
+# with a tracked home and has the status diff on (diff_enabled), once each,
+# as <CALL>.0, <CALL>.1, ... in the session's .bash directory (made once per
+# session, not per call). The call's start is logged before its first
+# capture; a call that captured nothing logs its end at once, so it never
+# stands open in the log for other sessions' diffs.
+diff_capture() {
+  local d root home n=0 started=0 done_roots=$'\n' done_dirs=$'\n'
+  [ -d "${CALL%/*}" ] || mkdir -p "${CALL%/*}" 2>/dev/null || return 0
+  for d in "$@"; do
+    # Each directory once: a command writing many files in one directory
+    # asks git about it once.
+    case "$done_dirs" in *$'\n'"$d"$'\n'*) continue ;; esac
+    done_dirs="$done_dirs$d"$'\n'
+    if [ "$d" = "$CWD_ROOT" ]; then
+      root="$CWD_ROOT"
+    else
+      d=$(existing_dir "$d") || continue
+      root=$(checkout_root "$d") || continue
+    fi
+    case "$done_roots" in *$'\n'"$root"$'\n'*) continue ;; esac
+    done_roots="$done_roots$root"$'\n'
+    ledger_home_to home "$root" || continue
+    diff_enabled "$root" || continue
+    if [ "$started" = 0 ]; then
+      diff_log start
+      started=1
+    fi
+    if ! status_capture "$root" diff_keep > "${CALL:?}.$n" 2>/dev/null; then
+      rm -f -- "${CALL:?}.$n"
+      continue
+    fi
+    n=$((n + 1))
+  done
+  [ "$started" = 0 ] || [ "$n" -gt 0 ] || diff_log end
+}
+
+# diff_overlap -> 0 when another session ran a Bash call in this repository
+# while this one ran, read from the call log (diff_log): a line of another
+# session after this call's start, or a call of another session still open
+# when this one started (opened in the last 15 minutes; an older one never
+# finished). Its writes would be in this call's diff, so the diff alone then
+# names nothing (the scanner's targets still count). Also 0 when this call's
+# start is not in the log: nothing can be told. A subagent shares its
+# parent's session id, so its calls are this session's own.
+diff_overlap() {
+  local log="$BASH_DIRS/bash-calls.log"
+  { cat -- "$log.old" "$log" 2>/dev/null || true; } | awk -v sid="$SESSION_ID" -v id="$TOOL_USE_ID" -v now="$NOW" '
+    $3 == sid && $4 == id && $2 == "start" {
+      found = 1
+      for (k in open) if (open[k] >= now - 900) busy = 1
+      next
+    }
+    $3 == sid { next }
+    found && ($2 == "start" || $2 == "end") { busy = 1; next }
+    $2 == "start" { open[$3 " " $4] = $1 }
+    $2 == "end" { delete open[$3 " " $4] }
+    END { exit (found && !busy) ? 1 : 0 }'
+}
+
+# diff_targets: adds each file the status diff found to TARGETS (and its
+# content before the call to DIFF_PATHS / DIFF_BEFORE), then closes the call:
+# its capture files go, and its end goes to the call log.
+DIFF_PATHS=()
+DIFF_BEFORE=()
+diff_targets() {
+  local cap rel before p
+  [ -f "$CALL.0" ] || return 0
+  if ! diff_overlap; then
+    for cap in "$CALL".[0-9]*; do
+      [ -f "$cap" ] || continue
+      while IFS= read -r -d '' p && IFS= read -r -d '' rel && IFS= read -r -d '' before; do
+        p="$p/$rel"
+        case "$SEEN" in
+          *$'\n'"$p"$'\n'*) ;;
+          *)
+            SEEN="$SEEN$p"$'\n'
+            TARGETS+=("$p")
+            ;;
+        esac
+        DIFF_PATHS+=("$p")
+        DIFF_BEFORE+=("$before")
+      done < <(status_changes "$cap" | diff_with_root "$cap")
+    done
+  fi
+  rm -f -- "${CALL:?}".[0-9]*
+  diff_log end
+}
+
+# diff_with_root <capture file>: status_changes' pairs on stdin, each
+# prefixed with the capture's root, as NUL-separated triples.
+diff_with_root() {
+  local root rel before
+  IFS= read -r -d '' root < "$1" || return 0
+  while IFS= read -r -d '' rel && IFS= read -r -d '' before; do
+    printf '%s\0%s\0%s\0' "$root" "$rel" "$before"
+  done
+}
+
+# diff_before <path> -> the content before the call the status diff found
+# for <path>, "" when it did not find the write.
+diff_before() {
+  local i
+  for ((i = 0; i < ${#DIFF_PATHS[@]}; i++)); do
+    if [ "${DIFF_PATHS[$i]}" = "$1" ]; then
+      printf '%s' "${DIFF_BEFORE[$i]}"
+      return 0
+    fi
+  done
+}
+
 payload_parse "$(cat)" FILE_PATH='.tool_input.file_path // .tool_input.notebook_path' \
   COMMAND=.tool_input.command SESSION_ID=.session_id HOOK_EVENT='.hook_event_name | strings' \
-  AGENT_ID='.agent_id | strings' AGENT_TYPE='.agent_type | strings' CWDS="$HOOK_CWDS"
+  AGENT_ID='.agent_id | strings' AGENT_TYPE='.agent_type | strings' CWDS="$HOOK_CWDS" \
+  TOOL_USE_ID='.tool_use_id | strings'
 
 [ -n "$SESSION_ID" ] || exit 0
 
@@ -987,7 +1189,22 @@ fi
 PAYLOAD_CWD=$(first_dir "$CWDS") || PAYLOAD_CWD="$PWD"
 BASE_DIR=$(physical_dir "$PAYLOAD_CWD")
 
+# The cwd's checkout and its tracked session home, for a write into a
+# nested untracked clone (ledger_home_to) and for the status diff's
+# captures. Empty when the cwd is in no tracked project.
+CWD_ROOT="" CWD_HOME=""
+# Asked here, in this shell, so the subshells below find the answer cached.
+checkout_facts "$BASE_DIR" || true
+if CWD_ROOT=$(checkout_root "$BASE_DIR") && CWD_HOME=$(session_home "$CWD_ROOT") \
+    && session_tracked_at "$CWD_HOME" "$CWD_ROOT"; then
+  # ledger_home_to's answer for the cwd's checkout, without asking again.
+  LH_ROOT="$CWD_ROOT" LH_HOME="$CWD_HOME" LH_RC=0
+else
+  CWD_ROOT="" CWD_HOME=""
+fi
+
 TARGETS=()
+SEEN=$'\n'
 CONTEXT=""
 # PreToolUse (Bash only): snapshot the targets, record nothing else.
 PRE=0
@@ -1016,24 +1233,49 @@ elif [ -n "$COMMAND" ]; then
   fi
 
   # Cheap gate before the full scan: a write verb or a redirect at some
-  # segment. Most Bash calls stop here.
+  # segment, or a `cd` (it brings another checkout into the status diff's
+  # reach). Most Bash calls skip the scan.
   WRITE_PATTERNS=(
     '^([^[:space:]]*/)?(sed|perl|tee|mv|cp|rsync|install|patch)([[:space:]]|$)'
     '>{1,2}[[:space:]]*[^&[:space:]]'
+    '^cd([[:space:]]|$)'
   )
-  segment_matches "${WRITE_PATTERNS[@]}" || exit 0
-
   # Each file once, in first-seen order: a command that appends to the same
   # file in every statement writes it once as far as the ledger is concerned
-  # (one snapshot before, one after).
-  scan_command keep
-  SEEN=$'\n'
-  while IFS= read -r p; do
-    [ -n "$p" ] || continue
-    case "$SEEN" in *$'\n'"$p"$'\n'*) continue ;; esac
-    SEEN="$SEEN$p"$'\n'
-    TARGETS+=("$p")
-  done < <(bash_write_targets)
+  # (one snapshot before, one after). REACH: the directories whose
+  # checkouts the status diff captures.
+  REACH=()
+  [ -z "$CWD_ROOT" ] || REACH=("$CWD_ROOT")
+  if segment_matches "${WRITE_PATTERNS[@]}"; then
+    scan_command keep
+    while IFS= read -r p; do
+      case "$p" in
+        '') continue ;;
+        cd:*) REACH+=("${p#cd:}"); continue ;;
+      esac
+      case "$SEEN" in *$'\n'"$p"$'\n'*) continue ;; esac
+      SEEN="$SEEN$p"$'\n'
+      TARGETS+=("$p")
+      REACH+=("${p%/*}")
+    done < <(bash_write_targets)
+  fi
+
+  # The status diff needs the call id that pairs PreToolUse with PostToolUse,
+  # a tracked cwd to keep its captures in, and the lib.
+  TOOL_USE_ID=${TOOL_USE_ID//[!A-Za-z0-9_-]/}
+  if [ -n "$TOOL_USE_ID" ] && [ -n "$CWD_HOME" ] && [ -f "$HOOK_LIB/status-diff.sh" ] \
+      && session_file "$CWD_HOME" "$SESSION_ID" >/dev/null; then
+    # shellcheck source=lib/status-diff.sh
+    . "$HOOK_LIB/status-diff.sh"
+    BASH_DIRS=$(session_dir "$CWD_HOME")
+    CALL="$BASH_DIRS/$SESSION_ID.bash/$TOOL_USE_ID"
+    NOW=$(date +%s)
+    if [ "$PRE" = 1 ]; then
+      diff_capture ${REACH[@]+"${REACH[@]}"}
+    else
+      diff_targets
+    fi
+  fi
 
   # Parameter expansion, not `printf | tr | head -c`: head exits after 120
   # bytes, tr dies of SIGPIPE on a long command (a heredoc write), and under
@@ -1046,17 +1288,6 @@ else
 fi
 
 [ "${#TARGETS[@]}" -gt 0 ] || exit 0
-
-# The cwd's checkout and its tracked session home, for a write into a
-# nested untracked clone (ledger_home_to). Empty when the cwd is in no tracked
-# project.
-CWD_ROOT="" CWD_HOME=""
-if CWD_ROOT=$(checkout_root "$BASE_DIR") && CWD_HOME=$(session_home "$CWD_ROOT") \
-    && session_tracked_at "$CWD_HOME" "$CWD_ROOT"; then
-  :
-else
-  CWD_ROOT="" CWD_HOME=""
-fi
 
 CODE_ROOTS=()
 CODE_PATHS=()
@@ -1077,7 +1308,7 @@ for p in "${TARGETS[@]}"; do
     CODE_ROOTS+=("$root")
     CODE_PATHS+=("$p")
   fi
-  pend_write "$kind" "$root" "$rel"
+  pend_write "$kind" "$root" "$rel" "$(diff_before "$p")"
 done
 record_pending
 [ "$PRE" = 0 ] || exit 0

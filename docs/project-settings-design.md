@@ -95,6 +95,7 @@ Interaction with the guards: a tree that `install` built in the worktree is a re
 |---|---|---|---|---|
 | `extraCodeExtensions` | list of extension | `[]` | **new**, #231 | Treat these as code in addition to `CODE_EXT` (e.g. `twig`, `tf`, `proto`). |
 | `ignorePaths` | list of glob | `[]` | **new**, #231 | A write to a matching path is recorded as `file`, not `code`, so it never arms the gate by itself. For generated output and scratch directories inside the repo. Loosens the gate, so doctor lists it. |
+| `statusDiff` | bool | `true` | #276 | `false` stops the status diff: a Bash call's writes are then only the targets the command scanner reads from its text, so a write through a variable path or an interpreter is missed (docs/stop-gate.md, Session writes). For a checkout where `git status --untracked-files=all` is slow. Loosens the gate, so doctor lists it. |
 
 Removing a default extension is deliberately not offered. A project that wants an extension ignored can ignore the paths that hold it, which keeps the decision visible and scoped.
 

@@ -192,11 +192,17 @@ Bash: it snapshots each file the checks cover before and after the write, and
 the gate judges the lines one of those before-to-after diffs added. A line the
 file held before the session (committed or not), another session's line, and a
 tech-spec that predates the session are never judged; a line this session
-added and then committed still is. A write the scanner cannot see (a variable
-path, a file `python3 -c` opens) gets no snapshot, as it gets no write event.
+added and then committed still is. A Bash write is found from the working
+tree as well as the command text: `git status` is captured before the call and
+compared after it, so a variable path or a file `python3 -c` opens is recorded
+and judged too (a gitignored file is not, and is outside the checks anyway).
+The captures live in `.claude/state/sessions/<session_id>.bash/`, and the
+sessions of one repository share `.claude/state/sessions/bash-calls.log`,
+which orders their Bash calls so that one session's writes are not taken for
+another's.
 When the git object store is read-only, the snapshots are copied to
 `.claude/state/sessions/<session_id>.blobs/`; `/myspec:session-clean` removes
-that directory with the session file. [stop-gate.md](stop-gate.md) R14 has the
+those directories with the session file. [stop-gate.md](stop-gate.md) R14 has the
 rules.
 
 The hook now parses a Bash command at PreToolUse and again after it. Each
