@@ -20,8 +20,8 @@
 #   --case          restrict to a case glob: a partial run, never recordable,
 #                   never exit 1
 #   --head-results  reuse an earlier run.sh results dir for HEAD, spend nothing on it
-#   --cc-match      exact (default): any Claude Code version change re-runs the
-#                   previous tag; minor: only a major.minor change does
+#   --cc-match      minor (default): only a major.minor Claude Code change re-runs
+#                   the previous tag; exact: any version change does
 #   --record        after the maintainer's go: copy what a check staged in
 #                   <out-dir>/staged/ into quality/ (baselines, trend line)
 #   --skip          record {"skipped": "<reason>"} in quality/trend.jsonl, run nothing
@@ -70,7 +70,7 @@ die() { echo "release-check: $*" >&2; exit 2; }
 usage() { awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; }
 
 VERSION="" PREV_TAG="" RUNS="" MODELS="sonnet,haiku" CASE_GLOB="" OUT="" HEAD_RESULTS="" SKIP_REASON="" SKIP=0
-RECORD_FROM="" CC_MATCH="exact"
+RECORD_FROM="" CC_MATCH="minor"
 while [ $# -gt 0 ]; do
   case "$1" in
     --version) VERSION="${2:-}"; shift 2 ;;
