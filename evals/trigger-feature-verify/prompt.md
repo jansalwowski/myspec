@@ -1,7 +1,7 @@
 ---
 description: "One feature's health (docs, plan, code, manifest) is feature-verify, not feature-status-audit (every feature) or doctor (setup)."
 tags: [skill:feature-verify, skill:feature-status-audit, skill:doctor, trigger, regression]
-max_turns: 6
+max_turns: 2
 timeout_seconds: 300
 allowed_tools: [Read, Glob, Grep, Skill]
 ---
