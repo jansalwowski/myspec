@@ -34,8 +34,8 @@ The target is **retrieval quality, not size**. Memory bodies load only when `/my
 
 | Check | Applies to | How | Signal |
 |---|---|---|---|
-| Anchor liveness | P, S | `[ -f "$file" ] && grep -q "$pattern" "$file"` | pass → anchored |
-| Anchor relocation | P, S | on failure: `git grep -l "$pattern" -- . ":(exclude)$aiDir"` | hit → RE-ANCHOR; no hit → DROP-stale |
+| Anchor liveness | P, S | `node "${CLAUDE_PLUGIN_ROOT}/lib/memory-anchor.mjs" "$file" "$pattern"`, the doctor's check (pattern rules: `memory-create` Step 4) | exit 0 → anchored |
+| Anchor relocation | P, S | on failure: `git grep -lE -e "$pattern" -- . ":(exclude)$aiDir"`, then confirm each hit with the liveness command | confirmed hit → RE-ANCHOR; none → DROP-stale |
 | Never fired | P | `validation_count` is 0 and `created` > 90 days | RETUNE (see below) |
 | Trigger collision | P | 2+ shared entries in `triggers` with another P of the same `feature` | MERGE candidate |
 | Episode decay | E | `persistent: false` and `date` > 30 days | CONSOLIDATE or EXPIRE |

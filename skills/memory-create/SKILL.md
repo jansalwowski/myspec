@@ -16,7 +16,7 @@ description: "Use when an approved insight needs writing to memory — the share
   - **Procedural**: Steps (do this, verify that)
   - **Semantic**: Facts (what is true, source, implication)
   - **Episodic**: Narrative (context, decision, outcome, consequence)
-- Code-specific memories MUST include file + grep pattern anchors for staleness detection
+- Code-specific memories MUST include file + pattern anchors for staleness detection (pattern rules in Step 4)
 - Set `related` to cross-reference memories discovered during the consolidation check; empty is fine for a first capture in a new area
 
 ## Workflow
@@ -71,7 +71,7 @@ Use the type-appropriate template from `${aiDir}/.templates/memory-{type}.md`:
 - Set `polarity`: positive (pattern to follow) or negative (anti-pattern)
 - Set `triggers`: keywords from the problem space (error messages, component names, symptoms)
 - Set `not_for`: 2-3 specific exclusions
-- Set `anchors`: file + grep pattern if code-specific
+- Set `anchors`: file + pattern if code-specific
 - Set `related`: IDs of related semantic/episodic memories (e.g., ["S001", "E003"])
 
 **If semantic:**
@@ -87,6 +87,8 @@ Use the type-appropriate template from `${aiDir}/.templates/memory-{type}.md`:
 - Set `persistent: true` only if this has indefinite relevance
 - Default `persistent: false` -- will auto-archive after 30 days
 - Set `related`: IDs of related procedural/semantic memories (e.g., ["P009", "S001"])
+
+**Anchor patterns.** A pattern is a POSIX extended regex (`grep -E`), case-sensitive, matched one line at a time: `^` and `$` mean line start and end, and nothing matches across a line break. Write alternation as `|`; `\|`, `\+`, `\(` are literal characters. A pattern that appears literally on a line also counts, so `$this->load(` needs no escaping. Pick a line that names the thing (`^composer:`, `function resolveSkillName`), not one that spans lines. Check it before writing: `node "${CLAUDE_PLUGIN_ROOT}/lib/memory-anchor.mjs" <file> "<pattern>"` must exit 0 — the doctor and `memory-optimize` run the same check.
 
 ### 5. Update Type-Specific Index
 
@@ -128,7 +130,7 @@ If the memory is critical enough to always be in context:
 - [ ] ID came from `memory-claim-id.sh`; a missing script or an exit-3 refusal stopped the write instead of being worked around
 - [ ] `hook:` set in frontmatter; index regenerated and `--check` clean
 - [ ] Index row contains keywords/topics only — no solutions leaked
-- [ ] `anchors` field set for code-specific memories
+- [ ] `anchors` field set for code-specific memories; each pattern passes `memory-anchor.mjs`
 - [ ] `related` field cross-references other memory types
 - [ ] User approved the drafted memory before final write
 - [ ] `validated`/`verified` date set in frontmatter

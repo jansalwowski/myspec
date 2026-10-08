@@ -53,8 +53,7 @@ For each episodic entry where `persistent: false` and date is > 30 days old:
 
 For any loaded memory with anchors:
 
-- Does the anchored file exist? (`ls {file}`)
-- Does the anchored pattern exist? (`grep -l "{pattern}" {file}`)
+- Does the anchored file still hold the pattern? (`node "${CLAUDE_PLUGIN_ROOT}/lib/memory-anchor.mjs" {file} "{pattern}"` exits 0; a missing file exits 1 too)
 - If either fails: flag memory as ⚠️ stale in its type index. Warn before applying.
 
 ### 7. Check for Active Session

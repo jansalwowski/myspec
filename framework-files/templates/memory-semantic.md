@@ -5,7 +5,7 @@ topic: ""           # domain keyword (e.g., google-maps, prisma, auth)
 feature: ""         # feature name or empty for global
 created: YYYY-MM-DD
 verified: YYYY-MM-DD
-anchor:             # {file: "path", pattern: "grep pattern"}
+anchor:             # {file: "path", pattern: "grep -E regex, one line"}
   file: ""
   pattern: ""
 source_session: ""  # archive slug of originating session (e.g., "2024-01-15-streetview-fix")
