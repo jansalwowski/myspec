@@ -218,12 +218,14 @@ expect_has "and the stored baseline is reused" "$OUTPUT" "v1.1.0 (stored baselin
 record fixchg
 
 echo "# Claude Code version changed: re-run the previous tag"
-STUB_CC_VERSION=2.1.290 rc_run ccpatch --version 1.2.0 --models sonnet --runs 2
-expect_has "any version change re-runs by default" "$OUTPUT" "RERUN sonnet Claude Code 2.1.284 -> 2.1.290"
+STUB_CC_VERSION=2.1.290 rc_run ccminor --version 1.2.0 --models sonnet --runs 2
+expect_eq "a patch release reuses the baseline by default" "$(grep -c '^EVAL PREV' "$STUB_LOG")" 0
+STUB_CC_VERSION=2.2.0 rc_run ccminorbump --version 1.2.0 --models sonnet --runs 2
+expect_has "a minor version change re-runs by default" "$OUTPUT" "RERUN sonnet Claude Code 2.1.284 -> 2.2.0"
+STUB_CC_VERSION=2.1.290 rc_run ccpatch --version 1.2.0 --models sonnet --runs 2 --cc-match exact
+expect_has "--cc-match exact re-runs on any version change" "$OUTPUT" "RERUN sonnet Claude Code 2.1.284 -> 2.1.290"
 expect_eq "HEAD and the previous tag ran" "$(grep -c '^EVAL HEAD' "$STUB_LOG") $(grep -c '^EVAL PREV' "$STUB_LOG")" "1 1"
 expect_eq "worktree cleaned up" "$(worktrees) $(leftovers)" "1 0"
-STUB_CC_VERSION=2.1.290 rc_run ccminor --version 1.2.0 --models sonnet --runs 2 --cc-match minor
-expect_eq "--cc-match minor reuses across a patch release" "$(grep -c '^EVAL PREV' "$STUB_LOG")" 0
 
 echo "# resolved model id changed or unresolved"
 rc_run twomodels --version 1.2.0 --models sonnet,haiku --runs 2
