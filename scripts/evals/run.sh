@@ -38,6 +38,7 @@
 #   MYSPEC_EVALS_DRY_RUN=1         print the selection and the commands, run nothing
 #   MYSPEC_EVAL_CLAUDE             claude binary, default: claude (tests point it at a stub)
 #   MYSPEC_EVAL_PROBE_URL          reachability probe, default $ANTHROPIC_BASE_URL or https://api.anthropic.com
+#   CLAUDE_CODE_PROMPT_CACHE_TTL   prompt cache TTL for the runs, default 5m (1h restores Claude Code's subscription default)
 #
 # Exit status: 0 ran (report only) · 1 below threshold, only when strict ·
 #              2 infrastructure error (claude missing, not logged in, API
@@ -86,6 +87,12 @@ ABLATION="${MYSPEC_EVAL_ABLATION:-none}"
 if [ "$MODE" = changed ]; then MAX_COST="${MYSPEC_EVAL_MAX_COST_USD:-2}"; else MAX_COST="${MYSPEC_EVAL_MAX_COST_USD:-20}"; fi
 DEADLINE="${MYSPEC_EVAL_DEADLINE_SECONDS:-0}"
 case "$DEADLINE" in ''|*[!0-9]*) die "MYSPEC_EVAL_DEADLINE_SECONDS must be a whole number of seconds" ;; esac
+# A subscription login writes the main conversation's prompt cache with the
+# one-hour TTL, billed at 2x input against 1.25x for five minutes. No run lasts
+# five minutes, so the hour is never used; cache writes were 62% of a Sonnet
+# run's cost (docs/evals-research-2026-10-07/cost-analysis.md). Only billing
+# changes, so results stay comparable with baselines recorded on 1h.
+export CLAUDE_CODE_PROMPT_CACHE_TTL="${CLAUDE_CODE_PROMPT_CACHE_TTL:-5m}"
 # Tools beyond the read-only set that some case needs: feature-spec writes
 # spec.md (Write, Edit); feature-plan and feature-implement read the branch
 # (git, read-only verbs).
