@@ -23,7 +23,7 @@
 //   cases in only one set: listed, excluded from every paired statistic
 //
 // A case REGRESSED when either
-//   - it passed every run in the baseline (at least 2 runs) and now passes
+//   - it passed every run in the baseline (at least 1 run) and now passes
 //     none of at least 2 runs, or
 //   - its mean score fell by at least --case-drop (default 0.67).
 //
@@ -45,7 +45,10 @@
 // capability (a baseline file; results directories carry no tiers) is shown
 // with its diff and any drop, but stays out of the paired statistics, the
 // regressed-case count, pass@k/pass^k and the verdict. The release suite runs
-// capability cases once (`runs: 1`), regression cases 3 times.
+// capability cases once (`runs: 1`), regression cases 3 times, or, for a model
+// in "adaptiveModels", once and 3 times only when that run failed. A passing
+// single run therefore counts as stable: under the old 2-run minimum, two
+// adaptive sides could never flag a broken case (calibrate.mjs).
 //
 // Exit status: 0 improved, no-change or insufficient-data · 1 regressed ·
 // 2 bad input (unreadable set, no model or no case in common, --k above the
@@ -55,7 +58,7 @@ import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { filterCases, loadSet, reportOnlyCases } from './results.mjs';
 
-export const DEFAULTS = { seed: 42, resamples: 10000, minPaired: 5, minFlagged: 2, caseDrop: 0.67, signAlpha: 0.05, stablePassMax: 0 };
+export const DEFAULTS = { seed: 42, resamples: 10000, minPaired: 5, minFlagged: 2, caseDrop: 0.67, signAlpha: 0.05, stablePassMax: 0, minStableRuns: 1 };
 
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -168,15 +171,15 @@ export function compareModel(oldM, newM, opts) {
   const newS = paired.length ? summarize(pick(newM, paired), k) : looseSummary(newM.cases, []);
 
   // Per-case regression flags. A case counts when it was stable in the
-  // baseline (every run passed, at least 2 runs) and now fails at least 2
-  // more runs, or when its mean score fell by at least caseDrop.
+  // baseline (every run passed, at least minStableRuns runs) and now fails
+  // every one of at least 2 runs, or when its mean score fell by at least caseDrop.
   const flagged = [];
   const flagCase = (c) => {
     const no = c.old_passed.length;
     const nn = c.new_passed.length;
     const co = c.old_passed.filter(Boolean).length;
     const cn = c.new_passed.filter(Boolean).length;
-    if (no >= 2 && nn >= 2 && co === no && cn / nn <= opts.stablePassMax + EPS) {
+    if (no >= opts.minStableRuns && nn >= 2 && co === no && cn / nn <= opts.stablePassMax + EPS) {
       c.flag = `was ${pf(c.old_passed)}, now ${pf(c.new_passed)}`;
     } else if (-c.diff >= opts.caseDrop - EPS) {
       c.flag = `mean score ${c.old_mean.toFixed(2)} -> ${c.new_mean.toFixed(2)}`;

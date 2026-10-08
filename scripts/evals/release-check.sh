@@ -122,8 +122,9 @@ fi
 
 # gate seed resamples gate-models model-tags: gate-models is "*" when
 # gateModels is absent (every model gates), "-" for an empty list (none does);
-# model-tags is "<model>=<tag>,<tag>;<model>=..." from modelTags, "-" for none.
-read -r GATE SEED RESAMPLES GATE_MODELS MODEL_TAGS < <(node -e '
+# model-tags is "<model>=<tag>,<tag>;<model>=..." from modelTags, "-" for none;
+# adaptive is adaptiveModels comma-separated, "-" for none.
+read -r GATE SEED RESAMPLES GATE_MODELS MODEL_TAGS ADAPTIVE_MODELS < <(node -e '
   const fs = require("fs");
   const c = fs.existsSync(process.argv[1]) ? JSON.parse(fs.readFileSync(process.argv[1], "utf8")) : {};
   const g = c.gateModels;
@@ -136,9 +137,13 @@ read -r GATE SEED RESAMPLES GATE_MODELS MODEL_TAGS < <(node -e '
     throw new Error("modelTags must map model aliases to non-empty arrays of tags");
   }
   const mt = Object.entries(t).map(([m, v]) => `${m}=${v.join(",")}`).join(";") || "-";
-  console.log([c.gate === true, c.seed ?? 42, c.resamples ?? 10000, g === undefined ? "*" : g.join(",") || "-", mt].join(" "));
+  const a = c.adaptiveModels ?? [];
+  if (!(Array.isArray(a) && a.every((m) => typeof m === "string" && /^[\w.-]+$/.test(m)))) {
+    throw new Error("adaptiveModels must be an array of model aliases");
+  }
+  console.log([c.gate === true, c.seed ?? 42, c.resamples ?? 10000, g === undefined ? "*" : g.join(",") || "-", mt, a.join(",") || "-"].join(" "));
 ' "$CONFIG") || die "unreadable $CONFIG"
-[ -n "${MODEL_TAGS:-}" ] || die "unreadable $CONFIG"
+[ -n "${ADAPTIVE_MODELS:-}" ] || die "unreadable $CONFIG"
 TAG_ARGS=()
 if [ "$MODEL_TAGS" != - ]; then
   IFS=';' read -r -a _mt <<< "$MODEL_TAGS"
@@ -195,6 +200,8 @@ trap 'echo "release-check: interrupted" >&2; exit 2' INT TERM HUP
 run_suite() {
   local args=(--mode full --models "$2" --out "$1") glob="${4:-$CASE_GLOB}" rc
   [ -n "$RUNS" ] && args+=(--runs "$RUNS")
+  # Both sides run adaptively, so the previous tag's re-run pairs with HEAD.
+  [ -z "$RUNS" ] && [ "$ADAPTIVE_MODELS" != - ] && args+=(--adaptive-models "$ADAPTIVE_MODELS")
   args+=(${TAG_ARGS[@]+"${TAG_ARGS[@]}"})
   [ -n "$glob" ] && args+=(--case "$glob")
   [ -n "${3:-}" ] && args+=(--plugin-dir "$3")

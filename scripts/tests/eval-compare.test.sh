@@ -156,15 +156,30 @@ expect_eq "1 paired case: insufficient-data, exit 0, however it moved" \
 cmp_json four "$FX/stable-old" "$FX/broken2-new" --case 'case-0[1-4]'
 expect_eq "4 paired cases, 2 broken: still insufficient-data (minimum 5)" "$RC $(jf "$TMP/four.json" d.verdict)" "0 insufficient-data"
 
+echo "# adaptive runs: a single passing baseline run counts as stable"
+ADAPT=$(COMPARE="$SRC_ROOT/scripts/evals/compare.mjs" node --input-type=module -e '
+  const { DEFAULTS, compareModel } = await import(process.env.COMPARE);
+  const P = { scores: [1], passed: [true] }, F3 = { scores: [0.5, 0.5, 0.5], passed: [false, false, false] };
+  const cases = (broken) => Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`c${i}`, i < broken ? F3 : P]));
+  const two = compareModel({ cases: cases(0) }, { cases: cases(2) }, DEFAULTS);
+  const one = compareModel({ cases: cases(0) }, { cases: cases(1) }, DEFAULTS);
+  const old = compareModel({ cases: cases(0) }, { cases: cases(2) }, { ...DEFAULTS, minStableRuns: 2 });
+  console.log([two.verdict, two.regressed_cases.length, one.verdict, old.verdict].join(" "));
+')
+expect_eq "1-run P baseline, 2 cases now FFF: regressed; 1 case: warning only; old 2-run minimum missed it" "$ADAPT" "regressed 2 no-change no-change"
+
 echo "# calibration (Monte Carlo, seeded; RELEASING.md records the numbers)"
 CAL=$(node "$SRC_ROOT/scripts/evals/calibrate.mjs" --trials 1000 --json)
 echo "     $CAL"
 cal() { node -e 'const d = JSON.parse(process.argv[1]); console.log(d[process.argv[2]])' "$CAL" "$1"; }
 le() { node -e 'process.exit(Number(process.argv[1]) <= Number(process.argv[2]) ? 0 : 1)' "$1" "$2"; }
-for s in "sonnet A/A" "sonnet-flaky3 A/A" "haiku A/A" "haiku-low A/A"; do
+for s in "sonnet A/A" "sonnet-flaky3 A/A" "haiku A/A" "haiku-low A/A" \
+         "adaptive sonnet A/A" "adaptive sonnet-flaky3 A/A" "adaptive sonnet-flaky5 A/A" "first adaptive sonnet A/A"; do
   if le "$(cal "$s")" 5; then ok "A/A false alarms <= 5%: $s ($(cal "$s")%)"; else nok "A/A false alarms <= 5%: $s" "$(cal "$s")%"; fi
 done
-for pair in "sonnet break 2:80" "sonnet break 3:95" "haiku break 2:25" "haiku break 3:40"; do
+# Adaptive runs must catch two broken cases at least as often as 3 fixed runs (80%).
+for pair in "sonnet break 2:80" "sonnet break 3:95" "haiku break 2:25" "haiku break 3:40" \
+            "adaptive sonnet break 2:80" "adaptive sonnet break 3:95" "first adaptive break 2:80"; do
   s="${pair%:*}" min="${pair##*:}"
   if le "$min" "$(cal "$s")"; then ok "detects $s >= $min% ($(cal "$s")%)"; else nok "detects $s >= $min%" "$(cal "$s")%"; fi
 done

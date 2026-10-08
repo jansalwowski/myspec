@@ -56,6 +56,7 @@ if (a[0] === 'plugin' && a[1] === 'eval') {
   if (fs.existsSync(path.join(dir, 'local'))) log('IGNORED');
   const glob = opt('--case');
   log(`EVAL ${isHead ? 'HEAD' : 'PREV'} ${dir} ${opt('--model')} ${glob || '-'}`);
+  log(`RUNS ${isHead ? 'HEAD' : 'PREV'} ${opt('--model')} ${glob || '-'} ${opt('--runs') || 'own'}`);
   const nap = isHead ? env.STUB_SLEEP_HEAD : env.STUB_SLEEP_PREV;
   if (nap) { fs.writeFileSync(env.STUB_LOG + '.started', `${process.pid} ${dir}`); sleep(nap); }
   if ((isHead && env.STUB_FAIL_HEAD) || (!isHead && env.STUB_FAIL_PREV)) { console.error('boom'); process.exit(2); }
@@ -103,7 +104,8 @@ mkdir -p scripts/evals quality evals/_fixtures
 cp "$SRC_ROOT"/scripts/evals/{run.sh,summary.mjs,compare.mjs,baseline.mjs,results.mjs,release-check.sh,workspaces.mjs} scripts/evals/
 # set_config <gate> [gateModels JSON]: the repo's release-check.json with gate
 # set and gateModels replaced, or dropped when no second argument is given.
-# modelTags is dropped too, or set from $SET_MODEL_TAGS (JSON).
+# modelTags is dropped too, or set from $SET_MODEL_TAGS (JSON), and so is
+# adaptiveModels, or set from $SET_ADAPTIVE (JSON).
 set_config() {
   node -e '
     const fs = require("fs");
@@ -111,7 +113,9 @@ set_config() {
     c.gate = process.argv[2] === "true";
     delete c.gateModels;
     delete c.modelTags;
+    delete c.adaptiveModels;
     if (process.env.SET_MODEL_TAGS) c.modelTags = JSON.parse(process.env.SET_MODEL_TAGS);
+    if (process.env.SET_ADAPTIVE) c.adaptiveModels = JSON.parse(process.env.SET_ADAPTIVE);
     if (process.argv[3]) c.gateModels = JSON.parse(process.argv[3]);
     fs.writeFileSync(process.argv[4], JSON.stringify(c, null, 2) + "\n");
   ' "$SRC_ROOT/quality/release-check.json" "$1" "${2:-}" "$REPO/quality/release-check.json"
@@ -382,6 +386,22 @@ expect_eq "baselines record tiers and every case's workspace hash" \
   '["capability","regression",true,"none"]'
 expect_eq "capability cases are report-only in the comparison" \
   "$(jf "$TMP/out-suite1/compare.json" '[d.models.sonnet.n_paired, d.models.sonnet.report_only.cases.map((c) => c.name).join(" ")]')" '[4,"case-c case-e"]'
+
+echo "# adaptiveModels: once, then twice more for a failed regression case"
+SET_ADAPTIVE='["sonnet"]' SET_MODEL_TAGS='{"haiku": ["trigger", "near-miss"]}' set_config true '["sonnet"]'
+rc_run adaptive --version 1.2.0 --models sonnet,haiku
+HA="$TMP/out-adaptive/staged/baselines/v1.2.0.json"
+expect_eq "HEAD (every run fails): regression cases end with 3 runs, capability cases with 1" \
+  "$(jf "$HA" 'Object.entries(d.models.sonnet.cases).map(([c, v]) => c.slice(5) + v.scores.length).join(" ")')" "a3 b3 c1 d3 e1 f3"
+expect_eq "HEAD sonnet: one first pass at --runs 1, then one --runs 2 retry per failed regression case" \
+  "$(grep '^RUNS HEAD sonnet' "$STUB_LOG" | cut -d' ' -f4,5 | sort | tr '\n' ' ')" "- 1 case-a 2 case-b 2 case-d 2 case-f 2 "
+expect_eq "the previous tag (every run passes) runs adaptively too, and retries nothing" \
+  "$(grep '^RUNS PREV sonnet' "$STUB_LOG" | cut -d' ' -f4,5 | sort -u | tr '\n' ' ')" "- 1 "
+expect_eq "haiku is not adaptive: its cases keep their own run counts" "$(grep '^RUNS HEAD haiku' "$STUB_LOG" | cut -d' ' -f5 | sort -u)" "own"
+expect_has "the retries are announced" "$OUTPUT" "sonnet: retrying 4 failed regression case(s)"
+rc_run adaptive-runs --version 1.2.0 --models sonnet --runs 2
+expect_eq "--runs N switches adaptive runs off" "$(grep '^RUNS' "$STUB_LOG" | cut -d' ' -f5 | sort -u)" "2"
+SET_MODEL_TAGS='{"haiku": ["trigger", "near-miss"]}' set_config true '["sonnet"]'
 record suite1
 
 echo "lib comment" >> evals/_fixtures/lib.sh
