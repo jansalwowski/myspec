@@ -63,6 +63,7 @@ The plugin under test is a temporary copy of the repo's tracked and untracked, n
 | `MYSPEC_EVAL_CONCURRENCY` | `4` | parallel runs |
 | `MYSPEC_EVAL_ABLATION` | `none` | `with-without` adds the no-plugin baseline arm and its Δ (doubles the cost) |
 | `MYSPEC_EVALS_DRY_RUN` | `0` | `1`: print selection and commands only |
+| `CLAUDE_CODE_PROMPT_CACHE_TTL` | `5m` | prompt cache TTL of each run. A subscription login defaults to `1h`, which bills cache writes at 2x input instead of 1.25x, and no run lasts five minutes. One Sonnet run went from $0.073–0.102 to $0.058 (2026-10-08). `1h` restores the default |
 
 Exit status: `0` ran (report-only), `1` below threshold and strict, `2` infrastructure error (claude missing or logged out, API unreachable, bad `--base`, a case file that failed to load, cost ceiling or deadline hit, or any run that ended in an error other than the `max_turns` cap). An exit 2 says nothing about the plugin; read the eval log it prints.
 
