@@ -1,7 +1,7 @@
 ---
 description: "Wrapping up a tracked session is session-complete, not memorify (sweep on demand) or memorize (named fact)."
 tags: [skill:session-complete, skill:memorify, skill:memorize, trigger, regression]
-max_turns: 6
+max_turns: 2
 timeout_seconds: 300
 allowed_tools: [Read, Glob, Grep, Skill]
 ---

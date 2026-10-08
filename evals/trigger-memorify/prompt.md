@@ -1,7 +1,7 @@
 ---
 description: "The user asks what from the conversation is worth keeping: memorify (sweep), not memorize (named fact) or session-complete (wrap-up)."
 tags: [skill:memorify, skill:memorize, skill:session-complete, trigger, regression]
-max_turns: 6
+max_turns: 2
 timeout_seconds: 300
 allowed_tools: [Read, Glob, Grep, Skill]
 ---
