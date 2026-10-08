@@ -262,9 +262,11 @@ session_written() {
 # <before> is the blob of the `pre` event recorded for the file since its
 # last write event, "-" when that event found no file, else the after-blob
 # of the session's previous Bash write to it, else "?" (unknown: no snapshot
-# was taken). A write whose after-blob is "" (the file is gone) is left out;
-# one whose after-blob is "@" (judged but not hashed) is kept, and the Stop
-# gate reads the file itself.
+# was taken). <after> is the write's after-blob, "-" when the write removed
+# the file (after-blob ""): the Stop gate counts the lines a removal took
+# away, so a file removed and restored (`mv` away and back) nets to
+# nothing. One whose after-blob is "@" (judged but not hashed) is kept, and
+# the Stop gate reads the file itself.
 session_bash_writes() {
   session_query "$1" "$2" '
     reduce ($ev[] | select(.t == "pre" or .t == "write")
@@ -273,8 +275,9 @@ session_bash_writes() {
       ($e.root + "\t" + $e.rel) as $k
       | if $e.t == "pre" then .pre[$k] = (if $e.blob == "" then "-" else ($e.blob | tostring) end)
         elif $e.via == "bash" and ($e.blob | type) == "string" then
-          (if $e.blob == "" then . else .out += [$k + "\t" + (.pre[$k] // .last[$k] // "?") + "\t" + $e.blob] end)
-          | .last[$k] = (if $e.blob == "" then "-" else $e.blob end) | del(.pre[$k])
+          (if $e.blob == "" then "-" else $e.blob end) as $a
+          | .out += [$k + "\t" + (.pre[$k] // .last[$k] // "?") + "\t" + $a]
+          | .last[$k] = $a | del(.pre[$k])
         else del(.pre[$k]) | del(.last[$k]) end)
     | .out[]'
 }

@@ -11,18 +11,37 @@
 #
 # Input: the session's Bash writes as before/after blob pairs
 # (session_bash_writes; mark-code-changed.sh snapshots a covered file at
-# PreToolUse and after the write). Write and Edit calls are not here: their
-# PreToolUse hooks judged them. Per file in a checkout of this repository (or
-# nested in the cwd's tree) that still exists:
-#   - the lines judged are the lines of the file as it is now whose text one
-#     of the session's Bash writes added (the `+` lines of before -> after).
-#     A line the file held before the session, or another session wrote, is
-#     not one; a line this session added and then committed still is;
+# PreToolUse and after the write; a write that removed the file is a pair
+# whose after is "-"). Write and Edit calls are not here: their PreToolUse
+# hooks judged them. Per file in a checkout of this repository (or nested in
+# the cwd's tree) that still exists:
+#   - the lines judged are the lines the session's Bash writes added on net
+#     and the file still holds. Per line text, each pair counts its `+` lines
+#     less its `-` lines (session_lines); a text whose sum is above zero has
+#     that many session copies. A line the file held before the session, or
+#     another session wrote, is not one: a write that changes a line and a
+#     later one that restores it sum to zero for both texts, and a line moved
+#     within the file sums to zero. A line this session added and then
+#     committed still is;
 #   - absolute homedir paths, on those lines, for the files the rule covers
 #     (absolute_paths_scope; only those get snapshots);
-#   - frontmatter, on a ${aiDir} markdown doc a Bash write created or whose
-#     frontmatter region one changed;
-#   - the reuse audit, on a tech-spec a Bash write created.
+#   - frontmatter, on a ${aiDir} markdown doc the session created, or whose
+#     frontmatter region its writes left different from what they found;
+#   - the reuse audit, on a tech-spec the session created.
+# "Created" means the file did not exist before the session's first Bash
+# write to it, so a file deleted and recreated (`mv` away and back) is
+# not created.
+#
+# Why the pairs and not the net diff of the file's earliest snapshot against
+# the file now (#343): between two of the session's Bash writes another
+# session, an Edit or Write call, or the user may change the file, and those
+# changes sit between one pair's after and the next pair's before, so the
+# pairs never count them, while an earliest-to-now diff would sweep them in.
+# Dropping from a union of `+` lines every text the earliest snapshot held
+# would miss a second copy the session added of a text the file already had;
+# the counts catch it, and judge as many copies as the session added
+# (preferring the line numbers its writes put them at, then the last ones).
+#
 # Each finding blocks the stop with the reason the PreToolUse hook would have
 # given. The checks are cheap, and they run inside the gate budget like
 # everything else (gate_budget_init runs first). They block during a
@@ -78,28 +97,43 @@ content_before() {
   esac
 }
 
-# added_lines <old file> <new file> <out file> -> writes `<line>\t<text>` for
-# each line of <new file> that is not in <old file>: the `+` lines of
-# `git diff --no-index -U0`, numbered from the hunk headers.
-added_lines() {
+# pair_lines <old file> <new file> <out file> -> writes `+\t<line>\t<text>`
+# for each line of <new file> that is not in <old file> and `-\t<line>\t<text>`
+# for each line of <old file> that is not in <new file>: the lines of
+# `git diff --no-index -U0`, numbered from the hunk headers (in <new file>
+# for a `+` line, in <old file> for a `-` one).
+pair_lines() {
   # The `---`/`+++` header lines precede the first hunk, so only lines after
-  # a hunk header count; a line in the body starting with +++ is content.
+  # a hunk header count; a body line starting with +++ or --- is content.
   git diff --no-index --no-color --no-ext-diff -U0 -- "$1" "$2" 2>/dev/null | LC_ALL=C awk '
-    /^@@/ { match($0, /\+[0-9]+/); n = substr($0, RSTART + 1, RLENGTH - 1) + 0; hunk = 1; next }
-    hunk && /^\+/ { printf "%d\t%s\n", n, substr($0, 2); n++; next }
-    hunk && /^ / { n++ }' > "$3" || true
+    /^@@/ {
+      match($0, /-[0-9]+/); o = substr($0, RSTART + 1, RLENGTH - 1) + 0
+      match($0, /\+[0-9]+/); n = substr($0, RSTART + 1, RLENGTH - 1) + 0
+      hunk = 1; next }
+    hunk && /^\+/ { printf "+\t%d\t%s\n", n, substr($0, 2); n++; next }
+    hunk && /^-/ { printf "-\t%d\t%s\n", o, substr($0, 2); o++ }' > "$3" || true
 }
 
-# session_lines <file> <added> <out file> -> writes `<line>\t<text>` for each
-# line of <file> whose text is one of the <added> lines (`<n>\t<text>`, as
-# added_lines writes them): what the session added that the file still holds.
-# A trailing CR is dropped on both sides: the blobs went through git's
+# session_lines <file> <changes> <out file> -> writes `<line>\t<text>` for
+# each line of <file> the session added on net: <changes> holds every pair's
+# pair_lines output, and a text counts its `+` lines less its `-` lines. A
+# text with a count of k has k copies judged: first the copies at a line
+# number one of its `+` lines gave, then the last ones in the file. A
+# trailing CR is dropped on every side: the blobs went through git's
 # line-ending conversion (core.autocrlf, `text eol=crlf`), the working file
 # did not, so a CRLF line would otherwise never match its added text.
 session_lines() {
-  LC_ALL=C awk 'NR == FNR { t = substr($0, index($0, "\t") + 1); sub(/\r$/, "", t); seen[t] = 1; next }
-    { t = $0; sub(/\r$/, "", t) }
-    (t in seen) { printf "%d\t%s\n", FNR, t }' "$2" "$1" > "$3" 2>/dev/null || : > "$3"
+  LC_ALL=C awk -F'\t' '
+    FILENAME == ARGV[1] {
+      t = $0; sub(/^[^\t]*\t[^\t]*\t/, "", t); sub(/\r$/, "", t)
+      if ($1 == "+") { d[t]++; at[$2 "\t" t] = 1 } else if ($1 == "-") d[t]--
+      next }
+    { t = $0; sub(/\r$/, "", t); line[++n] = t }
+    END {
+      for (i = n; i >= 1; i--) { t = line[i]; if (d[t] > 0 && ((i "\t" t) in at)) { pick[i] = 1; d[t]-- } }
+      for (i = n; i >= 1; i--) { t = line[i]; if (!(i in pick) && d[t] > 0) { pick[i] = 1; d[t]-- } }
+      for (i = 1; i <= n; i++) if (i in pick) printf "%d\t%s\n", i, line[i]
+    }' "$2" "$1" > "$3" 2>/dev/null || : > "$3"
 }
 
 # content_gates -> runs the checks above over the session's Bash writes and
@@ -107,7 +141,7 @@ session_lines() {
 # ORIG_ROOT (arm_init).
 content_gates() {
   local root rel abs ai lines text findings matches n m where pairs file
-  local before after created fm_changed tmp
+  local before after created fm_changed tmp first fm_from fm_to fm_seen fm_before fm_after
   local -a reasons=()
   [ -n "${SESSION_ID:-}" ] || return 0
   pairs=$(session_bash_writes "$STATE_HOME" "$SESSION_ID")
@@ -125,12 +159,15 @@ content_gates() {
     [ -f "$abs" ] || continue
     ai=""
     [ ! -f "$root/.myspec.json" ] || ai=$(ai_dir "$root")
-    created=0 fm_changed=0
-    : > "$tmp/added"
+    created=0 fm_changed=0 first=1 fm_from="" fm_to="" fm_seen=0
+    : > "$tmp/changes"
     while IFS=$'\t' read -r _ _ before after; do
       CONTENT_KEPT=0
       content_before "$root" "$rel" "$before" "$tmp/before" || continue
-      if [ "$after" = "@" ]; then
+      if [ "$after" = "-" ]; then
+        # The write removed the file.
+        : > "$tmp/after"
+      elif [ "$after" = "@" ]; then
         # Neither hashed nor kept: the file as it is now.
         cat -- "$abs" > "$tmp/after" 2>/dev/null || continue
         CONTENT_KEPT=1
@@ -143,12 +180,22 @@ content_gates() {
         LC_ALL=C awk '{ sub(/\r$/, "") } 1' "$tmp/after" > "$tmp/lf" && mv "$tmp/lf" "$tmp/after"
         LC_ALL=C awk '{ sub(/\r$/, "") } 1' "$tmp/before" > "$tmp/lf" && mv "$tmp/lf" "$tmp/before"
       fi
-      [ "$CONTENT_NEW" -eq 0 ] || created=1
-      added_lines "$tmp/before" "$tmp/after" "$tmp/pair"
-      cat "$tmp/pair" >> "$tmp/added"
-      [ "$(frontmatter_region "$tmp/before")" = "$(frontmatter_region "$tmp/after")" ] || fm_changed=1
+      # Created: no file before the session's first write to it.
+      [ "$first" -eq 0 ] || created=$CONTENT_NEW
+      first=0
+      pair_lines "$tmp/before" "$tmp/after" "$tmp/pair"
+      cat "$tmp/pair" >> "$tmp/changes"
+      # The frontmatter region before the first write that changed it, and
+      # after the last one: equal when the session restored it.
+      fm_before=$(frontmatter_region "$tmp/before")
+      fm_after=$(frontmatter_region "$tmp/after")
+      if [ "$fm_before" != "$fm_after" ]; then
+        [ "$fm_seen" -eq 1 ] || fm_from=$fm_before
+        fm_to=$fm_after fm_seen=1
+      fi
     done < <(printf '%s\n' "$pairs" | LC_ALL=C awk -F'\t' -v r="$root" -v p="$rel" '$1 == r && $2 == p')
-    session_lines "$abs" "$tmp/added" "$tmp/numbered"
+    [ "$fm_seen" -eq 0 ] || [ "$fm_from" = "$fm_to" ] || fm_changed=1
+    session_lines "$abs" "$tmp/changes" "$tmp/numbered"
 
     # Absolute homedir paths, on the lines the session added.
     if absolute_paths_scope "$root" "$rel" "$ai" && [ -s "$tmp/numbered" ]; then
@@ -165,14 +212,14 @@ content_gates() {
       fi
     fi
 
-    # Frontmatter, on a doc a Bash write created or whose frontmatter region
-    # one changed.
+    # Frontmatter, on a doc the session created or whose frontmatter region
+    # its writes changed on net.
     if [ -n "$ai" ] && frontmatter_scope "$ai" "$rel" && [ $((created + fm_changed)) -gt 0 ]; then
       lines=$(frontmatter_issues "$abs")
       [ -z "$lines" ] || reasons+=("$(frontmatter_reason "$rel" "$lines" "$ai")")
     fi
 
-    # The reuse audit, on a tech-spec a Bash write created.
+    # The reuse audit, on a tech-spec the session created.
     if [ "$created" -eq 1 ] && reuse_audit_scope "${ai:-$(ai_dir "$root")}" "$rel"; then
       lines=$(reuse_audit_issues "$abs")
       [ -z "$lines" ] || reasons+=("$(reuse_audit_reason "$rel" "$lines")")

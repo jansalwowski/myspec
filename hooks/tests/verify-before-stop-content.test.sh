@@ -11,6 +11,10 @@
 # not), a line another session added (in another file or the same one), a
 # tech-spec that predates the session, a gitignored file, and Edit-tool
 # writes. What it must still catch: a Bash write committed in the session.
+# The net effect counts, not the union of the writes (#343): a line changed
+# and restored, moved, or reverted around another session's write is not
+# added; a partial revert, a second copy of an existing line, and the last of
+# several changes are; a file moved away and back was not created.
 #
 # Usage: verify-before-stop-content.test.sh [path-to-stop-hook]
 
@@ -230,6 +234,134 @@ bashcmd 21 "printf 'fixed\n' > docs/fixed.md"
 OUT=$(stop 21)
 [ "$(decision "$OUT")" = approve ] && ok || fail "a leak removed by a later Bash write approves (got: ${OUT:0:300})"
 rm -f "$REPO/docs/fixed.md"
+
+# --- the net effect of the session's writes, not their union (#343) ---------------
+# sedi <expr> <rel>: a portable `sed -i` command line for bashcmd.
+sedi() { printf "sed -i.bak '%s' %s && rm -f %s.bak" "$1" "$2" "$2"; }
+
+# The report: a line one Bash write changed and a later one restored was
+# judged as added, on every Stop, committed or not.
+bashcmd 60 "$(sedi 's#^old leak: .*#old leak: renamed#' docs/notes.md)"
+bashcmd 60 "$(sedi "s#^old leak: renamed\$#old leak: $LEAK#" docs/notes.md)"
+git -C "$REPO" diff --quiet -- docs/notes.md && ok || fail "fixture: the revert restored docs/notes.md byte for byte"
+OUT=$(stop 60)
+[ "$(decision "$OUT")" = approve ] && ok || fail "a line changed and restored by two Bash writes approves (#343; got: ${OUT:0:300})"
+bashcmd 60 "git add -A && git commit -qm noop --allow-empty"
+OUT=$(stop 60)
+[ "$(decision "$OUT")" = approve ] && ok || fail "the restored line still approves after a commit (#343; got: ${OUT:0:300})"
+git -C "$REPO" reset -q --hard HEAD~1
+
+# A partial revert: of two changed lines one is restored, the other still
+# leaks.
+bashcmd 61 "$(sedi "s#^clean line\$#clean line $LEAK#; s#^old leak: .*#old leak: gone#" docs/notes.md)"
+bashcmd 61 "$(sedi "s#^old leak: gone\$#old leak: $LEAK#" docs/notes.md)"
+OUT=$(stop 61)
+[ "$(decision "$OUT")" = block ] && ok || fail "a partial revert still blocks on the line left changed (got: ${OUT:0:200})"
+R=$(reason "$OUT")
+expect_in "line 6: /Users/alice" "$R" "the line left changed is named"
+expect_not_in "line 5:" "$R" "the restored line is not named"
+git -C "$REPO" checkout -q -- docs/notes.md
+
+# Change, then change again: only the last text counts.
+bashcmd 62 "$(sedi 's#^clean line$#clean line, once#' docs/notes.md)"
+bashcmd 62 "$(sedi "s#^clean line, once\$#clean line, twice $LEAK#" docs/notes.md)"
+OUT=$(stop 62)
+[ "$(decision "$OUT")" = block ] && ok || fail "a line changed twice, the second time to a leak, blocks (got: ${OUT:0:200})"
+expect_in "line 6: /Users/alice" "$(reason "$OUT")" "the last text is named"
+git -C "$REPO" checkout -q -- docs/notes.md
+bashcmd 63 "$(sedi "s#^clean line\$#clean line $LEAK#" docs/notes.md)"
+bashcmd 63 "$(sedi "s#^clean line /.*#clean line, fixed#" docs/notes.md)"
+OUT=$(stop 63)
+[ "$(decision "$OUT")" = approve ] && ok || fail "a leak changed again to a clean text approves (got: ${OUT:0:300})"
+git -C "$REPO" checkout -q -- docs/notes.md
+
+# A second copy of a line the file already held is the session's; the
+# original is not.
+bashcmd 64 "printf 'old leak: $LEAK\n' >> docs/notes.md"
+OUT=$(stop 64)
+[ "$(decision "$OUT")" = block ] && ok || fail "a second copy of an old leak line blocks (got: ${OUT:0:200})"
+R=$(reason "$OUT")
+expect_in "line 7: /Users/alice" "$R" "the copy's line is named"
+expect_not_in "line 5:" "$R" "the original line is not named"
+git -C "$REPO" checkout -q -- docs/notes.md
+
+# A line moved within the file is not added.
+bashcmd 65 "awk 'NR == 5 { l = \$0; next } { print } END { print l }' docs/notes.md > docs/notes.tmp && mv docs/notes.tmp docs/notes.md"
+[ "$(tail -n 1 "$REPO/docs/notes.md")" = "old leak: $LEAK" ] && ok || fail "fixture: the old leak line moved to the end"
+OUT=$(stop 65)
+[ "$(decision "$OUT")" = approve ] && ok || fail "an old leak line moved within the file approves (got: ${OUT:0:300})"
+git -C "$REPO" checkout -q -- docs/notes.md
+
+# Another session writes between a change and its revert: its line stays its
+# own, and the revert is still a revert. A net diff from this session's first
+# snapshot to the file now would sweep the other session's line in.
+bashcmd 66 "$(sedi 's#^old leak: .*#old leak: renamed#' docs/notes.md)"
+bashcmd 67 "printf 'other $LEAK\n' >> docs/notes.md"
+bashcmd 66 "$(sedi "s#^old leak: renamed\$#old leak: $LEAK#" docs/notes.md)"
+OUT=$(stop 66)
+[ "$(decision "$OUT")" = approve ] && ok || fail "a revert around another session's leak approves (got: ${OUT:0:300})"
+OUT=$(stop 67)
+[ "$(decision "$OUT")" = block ] && ok || fail "the other session's leak blocks that session (got: ${OUT:0:200})"
+R=$(reason "$OUT")
+expect_in "line 7: /Users/alice" "$R" "the other session's line is named"
+expect_not_in "line 5:" "$R" "the reverted line is not the other session's either"
+git -C "$REPO" checkout -q -- docs/notes.md
+
+# An Edit call between two Bash writes: the second pair has no snapshot of its
+# own and falls back to HEAD, and the revert still nets to nothing.
+bashcmd 68 "$(sedi 's#^old leak: .*#old leak: renamed#' docs/notes.md)"
+editcall 68 docs/notes.md
+bashcmd 68 "$(sedi "s#^old leak: renamed\$#old leak: $LEAK#" docs/notes.md)"
+OUT=$(stop 68)
+[ "$(decision "$OUT")" = approve ] && ok || fail "a revert with an Edit call between approves (got: ${OUT:0:300})"
+git -C "$REPO" checkout -q -- docs/notes.md
+
+# Frontmatter changed and restored: a doc whose frontmatter was already bad
+# is not judged. One the session leaves changed is.
+printf -- '---\ntitle: Bad\n---\nbody\n' > "$REPO/.ai/features/old/bad.md"
+git -C "$REPO" add -A && git -C "$REPO" commit -qm bad
+bashcmd 69 "$(sedi 's#^title: Bad$#title: Bad, renamed#' .ai/features/old/bad.md)"
+bashcmd 69 "$(sedi 's#^title: Bad, renamed$#title: Bad#' .ai/features/old/bad.md)"
+OUT=$(stop 69)
+[ "$(decision "$OUT")" = approve ] && ok || fail "frontmatter changed and restored on a doc with old frontmatter issues approves (got: ${OUT:0:300})"
+bashcmd 70 "$(sedi 's#^title: Bad$#title: Bad, renamed#' .ai/features/old/bad.md)"
+bashcmd 70 "printf 'more body\n' >> .ai/features/old/bad.md"
+OUT=$(stop 70)
+[ "$(decision "$OUT")" = block ] && ok || fail "frontmatter left changed, then a body write, still blocks (got: ${OUT:0:200})"
+expect_in "missing temporal field" "$(reason "$OUT")" "the frontmatter issue is named"
+git -C "$REPO" reset -q --hard HEAD~1
+
+# A file removed and restored (`mv` away and back) was not created: the
+# pre-hook tech-spec is not held to the reuse audit, and its lines are not
+# added.
+bashcmd 71 "mv .ai/features/old/tech-spec.md .ai/features/old/moved.md"
+bashcmd 71 "mv .ai/features/old/moved.md .ai/features/old/tech-spec.md"
+bashcmd 71 "mv docs/notes.md docs/moved.md"
+bashcmd 71 "mv docs/moved.md docs/notes.md"
+git -C "$REPO" diff --quiet HEAD && ok || fail "fixture: the moves back restored the tree"
+OUT=$(stop 71)
+[ "$(decision "$OUT")" = approve ] && ok || fail "files moved away and back approve: not created, no lines added (got: ${OUT:0:300})"
+git -C "$REPO" reset -q --hard HEAD
+
+# A file the session created, removed and created again is still created.
+bashcmd 72 "printf '# P\n' > .ai/features/old/p.md"
+bashcmd 72 "rm .ai/features/old/p.md"
+bashcmd 72 "printf '# P\nagain\n' > .ai/features/old/p.md"
+OUT=$(stop 72)
+[ "$(decision "$OUT")" = block ] && ok || fail "a doc created, removed and created again is still judged as created (got: ${OUT:0:200})"
+expect_in "Frontmatter issue in .ai/features/old/p.md" "$(reason "$OUT")" "the recreated doc is named"
+rm -f "$REPO/.ai/features/old/p.md"
+
+# A CRLF file under 'text eol=crlf': the blobs are LF, the file CRLF, and a
+# revert still nets to nothing.
+printf '*.md text eol=crlf\n' > "$REPO/.gitattributes"
+printf 'see %s\r\nclean\r\n' "$LEAK" > "$REPO/docs/crlf-rev.md"
+git -C "$REPO" add -A && git -C "$REPO" commit -qm crlf
+bashcmd 73 "$(sedi 's#^see .*#see nothing#' docs/crlf-rev.md)"
+bashcmd 73 "$(sedi "s#^see nothing#see $LEAK#" docs/crlf-rev.md)"
+OUT=$(stop 73)
+[ "$(decision "$OUT")" = approve ] && ok || fail "a CRLF line changed and restored approves (got: ${OUT:0:300})"
+git -C "$REPO" reset -q --hard HEAD~1
 
 # --- redirect forms the command scanner must see (PR #274 review) -----------------
 # A redirect after the heredoc marker, a pipe after it, a brace group's or
