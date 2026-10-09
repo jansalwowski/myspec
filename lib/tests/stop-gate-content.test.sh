@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Function tests for lib/stop-gate/content.sh (R14, #263): which lines a Bash
-# write added (numbered from the hunk headers), which of them the file still
-# holds, the content before a write (a snapshot blob, a copy kept outside a
+# write added and removed (numbered from the hunk headers), which lines the
+# session's writes added on net that the file still holds (a revert, a move,
+# a second copy, another writer between two writes, #343), the content before a write (a snapshot blob, a copy kept outside a
 # read-only object store, no file, or HEAD's version when no snapshot was
 # taken), and which roots the content gates own.
 # The gate end to end: hooks/tests/verify-before-stop-content.test.sh.
@@ -59,20 +60,125 @@ expect "2	+++ not a header" "$(cat "$OUT")" "a body line starting with +++ is co
 added_lines "$ROOT/empty" "$ROOT/before" "$OUT"
 expect "1	one
 2	two" "$(cat "$OUT")" "from nothing, every line"
+added_lines "$ROOT/before" "$ROOT/empty" "$OUT"
+expect "" "$(cat "$OUT")" "to nothing (the file removed): no line, and no removed-line records (PR #347 review)"
 
-# --- session_lines: the lines the file still holds -----------------------------
+# --- session_lines: the net lines whose text a write added ----------------------
 printf '5\tadded\n9\tgone\n' > "$ROOT/session-added"
-printf 'old\nadded\nother\n' > "$ROOT/now"
-session_lines "$ROOT/now" "$ROOT/session-added" "$OUT"
-expect "2	added" "$(cat "$OUT")" "a line the session added is judged where it is now; one removed since is not"
+printf '2\tadded\n3\tother\n' > "$ROOT/net"
+session_lines "$ROOT/net" "$ROOT/session-added" "$OUT"
+expect "2	added" "$(cat "$OUT")" "a net line a write added is judged at its line; another writer's is not"
 printf '1\tadded\n' > "$ROOT/session-added"
-printf 'old\r\nadded\r\n' > "$ROOT/now"
-session_lines "$ROOT/now" "$ROOT/session-added" "$OUT"
+printf '2\tadded\r\n' > "$ROOT/net"
+session_lines "$ROOT/net" "$ROOT/session-added" "$OUT"
 expect "2	added" "$(cat "$OUT")" "a CRLF line matches the added text git normalised to LF"
 printf '1\tadded\r\n' > "$ROOT/session-added"
-printf 'added\n' > "$ROOT/now"
-session_lines "$ROOT/now" "$ROOT/session-added" "$OUT"
+printf '1\tadded\n' > "$ROOT/net"
+session_lines "$ROOT/net" "$ROOT/session-added" "$OUT"
 expect "1	added" "$(cat "$OUT")" "an LF line matches added text that kept its CR"
+: > "$ROOT/session-added"
+session_lines "$ROOT/net" "$ROOT/session-added" "$OUT"
+expect "" "$(cat "$OUT")" "no added lines: nothing judged"
+
+# judge <now> <before> <after> [<before> <after>...] -> what content_gates
+# judges in <now>: the lines <now> gained since the first pair's before whose
+# text one of the pairs added. A pair's before need not be the previous
+# pair's after: another writer changed the file in between.
+judge() {
+  local now=$1
+  lf_copy "$2" "$ROOT/base"
+  shift
+  : > "$ROOT/added"
+  while [ "$#" -ge 2 ]; do
+    added_lines "$1" "$2" "$ROOT/pair"
+    cat "$ROOT/pair" >> "$ROOT/added"
+    shift 2
+  done
+  lf_copy "$now" "$ROOT/now"
+  added_lines "$ROOT/base" "$ROOT/now" "$ROOT/net"
+  session_lines "$ROOT/net" "$ROOT/added" "$OUT"
+  cat "$OUT"
+}
+# v <name> <printf format> -> writes a version of a file, prints its path
+v() {
+  # shellcheck disable=SC2059 # the format is the fixture
+  printf "$2" > "$ROOT/v.$1"
+  printf '%s' "$ROOT/v.$1"
+}
+
+# The report (#343): L -> L' by one write, L' -> L by the next.
+V0=$(v r0 'head\nL -home-token\ntail\n'); V1=$(v r1 'head\nL renamed\ntail\n')
+expect "" "$(judge "$V0" "$V0" "$V1" "$V1" "$V0")" "a line one write changed and a later one restored is not judged (#343)"
+# Partial revert: of two changed lines, one is restored.
+V0=$(v p0 'a\nb\n'); V1=$(v p1 'a2\nb2\n'); V2=$(v p2 'a\nb2\n')
+expect "2	b2" "$(judge "$V2" "$V0" "$V1" "$V1" "$V2")" "a partial revert judges only the line still changed"
+# Change, then change again: only the last text.
+V0=$(v c0 'x\nL\n'); V1=$(v c1 'x\nL1\n'); V2=$(v c2 'x\nL2\n')
+expect "2	L2" "$(judge "$V2" "$V0" "$V1" "$V1" "$V2")" "L -> L' -> L'' judges L'' only"
+# A second copy of a text the file already held: the copy, not the original.
+V0=$(v d0 'L\nmid\n'); V1=$(v d1 'L\nmid\nL\n')
+expect "3	L" "$(judge "$V1" "$V0" "$V1")" "a second copy of an existing text is judged at the copy only"
+# Another writer inserted a line above since: the copy, where it is now.
+VN=$(v dn 'new top\nL\nmid\nL\n')
+expect "4	L" "$(judge "$VN" "$V0" "$V1")" "a copy whose line moved since is judged where it is now, another writer's line not"
+# Two copies added, one of them gone since: the one left.
+V0=$(v f0 'x\n'); V1=$(v f1 'x\nL\nL\n'); VN=$(v fn 'x\nL\n')
+expect "2	L" "$(judge "$VN" "$V0" "$V1")" "no more copies are judged than the file holds"
+# A leak deleted in one section and pasted into another by one rewrite (PR
+# #347 review): judged. A line moved within the file looks the same, so it is
+# judged too.
+V0=$(v s0 '# A\nsee /Users/alice/x\n# B\nb\n'); V1=$(v s1 '# A\n# B\nb\nsee /Users/alice/x\n')
+expect "4	see /Users/alice/x" "$(judge "$V1" "$V0" "$V1")" "a line deleted in one place and pasted in another is judged (PR #347 review)"
+V1=$(v s2 '# A\n# B\nb\n'); V2=$(v s3 '# A\n# B\nsee /Users/alice/x\nb\n')
+expect "3	see /Users/alice/x" "$(judge "$V2" "$V0" "$V1" "$V1" "$V2")" "a line deleted by one write and pasted elsewhere by another is judged"
+# Removed and restored (a file the session deleted and recreated).
+V0=$(v g0 'L\nM\n')
+expect "" "$(judge "$V0" "$V0" "$ROOT/empty" "$ROOT/empty" "$V0")" "a file removed and restored as it was judges nothing"
+# Another writer between two of the session's writes: no pair adds its line.
+V0=$(v o0 'L\n'); V1=$(v o1 'L2\n'); V1X=$(v o1x 'L2\nother\n'); V2=$(v o2 'L\nother\n')
+expect "" "$(judge "$V2" "$V0" "$V1" "$V1X" "$V2")" "another writer's line between a change and its revert is not judged"
+V2=$(v o3 'L3\nother\n')
+expect "1	L3" "$(judge "$V2" "$V0" "$V1" "$V1X" "$V2")" "beside another writer's line, the session's own change is judged"
+# Another writer removed a line the session added; the session added it again.
+V0=$(v q0 'x\n'); V1=$(v q1 'x\nL\n'); V1X=$(v q1x 'x\n'); V2=$(v q2 'x\nL\n')
+expect "2	L" "$(judge "$V2" "$V0" "$V1" "$V1X" "$V2")" "a line the session added again after another writer removed it is judged"
+# A HEAD baseline (a write with no snapshot) after the session's copy of an
+# old line was removed by an Edit call: the old line is not the session's
+# (PR #347 review).
+V0=$(v h0 'P\nx\n'); V1=$(v h1 'P\nx\nP\n'); V2=$(v h2 'P\nx\nclean\n')
+expect "3	clean" "$(judge "$V2" "$V0" "$V1" "$V0" "$V2")" "a HEAD baseline does not count the session's earlier copy a second time"
+# A CRLF side (a kept copy) against an LF blob nets to nothing.
+V0=$(v k0 'L\n'); V1=$(v k1 'L\r\n')
+expect "" "$(judge "$V1" "$V0" "$V1")" "a line whose only change is its line ending is not judged"
+
+# --- content_gates: frontmatter_region only where the gate looks (PR #347 review)
+# Out of the frontmatter gate's scope: never computed. In scope, chained
+# pairs: the before of each pair after the first is the previous after.
+FM="$ROOT/fm"
+mkdir -p "$FM/docs" "$FM/.ai/features/f"
+git init -q -b main "$FM"
+printf '{"aiDir":".ai","frameworkVersion":"3.0.0"}\n' > "$FM/.myspec.json"
+# shellcheck disable=SC2059 # the format is the fixture
+blob() { printf -- "$1" | git -C "$FM" hash-object -w --stdin; }
+A=$(blob '---\ntitle: T\ncreated: 2026-01-01\n---\na\n')
+B=$(blob '---\ntitle: T\ncreated: 2026-01-01\n---\nb\n')
+C=$(blob '---\ntitle: T\ncreated: 2026-01-01\n---\nc\n')
+git -C "$FM" cat-file blob "$C" > "$FM/docs/plain.md"
+git -C "$FM" cat-file blob "$C" > "$FM/.ai/features/f/doc.md"
+STATE_HOME="$FM" SESSION_ID="sgc-fm"
+for rel in docs/plain.md .ai/features/f/doc.md; do
+  session_append "$STATE_HOME" "$SESSION_ID" "$(jq -nc --arg r "$FM" --arg p "$rel" --arg b "$A" '{t: "pre", root: $r, rel: $p, blob: $b}')"
+  for b in "$B" "$C"; do
+    session_append "$STATE_HOME" "$SESSION_ID" "$(jq -nc --arg r "$FM" --arg p "$rel" --arg b "$b" '{t: "write", root: $r, rel: $p, kind: "file", via: "bash", blob: $b}')"
+  done
+done
+eval "real_$(declare -f frontmatter_region)"
+frontmatter_region() { printf 'x\n' >> "$ROOT/fm-calls"; real_frontmatter_region "$@"; }
+: > "$ROOT/fm-calls"
+( arm_init "$FM"; content_gates ) > "$ROOT/fm-out" 2>&1
+expect "" "$(cat "$ROOT/fm-out")" "fixture: the clean writes pass"
+expect 3 "$(wc -l < "$ROOT/fm-calls" | tr -d ' ')" "frontmatter_region: not for a doc out of scope, once per pair after the first for chained pairs"
+eval "$(declare -f real_frontmatter_region | sed 's/^real_frontmatter_region/frontmatter_region/')"
 
 # --- content_before: the blob, nothing, or HEAD's version ------------------------
 printf 'one\ntwo\n' > "$REPO/docs/a.md"

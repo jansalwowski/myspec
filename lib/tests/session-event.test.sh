@@ -173,8 +173,8 @@ ev '{"t":"write","rel":"d.md","kind":"file","via":"tool"}'
 ev '{"t":"write","rel":"d.md","kind":"file","via":"bash","blob":"b4"}'
 ev '{"t":"write","rel":"e.md","kind":"file","via":"bash","blob":""}'
 ev '{"t":"write","rel":"f.md","kind":"file"}'
-eq "$(session_bash_writes "$REPO" $S | cut -f2- | tr '\t\n' ' |')" "d.md - b1|d.md b1 b2|d.md b2x b3|d.md ? b4|" \
-  "bash writes: before is the pre snapshot, else the previous after, else unknown after a tool write; a gone file and a write without a blob are left out"
+eq "$(session_bash_writes "$REPO" $S | cut -f2- | tr '\t\n' ' |')" "d.md - b1|d.md b1 b2|d.md b2x b3|d.md ? b4|e.md ? -|" \
+  "bash writes: before is the pre snapshot, else the previous after, else unknown after a tool write; a removal is a pair whose after is \"-\"; a write without a blob is left out"
 
 # --- TTLs --------------------------------------------------------------------------------
 
