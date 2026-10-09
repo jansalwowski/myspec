@@ -53,16 +53,18 @@ Anchor liveness runs in two steps, and the second step is what keeps the pass fr
 
 ```bash
 # S014 — anchor: {file: packages/db/src/client.ts, pattern: datasourceUrl}
-[ -f packages/db/src/client.ts ]          # fail — file is gone
-git grep -l datasourceUrl -- . ":(exclude)ai"
+node "${CLAUDE_PLUGIN_ROOT}/lib/memory-anchor.mjs" packages/db/src/client.ts datasourceUrl
+# missing: packages/db/src/client.ts does not exist
+node "${CLAUDE_PLUGIN_ROOT}/lib/memory-anchor.mjs" --find datasourceUrl -- . ":(exclude)ai"
 # packages/db/src/prisma/client.ts        # the fact survived, the file moved
 ```
 
 ```bash
 # S007 — anchor: {file: apps/web/src/lib/flags.ts, pattern: LEGACY_FLAG_TABLE}
-[ -f apps/web/src/lib/flags.ts ]          # fail
-git grep -l LEGACY_FLAG_TABLE -- . ":(exclude)ai"
-# (no output)                             # the thing the fact described is gone
+node "${CLAUDE_PLUGIN_ROOT}/lib/memory-anchor.mjs" apps/web/src/lib/flags.ts LEGACY_FLAG_TABLE
+# missing: apps/web/src/lib/flags.ts does not exist
+node "${CLAUDE_PLUGIN_ROOT}/lib/memory-anchor.mjs" --find LEGACY_FLAG_TABLE -- . ":(exclude)ai"
+# (no output, exit 1)                     # the thing the fact described is gone
 ```
 
 Same failing first check, opposite conclusion.

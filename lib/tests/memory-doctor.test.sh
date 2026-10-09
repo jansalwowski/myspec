@@ -336,5 +336,142 @@ run_doctor --root "$R2"
 expect_exit 1 "a collision at the default branch tip still fails"
 expect_line '^ERROR duplicate-id: P001: \.ai/memory/procedural/P001-c\.md, \.ai/memory/procedural/P001-d\.md$' "collision at the default branch tip is an error"
 
+# --- 5. issue #341: an anchor pattern is an ERE matched line by line ---------
+#
+# memory-anchor.mjs is the one definition (its header lists the rules); the
+# doctor and the skills both run it. One memory per rule, each named for it.
+
+R3="$ROOT/r3"
+mkdir -p "$R3/.ai/memory/procedural" "$R3/src"
+cd "$R3" || exit 1
+git init -q -b main .
+printf '{ "aiDir": ".ai/" }\n' > .myspec.json
+printf '.claude/state/\n' > .gitignore
+printf '# build targets\n\ninstall:\n\tnpm ci\ncomposer:\n\tcomposer install\n' > Makefile
+printf 'install:\r\ncomposer:\r\n' > crlf.mk
+# shellcheck disable=SC2016 # literal PHP source, nothing to expand
+printf '<?php\n$this->load($name);\n$total = a[0] + 1;\n' > src/Loader.php
+
+anchor() {  # anchor <slug> <file> <yaml-quoted pattern>
+  memory ".ai/memory/procedural/P$((++N))-$1.md" "P$N" "$1" "anchors: [{file: \"$2\", pattern: $3}]"
+}
+N=100
+anchor caret-not-line-one Makefile '"^composer:"'
+anchor dollar-end-of-line Makefile '"^install:$"'
+anchor crlf-dollar crlf.mk '"^install:$"'
+anchor dot-star-across-lines Makefile '"install.*composer"'
+anchor negated-class-across-lines Makefile '"install:[^x]*composer"'
+anchor ere-alternation Makefile '"deploy|install"'
+anchor bre-alternation-is-literal Makefile "'deploy\\|install'"
+anchor posix-class Makefile "'^[[:alpha:]]+:\$'"
+anchor word-boundary Makefile "'\\<composer\\>'"
+anchor leading-bracket Makefile "'^[]#]'"
+anchor case-sensitive Makefile '"^Composer:"'
+anchor literal-invalid-regex src/Loader.php "'\$this->load('"
+anchor literal-valid-regex src/Loader.php '"a[0] + 1"'
+anchor invalid-regex-absent src/Loader.php "'missing('"
+anchor empty-pattern Makefile '""'
+# PR #345 review: backslash in brackets, Unicode, nothing-to-repeat, directories.
+printf 'path\\x\nC:\\\nad\n*bullet\naaab\n' > src/paths.txt
+printf 'Zażółć:\n😀\n' > src/i18n.txt
+anchor bracket-backslash-slash src/paths.txt "'^path[\\/]x\$'"
+anchor bracket-backslash-only src/paths.txt "'^C:[\\]\$'"
+anchor bracket-backslash-d src/paths.txt "'^a[\\d]\$'"
+anchor nothing-to-repeat src/paths.txt "'^*bullet'"
+anchor stacked-quantifier src/paths.txt "'^a**b\$'"
+anchor unicode-alpha src/i18n.txt "'^[[:alpha:]]+:\$'"
+anchor unicode-dot src/i18n.txt "'^.\$'"
+anchor directory-anchor src '"x"'
+
+run_doctor --root "$R3"
+[ -n "${DEBUG_DOCTOR:-}" ] && printf '%s\n' "$OUTPUT" >&2
+
+live() {  # live <slug> <description>
+  expect_no_line "^WARN anchor-[a-z-]+: \.ai/memory/procedural/P[0-9]+-$1\.md" "$2"
+}
+gone() {  # gone <slug> <description>
+  expect_line "^WARN anchor-pattern-gone: \.ai/memory/procedural/P[0-9]+-$1\.md" "$2"
+}
+live caret-not-line-one "#341: ^ anchors to a line start, not the file start"
+live dollar-end-of-line "\$ anchors to a line end"
+live crlf-dollar "\$ matches before a CRLF line ending"
+gone dot-star-across-lines ".* does not cross a line break"
+gone negated-class-across-lines "[^x] does not cross a line break"
+live ere-alternation "| is alternation (ERE)"
+gone bre-alternation-is-literal "\\| is a literal bar, as under grep -E"
+live posix-class "[[:alpha:]] is a POSIX class"
+live word-boundary "\\< and \\> are word boundaries"
+live leading-bracket "a ] opening a bracket is literal"
+gone case-sensitive "matching is case-sensitive"
+live literal-invalid-regex "a pattern that is not a regex is found literally"
+live literal-valid-regex "a regex pattern meant literally is found literally"
+expect_line '^WARN anchor-pattern-invalid: \.ai/memory/procedural/P[0-9]+-invalid-regex-absent\.md: anchor pattern "missing\(" is not a valid extended regex' "an invalid regex that is absent says so"
+expect_no_line 'anchor-pattern-gone: \.ai/memory/procedural/P[0-9]+-invalid-regex-absent\.md' "an invalid regex is not reported as gone"
+expect_line '^WARN anchor-no-pattern: \.ai/memory/procedural/P[0-9]+-empty-pattern\.md' "an empty pattern is no anchor"
+expect_no_line 'anchor-pattern-(gone|invalid): \.ai/memory/procedural/P[0-9]+-empty-pattern\.md' "an empty pattern is not tested"
+live bracket-backslash-slash "a backslash in brackets is literal ([\\/] matches \\)"
+live bracket-backslash-only "[\\] is a valid one-member bracket"
+live bracket-backslash-d "[\\d] holds a backslash and d, not a digit class"
+live nothing-to-repeat "a * with nothing to repeat is literal"
+live stacked-quantifier "a** repeats like grep"
+live unicode-alpha "[[:alpha:]] matches non-ASCII letters"
+live unicode-dot ". matches one code point (an emoji)"
+expect_line '^WARN anchor-not-a-file: \.ai/memory/procedural/P[0-9]+-directory-anchor\.md: anchor src is not a regular file' "a directory anchor warns, as the command reports it"
+
+# The command the skills run: same answer, as an exit status.
+ANCHOR="$(dirname "$SCRIPT")/memory-anchor.mjs"
+cli() {  # cli <want-exit> <description> <args...>
+  local want="$1" desc="$2"
+  shift 2
+  node "$ANCHOR" "$@" >/dev/null 2>&1
+  local got=$?
+  if [ "$got" -eq "$want" ]; then ok; else fail "memory-anchor.mjs: $desc (exit $got, want $want)"; fi
+}
+cli 0 "live anchor exits 0" Makefile '^composer:'
+cli 1 "cross-line pattern exits 1" Makefile 'install.*composer'
+cli 1 "missing file exits 1" nope.mk '^composer:'
+cli 1 "invalid regex absent exits 1" src/Loader.php 'missing('
+cli 2 "empty pattern is a usage error" Makefile ''
+cli 2 "missing pattern is a usage error" Makefile
+cli 1 "a directory is not an anchor file" src 'x'
+if [ "$(node "$ANCHOR" src x)" = "not-a-file: src is not a regular file — anchor a file inside it" ]; then ok; else fail "memory-anchor.mjs: a directory reads not-a-file, as in the doctor"; fi
+
+# --find: relocation by the same rules, over the files git tracks or would.
+# shellcheck disable=SC2016 # a PHP literal, nothing to expand
+printf 'a\0$this->load(\n' > src/blob.bin
+find_hits() {  # find_hits <pattern> [pathspec...]; sets HITS and STATUS
+  local pattern="$1"
+  shift
+  HITS=$(node "$ANCHOR" --find "$pattern" -- "$@" 2>/dev/null | LC_ALL=C sort | tr '\n' ' ')
+  STATUS=$(node "$ANCHOR" --find "$pattern" -- "$@" >/dev/null 2>&1; echo $?)
+}
+# shellcheck disable=SC2016 # a PHP literal, nothing to expand
+find_hits '$this->load(' . ':(exclude).ai'
+if [ "$HITS" = "src/Loader.php " ] && [ "$STATUS" -eq 0 ]; then ok; else fail "--find: an invalid regex is found literally, binaries skipped (got '$HITS', exit $STATUS)"; fi
+find_hits '^install:$' . ':(exclude).ai'
+if [ "$HITS" = "Makefile crlf.mk " ]; then ok; else fail "--find: \$ matches before CRLF (got '$HITS')"; fi
+find_hits 'a[0] + 1' . ':(exclude).ai'
+if [ "$HITS" = "src/Loader.php " ]; then ok; else fail "--find: a pattern meant literally is found (got '$HITS')"; fi
+find_hits 'install.*composer' . ':(exclude).ai'
+if [ -z "$HITS" ] && [ "$STATUS" -eq 1 ]; then ok; else fail "--find: no hit exits 1 (got '$HITS', exit $STATUS)"; fi
+find_hits 'missing(' . ':(exclude).ai'
+if [ "$STATUS" -eq 1 ]; then ok; else fail "--find: the aiDir exclusion holds (exit $STATUS)"; fi
+find_hits 'missing('
+case "$HITS" in *invalid-regex-absent.md*) ok ;; *) fail "--find: without the exclusion the memory file itself is a hit (got '$HITS')" ;; esac
+STATUS=$(cd "$ROOT" && node "$ANCHOR" --find x >/dev/null 2>&1; echo $?)
+if [ "$STATUS" -eq 2 ]; then ok; else fail "--find outside a git work tree exits 2 (exit $STATUS)"; fi
+
+# Module surface: no dead export, and a literal hit never splits the file.
+if node --input-type=module -e "const m = await import('$ANCHOR'); process.exit('anchorMatches' in m ? 1 : 0)"; then ok; else fail "memory-anchor.mjs exports no unused anchorMatches"; fi
+if node --input-type=module -e "
+  const { anchorStatus } = await import('$ANCHOR');
+  const split = String.prototype.split;
+  let calls = 0;
+  String.prototype.split = function (...a) { calls += 1; return split.apply(this, a); };
+  const status = anchorStatus('x\n'.repeat(1000) + 'needle\n', 'needle');
+  String.prototype.split = split;
+  process.exit(status === 'live' && calls === 0 ? 0 : 1);
+"; then ok; else fail "a literal hit returns before splitting the file into lines"; fi
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

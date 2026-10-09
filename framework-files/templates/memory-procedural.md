@@ -8,7 +8,7 @@ validated: YYYY-MM-DD
 validation_count: 0
 triggers: []        # keywords agents search for
 not_for: []         # explicit exclusions
-anchors: []         # [{file: "path", pattern: "grep pattern"}]
+anchors: []         # [{file: "path", pattern: "grep -E regex, one line"}]
 related: []         # IDs of related memories (e.g., ["S001", "E003"])
 ---
 
