@@ -88,7 +88,7 @@ Use the type-appropriate template from `${aiDir}/.templates/memory-{type}.md`:
 - Default `persistent: false` -- will auto-archive after 30 days
 - Set `related`: IDs of related procedural/semantic memories (e.g., ["P009", "S001"])
 
-**Anchor patterns.** A pattern is a POSIX extended regex (`grep -E`), case-sensitive, matched one line at a time: `^` and `$` mean line start and end, and nothing matches across a line break. Write alternation as `|`; `\|`, `\+`, `\(` are literal characters. A pattern that appears literally on a line also counts, so `$this->load(` needs no escaping. Pick a line that names the thing (`^composer:`, `function resolveSkillName`), not one that spans lines. Check it before writing: `node "${CLAUDE_PLUGIN_ROOT}/lib/memory-anchor.mjs" <file> "<pattern>"` must exit 0 — the doctor and `memory-optimize` run the same check.
+**Anchor patterns.** A pattern is a POSIX extended regex (`grep -E`), case-sensitive, matched one line at a time: `^` and `$` mean line start and end, and nothing matches across a line break. Write alternation as `|`; `\|`, `\+`, `\(` are literal characters, and so is a backslash inside brackets. Matching is by Unicode character, so `.` and `[[:alpha:]]` cover non-ASCII text. A pattern that appears literally on a line also counts, so `$this->load(` needs no escaping. Pick a line that names the thing (`^composer:`, `function resolveSkillName`), not one that spans lines. Check it before writing: `node "${CLAUDE_PLUGIN_ROOT}/lib/memory-anchor.mjs" <file> "<pattern>"` must exit 0 — the doctor and `memory-optimize` run the same check.
 
 ### 5. Update Type-Specific Index
 

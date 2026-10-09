@@ -371,6 +371,17 @@ anchor literal-invalid-regex src/Loader.php "'\$this->load('"
 anchor literal-valid-regex src/Loader.php '"a[0] + 1"'
 anchor invalid-regex-absent src/Loader.php "'missing('"
 anchor empty-pattern Makefile '""'
+# PR #345 review: backslash in brackets, Unicode, nothing-to-repeat, directories.
+printf 'path\\x\nC:\\\nad\n*bullet\naaab\n' > src/paths.txt
+printf 'Zażółć:\n😀\n' > src/i18n.txt
+anchor bracket-backslash-slash src/paths.txt "'^path[\\/]x\$'"
+anchor bracket-backslash-only src/paths.txt "'^C:[\\]\$'"
+anchor bracket-backslash-d src/paths.txt "'^a[\\d]\$'"
+anchor nothing-to-repeat src/paths.txt "'^*bullet'"
+anchor stacked-quantifier src/paths.txt "'^a**b\$'"
+anchor unicode-alpha src/i18n.txt "'^[[:alpha:]]+:\$'"
+anchor unicode-dot src/i18n.txt "'^.\$'"
+anchor directory-anchor src '"x"'
 
 run_doctor --root "$R3"
 [ -n "${DEBUG_DOCTOR:-}" ] && printf '%s\n' "$OUTPUT" >&2
@@ -398,6 +409,14 @@ expect_line '^WARN anchor-pattern-invalid: \.ai/memory/procedural/P[0-9]+-invali
 expect_no_line 'anchor-pattern-gone: \.ai/memory/procedural/P[0-9]+-invalid-regex-absent\.md' "an invalid regex is not reported as gone"
 expect_line '^WARN anchor-no-pattern: \.ai/memory/procedural/P[0-9]+-empty-pattern\.md' "an empty pattern is no anchor"
 expect_no_line 'anchor-pattern-(gone|invalid): \.ai/memory/procedural/P[0-9]+-empty-pattern\.md' "an empty pattern is not tested"
+live bracket-backslash-slash "a backslash in brackets is literal ([\\/] matches \\)"
+live bracket-backslash-only "[\\] is a valid one-member bracket"
+live bracket-backslash-d "[\\d] holds a backslash and d, not a digit class"
+live nothing-to-repeat "a * with nothing to repeat is literal"
+live stacked-quantifier "a** repeats like grep"
+live unicode-alpha "[[:alpha:]] matches non-ASCII letters"
+live unicode-dot ". matches one code point (an emoji)"
+expect_line '^WARN anchor-not-a-file: \.ai/memory/procedural/P[0-9]+-directory-anchor\.md: anchor src is not a regular file' "a directory anchor warns, as the command reports it"
 
 # The command the skills run: same answer, as an exit status.
 ANCHOR="$(dirname "$SCRIPT")/memory-anchor.mjs"
@@ -414,6 +433,45 @@ cli 1 "missing file exits 1" nope.mk '^composer:'
 cli 1 "invalid regex absent exits 1" src/Loader.php 'missing('
 cli 2 "empty pattern is a usage error" Makefile ''
 cli 2 "missing pattern is a usage error" Makefile
+cli 1 "a directory is not an anchor file" src 'x'
+if [ "$(node "$ANCHOR" src x)" = "not-a-file: src is not a regular file — anchor a file inside it" ]; then ok; else fail "memory-anchor.mjs: a directory reads not-a-file, as in the doctor"; fi
+
+# --find: relocation by the same rules, over the files git tracks or would.
+# shellcheck disable=SC2016 # a PHP literal, nothing to expand
+printf 'a\0$this->load(\n' > src/blob.bin
+find_hits() {  # find_hits <pattern> [pathspec...]; sets HITS and STATUS
+  local pattern="$1"
+  shift
+  HITS=$(node "$ANCHOR" --find "$pattern" -- "$@" 2>/dev/null | LC_ALL=C sort | tr '\n' ' ')
+  STATUS=$(node "$ANCHOR" --find "$pattern" -- "$@" >/dev/null 2>&1; echo $?)
+}
+# shellcheck disable=SC2016 # a PHP literal, nothing to expand
+find_hits '$this->load(' . ':(exclude).ai'
+if [ "$HITS" = "src/Loader.php " ] && [ "$STATUS" -eq 0 ]; then ok; else fail "--find: an invalid regex is found literally, binaries skipped (got '$HITS', exit $STATUS)"; fi
+find_hits '^install:$' . ':(exclude).ai'
+if [ "$HITS" = "Makefile crlf.mk " ]; then ok; else fail "--find: \$ matches before CRLF (got '$HITS')"; fi
+find_hits 'a[0] + 1' . ':(exclude).ai'
+if [ "$HITS" = "src/Loader.php " ]; then ok; else fail "--find: a pattern meant literally is found (got '$HITS')"; fi
+find_hits 'install.*composer' . ':(exclude).ai'
+if [ -z "$HITS" ] && [ "$STATUS" -eq 1 ]; then ok; else fail "--find: no hit exits 1 (got '$HITS', exit $STATUS)"; fi
+find_hits 'missing(' . ':(exclude).ai'
+if [ "$STATUS" -eq 1 ]; then ok; else fail "--find: the aiDir exclusion holds (exit $STATUS)"; fi
+find_hits 'missing('
+case "$HITS" in *invalid-regex-absent.md*) ok ;; *) fail "--find: without the exclusion the memory file itself is a hit (got '$HITS')" ;; esac
+STATUS=$(cd "$ROOT" && node "$ANCHOR" --find x >/dev/null 2>&1; echo $?)
+if [ "$STATUS" -eq 2 ]; then ok; else fail "--find outside a git work tree exits 2 (exit $STATUS)"; fi
+
+# Module surface: no dead export, and a literal hit never splits the file.
+if node --input-type=module -e "const m = await import('$ANCHOR'); process.exit('anchorMatches' in m ? 1 : 0)"; then ok; else fail "memory-anchor.mjs exports no unused anchorMatches"; fi
+if node --input-type=module -e "
+  const { anchorStatus } = await import('$ANCHOR');
+  const split = String.prototype.split;
+  let calls = 0;
+  String.prototype.split = function (...a) { calls += 1; return split.apply(this, a); };
+  const status = anchorStatus('x\n'.repeat(1000) + 'needle\n', 'needle');
+  String.prototype.split = split;
+  process.exit(status === 'live' && calls === 0 ? 0 : 1);
+"; then ok; else fail "a literal hit returns before splitting the file into lines"; fi
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

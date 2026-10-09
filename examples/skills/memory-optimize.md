@@ -54,19 +54,17 @@ Anchor liveness runs in two steps, and the second step is what keeps the pass fr
 ```bash
 # S014 — anchor: {file: packages/db/src/client.ts, pattern: datasourceUrl}
 node "${CLAUDE_PLUGIN_ROOT}/lib/memory-anchor.mjs" packages/db/src/client.ts datasourceUrl
-# missing: packages/db/src/client.ts is not a file
-git grep -lE -e datasourceUrl -- . ":(exclude)ai"
+# missing: packages/db/src/client.ts does not exist
+node "${CLAUDE_PLUGIN_ROOT}/lib/memory-anchor.mjs" --find datasourceUrl -- . ":(exclude)ai"
 # packages/db/src/prisma/client.ts        # the fact survived, the file moved
-node "${CLAUDE_PLUGIN_ROOT}/lib/memory-anchor.mjs" packages/db/src/prisma/client.ts datasourceUrl
-# live: "datasourceUrl" matches a line of packages/db/src/prisma/client.ts
 ```
 
 ```bash
 # S007 — anchor: {file: apps/web/src/lib/flags.ts, pattern: LEGACY_FLAG_TABLE}
 node "${CLAUDE_PLUGIN_ROOT}/lib/memory-anchor.mjs" apps/web/src/lib/flags.ts LEGACY_FLAG_TABLE
-# missing: apps/web/src/lib/flags.ts is not a file
-git grep -lE -e LEGACY_FLAG_TABLE -- . ":(exclude)ai"
-# (no output)                             # the thing the fact described is gone
+# missing: apps/web/src/lib/flags.ts does not exist
+node "${CLAUDE_PLUGIN_ROOT}/lib/memory-anchor.mjs" --find LEGACY_FLAG_TABLE -- . ":(exclude)ai"
+# (no output, exit 1)                     # the thing the fact described is gone
 ```
 
 Same failing first check, opposite conclusion.
