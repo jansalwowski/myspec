@@ -1,0 +1,70 @@
+{
+  "schema": 1,
+  "version": "3.2.0",
+  "tag": "v3.2.0",
+  "commit": "a6751b73d2f1ddc18bf56c8dcfb2dff420ef287e",
+  "date": "2026-10-09",
+  "source": "release",
+  "claude_code": "2.1.295",
+  "runs": 3,
+  "judge_model": "sonnet",
+  "evals": {"fixtures":"b055ab44e3891415","cases":{"feature-implement-attribution":"65f40201a5a33aff","feature-implement-dispatch":"b04d3aa4e2a9a8f5","feature-plan-gate":"f2ff5cc5c9e57e4e","nearmiss-personal-preference":"5518f2c18dfe2459","nearmiss-skill-verify":"22bb80982376874b","route-spec-review":"1f61fced3024c15b","trigger-doctor":"8626b69404c956c8","trigger-feature-spec-scenarios":"50363cdfde49be61","trigger-feature-status-audit":"b5a127d496a3e453","trigger-feature-verify":"a62fc27fa180f31a","trigger-implement-review":"bf447a36836ce4d0","trigger-memorify":"ab102813e60de4d2","trigger-memorize":"d7369bacf4161421","trigger-memory-lookup":"4f5a030fb7da50a8","trigger-memory-sanitize":"70c546e910844df1","trigger-new-feature":"aa587205bd253418","trigger-session-complete":"aba624e13f284ca6","feature-implement-fix-round":"1c3bd1d95cb20785","feature-implement-phase-review":"814c8563ede3e143","feature-implement-probe-gate":"faeb55543a60b2ad","feature-implement-restart-state":"5f044107acb3dd93","feature-plan-coverage":"3fc2808323ac57a8","feature-spec-contract":"780147cc45749475","spec-review-planted-flaws":"49a857a605842b85","tech-spec-review-planted-flaws":"ca60af581c000b84"},"inputs":{"feature-implement-attribution":"3ee9b1da18177960","feature-implement-dispatch":"0968d70e56bda539","feature-plan-gate":"88278929b517f194","nearmiss-personal-preference":"c6ec86327f9f75a4","nearmiss-skill-verify":"98cb914375a0e377","route-spec-review":"37dc207fac2276c5","trigger-doctor":"bb7084f531bf6dae","trigger-feature-spec-scenarios":"78a6410c3049893a","trigger-feature-status-audit":"864b033bae521338","trigger-feature-verify":"4bc207976afeff2d","trigger-implement-review":"aee37ce8395ddae1","trigger-memorify":"04646b6c3c4f7733","trigger-memorize":"5123077514fd463d","trigger-memory-lookup":"615cb224e727171d","trigger-memory-sanitize":"75f2b7575146ddb4","trigger-new-feature":"3f02d4bb6a5aa44d","trigger-session-complete":"73192cc9eb4cbbae","feature-implement-fix-round":"f821a876c46888cc","feature-implement-phase-review":"b964c7d7271a9429","feature-implement-probe-gate":"b2b7729a2167de3d","feature-implement-restart-state":"d9b01280462dbdcf","feature-plan-coverage":"68f7832443cf591a","feature-spec-contract":"70a2e2456e49eabc","spec-review-planted-flaws":"4aa29d0e475bb786","tech-spec-review-planted-flaws":"9e61b882b63c3bf0"},"tiers":{"feature-implement-attribution":"capability","feature-implement-dispatch":"capability","feature-plan-gate":"regression","nearmiss-personal-preference":"capability","nearmiss-skill-verify":"regression","route-spec-review":"regression","trigger-doctor":"regression","trigger-feature-spec-scenarios":"capability","trigger-feature-status-audit":"regression","trigger-feature-verify":"regression","trigger-implement-review":"regression","trigger-memorify":"regression","trigger-memorize":"regression","trigger-memory-lookup":"regression","trigger-memory-sanitize":"capability","trigger-new-feature":"regression","trigger-session-complete":"regression","feature-implement-fix-round":"capability","feature-implement-phase-review":"capability","feature-implement-probe-gate":"capability","feature-implement-restart-state":"capability","feature-plan-coverage":"capability","feature-spec-contract":"regression","spec-review-planted-flaws":"regression","tech-spec-review-planted-flaws":"regression"},"workspaces":{"feature-implement-attribution":"5c6f0a8af79e0087","feature-implement-dispatch":"87c8e09fd9e12afc","feature-implement-fix-round":"da7e1e81a70355e6","feature-implement-phase-review":"2ebb4d4927434bcc","feature-implement-probe-gate":"6b0f8ab649e8bc48","feature-implement-restart-state":"87c8e09fd9e12afc","feature-plan-coverage":"315c428a26519e09","feature-plan-gate":"446aba2a826009bf","feature-spec-contract":"b259dc0f66204e3e","nearmiss-personal-preference":"b259dc0f66204e3e","nearmiss-skill-verify":"1fca099b6936b914","route-spec-review":"892f8da3b5f7dd77","spec-review-planted-flaws":"892f8da3b5f7dd77","tech-spec-review-planted-flaws":"a16a784ef4698772","trigger-doctor":"1fca099b6936b914","trigger-feature-spec-scenarios":"315c428a26519e09","trigger-feature-status-audit":"1fca099b6936b914","trigger-feature-verify":"1fca099b6936b914","trigger-implement-review":"1fca099b6936b914","trigger-memorify":"b259dc0f66204e3e","trigger-memorize":"b259dc0f66204e3e","trigger-memory-lookup":"b259dc0f66204e3e","trigger-memory-sanitize":"b259dc0f66204e3e","trigger-new-feature":"b259dc0f66204e3e","trigger-session-complete":"9467f7cb0bb43412"}},
+  "models": {
+    "haiku": {
+      "model_id": "claude-haiku-5-5",
+      "cost_usd": 0.1791,
+      "duration_s": 205,
+      "cases": {
+        "feature-implement-attribution": {"scores":[0],"passed":[false],"cost_usd":0.0079,"duration_s":46},
+        "feature-implement-dispatch": {"scores":[0.5],"passed":[false],"cost_usd":0.01,"duration_s":45},
+        "feature-plan-gate": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.017,"duration_s":62},
+        "nearmiss-personal-preference": {"scores":[1],"passed":[true],"cost_usd":0.0035,"duration_s":8},
+        "nearmiss-skill-verify": {"scores":[0.6667,0.6667,0.6667],"passed":[false,false,false],"cost_usd":0.0111,"duration_s":47},
+        "route-spec-review": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.0104,"duration_s":20},
+        "trigger-doctor": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.0119,"duration_s":43},
+        "trigger-feature-spec-scenarios": {"scores":[1],"passed":[true],"cost_usd":0.0077,"duration_s":48},
+        "trigger-feature-status-audit": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.0105,"duration_s":36},
+        "trigger-feature-verify": {"scores":[1,0.6667,0.6667],"passed":[true,false,false],"cost_usd":0.0101,"duration_s":22},
+        "trigger-implement-review": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.0112,"duration_s":49},
+        "trigger-memorify": {"scores":[1,1,0.6667],"passed":[true,true,false],"cost_usd":0.0101,"duration_s":28},
+        "trigger-memorize": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.01,"duration_s":22},
+        "trigger-memory-lookup": {"scores":[0.6667,0.6667,0.6667],"passed":[false,false,false],"cost_usd":0.0107,"duration_s":87},
+        "trigger-memory-sanitize": {"scores":[1],"passed":[true],"cost_usd":0.005,"duration_s":21},
+        "trigger-new-feature": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.022,"duration_s":145},
+        "trigger-session-complete": {"scores":[1,1,1],"passed":[true,true,true],"cost_usd":0.01,"duration_s":68}
+      }
+    },
+    "sonnet": {
+      "model_id": "claude-sonnet-5-5",
+      "cost_usd": 3.8265,
+      "duration_s": 289,
+      "cases": {
+        "feature-implement-attribution": {"scores":[1],"passed":[true],"cost_usd":0.3561,"duration_s":84},
+        "feature-implement-dispatch": {"scores":[1],"passed":[true],"cost_usd":0.3383,"duration_s":75},
+        "feature-implement-fix-round": {"scores":[1],"passed":[true],"cost_usd":0.2949,"duration_s":61},
+        "feature-implement-phase-review": {"scores":[1],"passed":[true],"cost_usd":0.374,"duration_s":62},
+        "feature-implement-probe-gate": {"scores":[1],"passed":[true],"cost_usd":0.2536,"duration_s":85},
+        "feature-implement-restart-state": {"scores":[1],"passed":[true],"cost_usd":0.3225,"duration_s":113},
+        "feature-plan-coverage": {"scores":[1],"passed":[true],"cost_usd":0.2882,"duration_s":88},
+        "feature-plan-gate": {"scores":[1],"passed":[true],"cost_usd":0.0928,"duration_s":26},
+        "feature-spec-contract": {"scores":[1],"passed":[true],"cost_usd":0.124,"duration_s":50},
+        "nearmiss-personal-preference": {"scores":[1],"passed":[true],"cost_usd":0.0647,"duration_s":13},
+        "nearmiss-skill-verify": {"scores":[1],"passed":[true],"cost_usd":0.0767,"duration_s":10},
+        "route-spec-review": {"scores":[1],"passed":[true],"cost_usd":0.0666,"duration_s":10},
+        "spec-review-planted-flaws": {"scores":[1],"passed":[true],"cost_usd":0.132,"duration_s":37},
+        "tech-spec-review-planted-flaws": {"scores":[1],"passed":[true],"cost_usd":0.164,"duration_s":45},
+        "trigger-doctor": {"scores":[1],"passed":[true],"cost_usd":0.0748,"duration_s":13},
+        "trigger-feature-spec-scenarios": {"scores":[1],"passed":[true],"cost_usd":0.1439,"duration_s":39},
+        "trigger-feature-status-audit": {"scores":[1],"passed":[true],"cost_usd":0.0651,"duration_s":9},
+        "trigger-feature-verify": {"scores":[1],"passed":[true],"cost_usd":0.067,"duration_s":8},
+        "trigger-implement-review": {"scores":[1],"passed":[true],"cost_usd":0.07,"duration_s":38},
+        "trigger-memorify": {"scores":[1],"passed":[true],"cost_usd":0.0619,"duration_s":13},
+        "trigger-memorize": {"scores":[1],"passed":[true],"cost_usd":0.0612,"duration_s":12},
+        "trigger-memory-lookup": {"scores":[1],"passed":[true],"cost_usd":0.0605,"duration_s":21},
+        "trigger-memory-sanitize": {"scores":[1],"passed":[true],"cost_usd":0.0895,"duration_s":30},
+        "trigger-new-feature": {"scores":[1],"passed":[true],"cost_usd":0.1217,"duration_s":64},
+        "trigger-session-complete": {"scores":[1],"passed":[true],"cost_usd":0.0625,"duration_s":14}
+      }
+    }
+  }
+}
