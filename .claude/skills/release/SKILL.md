@@ -35,14 +35,15 @@ Run all checks; any failure → report it and stop (fix first, never release aro
 
 ### Step 3: Eval Comparison
 
-`scripts/evals/release-check.sh` runs the release suite on HEAD (Sonnet: every case, 3 runs per regression case and 1 per capability case; Haiku: the `trigger` and `near-miss` cases only; Sonnet judge) and compares it case by case with the previous release. Every run is a real model call on the maintainer's login, so state the cost before starting:
+`scripts/evals/release-check.sh` runs the release suite on HEAD (Sonnet, adaptive: every case once, plus 2 more runs for a regression case whose run failed; Haiku: 3 runs per regression case, on the `trigger` and `near-miss` cases only; Sonnet judge) and compares it case by case with the previous release. Every run is a real model call on the maintainer's login, so state the cost before starting (measured on v3.2.0):
 
 | Situation | Spend | Time |
 |---|---|---|
-| Stored baseline for the previous tag is reused (same Claude Code version) | about $11.5 (Sonnet ≈ $9.3, Haiku ≈ $2.2), plus any changed case | about 13 min |
-| The previous tag's whole suite is re-run too (any Claude Code version change, the usual case) | about $23.5 | about 25 min |
+| Stored baseline for the previous tag is reused (the usual case: a Claude Code patch release does not re-run it) | about $4 (Sonnet ≈ $3.8, Haiku ≈ $0.2), plus each changed case on the previous tag (≈ $0.07 a routing case, ≈ $0.35 an orchestration one) | about 10 min |
+| One model re-runs on the previous tag (its resolved model id changed) | plus ≈ $0.2 (Haiku) or ≈ $3.8 (Sonnet) | plus 3–5 min |
+| The previous tag's whole suite is re-run (a Claude Code major.minor change, or no stored baseline) | about $8 | about 20 min |
 
-The script prints which applies (`baseline REUSE …`, `RERUN <model> <reason>`, `RERUN-CASE <case> <reason>`, `WORKSPACES …`). RELEASING.md lists the rules: any Claude Code version change or a changed or unresolved model id re-runs the suite; a case whose inputs (project-instructions block aside) or fixture workspace changed re-runs only that case. The check writes nothing to `quality/`; it stages files in its output directory.
+Each failed Sonnet regression run adds 2 retries of that case. The script prints which applies (`baseline REUSE …`, `RERUN <model> <reason>`, `RERUN-CASE <case> <reason>`, `WORKSPACES …`). RELEASING.md lists the rules: a Claude Code major.minor change (`--cc-match exact`: any version change) or a changed or unresolved model id re-runs the suite; a case whose inputs (project-instructions block aside) or fixture workspace changed re-runs only that case. The check writes nothing to `quality/`; it stages files in its output directory.
 
 1. Tell the maintainer the estimate. If they choose to skip (quota, outage, docs-only release), run `scripts/evals/release-check.sh --version {X.Y.Z} --skip "<reason>"`, which records the reason in `quality/trend.jsonl`, and go to item 5.
 2. Run `scripts/evals/release-check.sh --version {X.Y.Z}` in the background: it can outlast a 10-minute tool timeout. Wait for it to exit, then show the comparison report and note the output directory it printed (`release-check: output in <out>`).
