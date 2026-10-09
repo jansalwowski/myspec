@@ -24,16 +24,20 @@ const args = process.argv.slice(2);
 const trials = Number(args[args.indexOf('--trials') + 1] || 1000) || 1000;
 const R = mulberry32(12345);
 
-function sample(spec, runs = 3) {
+// mode 'fixed': 3 runs per case. 'adaptive': 1 run, and 2 more when it failed
+// (run.sh --adaptive-models).
+function sample(spec, mode = 'fixed') {
   const cases = {};
   spec.forEach((q, i) => {
     const scores = [];
     const passed = [];
-    for (let r = 0; r < runs; r++) {
+    const run = () => {
       const g = q.map((p) => R() < p);
       scores.push(Math.round((g.filter(Boolean).length / g.length) * 1e4) / 1e4);
       passed.push(g.every(Boolean));
-    }
+    };
+    run();
+    if (mode === 'fixed' || !passed[0]) { run(); run(); }
     cases[`c${String(i).padStart(2, '0')}`] = { scores, passed };
   });
   return { cases };
@@ -44,6 +48,7 @@ const capability = [0.995, 0.995, 0];
 const flaky = [0.93, 0.93, 0.93];
 const sonnet = [...Array(12).fill(stable), flaky, capability, capability];
 const sonnetFlaky3 = [...Array(10).fill(stable), ...Array(3).fill(flaky), capability, capability];
+const sonnetFlaky5 = [...Array(8).fill(stable), ...Array(5).fill([0.9, 0.9, 0.9]), capability, capability];
 const ramp = (lo, hi) => Array.from({ length: 15 }, (_, i) => lo + ((hi - lo) * i) / 14).map((p) => [p, p, p]);
 const haiku = ramp(0.55, 0.95);
 const haikuLow = ramp(0.45, 0.8);
@@ -59,13 +64,23 @@ export const SCENARIOS = [
   ['sonnet break 3', sonnet, brk(sonnet, [0, 1, 2])],
   ['haiku break 2', haiku, brk(haiku, [13, 14])],
   ['haiku break 3', haiku, brk(haiku, [12, 13, 14])],
+  // Adaptive runs (the gated model, "adaptiveModels"): both sides adaptive,
+  // and "first" for the release that switches, against a 3-run baseline.
+  ['adaptive sonnet A/A', sonnet, sonnet, 'adaptive', 'adaptive'],
+  ['adaptive sonnet-flaky3 A/A', sonnetFlaky3, sonnetFlaky3, 'adaptive', 'adaptive'],
+  ['adaptive sonnet-flaky5 A/A', sonnetFlaky5, sonnetFlaky5, 'adaptive', 'adaptive'],
+  ['adaptive sonnet break 1', sonnet, brk(sonnet, [0]), 'adaptive', 'adaptive'],
+  ['adaptive sonnet break 2', sonnet, brk(sonnet, [0, 1]), 'adaptive', 'adaptive'],
+  ['adaptive sonnet break 3', sonnet, brk(sonnet, [0, 1, 2]), 'adaptive', 'adaptive'],
+  ['first adaptive sonnet A/A', sonnet, sonnet, 'fixed', 'adaptive'],
+  ['first adaptive break 2', sonnet, brk(sonnet, [0, 1]), 'fixed', 'adaptive'],
 ];
 
 const out = {};
-for (const [name, a, b] of SCENARIOS) {
+for (const [name, a, b, ma, mb] of SCENARIOS) {
   let reg = 0;
-  for (let t = 0; t < trials; t++) if (compareModel(sample(a), sample(b), DEFAULTS).verdict === 'regressed') reg++;
+  for (let t = 0; t < trials; t++) if (compareModel(sample(a, ma), sample(b, mb), DEFAULTS).verdict === 'regressed') reg++;
   out[name] = Math.round((1000 * reg) / trials) / 10;
 }
 if (args.includes('--json')) console.log(JSON.stringify(out));
-else for (const [name, pct] of Object.entries(out)) console.log(`${name.padEnd(20)} regressed ${pct.toFixed(1)}%  (${trials} trials)`);
+else for (const [name, pct] of Object.entries(out)) console.log(`${name.padEnd(28)} regressed ${pct.toFixed(1)}%  (${trials} trials)`);

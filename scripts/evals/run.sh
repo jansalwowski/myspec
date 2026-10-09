@@ -18,6 +18,11 @@
 #                   one of the tags T; M is skipped when none does. Repeatable.
 #                   release-check.sh passes quality/release-check.json
 #                   "modelTags" this way.
+#   --adaptive-models M[,M...]
+#                   full mode, no --runs: run model M's cases once, then run
+#                   each regression case whose run failed twice more (3 in
+#                   all). release-check.sh passes quality/release-check.json
+#                   "adaptiveModels" this way (evals/README.md, "Tiers").
 #   --base          default: git merge-base origin/main HEAD (then main).
 #   --out           default: .eval-results/<UTC timestamp>-<mode>/
 #                   Results land in <out>/<model>/ (full) or
@@ -54,7 +59,7 @@ SCRIPT_DIR="$REPO_ROOT/scripts/evals"
 die() { echo "evals: $*" >&2; exit 2; }
 usage() { awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "${BASH_SOURCE[0]}"; }
 
-MODE="" BASE="" OUT="" RUNS="" MODELS="" CASE_GLOB="" PLUGIN_DIR="$REPO_ROOT"
+MODE="" BASE="" OUT="" RUNS="" MODELS="" CASE_GLOB="" PLUGIN_DIR="$REPO_ROOT" ADAPTIVE=""
 MODEL_TAGS=()   # "<model>=<tag>,<tag>" entries from --model-tags
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -68,6 +73,9 @@ while [ $# -gt 0 ]; do
     --models) MODELS="${2:-}"; shift 2 ;;
     --case) CASE_GLOB="${2:-}"; shift 2 ;;
     --plugin-dir) PLUGIN_DIR="${2:-}"; shift 2 ;;
+    --adaptive-models)
+      [[ "${2:-}" =~ ^[A-Za-z0-9._-]+(,[A-Za-z0-9._-]+)*$ ]] || { echo "evals: --adaptive-models needs <model>[,<model>...]" >&2; exit 2; }
+      ADAPTIVE="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "evals: unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -79,6 +87,13 @@ case "$MODE" in
   *) echo "evals: --mode changed|full is required" >&2; usage >&2; exit 2 ;;
 esac
 case "$RUNS" in *[!0-9]*|0|0*) die "--runs must be a positive integer" ;; esac
+# Adaptive runs only replace each case's own run count, so --runs or
+# changed mode (which already runs once) switch them off.
+if [ -n "$ADAPTIVE" ] && { [ "$MODE" != full ] || [ -n "$RUNS" ]; }; then
+  echo "evals: --adaptive-models applies to --mode full without --runs; ignored"
+  ADAPTIVE=""
+fi
+is_adaptive() { case ",$ADAPTIVE," in *",$1,"*) return 0 ;; esac; return 1; }
 
 CLAUDE_BIN="${MYSPEC_EVAL_CLAUDE:-claude}"
 THRESHOLD="${MYSPEC_EVAL_THRESHOLD:-0.8}"
@@ -373,6 +388,8 @@ note() { if [ "$1" -gt "$worst" ]; then worst="$1"; fi; }
 # A model with --model-tags gets only the selected cases carrying one of its
 # tags: in full mode through `--tag` (claude plugin eval ORs repeated tags and
 # ANDs them with --case), in changed mode by dropping the other cases.
+# A fifth field, when set, is the job's --runs: 1 for an adaptive model's first
+# pass, 2 for its retries (each case's own count otherwise).
 jobs_list=""
 IFS=',' read -r -a model_list <<< "$MODELS"
 for model in "${model_list[@]}"; do
@@ -384,10 +401,12 @@ for model in "${model_list[@]}"; do
     echo "evals: $model: only cases tagged ${tags//,/ or } ($(printf '%s\n' "$mine" | grep -c .) of $n)"
   fi
   if [ "$MODE" = full ]; then
-    jobs_list="$jobs_list$OUT/$model|$model|$CASE_GLOB|$tags"$'\n'
+    j_runs=""
+    if is_adaptive "$model"; then j_runs=1; echo "evals: $model: adaptive, each case once, then twice more for a failed regression case"; fi
+    jobs_list="$jobs_list$OUT/$model|$model|$CASE_GLOB|$tags|$j_runs"$'\n'
   else
     while IFS= read -r c; do
-      [ -n "$c" ] && jobs_list="$jobs_list$OUT/$model/$c|$model|$c|"$'\n'
+      [ -n "$c" ] && jobs_list="$jobs_list$OUT/$model/$c|$model|$c||"$'\n'
     done <<< "$mine"
   fi
 done
@@ -395,10 +414,15 @@ if [ -z "$jobs_list" ]; then echo "evals: no model has a case to run; nothing to
 if [ "$MODE" = full ]; then slots=1; else slots="$CONCURRENCY"; fi
 
 started=$(date +%s)
-running=""   # "pid:outdir pid:outdir …"
 stopped=""   # why no further invocation was launched
+all_jobs=""  # every job of every pass, for the exit-code roll-up
+
+# run_jobs: launch $jobs_list, $slots at a time, within the cost ceiling and deadline.
+run_jobs() {
+running=""   # "pid:outdir pid:outdir …"
 launched=0
 total=$(printf '%s' "$jobs_list" | grep -c .)
+all_jobs="$all_jobs$jobs_list"
 while :; do
   still=""
   for entry in $running; do
@@ -421,10 +445,10 @@ while :; do
     fi
     if LC_ALL=C awk -v l="$left" 'BEGIN { exit !(l <= 0) }'; then stopped="cost ceiling \$$MAX_COST reached"; break; fi
     job=$(printf '%s' "$jobs_list" | sed -n "$((launched + 1))p")
-    IFS='|' read -r j_out j_model j_case j_tags <<< "$job"
+    IFS='|' read -r j_out j_model j_case j_tags j_runs <<< "$job"
     tag_args=()
     for t in ${j_tags//,/ }; do tag_args+=(--tag "$t"); done
-    run_eval "$j_out" "$j_model" "$left" ${j_case:+--case "$j_case"} ${tag_args[@]+"${tag_args[@]}"} &
+    run_eval "$j_out" "$j_model" "$left" ${j_case:+--case "$j_case"} ${tag_args[@]+"${tag_args[@]}"} ${j_runs:+--runs "$j_runs"} &
     running="$running $!:$j_out"
     launched=$((launched + 1)); n_running=$((n_running + 1))
   done
@@ -435,9 +459,49 @@ if [ -n "$stopped" ]; then
   echo "evals: $stopped; $((total - launched)) of $total invocation(s) not started, in-flight ones stopped" >&2
   note 2
 fi
-while IFS='|' read -r j_out _ _ _; do
+}
+
+# failed_regression_cases <results dir>: the regression cases (no capability
+# tag) in which no run passed, one per line. A run that ended in an error other
+# than the max_turns cap counts as not passed, as results.mjs drops it.
+failed_regression_cases() {
+  local c
+  node --input-type=module -e '
+    import fs from "node:fs";
+    const { runPassed } = await import(process.argv[1]);
+    const doc = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+    for (const c of doc.cases ?? []) {
+      const runs = (c.arms?.with ?? []).filter((r) => !r.error || /maximum number of turns/i.test(String(r.error)));
+      if (!runs.some(runPassed)) console.log(c.name);
+    }' "$SCRIPT_DIR/results.mjs" "$1/aggregate-result.json" 2>/dev/null \
+    | while IFS= read -r c; do
+        case_tags "$c" | grep -qxF capability || echo "$c"
+      done
+}
+
+run_jobs
+
+# Adaptive retry pass: twice more for each regression case whose single run
+# failed, one invocation per case (--case takes one glob), $CONCURRENCY at a time.
+if [ -n "$ADAPTIVE" ] && [ -z "$stopped" ]; then
+  first_pass="$jobs_list" jobs_list=""
+  while IFS='|' read -r j_out j_model _ _ j_runs; do
+    [ "$j_runs" = 1 ] || continue
+    if [ "${MYSPEC_EVALS_DRY_RUN:-0}" = 1 ]; then echo "dry-run: $j_model: retry each failed regression case with --runs 2"; continue; fi
+    [ -f "$j_out/aggregate-result.json" ] || continue
+    retry=$(failed_regression_cases "$j_out")
+    if [ -z "$retry" ]; then echo "evals: $j_model: every regression case passed its run; no retries"; continue; fi
+    echo "evals: $j_model: retrying $(printf '%s\n' "$retry" | grep -c .) failed regression case(s): $(printf '%s' "$retry" | tr '\n' ' ')"
+    while IFS= read -r c; do
+      [ -n "$c" ] && jobs_list="$jobs_list$j_out/retry/$c|$j_model|$c||2"$'\n'
+    done <<< "$retry"
+  done <<< "$first_pass"
+  if [ -n "$jobs_list" ]; then slots="$CONCURRENCY"; run_jobs; fi
+fi
+
+while IFS='|' read -r j_out _ _ _ _; do
   [ -n "$j_out" ] && [ -f "$j_out/exit-code" ] && note "$(classify "$j_out")"
-done <<< "$jobs_list"
+done <<< "$all_jobs"
 
 if [ "${MYSPEC_EVALS_DRY_RUN:-0}" = 1 ]; then exit 0; fi
 

@@ -60,7 +60,7 @@ It:
 `scripts/evals/release-check.sh --version X.Y.Z` answers "did this release make the plugin worse than the last one?" It runs locally on the maintainer's Claude Code login (see `evals/README.md`); there is no CI job.
 
 1. Runs the release suite on HEAD with a Sonnet judge (`run.sh --mode full`, evals/README.md "Tiers"):
-   - Sonnet runs every case: 3 runs of each `regression` case, 1 of each `capability` case (`runs: 1` in its `prompt.md`).
+   - Sonnet runs every case once. Each `regression` case whose run failed then runs twice more (3 in all); `capability` cases stay at 1 (`runs: 1` in its `prompt.md`). This is `"adaptiveModels": ["sonnet"]` in `quality/release-check.json`, passed to `run.sh --adaptive-models`. The previous tag's re-run is adaptive the same way. A model not listed gets 3 runs of each regression case.
    - Haiku runs only the routing cases, those tagged `trigger` or `near-miss` (`"modelTags"` in `quality/release-check.json`), with the same run counts. It is report-only, and the planted-flaw, artifact-contract and orchestration cases say little about a model that rarely fires the skill.
    - `--runs N` runs every case N times instead.
 2. Resolves each model alias to the model id it maps to today, with one tiny `claude -p` call per model (about $0.03 in total). An id that cannot be resolved is stored with the reason, never as null. It also hashes the workspace each case's fixture builds (`workspaces.mjs`, no model call), for the next release's fixture check.
@@ -108,6 +108,16 @@ The release verdict is the worst model's.
 | Sonnet, 3 stable cases broken | 99.5% | ≥ 95% |
 | Haiku, 2 cases broken | 36.8% | ≥ 25% |
 | Haiku, 3 cases broken | 55.7% | ≥ 40% |
+| Adaptive Sonnet A/A | 0.0% | ≤ 5% |
+| Adaptive Sonnet A/A with 3 flaky cases | 0.0% | ≤ 5% |
+| Adaptive Sonnet A/A with 5 flaky cases (graders 0.90) | 0.3% | ≤ 5% |
+| Adaptive Sonnet, 1 stable case broken | 0.1% | reported as a warning |
+| Adaptive Sonnet, 2 stable cases broken | 96.8% | ≥ 80% |
+| Adaptive Sonnet, 3 stable cases broken | 100.0% | ≥ 95% |
+| First adaptive release (3-run baseline) A/A | 0.0% | ≤ 5% |
+| First adaptive release, 2 stable cases broken | 91.1% | ≥ 80% |
+
+**Adaptive runs** (2026-10-08): the "Adaptive" rows have both sides adaptive. Adaptive runs need the per-case rule to treat a single passing baseline run as stable (`minStableRuns: 1`). With the old two-run minimum, two adaptive sides caught 2 broken cases 0% of the time. The relaxed rule changes nothing for 3-run sides. It is not used for Haiku: with 1-run baselines it raised Haiku-like A/A false alarms to 25–42%, because a lucky single pass then looks stable. Replaying the seven stored release comparisons (v2.8.0 → v3.1.0) on the runs an adaptive suite would have kept gave the same verdict in all seven, with 171 Sonnet runs instead of 415 (−59%). One more single case (`feature-implement-dispatch`, flaky) printed as a warning.
 
 "Broken" means the case fails one grader on every run, the way a skill that stopped triggering would. The previous rule (a CI below 0, or pass^3 dropping by more than 0.10) cried regression in 8–17% of A/A trials per model. Haiku's cases are too noisy to catch one or two broken cases reliably, so the gate (below) does not block on a Haiku `regressed`, and a Haiku pass is only a signal. These rates were checked against five recorded releases before the gate went on (2.8.0–2.11.0 in `quality/trend.jsonl`: one `improved`, four `no-change`, no false regression).
 

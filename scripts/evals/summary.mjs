@@ -49,7 +49,9 @@ if (files.length === 0) {
   process.exit(2);
 }
 
-const rows = [];
+// An adaptive model's retries (run.sh --adaptive-models) land in a second
+// aggregate for the same case; their runs fold into that case's one row.
+const byCase = new Map();
 let below = 0;
 let infra = 0;
 let totalCost = 0;
@@ -71,43 +73,49 @@ for (const f of files) {
     const skillGraders = (c.graders ?? []).filter((g) => g.type === 'tool_used' && g.config?.tool === 'Skill');
     const sibling = new Set(skillGraders.filter((g) => g.config?.max === 0).map((g) => g.name));
     const right = new Set(skillGraders.filter((g) => g.config?.max !== 0).map((g) => g.name));
-    const allRuns = c.arms?.with ?? [];
-    const runs = allRuns.filter((r) => !r.error || BENIGN_ERROR_RE.test(String(r.error)));
-    const errored = allRuns.length - runs.length;
     for (const r of Object.values(c.arms ?? {}).flat()) totalCost += (r.costUsd ?? 0) + (r.judgeCostUsd ?? 0);
-    let fired = 0;
-    let wrong = 0;
-    let cost = 0;
-    let secs = 0;
-    const notes = new Set();
-    for (const r of allRuns) {
-      cost += (r.costUsd ?? 0) + (r.judgeCostUsd ?? 0);
-      secs += r.durationSeconds ?? 0;
-      if (r.error) notes.add(`error: ${String(r.error).slice(0, 60)}`);
-    }
-    if (errored) infra++;
-    for (const r of runs) {
-      const byName = Object.fromEntries((r.graders ?? []).map((g) => [g.name, g]));
-      if (right.size && [...right].every((n) => byName[n]?.passed)) fired++;
-      if ([...sibling].some((n) => byName[n] && !byName[n].passed)) wrong++;
-      for (const g of r.graders ?? []) {
-        if (!g.passed && g.scored !== false && !right.has(g.name) && !sibling.has(g.name)) notes.add(g.name);
-      }
-    }
-    const score = runs.length ? runs.reduce((a, r) => a + (r.score ?? 0), 0) / runs.length : null;
-    if (score !== null && score < threshold) below++;
-    rows.push({
-      case: c.name,
-      model,
-      score: score === null ? 'error' : score.toFixed(2),
-      fired: right.size ? `${fired}/${runs.length}` : '-',
-      wrong: sibling.size ? `${wrong}/${runs.length}` : '-',
-      errors: errored ? `${errored}/${allRuns.length}` : '-',
-      cost: `$${cost.toFixed(2)}`,
-      time: `${secs}s`,
-      notes: [...notes].join(', '),
-    });
+    const key = `${model}\0${c.name}`;
+    if (!byCase.has(key)) byCase.set(key, { name: c.name, model, right, sibling, allRuns: [] });
+    byCase.get(key).allRuns.push(...(c.arms?.with ?? []));
   }
+}
+
+const rows = [];
+for (const { name, model, right, sibling, allRuns } of byCase.values()) {
+  const runs = allRuns.filter((r) => !r.error || BENIGN_ERROR_RE.test(String(r.error)));
+  const errored = allRuns.length - runs.length;
+  let fired = 0;
+  let wrong = 0;
+  let cost = 0;
+  let secs = 0;
+  const notes = new Set();
+  for (const r of allRuns) {
+    cost += (r.costUsd ?? 0) + (r.judgeCostUsd ?? 0);
+    secs += r.durationSeconds ?? 0;
+    if (r.error) notes.add(`error: ${String(r.error).slice(0, 60)}`);
+  }
+  if (errored) infra++;
+  for (const r of runs) {
+    const byName = Object.fromEntries((r.graders ?? []).map((g) => [g.name, g]));
+    if (right.size && [...right].every((n) => byName[n]?.passed)) fired++;
+    if ([...sibling].some((n) => byName[n] && !byName[n].passed)) wrong++;
+    for (const g of r.graders ?? []) {
+      if (!g.passed && g.scored !== false && !right.has(g.name) && !sibling.has(g.name)) notes.add(g.name);
+    }
+  }
+  const score = runs.length ? runs.reduce((a, r) => a + (r.score ?? 0), 0) / runs.length : null;
+  if (score !== null && score < threshold) below++;
+  rows.push({
+    case: name,
+    model,
+    score: score === null ? 'error' : score.toFixed(2),
+    fired: right.size ? `${fired}/${runs.length}` : '-',
+    wrong: sibling.size ? `${wrong}/${runs.length}` : '-',
+    errors: errored ? `${errored}/${allRuns.length}` : '-',
+    cost: `$${cost.toFixed(2)}`,
+    time: `${secs}s`,
+    notes: [...notes].join(', '),
+  });
 }
 
 const cols = ['case', 'model', 'score', 'fired', 'wrong', 'errors', 'cost', 'time', 'notes'];

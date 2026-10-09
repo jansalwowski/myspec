@@ -10,7 +10,7 @@ Evals run **locally only**, on the maintainer's Claude Code login. There is no C
 |---|---|---|---|
 | pre-commit | static skill lint (no model) | `.githooks/pre-commit` | yes |
 | pre-push | cases for the skills changed on the branch, 1 run each, Sonnet | `.githooks/pre-push` → `run.sh --mode changed` | no (report-only) |
-| release | Sonnet: every case, 3 runs per `regression` case and 1 per `capability` case. Haiku: the same, on the `trigger` and `near-miss` cases only. Judge Sonnet, compared with the previous release | `scripts/evals/release-check.sh` (RELEASING.md) | yes: a Sonnet regression exits 1; Haiku is report-only (`quality/release-check.json` `gate`, `gateModels`) |
+| release | Sonnet: every case once, then 2 more runs for each `regression` case whose run failed (`"adaptiveModels"`). Haiku: 3 runs per `regression` case and 1 per `capability` case, on the `trigger` and `near-miss` cases only. Judge Sonnet, compared with the previous release | `scripts/evals/release-check.sh` (RELEASING.md) | yes: a Sonnet regression exits 1; Haiku is report-only (`quality/release-check.json` `gate`, `gateModels`) |
 
 Enable the hooks once per clone with `scripts/install-git-hooks.sh`. That script and `.githooks/pre-commit` come from PR #137 (requires #137). Skip the pre-push evals with `MYSPEC_SKIP_EVALS=1 git push` or `git push --no-verify`. Make a below-threshold result block the push with `MYSPEC_EVALS_STRICT=1`.
 
@@ -23,7 +23,7 @@ Each case also carries a **stability tier** tag:
 
 The tier sets how the release suite treats a case (#310):
 
-- A `capability` case carries `runs: 1` in its `prompt.md` frontmatter, so `run.sh --mode full` and the release suite run it once. A `regression` case sets no `runs:` and gets claude's default of 3. The suite lint in `scripts/tests/eval-select.test.sh` fails a case whose tier and run count disagree, so promoting a case means changing its tag and dropping its `runs: 1` together.
+- A `capability` case carries `runs: 1` in its `prompt.md` frontmatter, so `run.sh --mode full` and the release suite run it once. A `regression` case sets no `runs:` and gets claude's default of 3. For a model in `quality/release-check.json` `"adaptiveModels"` (Sonnet), the release suite runs it once instead, and twice more only when that run failed (`run.sh --adaptive-models`). Almost every Sonnet regression run passes, so this halves Sonnet's runs; the calibration and a replay of seven past releases are in RELEASING.md, "Adaptive runs". The suite lint in `scripts/tests/eval-select.test.sh` fails a case whose tier and run count disagree, so promoting a case means changing its tag and dropping its `runs: 1` together.
 - The release comparison lists capability cases with their scores and any drop, but keeps them out of the paired statistics, pass^k and the verdict (`compare.mjs`). One run cannot show a stable pass, and a case that may fail cannot gate a release.
 - A changed `runs:` line changes the case's hash, so the release check re-runs that case on the previous tag too, and both sides always run a case the same number of times.
 

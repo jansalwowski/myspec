@@ -96,7 +96,7 @@ Ideas 1 and 2 alone would cut a typical release from about $25–30 to about $10
 | 1 | **Done** (#338). `run.sh` defaults `CLAUDE_CODE_PROMPT_CACHE_TTL=5m` | The variable reaches the eval sessions: every cache write was `ephemeral_5m`, and one Sonnet run cost $0.058 against $0.073–0.102 |
 | 2 | **Done** (#339). `--cc-match minor` is the default | Six past re-runs of the same plugin on the next CLI patch moved 0 of 110 Sonnet and 0 of 110 Haiku case pairs by ≥ 0.34 |
 | 3 | **Done, in a cheaper form** (#340). The ten routing cases graded only on Skill calls cap at `max_turns: 2`; no wrapper needed | Sonnet passed 30/30 runs with no sibling fired, and cost 27% less for those cases. Every Skill call in the stored traces was on turn 1 |
-| 4 | Open | Needs `compare.mjs` statistics redone; not provable cheaply |
+| 4 | **Done for Sonnet** (`"adaptiveModels"`). Each case gets 1 run, plus 2 more when it fails, and a single passing baseline run counts as stable | Monte Carlo: 0% A/A false alarms, and 2 broken cases caught 96.8% of the time against 91.3% before. Replaying 7 stored releases gave the same verdicts with 59% fewer Sonnet runs. Haiku stays at 3 runs: a 1-run Haiku baseline raises false alarms to 25–42% |
 | 5 | **Solved upstream.** Claude Code 2.1.294 resolves `haiku` to `claude-haiku-5-5`, about 10x cheaper | On the routing cases, 32/51 runs passed against 11/41 on 4.5, at about $0.005 a run. Still far below Sonnet, so it stays report-only |
 | 6 | Concurrency 8: **rejected**. Parallel models: open | 4 subset cases × 3 runs took 53 s at concurrency 4 and 54 s at 8. Running models in parallel would need the cost ceiling redesigned |
 | 7, 8 | Not pursued | |
