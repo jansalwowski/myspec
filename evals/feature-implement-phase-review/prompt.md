@@ -1,7 +1,6 @@
 ---
 description: "Phase 1 of an approved 2-task plan is implemented and committed; both tasks are [~] in the plan, uncommitted, as the controller leaves them; the barrier log and review package are prebuilt, since the sandbox denies the suite. feature-implement must fire and dispatch the phase reviewer with the template's note that plan checkboxes are controller-managed, so the reviewer does not report the uncommitted [~] as a defect (#167). Graded on the reviewer dispatch only."
-tags: [skill:feature-implement, capability]
-runs: 1
+tags: [skill:feature-implement, regression]
 max_turns: 10
 timeout_seconds: 360
 allowed_tools: [Read, Glob, Grep, Skill, Write, Edit, Agent, Bash]
