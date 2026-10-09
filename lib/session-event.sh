@@ -263,9 +263,10 @@ session_written() {
 # last write event, "-" when that event found no file, else the after-blob
 # of the session's previous Bash write to it, else "?" (unknown: no snapshot
 # was taken). <after> is the write's after-blob, "-" when the write removed
-# the file (after-blob ""): the Stop gate counts the lines a removal took
-# away, so a file removed and restored (`mv` away and back) nets to
-# nothing. One whose after-blob is "@" (judged but not hashed) is kept, and
+# the file, or found none and left none (after-blob ""): the Stop gate reads
+# from it whether the file existed before the session's first write, so a
+# file removed and restored (`mv` away and back) is not created. One whose
+# after-blob is "@" (judged but not hashed) is kept, and
 # the Stop gate reads the file itself.
 session_bash_writes() {
   session_query "$1" "$2" '

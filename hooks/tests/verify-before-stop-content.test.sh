@@ -285,11 +285,29 @@ expect_in "line 7: /Users/alice" "$R" "the copy's line is named"
 expect_not_in "line 5:" "$R" "the original line is not named"
 git -C "$REPO" checkout -q -- docs/notes.md
 
-# A line moved within the file is not added.
-bashcmd 65 "awk 'NR == 5 { l = \$0; next } { print } END { print l }' docs/notes.md > docs/notes.tmp && mv docs/notes.tmp docs/notes.md"
-[ "$(tail -n 1 "$REPO/docs/notes.md")" = "old leak: $LEAK" ] && ok || fail "fixture: the old leak line moved to the end"
+# A leak deleted in one section and pasted into another by one rewrite is
+# judged at its new line (PR #347 review). A line moved within the file looks
+# the same, so it is judged too: no rule tells the two apart.
+bashcmd 65 "cat > docs/notes.md <<'EOF'
+---
+title: Notes
+updated: 2026-01-01
+---
+clean line
+## B
+old leak: $LEAK
+EOF"
 OUT=$(stop 65)
-[ "$(decision "$OUT")" = approve ] && ok || fail "an old leak line moved within the file approves (got: ${OUT:0:300})"
+[ "$(decision "$OUT")" = block ] && ok || fail "a leak line deleted in one section and pasted into another blocks (PR #347 review; got: ${OUT:0:200})"
+R=$(reason "$OUT")
+expect_in "line 7: /Users/alice" "$R" "the pasted line is named"
+expect_not_in "line 5:" "$R" "no other line is named"
+git -C "$REPO" checkout -q -- docs/notes.md
+bashcmd 74 "awk 'NR == 5 { l = \$0; next } { print } END { print l }' docs/notes.md > docs/notes.tmp && mv docs/notes.tmp docs/notes.md"
+[ "$(tail -n 1 "$REPO/docs/notes.md")" = "old leak: $LEAK" ] && ok || fail "fixture: the old leak line moved to the end"
+OUT=$(stop 74)
+[ "$(decision "$OUT")" = block ] && ok || fail "an old leak line moved within the file is judged like a paste (got: ${OUT:0:200})"
+expect_in "line 6: /Users/alice" "$(reason "$OUT")" "the moved line is named where it is now"
 git -C "$REPO" checkout -q -- docs/notes.md
 
 # Another session writes between a change and its revert: its line stays its
@@ -307,14 +325,48 @@ expect_in "line 7: /Users/alice" "$R" "the other session's line is named"
 expect_not_in "line 5:" "$R" "the reverted line is not the other session's either"
 git -C "$REPO" checkout -q -- docs/notes.md
 
-# An Edit call between two Bash writes: the second pair has no snapshot of its
-# own and falls back to HEAD, and the revert still nets to nothing.
+# An Edit call between two Bash writes: the second write takes its own
+# snapshot at PreToolUse, after the Edit, and the revert still nets to
+# nothing.
 bashcmd 68 "$(sedi 's#^old leak: .*#old leak: renamed#' docs/notes.md)"
 editcall 68 docs/notes.md
 bashcmd 68 "$(sedi "s#^old leak: renamed\$#old leak: $LEAK#" docs/notes.md)"
 OUT=$(stop 68)
 [ "$(decision "$OUT")" = approve ] && ok || fail "a revert with an Edit call between approves (got: ${OUT:0:300})"
 git -C "$REPO" checkout -q -- docs/notes.md
+
+# A write with no `pre` event (only PostToolUse reached the hook: a session
+# that started before the snapshots existed) falls back to HEAD as its
+# before. The session's earlier copy of an old line, which an Edit call
+# removed since, is not counted again against that baseline (PR #347 review).
+bashcmd 75 "printf 'old leak: $LEAK\n' >> docs/notes.md"
+sed -i.bak '$d' "$REPO/docs/notes.md" && rm -f "$REPO/docs/notes.md.bak"
+editcall 75 docs/notes.md
+(cd "$REPO" && printf 'clean tail\n' >> docs/notes.md)
+mark 75 PostToolUse "printf 'clean tail\n' >> docs/notes.md"
+jq -e -s '[.[] | select(.t == "pre")] | length == 1' "$REPO/.claude/state/sessions/$SID-75.jsonl" >/dev/null \
+  && ok || fail "fixture: the last write has no pre event"
+OUT=$(stop 75)
+[ "$(decision "$OUT")" = approve ] && ok || fail "a write without a snapshot does not judge an old line against HEAD (PR #347 review; got: ${OUT:0:300})"
+git -C "$REPO" checkout -q -- docs/notes.md
+
+# A no-op on a missing file (a redirect into a directory that does not exist
+# yet: the scanner names the target, which has no file before and none after)
+# is no write to it. A tech-spec the Write tool then created, and a later Bash
+# append, do not make it "created" by Bash (PR #347 review).
+FAILW="printf 'x\\n' > .ai/features/w/tech-spec.md"
+mark 76 PreToolUse "$FAILW"
+(cd "$REPO" && eval "$FAILW") >/dev/null 2>&1
+mark 76 PostToolUseFailure "$FAILW"
+jq -e -s 'any(.[]; .t == "write" and .rel == ".ai/features/w/tech-spec.md" and .blob == "")' "$REPO/.claude/state/sessions/$SID-76.jsonl" >/dev/null \
+  && ok || fail "fixture: the failed redirect is recorded as a write that left no file"
+mkdir -p "$REPO/.ai/features/w"
+printf -- '---\ntitle: W\ncreated: 2026-01-01\n---\n\n### Architecture\nwritten\n' > "$REPO/.ai/features/w/tech-spec.md"
+editcall 76 .ai/features/w/tech-spec.md
+bashcmd 76 "printf 'appended\n' >> .ai/features/w/tech-spec.md"
+OUT=$(stop 76)
+[ "$(decision "$OUT")" = approve ] && ok || fail "a failed redirect to a missing file does not make the file Bash-created (PR #347 review; got: ${OUT:0:300})"
+rm -rf "$REPO/.ai/features/w"
 
 # Frontmatter changed and restored: a doc whose frontmatter was already bad
 # is not judged. One the session leaves changed is.
@@ -464,6 +516,21 @@ if [ "$(id -u)" != 0 ]; then
   OUT=$(stop 59)
   [ "$(decision "$OUT")" = block ] && ok || fail "a write neither hashed nor kept still blocks (got: ${OUT:0:200})"
   rm -f "$REPO/docs/ro.md"
+  # The first pair cannot be read (its kept copy is gone): it still decides
+  # "created", from its before, so a tech-spec moved away and back (and
+  # appended to) is not judged as created (PR #347 review). An uncommitted
+  # change from outside the hooks first, so the store does not hold it.
+  printf 'outside %s\n' "$$" >> "$REPO/.ai/features/old/tech-spec.md"
+  chmod -R a-w "$REPO/.git/objects"
+  bashcmd 77 "mv .ai/features/old/tech-spec.md .ai/features/old/moved.md"
+  bashcmd 77 "mv .ai/features/old/moved.md .ai/features/old/tech-spec.md && printf 'more\n' >> .ai/features/old/tech-spec.md"
+  chmod -R u+w "$REPO/.git/objects"
+  FIRST=$(jq -r -s '[.[] | select(.t == "pre" and .rel == ".ai/features/old/tech-spec.md")][0].blob' "$REPO/.claude/state/sessions/$SID-77.jsonl")
+  case "$FIRST" in kept:*) ok ;; *) fail "fixture: the first snapshot is a kept copy (got: $FIRST)" ;; esac
+  rm -f "$REPO/.claude/state/sessions/$SID-77.blobs/${FIRST#kept:}"
+  OUT=$(stop 77)
+  [ "$(decision "$OUT")" = approve ] && ok || fail "an unreadable first pair still decides that the file was not created (PR #347 review; got: ${OUT:0:300})"
+  git -C "$REPO" checkout -q -- .ai/features/old/tech-spec.md
 fi
 
 # A file the checks never judge is not hashed: a binary adds no loose object.
