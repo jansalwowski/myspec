@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # bash-write-targets.sh
-# The files a Bash command names as written: redirect targets, the operands
-# of `tee`, `sed -i` and `perl -i`, every operand of `mv`, the destination of
-# `cp`, `rsync` and `install`, and the files `patch` edits and writes. Read
+# The files a Bash command names as written: redirect targets (`>`, `>>`,
+# `>|`), the operands of `tee`, `sed -i`, `perl -i`, `rm`, `touch` and
+# `truncate`, every operand of `mv`, the destination of `cp`, `rsync`,
+# `install` and `ln`, `dd`'s `of=`, and the files `patch` edits and writes.
+# A directory names nothing (`rm -r dir`): the recorder's status diff sees
+# what went, and the gate does not. Read
 # before the command runs, from its text alone (lib/command-scan.sh), so an
 # interpreter's write (`python -c`, `node -e`) or a variable path names
 # nothing here.
@@ -25,7 +28,7 @@
 # Cheap gate before the full scan: a write verb at a command position, or a
 # redirect to something other than a descriptor. Most Bash calls skip it.
 BASH_WRITE_PATTERNS=(
-  '^([^[:space:]]*/)?(sed|perl|tee|mv|cp|rsync|install|patch)([[:space:]]|$)'
+  '^([^[:space:]]*/)?(sed|perl|tee|mv|cp|rsync|install|patch|rm|touch|ln|truncate|dd)([[:space:]]|$)'
   '>{1,2}[[:space:]]*[^&[:space:]]'
 )
 
@@ -117,6 +120,7 @@ SCAN_KEPT=0
 
 # scan_command [keep]: fills SCAN_PLAIN from $COMMAND, and SCAN_KEEP too with
 # `keep`, each once.
+# shellcheck disable=SC2120 # keep is optional; the callers pass it in their own files
 scan_command() {
   if [ -z "$SCAN_PLAIN" ]; then
     SCAN_PLAIN=$(printf '%s' "$COMMAND" | sanitize_command | split_segments)
@@ -133,6 +137,7 @@ scan_command() {
 # scan already made.
 segment_matches() {
   local line seg pattern
+  # shellcheck disable=SC2119 # the plain scan only
   scan_command
   while IFS= read -r line; do
     strip_command_prefix_to seg "${line#*$'\t'}"
@@ -262,7 +267,7 @@ bash_write_targets() {
               fi
               skip=1
               ;;
-            patch:-[idprBDFVYzg]|install:-[mogS]) skip=1 ;;
+            patch:-[idprBDFVYzg]|install:-[mogS]|touch:-[rtd]|truncate:-[sr]|ln:-S) skip=1 ;;
           esac
           continue
           ;;
@@ -279,8 +284,28 @@ bash_write_targets() {
         [ "$inplace" -eq 1 ] || continue
         for word in "${ops[@]}"; do emit_target "$word" must-exist; done
         ;;
-      tee)
+      tee|rm|touch|truncate)
         for word in "${ops[@]}"; do emit_target "$word"; done
+        ;;
+      dd)
+        for word in "${ops[@]}"; do
+          case "$word" in of=*) emit_target "${word#of=}" ;; esac
+        done
+        ;;
+      ln)
+        # One operand links into the current directory, under its name.
+        if [ "${#ops[@]}" -eq 1 ]; then
+          emit_target "$(basename "$last")"
+          continue
+        fi
+        target_path_to dest "$last" || continue
+        if [ -d "$dest" ] && [ ! -L "$dest" ]; then
+          for ((i = 0; i < ${#ops[@]} - 1; i++)); do
+            emit_target "$last/$(basename "${ops[$i]}")"
+          done
+        else
+          emit_target "$last"
+        fi
         ;;
       mv|cp|rsync|install)
         # A move deletes its sources: those are changes too.

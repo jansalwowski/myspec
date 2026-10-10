@@ -56,5 +56,9 @@ roundtrip 'a || b; c | d & e' "|| ; | &"
 roundtrip '(cd x) { y; } `z`' "( ) { } backtick"
 roundtrip $'one\ntwo  three' "newline and spaces"
 
+# `>|` is a clobber redirect: its target stays in the segment (#348 review).
+eq "$(printf '%s' 'echo x >| out.ts' | sanitize_command | split_segments | awk -F'\t' '$2 != ""')" $'^\techo x > out.ts' "split: >| keeps its target"
+eq "$(printf '%s' 'ls | wc' | sanitize_command | split_segments | awk -F'\t' '$2 != ""' | wc -l | tr -d ' ')" "2" "split: a plain pipe still splits"
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

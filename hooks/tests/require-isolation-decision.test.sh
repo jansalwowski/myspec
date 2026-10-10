@@ -370,7 +370,12 @@ git -C "$REPO" symbolic-ref HEAD refs/heads/main
 check allow "on main, origin/HEAD is develop"      pb-dev "$REPO/.ai/ideas/new.md"
 git -C "$REPO" symbolic-ref --delete refs/remotes/origin/HEAD
 # The reported case: a detached HEAD at the integration branch.
-git -C "$REPO" update-ref --no-deref HEAD "$(git -C "$REPO" rev-parse refs/heads/wt-a)"
+# A commit of its own, with an identity: CI's git has none configured.
+git -C "$REPO" -c user.name=t -c user.email=t@t commit -q --allow-empty -m detach
+git -C "$REPO" update-ref --no-deref HEAD "$(git -C "$REPO" rev-parse HEAD)"
+if git -C "$REPO" symbolic-ref -q HEAD >/dev/null; then
+  FAIL=$((FAIL + 1)); echo "FAIL  fixture: HEAD did not detach" >&2
+fi
 check block "detached HEAD, aiDir doc"             pb-det "$REPO/.ai/features/index.yaml"
 if run_hook "$REPO" pb-det "$REPO/.ai/features/index.yaml" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -qF 'a detached HEAD'; then
   PASS=$((PASS + 1))
