@@ -25,6 +25,14 @@
 #      `isolation.blockInMain` (anchored extended regexes over a command
 #      segment): a default in the settings schema, which a project extends
 #      there and trims with `isolation.ignoreBlockInMain`.
+#   C. A Bash write is judged as the same write through the Write tool
+#      (#348): each file the command names as written (redirects, `tee`,
+#      `sed -i`, `mv`, `cp`; lib/bash-write-targets.sh) goes through
+#      require-isolation-decision.sh, so a session with no decision is asked
+#      before writing source by redirect, or a doc on a protected branch, and
+#      a worktree session cannot write the main checkout that way. A file the
+#      command does not name (an interpreter's write, a variable path) is not
+#      seen before it lands; mark-code-changed.sh records it afterwards.
 #
 # Until 2.0 gate A was its own hook, guard-git-branch.sh; folding the two keeps
 # one root resolver, one scanner, one worktree lookup, one block message.
@@ -96,6 +104,11 @@ fi
 . "$HOOK_LIB/session-event.sh"
 # shellcheck source=lib/command-scan.sh
 . "$HOOK_LIB/command-scan.sh"
+# Gate C only; without it the gate is skipped, gates A and B still run.
+if [ -f "$HOOK_LIB/bash-write-targets.sh" ]; then
+  # shellcheck source=lib/bash-write-targets.sh
+  . "$HOOK_LIB/bash-write-targets.sh"
+fi
 
 payload_parse "$(cat)" COMMAND=.tool_input.command SESSION_ID=.session_id \
   CWDS="$HOOK_CWDS"
@@ -652,4 +665,23 @@ walk() {
 }
 
 walk "$COMMAND" "$START_DIR" 0
+
+# --- gate C: the files the command writes ------------------------------------
+# Each named target as a Write of that file, judged by the Write|Edit hook
+# itself: one rule for both tools, and its block message carries the ask.
+ISO_HOOK="$(dirname "${BASH_SOURCE[0]}")/require-isolation-decision.sh"
+if declare -F bash_write_targets >/dev/null && [ -f "$ISO_HOOK" ] && [ -n "$SESSION_ID" ] \
+    && BASE_DIR=$(physical_dir "$START_DIR") && bash_may_write; then
+  scan_command keep
+  while IFS= read -r target; do
+    case "$target" in ''|cd:*) continue ;; esac
+    verdict=$(jq -nc --arg f "$target" --arg c "$START_DIR" --arg s "$SESSION_ID" \
+        '{tool_name: "Write", tool_input: {file_path: $f}, cwd: $c, session_id: $s}' \
+      | bash "$ISO_HOOK" 2>/dev/null \
+      | jq -r '.hookSpecificOutput | select(.permissionDecision == "deny") | .permissionDecisionReason' 2>/dev/null) || verdict=""
+    [ -z "$verdict" ] || pretool_deny "Bash write to $target, judged as a Write of that file:
+
+$verdict"
+  done < <(bash_write_targets)
+fi
 exit 0

@@ -24,6 +24,7 @@
 #   aiDir                       doc tree; edits there never trigger the prompt
 #   isolation.worktreeRoot      where worktrees live
 #   isolation.gateDocs          true: the exempt doc paths are asked too (#329)
+#   isolation.protectedBranches more branches whose doc paths are asked (#348)
 #
 # Output contract: a block prints the PreToolUse deny form (pretool_deny in
 # lib/hook-core.sh). An allowed edit prints NOTHING.
@@ -208,15 +209,23 @@ case "$ISO_MODE" in
   worktree) pretool_deny "$WORKTREE_REASON" ;;
 esac
 
-# 2. No decision — ask, unless the file is exempt from prompting.
-[ "$IS_EXEMPT" -eq 0 ] || exit 0
+# 2. No decision — ask, unless the file is exempt from prompting. On a
+#    protected HEAD (#348: a detached HEAD, the default branch, an
+#    isolation.protectedBranches entry) nothing is exempt from the question:
+#    a doc written there lands on the integration branch unasked. Asked only
+#    here, so a session with a decision never pays for the git calls.
+WHAT="source files"
+if [ "$IS_EXEMPT" -eq 1 ]; then
+  protected_checkout "$REPO_ROOT" || exit 0
+  WHAT="files on $PROTECTED_HEAD"
+fi
 
 pretool_deny "BLOCKED: no work-isolation decision recorded for this session.
 
-Before editing source files in the main checkout, ask where the work should happen. Call AskUserQuestion with ONE question:
+Before editing $WHAT in the main checkout, ask where the work should happen. Call AskUserQuestion with ONE question:
 
   header:   \"Isolation\"
-  question: \"This task edits source files. Where should the work happen?\"
+  question: \"This task edits $WHAT. Where should the work happen?\"
   options:
     - \"develop\"  — \"Edits land in your checkout; test immediately. No branch yet.\"
     - \"Worktree\" — \"Isolated branch in $WORKTREE_ROOT/; PR opened when done.\"

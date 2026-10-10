@@ -1,18 +1,18 @@
 ---
 title: "Work Isolation Procedure"
 purpose: "How to ask, record, and carry out the develop-vs-worktree decision once an isolation hook blocks"
-updated: 2026-10-07
+updated: 2026-10-10
 ---
 
 # Work Isolation Procedure (develop vs worktree)
 
 `.claude/rules/work-isolation.md` is the always-loaded contract; this file is the procedure the isolation hooks' block messages point at. Read it when a block fires.
 
-Where code gets written is the user's call, not the agent's. `require-isolation-decision.sh` (PreToolUse `Write|Edit`) blocks the first source edit in the main checkout until the answer is recorded; `guard-worktree-context.sh` (PreToolUse `Bash`) blocks branch mutations on the main checkout always, and tree-specific commands there once a session has chosen a worktree.
+Where code gets written is the user's call, not the agent's. `require-isolation-decision.sh` (PreToolUse `Write|Edit`) blocks the first source edit in the main checkout until the answer is recorded; `guard-worktree-context.sh` (PreToolUse `Bash`) blocks branch mutations on the main checkout always, tree-specific commands there once a session has chosen a worktree, and a Bash write the Write tool would not be allowed to make.
 
-Edits under `${aiDir}/`, `.claude/`, `docs/` and the root agent files never trigger the **question** — doc work is not gated on an isolation decision — unless `.myspec.json` sets `isolation.gateDocs: true`, which asks it for them too. They are *not* exempt from an answer already given: once a session is in worktree mode, a doc edit aimed at the main checkout is blocked like any other. Two paths are pinned to the main checkout whatever the answer: `.claude/state/` (live session logs, session-state files, the ID registry) and `${aiDir}/memory/sessions/` (the session archive); `isolation.gateDocs` never gates them.
+Edits under `${aiDir}/`, `.claude/`, `docs/` and the root agent files do not trigger the **question** on a feature branch — doc work there is not gated on an isolation decision — unless `.myspec.json` sets `isolation.gateDocs: true`, which asks it for them too. On a protected HEAD they are asked like source, with no setting: a detached HEAD, the default branch, or a branch matching an `isolation.protectedBranches` glob (add the integration and release branches there, e.g. `["develop", "release/*"]`). A doc written there lands on the integration branch. They are *not* exempt from an answer already given: once a session is in worktree mode, a doc edit aimed at the main checkout is blocked like any other. Two paths are pinned to the main checkout whatever the answer: `.claude/state/` (live session logs, session-state files, the ID registry) and `${aiDir}/memory/sessions/` (the session archive); `isolation.gateDocs` never gates them.
 
-The question is asked on the file-edit tools (`Write`, `Edit`, `MultiEdit`, `NotebookEdit`) only. A file written through `Bash` (a redirect, `sed -i`, `tee`) is recorded by `mark-code-changed.sh` but never blocked, so an agent that writes source that way skips the question: ask it before such a write the same way.
+A file written through `Bash` is judged as a `Write` of that file when the command names it: a redirect or heredoc, `tee`, `sed -i`, `perl -i`, `mv`, `cp`, `rsync`, `install`, `patch`. A write the command does not name — an interpreter's (`python -c`, `node -e`), a variable path — is recorded by `mark-code-changed.sh` after it lands, never blocked. Edit files in the main checkout with `Write`/`Edit` or a named Bash target, never an interpreter one-liner.
 
 ## At the start
 

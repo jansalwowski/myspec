@@ -30,6 +30,10 @@ REPO="$ROOT/checkout"
 STATE="$REPO/.claude/state/sessions"
 mkdir -p "$STATE"
 git init -q -b main "$REPO"
+# A feature branch: on the default branch or a detached HEAD the doc paths are
+# asked too (#348, its own section below), and the cases above it test the
+# exemption itself.
+git -C "$REPO" symbolic-ref HEAD refs/heads/feat/x
 printf '{"aiDir":".ai","frameworkVersion":"2.0.0"}\n' > "$REPO/.myspec.json"
 trap 'rm -rf "$ROOT"' EXIT
 
@@ -337,6 +341,53 @@ else
 fi
 mark gd-done develop 60
 check allow "gateDocs true, develop recorded, aiDir doc" gd-done "$REPO/.ai/features/x/spec.md"
+cp "$ROOT/myspec.saved" "$REPO/.myspec.json"
+
+# --- a protected HEAD (#348): the doc paths are asked with no setting ----------
+cp "$REPO/.myspec.json" "$ROOT/myspec.saved"
+printf '{"aiDir":".ai","frameworkVersion":"3.0.0"}\n' > "$REPO/.myspec.json"
+rm -f "$STATE/"*.jsonl
+git -C "$REPO" symbolic-ref HEAD refs/heads/main
+check block "on main, no decision, aiDir doc"      pb-main "$REPO/.ai/ideas/new.md"
+check block "on main, no decision, docs/ file"     pb-main "$REPO/docs/guide.md"
+check block "on main, no decision, AGENTS.md"      pb-main "$REPO/AGENTS.md"
+check allow "on main, live session log"            pb-main "$REPO/.claude/state/sessions/abc123.md"
+check allow "on main, archived session"            pb-main "$REPO/.ai/memory/sessions/archive/2026-08-31-x.md"
+if run_hook "$REPO" pb-main "$REPO/.ai/ideas/new.md" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -qF 'edits files on branch main'; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); echo "FAIL  the protected-branch ask names the branch" >&2
+fi
+mark pb-main develop 60
+check allow "on main, develop recorded, aiDir doc" pb-main "$REPO/.ai/ideas/new.md"
+git -C "$REPO" symbolic-ref HEAD refs/heads/master
+check block "on master, no remote HEAD, aiDir doc" pb-master "$REPO/.ai/ideas/new.md"
+# origin/HEAD names the default branch when there is one; main is then just a branch.
+git -C "$REPO" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/develop
+git -C "$REPO" symbolic-ref HEAD refs/heads/develop
+check block "on origin/HEAD's branch, aiDir doc"   pb-dev "$REPO/.ai/ideas/new.md"
+git -C "$REPO" symbolic-ref HEAD refs/heads/main
+check allow "on main, origin/HEAD is develop"      pb-dev "$REPO/.ai/ideas/new.md"
+git -C "$REPO" symbolic-ref --delete refs/remotes/origin/HEAD
+# The reported case: a detached HEAD at the integration branch.
+git -C "$REPO" update-ref --no-deref HEAD "$(git -C "$REPO" rev-parse refs/heads/wt-a)"
+check block "detached HEAD, aiDir doc"             pb-det "$REPO/.ai/features/index.yaml"
+if run_hook "$REPO" pb-det "$REPO/.ai/features/index.yaml" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -qF 'a detached HEAD'; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); echo "FAIL  the detached-HEAD ask says so" >&2
+fi
+# isolation.protectedBranches: globs, extending the default.
+git -C "$REPO" symbolic-ref HEAD refs/heads/release/1.2
+check allow "release branch, unconfigured, aiDir doc" pb-rel "$REPO/.ai/ideas/new.md"
+printf '{"aiDir":".ai","frameworkVersion":"3.0.0","isolation":{"protectedBranches":["develop","release/*"]}}\n' > "$REPO/.myspec.json"
+check block "release/* configured, aiDir doc"     pb-rel "$REPO/.ai/ideas/new.md"
+git -C "$REPO" symbolic-ref HEAD refs/heads/feat/x
+check allow "feature branch, configured list, aiDir doc" pb-rel "$REPO/.ai/ideas/new.md"
+printf '{"aiDir":".ai","frameworkVersion":"3.0.0","isolation":{"protectedBranches":"develop"}}\n' > "$REPO/.myspec.json"
+git -C "$REPO" symbolic-ref HEAD refs/heads/develop
+check allow "protectedBranches not a list: dropped, aiDir doc" pb-rel "$REPO/.ai/ideas/new.md"
+git -C "$REPO" symbolic-ref HEAD refs/heads/feat/x
 cp "$ROOT/myspec.saved" "$REPO/.myspec.json"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
