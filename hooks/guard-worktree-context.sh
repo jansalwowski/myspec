@@ -25,6 +25,16 @@
 #      `isolation.blockInMain` (anchored extended regexes over a command
 #      segment): a default in the settings schema, which a project extends
 #      there and trims with `isolation.ignoreBlockInMain`.
+#   C. A Bash write is judged as the same write through the Write tool
+#      (#348): each file the command names as written (redirects, `tee`,
+#      `sed -i`, `mv`, `cp`, `rm`, `touch`, ...; lib/bash-write-targets.sh),
+#      in the command and in its `bash -c` / `eval` payloads, goes through
+#      require-isolation-decision.sh. So a session with no decision is asked
+#      before writing source by redirect, or a doc on a protected branch, and
+#      a worktree session cannot write the main checkout that way unless the
+#      command carries MYSPEC_ALLOW_MAIN_CHECKOUT=1, gate B's escape. A file
+#      the command does not name (an interpreter's write, a variable path) is
+#      not seen before it lands; mark-code-changed.sh records it afterwards.
 #
 # Until 2.0 gate A was its own hook, guard-git-branch.sh; folding the two keeps
 # one root resolver, one scanner, one worktree lookup, one block message.
@@ -55,9 +65,10 @@
 #                               so advertising it would let any blocked agent
 #                               wave itself through. Only flows whose skill
 #                               documents it (feature-complete's merge) know it.
-#   MYSPEC_ALLOW_MAIN_CHECKOUT=1 gate B. Advertised: refreshing the symlinked
-#                               node_modules in the main checkout is a legitimate
-#                               mid-worktree action, so this gate is a speed bump.
+#   MYSPEC_ALLOW_MAIN_CHECKOUT=1 gate B, and gate C in worktree mode. Advertised:
+#                               refreshing the symlinked node_modules in the main
+#                               checkout is a legitimate mid-worktree action, so
+#                               this gate is a speed bump.
 #
 # Sanctioned branch cleanup needs no bypass: lib/branch-cleanup.sh makes its
 # git calls in a child process this hook never sees.
@@ -96,6 +107,11 @@ fi
 . "$HOOK_LIB/session-event.sh"
 # shellcheck source=lib/command-scan.sh
 . "$HOOK_LIB/command-scan.sh"
+# Gate C only; without it the gate is skipped, gates A and B still run.
+if [ -f "$HOOK_LIB/bash-write-targets.sh" ]; then
+  # shellcheck source=lib/bash-write-targets.sh
+  . "$HOOK_LIB/bash-write-targets.sh"
+fi
 
 payload_parse "$(cat)" COMMAND=.tool_input.command SESSION_ID=.session_id \
   CWDS="$HOOK_CWDS"
@@ -501,10 +517,54 @@ join_words() {
   printf '%s' "$out"
 }
 
+# --- gate C: the files the command writes ------------------------------------
+
+# Each named target as a Write of that file, judged by the Write|Edit hook
+# itself: one rule for both tools, and its block message carries the ask.
+ISO_HOOK="$(dirname "${BASH_SOURCE[0]}")/require-isolation-decision.sh"
+C_SEEN=$'\n'
+
+# gate_c <command> <dir> — blocks (and exits) on the first target the hook
+# denies. walk calls it for the command and for every `bash -c` / `eval`
+# payload, each from the directory it starts in. Cost: the hook runs once per
+# distinct target, and not at all when the session's answer lets every one
+# through.
+gate_c() {
+  local target verdict
+  declare -F bash_write_targets >/dev/null && [ -f "$ISO_HOOK" ] && [ -n "$SESSION_ID" ] || return 0
+  # The scanner's globals, per command scanned.
+  COMMAND="$1" SCAN_PLAIN="" SCAN_KEEP="" SCAN_KEPT=0
+  BASE_DIR=$(physical_dir "$2") || return 0
+  bash_may_write || return 0
+  # develop lets every write through, as the hook would. In worktree mode
+  # MYSPEC_ALLOW_MAIN_CHECKOUT=1, gate B's advertised escape, lifts the same
+  # block here; it never skips the first question.
+  if checkout_facts "$BASE_DIR" && [ -n "$CF_MAIN" ]; then
+    session_mode "$CF_MAIN"
+    case "$ISO_MODE" in
+      develop) return 0 ;;
+      worktree) [ "$ALLOW_MAIN_CHECKOUT" = 0 ] || return 0 ;;
+    esac
+  fi
+  scan_command keep
+  while IFS= read -r target; do
+    case "$target" in ''|cd:*) continue ;; esac
+    case "$C_SEEN" in *$'\n'"$target"$'\n'*) continue ;; esac
+    C_SEEN="$C_SEEN$target"$'\n'
+    verdict=$(jq -nc --arg f "$target" --arg c "$2" --arg s "$SESSION_ID" \
+        '{tool_name: "Write", tool_input: {file_path: $f}, cwd: $c, session_id: $s}' \
+      | bash "$ISO_HOOK" 2>/dev/null \
+      | jq -r '.hookSpecificOutput | select(.permissionDecision == "deny") | .permissionDecisionReason' 2>/dev/null) || verdict=""
+    [ -z "$verdict" ] || pretool_deny "Bash write to $target, judged as a Write of that file:
+
+$verdict"
+  done < <(bash_write_targets)
+}
+
 # walk <command> <start dir> <depth> — checks every segment of <command>.
 # Blocks (and exits) on the first offending segment; returns when clean.
 walk() {
-  local cmd="$1" dir="$2" depth="$3"
+  local cmd="$1" dir="$2" depth="$3" start="$2"
   local -a seps segs_s segs_r sw rw stack
   local line k n j c w sub gdir gitdir norm payload
 
@@ -649,6 +709,8 @@ walk() {
         ;;
     esac
   done
+  # After gates A and B: a branch or worktree block names the real problem.
+  gate_c "$cmd" "$start"
 }
 
 walk "$COMMAND" "$START_DIR" 0

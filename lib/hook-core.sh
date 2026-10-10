@@ -256,6 +256,39 @@ ai_dir() {
   printf '%s\n' "$ai"
 }
 
+# protected_checkout <checkout root> -> 0 when the checkout's HEAD is one no
+# write should land on before the isolation question (#348): a detached HEAD,
+# the default branch (origin/HEAD, else main or master), or a branch matching
+# an isolation.protectedBranches glob. PROTECTED_HEAD names it for a block
+# message ("a detached HEAD", "branch main"). Fails outside a repository.
+PROTECTED_HEAD=""
+protected_checkout() {
+  local branch dflt pat rc=0
+  PROTECTED_HEAD=""
+  branch=$(git -C "$1" symbolic-ref --quiet --short HEAD 2>/dev/null) || rc=$?
+  case "$rc" in
+    0) ;;
+    1) PROTECTED_HEAD="a detached HEAD"; return 0 ;;
+    *) return 1 ;;
+  esac
+  dflt=$(git -C "$1" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || printf '')
+  dflt="${dflt#origin/}"
+  if [ -n "$dflt" ]; then
+    [ "$branch" != "$dflt" ] || PROTECTED_HEAD="branch $branch"
+  else
+    case "$branch" in main|master) PROTECTED_HEAD="branch $branch" ;; esac
+  fi
+  if [ -z "$PROTECTED_HEAD" ] && read_setting isolation.protectedBranches "$1"; then
+    [ -z "$SETTING_NOTES" ] || printf '%s\n' "$SETTING_NOTES" | sed 's/^/myspec-config: /' >&2
+    while IFS= read -r pat; do
+      [ -n "$pat" ] || continue
+      # shellcheck disable=SC2254 # the entry is a glob on purpose
+      case "$branch" in $pat) PROTECTED_HEAD="branch $branch"; break ;; esac
+    done < <(printf '%s' "$SETTING" | jq -r 'if type == "array" then .[] | strings else empty end' 2>/dev/null || true)
+  fi
+  [ -n "$PROTECTED_HEAD" ]
+}
+
 # pretool_deny <reason> -> prints the PreToolUse deny and exits 0. Only the
 # hookSpecificOutput form: the top-level decision/reason pair is the
 # deprecated PreToolUse spelling, and the host floor (README) reads this one.

@@ -177,6 +177,16 @@ ledger_has "$SID-33" code "$REPO" src/rel.ts && ok || fail "a relative target re
 bashcmd "$SID-34" "$REPO" 'echo x | tee -a src/t1.ts src/t2.ts'
 ledger_has "$SID-34" code "$REPO" src/t1.ts && ledger_has "$SID-34" code "$REPO" src/t2.ts && ok || fail "every tee operand is recorded"
 
+# #348 review: the clobber redirect, and the verbs that name what they change.
+bashcmd "$SID-34a" "$REPO" 'echo x >| src/k1.ts'
+ledger_has "$SID-34a" code "$REPO" src/k1.ts && ok || fail "a >| target is recorded, not read as a pipe"
+bashcmd "$SID-34b" "$REPO" 'rm -f src/k2.ts; touch src/k3.ts; truncate -s 0 src/k4.ts'
+ledger_has "$SID-34b" code "$REPO" src/k2.ts && ledger_has "$SID-34b" code "$REPO" src/k3.ts \
+  && ledger_has "$SID-34b" code "$REPO" src/k4.ts && ok || fail "rm, touch and truncate operands are recorded"
+bashcmd "$SID-34c" "$REPO" 'ln -sf k3.ts src/k5.ts && dd if=/dev/null of=src/k6.ts'
+ledger_has "$SID-34c" code "$REPO" src/k5.ts && ledger_has "$SID-34c" code "$REPO" src/k6.ts \
+  && ok || fail "an ln link and a dd of= target are recorded"
+
 # --- GraphQL is code (#152 §3) --------------------------------------------------
 mkdir -p "$REPO/api"
 bashcmd "$SID-35" "$REPO" 'echo "type Q { a: Int }" > api/schema.graphql'

@@ -170,6 +170,9 @@ split_segments() {
       cur = ""
       for (i = 1; i <= n; i++) {
         c = substr(buf, i, 1)
+        # `>|` (clobber) is a redirect, not a pipe: drop the bar so the
+        # target stays in the segment as `> file`.
+        if (c == "|" && i > 1 && substr(buf, i - 1, 1) == ">") continue
         if (index("|&;(){}`\n", c) > 0) {
           print sep "\t" cur
           cur = ""

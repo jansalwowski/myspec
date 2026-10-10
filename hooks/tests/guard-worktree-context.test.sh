@@ -129,8 +129,11 @@ check allow "verb in commit message"   'git commit -m "docs: explain that git ch
 check allow "verb in PR body"          'gh pr create --body "then git merge into develop"'
 check allow "verb in single quotes"    "grep -r 'git rebase' .claude/"
 check allow "separator inside quotes"  'git commit -m "fix; git checkout foo"'
-check allow "heredoc prose"            $'cat > x.md <<\'EOF\'\nUse git checkout carefully\nEOF'
-check allow "unquoted heredoc prose"   $'cat > x.md <<EOF\nrun git merge here\nEOF'
+# Written to a file, as a doc heredoc is: a develop answer keeps gate C out of
+# the way, so only gate A's reading of the body is under test.
+mark prose-dev develop 60
+check_in "$REPO" allow "heredoc prose"          prose-dev $'cat > x.md <<\'EOF\'\nUse git checkout carefully\nEOF'
+check_in "$REPO" allow "unquoted heredoc prose" prose-dev $'cat > x.md <<EOF\nrun git merge here\nEOF'
 check allow "echo of the verb"         'echo "git branch -d foo"'
 
 # --- gate A, must allow: safe git usage --------------------------------------
@@ -463,6 +466,56 @@ if run_hook "$REPO" none-sess 'git checkout develop' | grep -q "MYSPEC_ALLOW_BRA
 else
   PASS=$((PASS + 1))
 fi
+
+# --- gate C (#348): a Bash write is judged as a Write of the same file ---------
+# The main checkout is on main, the default branch here (no origin/HEAD).
+rm -f "$STATE/"*.jsonl
+mkdir -p "$REPO/.ai/ideas" "$REPO/src"
+printf 'a\n' > "$REPO/.ai/ideas/PRIORITY-LISTING.md"
+check block "no decision, redirect into source"        'echo x > src/a.js'
+check block "no decision, heredoc into source"         $'cat > src/b.js <<EOF\nx\nEOF'
+check block "on main, redirect into the aiDir"         'echo x >> .ai/ideas/new.md'
+check block "on main, sed -i on the listing"           "sed -i.bak 's/a/b/' .ai/ideas/PRIORITY-LISTING.md"
+check block "on main, tee into the aiDir"              'echo x | tee .ai/ideas/t.md'
+check block "on main, cp into the aiDir"               'cp /etc/hosts .ai/ideas/hosts.md'
+check allow "redirect to /dev/null"                    'ls > /dev/null 2>&1'
+check allow "redirect outside the repo"                "echo x > $(dirname "$REPO")/scratch.txt"
+check allow "session state stays pinned"               'echo x > .claude/state/sessions/note.md'
+check allow "read-only command"                        'cat .ai/ideas/PRIORITY-LISTING.md'
+check block "bash -c payload"                          "bash -c 'echo x > src/a.js'"
+check block "eval payload"                             "eval 'echo x > src/a.js'"
+check block "bash -c after a cd"                       "cd src && bash -c 'echo x > a.js'"
+check block "clobber redirect"                         'echo x >| src/a.js'
+printf 'a\n' > "$REPO/src/old.js"
+check block "rm"                                       'rm -f src/old.js'
+check block "touch"                                    'touch src/new.js'
+check block "ln -sf over a file"                       'ln -sf old.js src/old.js'
+check block "truncate"                                 'truncate -s 0 src/old.js'
+check block "dd of="                                   'dd if=/dev/null of=src/old.js'
+check allow "a pipe is not a clobber"                  'ls | wc -l'
+check allow "rm outside the repo"                      "rm -f $(dirname "$REPO")/scratch.txt"
+check block "escape hatch never skips the question"    'MYSPEC_ALLOW_MAIN_CHECKOUT=1 echo x > src/a.js'
+OUT=$(run_hook "$REPO" none-sess 'echo x > .ai/ideas/new.md' | jq -r '.hookSpecificOutput.permissionDecisionReason')
+if printf '%s' "$OUT" | grep -qF 'Bash write to' && printf '%s' "$OUT" | grep -qF 'edits files on branch main'; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); echo "FAIL  gate C names the Bash write and carries the ask: $OUT" >&2
+fi
+mark c-dev develop 60
+check_in "$REPO" allow "develop recorded, redirect into source" c-dev 'echo x > src/a.js'
+check_in "$REPO" allow "develop recorded, aiDir doc"            c-dev 'echo x > .ai/ideas/new.md'
+mark c-wt worktree 60
+check_in "$REPO" block "worktree mode, redirect into main checkout" c-wt 'echo x > .ai/ideas/new.md'
+check_in "$REPO" allow "worktree mode, cd into the worktree first"  c-wt "cd $WT && echo x > src.js"
+check_in "$WT"   allow "worktree mode, cwd in the worktree"         c-wt 'echo x > src.js'
+check_in "$REPO" allow "worktree mode, escape hatch"                c-wt 'MYSPEC_ALLOW_MAIN_CHECKOUT=1 echo x > .ai/ideas/new.md'
+check_in "$REPO" block "worktree mode, bash -c into main checkout"  c-wt "bash -c 'echo x > .ai/ideas/new.md'"
+# A feature branch: the doc paths are exempt again, source still asks.
+git -C "$REPO" symbolic-ref HEAD refs/heads/feat/c
+check allow "feature branch, aiDir doc"                'echo x > .ai/ideas/new.md'
+check block "feature branch, source"                   'echo x > src/a.js'
+git -C "$REPO" symbolic-ref HEAD refs/heads/main
+rm -f "$STATE/"*.jsonl
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

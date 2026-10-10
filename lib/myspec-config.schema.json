@@ -232,7 +232,19 @@
       "type": ["boolean"],
       "default": false,
       "issue": ["#329"],
-      "description": "Read by require-isolation-decision.sh: ask the develop-vs-worktree question for edits under aiDir, .claude/, docs/ and the root agent files too, which are otherwise exempt from it. The paths pinned to the main checkout stay exempt."
+      "description": "Read by require-isolation-decision.sh: ask the develop-vs-worktree question for edits under aiDir, .claude/, docs/ and the root agent files too, which are otherwise exempt from it, on every branch. On a protected branch (isolation.protectedBranches) they are asked whatever this says. The paths pinned to the main checkout stay exempt."
+    },
+    "isolation.protectedBranches": {
+      "file": "project",
+      "type": [
+        "array"
+      ],
+      "default": [],
+      "merge": "extend",
+      "issue": [
+        "#348"
+      ],
+      "description": "Branch name globs (integration, release) that count as protected besides the default branch and a detached HEAD, which always do. While the main checkout is on one, require-isolation-decision.sh and guard-worktree-context.sh ask the develop-vs-worktree question before the first write of a session to doc paths too, not only to source."
     },
     "isolation.worktreeRoot": {
       "file": "project",

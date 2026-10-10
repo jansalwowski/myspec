@@ -38,7 +38,8 @@ build() {
   REPO="$ROOT/$name"
   rm -rf "$REPO"
   mkdir -p "$REPO/.claude"
-  (cd "$REPO" && git init -q -b main .)
+  # A feature branch: on the default branch the aiDir is asked too (#348).
+  (cd "$REPO" && git init -q -b feat/x .)
   printf '{"frameworkVersion":"0.0.0","project":{"name":"fx"}}\n' > "$REPO/.myspec.json"
   for d in "$@"; do mkdir -p "$REPO/$d"; done
 }
