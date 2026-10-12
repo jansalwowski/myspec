@@ -101,6 +101,8 @@ For each confirmed mockup, in order:
 3. **Compile-check.** If `preview` is configured, ensure the dev server is running (start in background if not). Run the configured `compileCheck` for the file — expect success; on failure read the dev-server log for the transform error and fix. Not configured → skip with a note.
 4. **✓** — emit one-line progress (`{Name} · verify ✓ · compile ✓`), move to the next file.
 
+**Variant pick.** For each surface built as variants, once all its variants are green, ask which one wins through `/myspec:visualize-options`, not AskUserQuestion: one option per variant, its preview an HTML rendering of that variant's layout. Delete the losing variant files and rename the winner to the surface name.
+
 After all files: if the project's docs conventions require a `mockups/README.md` (see `mockup-design.md`), write or update it with the required frontmatter.
 
 ### Phase 3 — Iterate (stay open)

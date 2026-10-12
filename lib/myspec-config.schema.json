@@ -157,6 +157,13 @@
       "issue": ["#247"],
       "description": "\"controller\" (the default: feature-implement runs every per-task step itself) or \"workflow\" (opt in to the per-task loop run by the plugin workflow myspec:implement-phase through the host's Workflow tool, where present; without it feature-implement runs controller mode)."
     },
+    "visualQuestions": {
+      "file": "project",
+      "type": ["string"],
+      "default": "off",
+      "issue": [],
+      "description": "\"off\" (the default) or \"auto\": visual questions (layouts, UI states, colors, spacing, typography, an option that needs ASCII art) go to the user through /myspec:visualize-options in the browser instead of AskUserQuestion. Set by /myspec:setup visual-questions. The manifest rule .claude/rules/visual-questions.md carries when: {visualQuestions: auto}, so it is installed only while this is auto."
+    },
     "probes.portSource": {
       "file": "project",
       "type": ["string"],

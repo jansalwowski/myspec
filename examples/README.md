@@ -19,6 +19,7 @@ The eight skills you'll use to take a feature from idea to shipped:
 | [skills/feature-spec.md](skills/feature-spec.md) | Greenfield small feature (with the optional scenarios + seed data step) · Cross-feature dependencies · Skill recommends decomposing first |
 | [skills/feature-decompose.md](skills/feature-decompose.md) | Mixed-priority split with deferred sub-features · Skill refuses to decompose |
 | [skills/feature-mockup.md](skills/feature-mockup.md) | First mockups for an approved spec · Unconfigured project (graceful degradation) · Scope-creep flag + schema handoff |
+| [skills/visualize-options.md](skills/visualize-options.md) | Layout and states decision on one screen · feature-mockup variant pick · Answer given in the terminal instead |
 | [skills/feature-mockup-review.md](skills/feature-mockup-review.md) | Full review with mixed findings · Focus prompt narrows to loose ends · Unconfigured project (Group E skipped, gap handed off) |
 | [skills/feature-tech-spec.md](skills/feature-tech-spec.md) | Pattern-following design · ADR-heavy with alternatives · Discovers spec gap during design |
 | [skills/feature-plan.md](skills/feature-plan.md) | Single-milestone plan · Multi-milestone with parallel groups · Plan refuses, recommends decompose |

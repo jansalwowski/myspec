@@ -234,6 +234,21 @@ expect "machine layer between project and session" "[$(jq -c '. + ["^a","^b"]' <
 grep -qE '^\s*\[layer_default, layer_project, layer_session\] as \$LAYERS' "$SH" && ok \
   || fail "sh: the layers are one ordered list"
 
+# --- 1b. manifest conditions (`when`) -----------------------------------------
+# A manifest entry's `when` holds when each named setting's effective value
+# equals the required one, defaults included: update and the doctor both read
+# it through this, so an absent key must compare as its schema default.
+d=$(fixture when-default '{}')
+OUT=$(node "$MJS" when '{"visualQuestions":"off"}' --root "$d" 2>/dev/null)
+[ "$OUT" = true ] && ok || fail "when: an absent key compares as its default (got $OUT)"
+OUT=$(node "$MJS" when '{"visualQuestions":"auto"}' --root "$d" 2>/dev/null)
+[ "$OUT" = false ] && ok || fail "when: the default does not satisfy another value (got $OUT)"
+d=$(fixture when-set '{"visualQuestions":"auto"}')
+OUT=$(node "$MJS" when '{"visualQuestions":"auto"}' --root "$d" 2>/dev/null)
+[ "$OUT" = true ] && ok || fail "when: a set value satisfies its condition (got $OUT)"
+node "$MJS" when '["visualQuestions"]' --root "$d" >/dev/null 2>&1; st=$?
+[ "$st" -eq 2 ] && ok || fail "when: a non-object condition is a usage error (exit $st)"
+
 # --- 2. catalogue -------------------------------------------------------------
 # --- 3. scripts ---------------------------------------------------------------
 

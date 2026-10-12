@@ -96,6 +96,9 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 | `trigger-session-complete` | trigger | "that's it for today, wrap up the session" → session-complete, not memorify |
 | `trigger-implement-review` | trigger, near-miss | "does what we built match the spec and plan?" → feature-implement-review, not the built-in /code-review or feature-verify |
 | `nearmiss-skill-verify` | trigger, near-miss | "check my SKILL.md for problems" → skill-verify, not the built-in /code-review or feature-spec-review |
+| `trigger-visualize-options` | trigger, near-miss | "show me both layouts side by side in my browser … let me click one" → visualize-options, not feature-mockup or brainstorm |
+| `visual-questions-auto` | trigger, rule | `visualQuestions: "auto"` with its rule installed → a spacing-scale choice goes through visualize-options |
+| `visual-questions-off` | near-miss, rule | the same prompt with the setting off → not visualize-options: the rule, not the skill description, does the routing |
 | `trigger-doctor` | trigger | "health check of our myspec setup" → doctor, not the feature audits |
 | `trigger-feature-verify` | trigger | one feature's drift → feature-verify, not feature-status-audit or doctor |
 | `trigger-feature-status-audit` | trigger | "does index.yaml match the features folder?" → feature-status-audit |
@@ -112,7 +115,7 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 | `feature-implement-restart-state` | orchestration | approved 2-task plan → before Phase 1's first dispatch the plan's Execution Log gets a `Base (Phase 1): <sha>` entry a restarted session can recover (#166) |
 | `feature-implement-probe-gate` | orchestration | both tasks `[x]`, Checkpoint probes not yet run → the Step 4b probe gate dispatches the plugin agent `myspec:probe-executor`, never a general-purpose subagent carrying the executor prompt (#171) |
 
-`nearmiss-personal-preference` is a `capability` case until it has been run across releases, and so are `trigger-feature-spec-scenarios` (added with #264, not yet run) and `trigger-memory-sanitize` (added with #161, not yet run). So are two of the three feature-plan and feature-implement cases (Sonnet, 2026-09-29), and `feature-implement-probe-gate`:
+`nearmiss-personal-preference` is a `capability` case until it has been run across releases, and so are `trigger-feature-spec-scenarios` (added with #264, not yet run), `trigger-visualize-options`, `visual-questions-auto` and `visual-questions-off` (added with the skill) and `trigger-memory-sanitize` (added with #161, not yet run). So are two of the three feature-plan and feature-implement cases (Sonnet, 2026-09-29), and `feature-implement-probe-gate`:
 
 - `feature-plan-coverage` passed 6 of 6.
 - `feature-implement-dispatch` dispatched the implementer in 5 of 6. In the sixth, the controller wrote both tasks itself (#174). `dispatch-before-source-write` also fails when the implementer writes no file at all: in 1 of 3 runs its Bash heredoc was denied and it reported BLOCKED.

@@ -74,7 +74,9 @@ for(const k of Object.keys(m.files)){
   const dest = k.startsWith("templates/") ? aiDir+"/.templates/"+k.slice(10) : aiDir+"/"+k;
   put(join(plugin,"framework-files",k),dest);
 }
-for(const [k,e] of Object.entries(m.rules)){ put(join(plugin,"framework-files","rules",k),e.dest); }
+// An entry with `when` is installed only while its setting holds; the fixture
+// sets none, so every condition is at its default and conditional rules stay out.
+for(const [k,e] of Object.entries(m.rules)){ if(!e.when){ put(join(plugin,"framework-files","rules",k),e.dest); } }
 // Since 3.0 the hooks and lib run from the plugin: nothing of them is copied
 // and settings.json carries no framework entry. A 3.0 init writes no
 // settings.json at all; this one holds a project hook, so the checks on
@@ -1113,6 +1115,51 @@ expect_line '^SET +isolation\.blockInMain = default \+ \["\^make\[\[:space:\]\]\
 expect_line '^SET +isolation\.ignoreBlockInMain = \["\^git.*push.*"\] \(\.myspec\.json\) — loosens a gate$' "blockInMain: ignoreBlockInMain is listed as loosening"
 run_doctor_env -- schema
 expect_no_line 'setting-' "blockInMain: both keys are known settings of the right type"
+
+# --- pass 3d: a conditional manifest entry (`when`) ---------------------------
+#
+# An entry with `when: {"<setting>": <value>}` is expected only while the
+# setting has that effective value (schema defaults apply). A fake plugin root
+# carries one conditional rule keyed on visualQuestions (default "off"), so
+# the test does not depend on which real rule happens to be conditional.
+
+FAKE="$ROOT/plugin-when"
+mkdir -p "$FAKE/framework-files/rules"
+cp -R "$PLUGIN/framework-files/." "$FAKE/framework-files/"
+printf '# Conditional\n\nOnly while visualQuestions is auto.\n' > "$FAKE/framework-files/rules/conditional.md"
+node -e '
+const fs=require("fs");
+const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+for (const k of Object.keys(m.rules)) { if (m.rules[k].when) { delete m.rules[k]; } }
+m.rules["conditional.md"]={type:"overwrite",dest:".claude/rules/conditional.md",when:{visualQuestions:"auto"}};
+fs.writeFileSync(process.argv[1],JSON.stringify(m,null,2)+"\n");
+' "$FAKE/framework-files/manifest.json"
+RUN_PLUGIN="$FAKE"
+
+build_fixture
+run_doctor install
+expect_no_line 'conditional.md' "condition false (setting at its default) and file absent: no finding"
+
+set_json .myspec.json 'd.visualQuestions = "auto"'
+run_doctor install
+expect_line 'ERROR +framework-missing: .claude/rules/conditional.md' "condition true and file absent: framework-missing, like any rule"
+
+cp "$FAKE/framework-files/rules/conditional.md" "$REPO/.claude/rules/conditional.md"
+run_doctor install
+expect_no_line 'conditional.md' "condition true and file installed: clean"
+
+set_json .myspec.json 'd.visualQuestions = "off"'
+run_doctor install
+expect_exit 0 "a leftover conditional file does not fail the run"
+expect_line 'WARN +framework-condition-off: .claude/rules/conditional.md' "condition false and file present: warned"
+expect_line 'run: /myspec:update' "the warning carries the update command"
+expect_no_line 'framework-missing: .claude/rules/conditional.md' "condition false is never framework-missing"
+
+set_json .myspec.json 'd.frameworkFiles = {"rules/conditional.md": {pinned: "kept on purpose"}}'
+run_doctor install
+expect_no_line 'conditional.md' "pinned and condition false: a deliberate keep, no warning"
+
+unset RUN_PLUGIN
 
 # --- pass 4: argument handling ------------------------------------------------
 

@@ -136,7 +136,11 @@ check_cases "$SRC_ROOT" ""
 text=$(block_text "$SRC_ROOT/evals/trigger-new-feature/case.yaml")
 for rule in "$SRC_ROOT"/framework-files/rules/*.md; do
   r=$(basename "$rule")
-  if [ "$(node "$TMP/expect.cjs" always "$rule")" = yes ]; then
+  # A conditional manifest rule (`when`) is installed only while its setting
+  # holds; myspec_init sets none, so the default case leaves it out.
+  if [ "$(jq -r --arg r "$r" '.rules[$r].when != null' "$SRC_ROOT/framework-files/manifest.json")" = true ]; then
+    expect_lacks "conditional $r is left out" "$text" "Contents of .claude/rules/$r "
+  elif [ "$(node "$TMP/expect.cjs" always "$rule")" = yes ]; then
     expect_has "always-loaded $r is included" "$text" "Contents of .claude/rules/$r "
   else
     expect_lacks "path-scoped $r is left out" "$text" "Contents of .claude/rules/$r "

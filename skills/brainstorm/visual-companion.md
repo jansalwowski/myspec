@@ -39,7 +39,7 @@ The server watches a directory for HTML files and serves the newest one to the b
 ```bash
 # Start AFTER the user approves the companion. --open auto-opens their browser on
 # the first screen; --project-dir persists mockups and enables same-port restart.
-<plugin lib>/brainstorm-server/start-server.sh --project-dir /path/to/project --open
+bash <plugin lib>/brainstorm-server/start-server.sh --project-dir /path/to/project --open
 
 # Returns: {"type":"server-started","port":52341,
 #           "url":"http://localhost:52341/?key=ab12…",
@@ -60,7 +60,7 @@ Save both `screen_dir` (where you write HTML) and `state_dir` (where you read th
 **If background processes are reaped in your environment:** run in foreground from a persistent terminal session:
 
 ```bash
-<plugin lib>/brainstorm-server/start-server.sh --project-dir /path/to/project --foreground
+bash <plugin lib>/brainstorm-server/start-server.sh --project-dir /path/to/project --foreground
 ```
 
 In `--foreground` mode, the command stays attached and serves until interrupted.
@@ -68,13 +68,15 @@ In `--foreground` mode, the command stays attached and serves until interrupted.
 If the URL is unreachable from your browser (common in remote/containerized setups), bind a non-loopback host:
 
 ```bash
-<plugin lib>/brainstorm-server/start-server.sh \
+bash <plugin lib>/brainstorm-server/start-server.sh \
   --project-dir /path/to/project \
   --host 0.0.0.0 \
   --url-host localhost
 ```
 
 Use `--url-host` to control what hostname is printed in the returned URL JSON.
+
+**Custom browser launcher:** set `BRAINSTORM_OPEN_CMD` to the command that opens a URL (`firefox`, `flatpak run org.mozilla.firefox`, `node "/path/capture.js"`) when `--open`'s platform launcher does not apply. The server appends the URL as the last argument and runs the command without a shell: quotes group arguments (`""` is an empty one), a backslash escapes the next character, and nothing else is interpreted. A shell builtin is not a command on its own: on Windows use `cmd /c start ""`. A value that cannot be parsed, or a launch that fails, is logged to the server's stderr.
 
 ## The Loop
 
@@ -228,6 +230,10 @@ The frame template provides these CSS classes for your content:
 - `.section` — content block with bottom margin
 - `.label` — small uppercase label text
 
+## Decision screens
+
+When a screen asks the user to decide (pick a layout, tick the states to build) rather than react, give it a Submit button: the answer arrives as `$STATE_DIR/answer.json` in AskUserQuestion's result shape, with no terminal round-trip. `skills/visualize-options/SKILL.md` has the markup contract (`data-question`, `data-choice` with no `onclick`, `textarea[data-note]`, `button[data-submit]`, `.preview` for a phone-width toggle). The answer names the screen it came from (`"screen": "<file>.html"`), and the server refuses a Submit from a screen that is no longer the newest, so wait for your screen's name, not just for the file. Pushing a new screen deletes the previous `answer.json`.
+
 ## Browser Events Format
 
 When the user clicks options in the browser, their interactions are recorded to `$STATE_DIR/events` (one JSON object per line). The file is cleared automatically when you push a new screen.
@@ -262,7 +268,7 @@ If the `events` file doesn't exist, the user didn't interact with the browser �
 
 ```bash
 # Pass the SESSION directory — the parent of screen_dir/state_dir, not either of them.
-<plugin lib>/brainstorm-server/stop-server.sh $SESSION_DIR
+bash <plugin lib>/brainstorm-server/stop-server.sh $SESSION_DIR
 ```
 
 If the session used `--project-dir`, mockup files persist in `.myspec/brainstorm/` for later reference. Only `/tmp` sessions get deleted on stop.

@@ -1,6 +1,6 @@
 ---
 name: "setup"
-description: "Use when a project-specific file should be generated from a guided wizard. Blueprints: backbone, claude-md, conventions, mockup, index-md, workflow, pre-flight, anti-patterns. Do NOT use for first-time init (init)."
+description: "Use when a project-specific file should be generated from a guided wizard. Blueprints: backbone, claude-md, conventions, mockup, index-md, workflow, pre-flight, anti-patterns, visual-questions. Do NOT use for first-time init (init)."
 ---
 
 # Setup
@@ -17,6 +17,7 @@ Dispatches guided blueprint wizards to generate project-specific files. Each blu
 | `claude-md` | CLAUDE.md project context file | `CLAUDE.md` (project root) |
 | `conventions` | Coding standards and testing patterns | `${aiDir}/conventions/` |
 | `mockup` | Mockup stack, tooling commands, and hard guards for the feature-mockup skills | `${aiDir}/conventions/mockup-design.md` + `.myspec.json` |
+| `visual-questions` | Turn browser-based visual questions on or off (heads-up: more tokens) | `.claude/rules/visual-questions.md` + `.myspec.json` |
 | `index-md` | Documentation navigation index | `${aiDir}/INDEX.md` |
 | `workflow` | Development workflow definition | `${aiDir}/workflow.md` |
 | `pre-flight` | Project-specific pre-flight checks | `${aiDir}/pre-flight.md` |
@@ -40,6 +41,8 @@ Check if the output file already exists.
 
 → If it exists: ask "This file already exists. Overwrite? (y/n)"
 → If user says no: stop.
+
+`visual-questions` is a toggle, not a generated file: skip the overwrite question; its discovery question covers it.
 
 ### Step 3: Execute Blueprint
 

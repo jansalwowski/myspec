@@ -1,0 +1,51 @@
+<h2>Invoices page: layout and states</h2>
+<p class="subtitle">Pick one layout, tick the states worth a mockup, then Submit.</p>
+
+<section class="question" data-question="Which layout should the invoices page use?">
+  <h3>Which layout should the invoices page use?</h3>
+  <div class="cards">
+    <div class="card" data-choice="Dense list (Recommended)">
+      <div class="card-body">
+        <h3>Dense list <span class="badge">Recommended</span></h3>
+        <p>One row per invoice; matches the existing payments list.</p>
+        <div class="metrics"><span>~1,500 DOM elements at 200 invoices</span><span>14 per screen</span></div>
+      </div>
+      <div class="preview">
+        <div class="mock-nav">Invoices</div>
+        <div style="padding:0.25rem 1rem;font-size:0.85rem">
+          <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:0 1rem;padding:0.5rem 0;border-bottom:1px solid var(--border)"><span>INV-1042 · Acme Ltd</span><span>€1,200 · due 3 Nov</span></div>
+          <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:0 1rem;padding:0.5rem 0;border-bottom:1px solid var(--border)"><span>INV-1041 · Northwind</span><span>€860 · paid</span></div>
+          <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:0 1rem;padding:0.5rem 0"><span>INV-1040 · Globex</span><span>€2,410 · overdue</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="card" data-choice="Card grid">
+      <div class="card-body">
+        <h3>Card grid</h3>
+        <p>Amount-first cards; scans well on a phone, fewer per screen.</p>
+        <div class="metrics"><span>~2,100 DOM elements at 200 invoices</span><span>6 per screen</span></div>
+      </div>
+      <div class="preview">
+        <div class="mock-nav">Invoices</div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:0.5rem;padding:0.75rem;font-size:0.8rem">
+          <div style="border:1px solid var(--border);border-radius:8px;padding:0.5rem">INV-1042 · Acme<b style="display:block;font-size:1.1rem">€1,200</b>due 3 Nov</div>
+          <div style="border:1px solid var(--border);border-radius:8px;padding:0.5rem">INV-1041 · Northwind<b style="display:block;font-size:1.1rem">€860</b>paid</div>
+          <div style="border:1px solid var(--border);border-radius:8px;padding:0.5rem">INV-1040 · Globex<b style="display:block;font-size:1.1rem">€2,410</b>overdue</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <label class="note">Note (optional; with nothing picked, the note is your answer)<textarea data-note></textarea></label>
+</section>
+
+<section class="question" data-question="Which states need their own mockup?">
+  <h3>Which states need their own mockup?</h3>
+  <div class="options" data-multiselect>
+    <div class="option" data-choice="Empty"><div class="letter">A</div><div class="content"><h3>Empty</h3><p>No invoices yet: explain how they are created.</p></div></div>
+    <div class="option" data-choice="Overdue banner"><div class="letter">B</div><div class="content"><h3>Overdue banner</h3><p>At least one overdue invoice: banner above the list.</p></div></div>
+    <div class="option" data-choice="Filtered to zero"><div class="letter">C</div><div class="content"><h3>Filtered to zero</h3><p>Filters match nothing: offer to clear them.</p></div></div>
+  </div>
+  <label class="note">Note (optional)<textarea data-note></textarea></label>
+</section>
+
+<div class="submit-bar"><button type="button" class="submit" data-submit>Submit</button></div>

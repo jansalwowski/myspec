@@ -56,6 +56,10 @@ Every migration, rename and removal an older version needed ran in that update; 
 
 List every migration run under `Migrations` in the Step 6 summary.
 
+### Step 1.6: Ask the visual-questions setting
+
+When `.myspec.json` has no `visualQuestions` key, the project has never been asked: run the `setup` skill with blueprint `visual-questions`. Its question carries the token heads-up, and either answer records the key, so this is asked once per project. Ask it here, before Step 2: the key decides whether the manifest's conditional `visual-questions.md` rule applies, so it must be settled before any entry is applied. A key already set is left alone.
+
 ### Step 2: Inventory Files to Update
 
 From `manifest.json`, collect all files. Each file has a `type`:
@@ -65,6 +69,7 @@ From `manifest.json`, collect all files. Each file has a `type`:
 
 For `files` entries: destination is `{aiDir}/{filename}` — **except** `templates/{name}` entries, which install to `{aiDir}/.templates/{name}` (the dot-directory `init` creates; skills read templates from there — never create `{aiDir}/templates/`).
 For `rules` entries: source is `framework-files/rules/{filename}`, destination is the `dest` path (e.g., `.claude/rules/workflow.md`).
+**Conditional entries.** A `files` or `rules` entry may carry `when: {"<setting key>": <value>, …}`. It applies only while every named setting has that effective value, schema defaults included: run `node "${CLAUDE_PLUGIN_ROOT}/lib/myspec-config.mjs" when '<the entry's when, as JSON>'` from the project root, which prints `true` or `false`. `true` → the entry is processed like any other (rename, pin, apply, hash). `false` → it is not installed: when its `dest` exists, delete it (`git rm` if tracked) and list it under `Removed`, unless it is pinned, in which case leave the file and the pin and report it as "condition off, kept locally". `.myspec.json` `visualQuestions` is the case today (`rules/visual-questions.md`, while it is `"auto"`).
 There are no `hooks` or `lib` entries since 3.0: the plugin runs its hooks and lib from its own directory, and `frameworkVersion` covers the `files` and `rules` blocks only.
 
 **Renamed entries — migrate the destination before applying.** A `files` or `rules` entry may carry `renamedFrom: "<old key>"`. It means the framework changed a file's name, and the project on disk still holds the old one. Before applying such an entry:
@@ -90,7 +95,7 @@ Pinning is the project's call, not the skill's. Never add or remove a pin on the
 
 ### Step 3: Apply Updates
 
-For each file in the manifest:
+For each file in the manifest whose `when` holds (Step 2, "Conditional entries"):
 
 **`overwrite` strategy:**
 1. Read the source file from `framework-files/{filename}` (or `framework-files/rules/{filename}` for rules)
@@ -154,6 +159,7 @@ Read the result as a checklist of this run:
 
 - `framework-missing` / `framework-drift` → a manifest entry did not get written. Re-apply that entry, do not stamp over it. For a `marker-merge` file this covers the header above the start marker too: the framework-owned region is line 1 through the end marker.
 - `marker-missing` → a `marker-merge` file has no `<!-- myspec:framework-start -->` / `<!-- myspec:framework-end -->` markers and the replace / prepend / pin choice in Step 3 was not applied. Either the question was skipped (ask it now) or the user gave no answer (report it; the file stays untouched and does not block the stamp).
+- `framework-condition-off` → a conditional entry's file is on disk while its `when` does not hold; Step 2's conditional delete was skipped. Delete it now, or report it if the user wants it pinned.
 - `framework-renamed` → an old filename is still on disk. Either the Step 2 move did not happen (do it now) or both names exist and the user declined the merge (report it).
 - `hook-wired-locally` / `hook-copy-retired` → the `3.0.0-plugin-hooks` migration left a framework entry in `settings.json` or a copy under `.claude/hooks/` or `.claude/lib/`; unwire or move it as the migration does, do not stamp over it.
 - Anything in the `schema` or `features` group → fix before finishing; an unparseable `.myspec.json` or `verification.json` silently disables the surfaces that read it, and an entry the features parser cannot read is invisible to every status audit. Exception: `note-over-cap` / `note-volatile` / `manifest-unknown-key` are project content, not install state — report them and leave the notes alone.
@@ -199,7 +205,7 @@ Migrations (one-shot, recorded in .myspec.json):
   {each migration id run this time with one line of what it did; or "none pending"}
   {3.1.0-doc-status: each rewritten doc as "{path}: {old} → {new}", each off-vocabulary one as "{path}: {value} — set by hand"}
 
-Removed (retired by the framework):
+Removed (retired by the framework, or a `when` condition that no longer holds):
   {each deleted file; "kept locally (pinned)" for pinned ones; or omit the block}
 
 Preserved (project-customized sections):
@@ -235,7 +241,7 @@ Do NOT modify the file — this is advisory only.
 - **Never copy a hook or lib helper into the project.** Since 3.0 they run from the plugin, and a copy under `.claude/` is dead weight at best and a second, stale run of a gate at worst (a copy is moved to `.claude/state/retired-3.0/`, never written). Only the `files` and `rules` blocks exist, and both carry `${aiDir}` as a placeholder to substitute.
 - Never overwrite a file whose `frameworkFiles[...].pinned` is set, and never add or clear a pin yourself — except the `hooks/*` and `lib/*` pins the `3.0.0-plugin-hooks` migration drops, which it reports
 - Never overwrite content after `<!-- myspec:framework-end -->` in a `marker-merge` file
-- Never modify files not listed in `manifest.json`, with three exceptions this skill owns: the `hooks` key of `.claude/settings.json` (framework entries removed, nothing added), `.claude/state/retired-3.0/` (where the migration moves the retired copies), and the frontmatter `status:` line of feature docs the `3.1.0-doc-status` migration rewrites
+- Never modify files not listed in `manifest.json`, with four exceptions this skill owns: the `.myspec.json` `visualQuestions` key (Step 1.6, through the `visual-questions` blueprint), the `hooks` key of `.claude/settings.json` (framework entries removed, nothing added), `.claude/state/retired-3.0/` (where the migration moves the retired copies), and the frontmatter `status:` line of feature docs the `3.1.0-doc-status` migration rewrites
 - Never update `.myspec.json` project fields (`name`, `techStack`) or `aiDir`. Keys a migration retires are deleted only by it: `codeReview` by `3.0.0-code-review`, `reuseAudit` by `3.0.0-reuse-audit`, `project.description` by `3.0.0-schema-v2`. A pin's `hash` and `upstreamHash` are written only by `pin-reconcile.mjs` (`--backfill`, `--record`)
 - Never run a migration whose id is already in `.myspec.json` `migrations`; record each one the moment it completes
 - If a source file is missing from the plugin, skip it and warn the user — do not delete the destination
@@ -250,6 +256,8 @@ After running the skill:
 - [ ] Every `manifest.json` entry processed with its declared strategy (`overwrite` / `marker-merge`)
 - [ ] Every entry carrying `renamedFrom` checked before applying: destination migrated and its `frameworkFiles` key renamed (kept even when the apply could not merge), a dead old key dropped, or the both-exist case offered a merge (or deletion, for a marker-less old file)
 - [ ] Every `marker-merge` destination without an end marker offered replace / prepend / pin, and the answer applied
+- [ ] `visualQuestions` asked once through the `visual-questions` blueprint when absent (Step 1.6), before any manifest entry was applied
+- [ ] Every entry with `when` evaluated: applied like any entry when it holds; when it does not, its `dest` deleted unless pinned (a pinned one left and reported)
 - [ ] Every `removed` entry deleted (or kept when pinned) and, for hooks, unwired from `settings.json`
 - [ ] Entries pinned in `.myspec.json` skipped and listed in the summary; `pin-reconcile.mjs` run, every `drop`, `review` and `diverged` verdict offered its choice, every `unrecorded` pin backfilled, nothing decided alone
 - [ ] `templates/*` entries written to `{aiDir}/.templates/` (no `{aiDir}/templates/` created)

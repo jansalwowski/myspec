@@ -149,6 +149,12 @@ The probe runs `feature-plan` writes and `feature-implement` dispatches. Both ke
 | `portSource` | repo-relative path, or `$NAME` | none | #196 | Where a probe takes its dev-server ports from instead of literal ports in the plan: a file holding the per-checkout port slots, or the environment variable that holds them. `feature-plan` names it on each probe block's Ports line and writes ports as `$<slot>`; the probe executor resolves the slots in its own checkout. Unset, probes keep the Target line's literal address. |
 | `scratchEnvScript` | repo-relative path | none | #197 | A script that provisions the scratch environment a probe run needs (database, cache, buckets), reused across probe runs instead of rebuilt by each one. `feature-implement` passes it to the probe executor, which runs it from the checkout root before the first probe that writes; a non-zero exit makes the writing probes BLOCKED. Unset, the executor builds the scratch environment from the Scratch env line as before. |
 
+### Visual questions: `.myspec.json`
+
+| Key | Type | Default | Issue | Effect |
+|---|---|---|---|---|
+| `visualQuestions` | `"off"` or `"auto"` | `"off"` | **new** | `auto` sends visual questions (layouts, UI states, colors, spacing, typography, an option that needs ASCII art) through `/myspec:visualize-options` in the browser instead of AskUserQuestion, and has the agent offer "Show in visual companion" on questions that are only partly visual. The behaviour is the always-loaded rule `.claude/rules/visual-questions.md`, a manifest entry with the condition `when: {"visualQuestions": "auto"}`: installed, refreshed, pinned and drift-checked like any rule while the setting is `auto`, deleted by `update` (unless pinned) while it is not. `/myspec:setup visual-questions` sets the key; `update` asks once when it is absent. |
+
 ### Deferred
 
 These came up during triage and are not in this round, because no issue has shown a project that needs them yet: an allowlist for `no-absolute-paths` (#234 chose file-kind scoping instead), `allowInMain` carve-outs for the worktree guard, and per-check environment variables. They fit the same layers and schema if they are needed later.
