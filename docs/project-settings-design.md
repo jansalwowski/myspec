@@ -153,7 +153,7 @@ The probe runs `feature-plan` writes and `feature-implement` dispatches. Both ke
 
 | Key | Type | Default | Issue | Effect |
 |---|---|---|---|---|
-| `visualQuestions` | `"off"` or `"auto"` | `"off"` | **new** | `auto` sends visual questions (layouts, UI states, colors, spacing, typography, an option that needs ASCII art) through `/myspec:visualize-options` in the browser instead of AskUserQuestion, and has the agent offer "Show in visual companion" on questions that are only partly visual. `/myspec:setup visual-questions` sets it and installs or removes the always-loaded rule `.claude/rules/visual-questions.md` that carries the behaviour; `update` asks once when the key is absent and refreshes the rule while it is `auto`. |
+| `visualQuestions` | `"off"` or `"auto"` | `"off"` | **new** | `auto` sends visual questions (layouts, UI states, colors, spacing, typography, an option that needs ASCII art) through `/myspec:visualize-options` in the browser instead of AskUserQuestion, and has the agent offer "Show in visual companion" on questions that are only partly visual. The behaviour is the always-loaded rule `.claude/rules/visual-questions.md`, a manifest entry with the condition `when: {"visualQuestions": "auto"}`: installed, refreshed, pinned and drift-checked like any rule while the setting is `auto`, deleted by `update` (unless pinned) while it is not. `/myspec:setup visual-questions` sets the key; `update` asks once when it is absent. |
 
 ### Deferred
 

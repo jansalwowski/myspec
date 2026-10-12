@@ -162,7 +162,7 @@
       "type": ["string"],
       "default": "off",
       "issue": [],
-      "description": "\"off\" (the default) or \"auto\": visual questions (layouts, UI states, colors, spacing, typography, an option that needs ASCII art) go to the user through /myspec:visualize-options in the browser instead of AskUserQuestion. Set by /myspec:setup visual-questions, which installs or removes .claude/rules/visual-questions.md with it."
+      "description": "\"off\" (the default) or \"auto\": visual questions (layouts, UI states, colors, spacing, typography, an option that needs ASCII art) go to the user through /myspec:visualize-options in the browser instead of AskUserQuestion. Set by /myspec:setup visual-questions. The manifest rule .claude/rules/visual-questions.md carries when: {visualQuestions: auto}, so it is installed only while this is auto."
     },
     "probes.portSource": {
       "file": "project",

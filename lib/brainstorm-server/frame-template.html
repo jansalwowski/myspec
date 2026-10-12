@@ -210,6 +210,8 @@
     .submit-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; margin-top: 1.5rem; }
     .submit { background: var(--accent); color: white; border: 0; border-radius: 8px; padding: 0.6rem 1.4rem; font: inherit; font-weight: 600; cursor: pointer; }
     .submit:disabled { opacity: 0.5; cursor: default; }
+    [data-question] [data-choice][aria-disabled="true"] { cursor: default; opacity: 0.6; }
+    [data-question] [data-choice][aria-disabled="true"].selected { opacity: 1; }
     .submit-status.error { color: var(--error); }
     .submit-status.ok { color: var(--success); }
   </style>

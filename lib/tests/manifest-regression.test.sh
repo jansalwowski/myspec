@@ -194,5 +194,25 @@ EOF
 HASHED=$(jq -r '.tag // empty' "$(dirname "$MANIFEST")/retired-hashes.json" 2>/dev/null)
 if [ -z "$HASHED" ] || [ "v$FLOOR" = "$HASHED" ]; then ok; else fail "upgradeFrom $FLOOR is not the release retired-hashes.json hashed ($HASHED)"; fi
 
+# --- 5. a `when` condition names real settings --------------------------------
+# A files or rules entry may carry `when: {"<setting key>": <value>}` and is
+# installed only while each setting has that effective value. A key the
+# settings schema does not define, or a value of a type it does not allow,
+# reads as its default (or null) forever: the entry would never install, or
+# never leave, and nothing would say why.
+SCHEMA="$PLUGIN/lib/myspec-config.schema.json"
+WHEN_BAD=$(jq -r --slurpfile schema "$SCHEMA" '
+  def jtype: if type == "number" then (if . == floor then ["integer","number"] else ["number"] end) else [type] end;
+  [(.files // {}), (.rules // {})] | map(to_entries[]) | .[] | select(.value | has("when")) | .key as $k | .value.when as $w |
+  if ($w | type) != "object" or ($w | length) == 0 then "\($k): when is not a non-empty object"
+  else ($w | to_entries[] | . as $c | $schema[0].keys[$c.key] as $def |
+    if $def == null then "\($k): when names \($c.key), which lib/myspec-config.schema.json does not define"
+    elif ([$c.value | jtype[]] - $def.type | length) == ($c.value | jtype | length) then "\($k): when \($c.key) = \($c.value | tojson) is not of type \($def.type | join("|"))"
+    else empty end)
+  end' "$MANIFEST")
+if [ -z "$WHEN_BAD" ]; then ok; else fail "manifest when conditions: $WHEN_BAD"; fi
+WHEN_COUNT=$(jq '[(.files // {}), (.rules // {})] | map(to_entries[] | select(.value | has("when"))) | length' "$MANIFEST")
+if [ "$WHEN_COUNT" -ge 1 ]; then ok; else fail "the manifest has no conditional entry, so check 5 checks nothing"; fi
+
 printf '%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -156,6 +156,8 @@ Copy `.claude/rules/` framework rules from `framework-files/rules/`:
 - `skill-self-test.md`
 - `work-isolation.md`
 
+These are the manifest's unconditional `rules` entries. An entry with `when` (today `visual-questions.md`, while `visualQuestions` is `"auto"`) is not copied here: its setting is unset, so its condition is at the default, and the Step 6 blueprint installs it when the user turns it on.
+
 Create `.claude/verification.json` using `templates/verification.json` as the base, substituting verification commands from Step 2 question 4.
 
 If commands were left empty, write the placeholder structure and note: "Edit `.claude/verification.json` to add your verification commands."

@@ -22,8 +22,10 @@ Turn browser-based questions on or off for this project. When on (`visualQuestio
 
 ## Output Format
 
-- **On:** copy the plugin's `templates/rules/visual-questions.md` byte for byte to `.claude/rules/visual-questions.md` (create `.claude/rules/` if missing), and set `"visualQuestions": "auto"` in `.myspec.json`.
-- **Off:** delete `.claude/rules/visual-questions.md` if present, and set `"visualQuestions": "off"` in `.myspec.json`. Record `off` rather than deleting the key: `update` asks only while the key is absent.
+The rule is the manifest's conditional entry `rules/visual-questions.md` (`when: {"visualQuestions": "auto"}`), so `update` keeps it in step with the setting from then on. Check `.myspec.json` `frameworkFiles["rules/visual-questions.md"].pinned` first.
+
+- **On:** set `"visualQuestions": "auto"` in `.myspec.json`, then install the rule as `update` would: copy the plugin's `framework-files/rules/visual-questions.md` to `.claude/rules/visual-questions.md` (create `.claude/rules/` if missing). A pinned file is left as it is.
+- **Off:** set `"visualQuestions": "off"` in `.myspec.json`, then delete `.claude/rules/visual-questions.md` if present, unless it is pinned (leave it and say so). Record `off` rather than deleting the key: `update` asks only while the key is absent.
 
 ## Output Location
 

@@ -37,11 +37,11 @@ If a brainstorm companion session is already running (its `state_dir` has `serve
 bash <plugin lib>/brainstorm-server/start-server.sh --open
 ```
 
-It prints `{"type":"server-started","url":…,"screen_dir":…,"state_dir":…}`. Keep all three. Without `--project-dir` the session lives in a temp directory and is deleted on stop, which is what a one-off decision wants. Remote bind (container, SSH): add `--host 0.0.0.0 --url-host <name the browser uses>`.
+It prints `{"type":"server-started","url":…,"screen_dir":…,"state_dir":…}`. Keep all three; below, `<screen_dir>` and `<state_dir>` are those paths, written out in each command (nothing carries a shell variable between Bash calls). Without `--project-dir` the session lives in a temp directory and is deleted on stop, which is what a one-off decision wants. Remote bind (container, SSH): add `--host 0.0.0.0 --url-host <name the browser uses>`.
 
 ### 2. Write the decision screen
 
-One new file in `screen_dir` (`{id}.html`, never reused), written with the file-creation tool. A content fragment, no `<html>`: the server wraps it in the frame. Markup contract, read by the companion's helper script:
+One new file in `<screen_dir>` (`{id}.html`, never reused; `{id}.html` is the screen's name below), written with the file-creation tool. A content fragment, no `<html>`: the server wraps it in the frame. Markup contract, read by the companion's helper script:
 
 ```html
 <h2>{title}</h2>
@@ -67,11 +67,13 @@ Pushing the file opens the browser (first screen) or reloads the open tab. Tell 
 
 ### 3. Wait for Submit
 
-Submit writes `state_dir/answer.json`. Wait with Bash `run_in_background: true`, so the harness wakes you, then end your turn:
+Submit writes `<state_dir>/answer.json`, naming the screen it answers; the server refuses a Submit from any other screen (a stale tab, a send queued across a reconnect). Wait with Bash `run_in_background: true`, so the harness wakes you, then end your turn:
 
 ```bash
-until [ -f "$STATE_DIR/answer.json" ] || [ -f "$STATE_DIR/server-stopped" ]; do sleep 1; done; cat "$STATE_DIR/answer.json" "$STATE_DIR/server-stopped" 2>/dev/null
+until grep -qs '"screen": "{id}.html"' <state_dir>/answer.json || [ -f <state_dir>/server-stopped ] || [ ! -d <state_dir> ]; do sleep 1; done; cat <state_dir>/answer.json <state_dir>/server-stopped 2>/dev/null
 ```
+
+The `screen` match keeps an earlier decision's answer from being read as this one's. The loop also ends when the session directory is gone (`stop-server.sh` deletes temp sessions, a killed server writes nothing).
 
 If the user answers in the terminal instead, that reply is the answer: treat it as AskUserQuestion's "Other" for the questions it covers.
 
@@ -80,15 +82,16 @@ If the user answers in the terminal instead, that reply is the answer: treat it 
 `answer.json` holds AskUserQuestion's result shape; the caller consumes it unchanged:
 
 ```json
-{ "answers": { "Which layout?": "Dense list (Recommended)", "Which states?": "Empty, Overdue banner" },
+{ "screen": "invoices-layout.html",
+  "answers": { "Which layout?": "Dense list (Recommended)", "Which states?": "Empty, Overdue banner" },
   "annotations": { "Which states?": { "notes": "skip loading" } }, "timestamp": 1791819100000 }
 ```
 
-A multiSelect answer joins labels with `", "` in screen order. A question with no pick but a note is answered by the note. Every note is also an annotation. If `server-stopped` appeared instead (idle timeout, owner exited), there is no answer: ask in the terminal.
+A multiSelect answer joins labels with `", "` in screen order. A question with no pick but a note is answered by the note. Every note is also an annotation. If the loop ended any other way (`server-stopped`: idle timeout or owner exited; or the session directory is gone), there is no answer: ask in the terminal.
 
 ### 5. Clean up
 
-Push a waiting screen if the companion stays in use (brainstorm's convention), or stop it: `bash <plugin lib>/brainstorm-server/stop-server.sh <session dir>` (the parent of `screen_dir`). A new screen deletes the previous `answer.json`, so one session can put several decisions in turn.
+Push a waiting screen if the companion stays in use (brainstorm's convention), or stop it: `bash <plugin lib>/brainstorm-server/stop-server.sh <session dir>` (the parent of `<screen_dir>`). A new screen deletes the previous `answer.json`, so one session can put several decisions in turn.
 
 ## The `visualQuestions` setting
 
@@ -104,6 +107,7 @@ Where a skill would call AskUserQuestion and an option has a visual payload (fea
 - [ ] 1–4 questions, 2–4 options each, recommended first, question text and labels verbatim in `data-question` / `data-choice`
 - [ ] Previews are self-contained: no `<script>`, no http(s) URLs
 - [ ] The user got the full URL with `?key=`
+- [ ] The wait loop matched this screen's name and also ends when the session directory is gone
 - [ ] The result came from `answer.json` (or the user's terminal reply), never retyped from memory
 - [ ] Companion stopped, or left on a waiting screen when the caller keeps using it
 

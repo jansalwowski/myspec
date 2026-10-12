@@ -67,6 +67,13 @@
     "work-isolation.md": {
       "type": "overwrite",
       "dest": ".claude/rules/work-isolation.md"
+    },
+    "visual-questions.md": {
+      "type": "overwrite",
+      "dest": ".claude/rules/visual-questions.md",
+      "when": {
+        "visualQuestions": "auto"
+      }
     }
   },
   "removed": {

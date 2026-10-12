@@ -113,8 +113,14 @@ MD
     _copy_doc "$PLUGIN_ROOT/framework-files/work-isolation.md" "$ai/work-isolation.md"
   fi
 
+  # A rule whose manifest entry carries `when` installs only while its
+  # setting holds; myspec_init sets none, so those stay out (a fixture that
+  # turns one on copies it itself).
   local rule
   for rule in "$PLUGIN_ROOT"/framework-files/rules/*.md; do
+    if node -e 'const m=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.exit(((m.rules||{})[process.argv[2]]||{}).when?0:1)' "$manifest" "$(basename "$rule")"; then
+      continue
+    fi
     _copy_doc "$rule" ".claude/rules/$(basename "$rule")"
   done
   printf '.claude/state/\n' > .gitignore

@@ -76,7 +76,7 @@ bash <plugin lib>/brainstorm-server/start-server.sh \
 
 Use `--url-host` to control what hostname is printed in the returned URL JSON.
 
-**Custom browser launcher:** set `BRAINSTORM_OPEN_CMD` to the command that opens a URL (`firefox`, `flatpak run org.mozilla.firefox`, `node "/path/capture.js"`) when `--open`'s platform launcher does not apply. The server appends the URL as the last argument and runs the command without a shell: quotes group arguments, and shell metacharacters are not interpreted.
+**Custom browser launcher:** set `BRAINSTORM_OPEN_CMD` to the command that opens a URL (`firefox`, `flatpak run org.mozilla.firefox`, `node "/path/capture.js"`) when `--open`'s platform launcher does not apply. The server appends the URL as the last argument and runs the command without a shell: quotes group arguments (`""` is an empty one), a backslash escapes the next character, and nothing else is interpreted. A shell builtin is not a command on its own: on Windows use `cmd /c start ""`. A value that cannot be parsed, or a launch that fails, is logged to the server's stderr.
 
 ## The Loop
 
@@ -232,7 +232,7 @@ The frame template provides these CSS classes for your content:
 
 ## Decision screens
 
-When a screen asks the user to decide (pick a layout, tick the states to build) rather than react, give it a Submit button: the answer arrives as `$STATE_DIR/answer.json` in AskUserQuestion's result shape, with no terminal round-trip. `skills/visualize-options/SKILL.md` has the markup contract (`data-question`, `data-choice` with no `onclick`, `textarea[data-note]`, `button[data-submit]`, `.preview` for a phone-width toggle). Pushing a new screen deletes the previous `answer.json`.
+When a screen asks the user to decide (pick a layout, tick the states to build) rather than react, give it a Submit button: the answer arrives as `$STATE_DIR/answer.json` in AskUserQuestion's result shape, with no terminal round-trip. `skills/visualize-options/SKILL.md` has the markup contract (`data-question`, `data-choice` with no `onclick`, `textarea[data-note]`, `button[data-submit]`, `.preview` for a phone-width toggle). The answer names the screen it came from (`"screen": "<file>.html"`), and the server refuses a Submit from a screen that is no longer the newest, so wait for your screen's name, not just for the file. Pushing a new screen deletes the previous `answer.json`.
 
 ## Browser Events Format
 

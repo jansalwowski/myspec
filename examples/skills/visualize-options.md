@@ -28,12 +28,13 @@ A Flask invoicing app with myspec initialized. Planning the invoices page, the a
 
 1. **Companion** — none running, so `bash <plugin lib>/brainstorm-server/start-server.sh --open`; the agent keeps `url`, `screen_dir` and `state_dir`.
 2. **Screen** — writes `screen_dir/invoices-layout.html`, a fragment with two `data-question` sections. Layout uses `.cards`, the recommended "Dense list" first with a badge, each card holding a `.preview` (three realistic invoice rows built from `mock-nav` and inline styles) and metrics chips (`~1,500 DOM elements at 200 invoices`, `14 per screen`). States uses `.options data-multiselect` with three text rows and no previews. A Submit button closes the screen. The full fragment is the test fixture `lib/tests/fixtures/brainstorm-server/decision.html`.
-3. **Hand-off** — the push opens the browser. The agent sends the full URL with its `?key=…`, says "2 questions: layout, states", starts the background wait on `answer.json`, and ends its turn.
+3. **Hand-off** — the push opens the browser. The agent sends the full URL with its `?key=…`, says "2 questions: layout, states", starts the background wait for an `answer.json` naming `invoices-layout.html`, and ends its turn.
 4. **User** — toggles both previews to Phone 412, picks Card grid, ticks Empty and Filtered to zero with the keyboard, writes "skip the loading state" in the States note, presses Submit. The page says "Submitted. Return to the terminal".
 5. **Result** — the wait exits and prints `answer.json`:
 
    ```json
    {
+     "screen": "invoices-layout.html",
      "answers": {
        "Which layout should the invoices page use?": "Card grid",
        "Which states need their own mockup?": "Empty, Filtered to zero"
