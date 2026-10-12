@@ -104,6 +104,8 @@ A browser-based companion for showing mockups, diagrams, and visual options duri
 - **Use the browser** for content that IS visual — mockups, wireframes, layout comparisons, architecture diagrams
 - **Use the terminal** for content that is text — requirements questions, conceptual choices, tradeoff lists, scope decisions
 
+When the visual question is a decision (pick one of these layouts, then move on) rather than exploration, use `/myspec:visualize-options`: it pushes a decision screen to the same companion and returns the pick in AskUserQuestion's shape once the user presses Submit.
+
 If they agree to the companion, read the detailed guide before proceeding:
 [visual-companion.md](visual-companion.md) (OPTIONAL — only when visual companion is accepted). It names the server scripts under `<plugin lib>`, which is `${CLAUDE_PLUGIN_ROOT}/lib`, resolved here. The Bash tool does not export the variable, so use this path.
 

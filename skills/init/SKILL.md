@@ -174,7 +174,8 @@ Ask:
 5. **Workflow** — development workflow definition (`setup` with blueprint `workflow`)
 6. **Pre-flight** — project-specific pre-flight checks (`setup` with blueprint `pre-flight`)
 7. **Anti-patterns** — project-specific anti-patterns (`setup` with blueprint `anti-patterns`)
-8. **Skip** — do it manually later with the `setup` skill
+8. **Visual questions** — layout, UI-state and design questions shown in the browser instead of ASCII; uses more tokens (`setup` with blueprint `visual-questions`)
+9. **Skip** — do it manually later with the `setup` skill
 
 Which would you like? Enter numbers separated by commas, `all`, or `skip`."
 

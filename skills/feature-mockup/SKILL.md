@@ -85,6 +85,7 @@ Two sources, both optional — configure with `/myspec:setup mockup`:
    - **Contested surfaces** — where the spec admits multiple plausible IA paths — marked `(variants?)`
 
    After the user confirms the inventory, follow up with one `AskUserQuestion` covering only the `(variants?)` surfaces: "Build single / A+B / A+B+C for {Surface}?" Default = single. Confirm "go".
+5. **Variant pick.** Once a surface's variants are built and green, ask which one wins through `/myspec:visualize-options`, not AskUserQuestion: one option per variant, its preview an HTML rendering of that variant's layout.
 
 ### Phase 2 — Build (per-file loop)
 

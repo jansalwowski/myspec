@@ -140,6 +140,14 @@ When `{aiDir}/memory/` exists. Since v1.23.0 the index tables are generated from
 
 If `node` is unavailable, print: "Memory health check skipped — node not found. Run `node \"${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs\" --check` when it is available; ID allocation is blocked until the doctor passes."
 
+### Step 3.65: Visual questions
+
+Read `.myspec.json` `visualQuestions`:
+
+- **Absent** → the project has never been asked. Run the `setup` skill with blueprint `visual-questions`; its question carries the token heads-up, and either answer records the key, so this is asked once per project.
+- **`auto`** → copy the plugin's `templates/rules/visual-questions.md` over `.claude/rules/visual-questions.md`, so the rule follows the plugin. Report it under `Updated` when the content changed.
+- **`off`** → nothing. Delete `.claude/rules/visual-questions.md` if it is still there.
+
 ### Step 3.7: Verify the install
 
 Everything above wrote files; this reads them back. Run the full doctor from the project root:
@@ -235,7 +243,7 @@ Do NOT modify the file — this is advisory only.
 - **Never copy a hook or lib helper into the project.** Since 3.0 they run from the plugin, and a copy under `.claude/` is dead weight at best and a second, stale run of a gate at worst (a copy is moved to `.claude/state/retired-3.0/`, never written). Only the `files` and `rules` blocks exist, and both carry `${aiDir}` as a placeholder to substitute.
 - Never overwrite a file whose `frameworkFiles[...].pinned` is set, and never add or clear a pin yourself — except the `hooks/*` and `lib/*` pins the `3.0.0-plugin-hooks` migration drops, which it reports
 - Never overwrite content after `<!-- myspec:framework-end -->` in a `marker-merge` file
-- Never modify files not listed in `manifest.json`, with three exceptions this skill owns: the `hooks` key of `.claude/settings.json` (framework entries removed, nothing added), `.claude/state/retired-3.0/` (where the migration moves the retired copies), and the frontmatter `status:` line of feature docs the `3.1.0-doc-status` migration rewrites
+- Never modify files not listed in `manifest.json`, with four exceptions this skill owns: `.claude/rules/visual-questions.md` and the `.myspec.json` `visualQuestions` key (Step 3.65, through the `visual-questions` blueprint), the `hooks` key of `.claude/settings.json` (framework entries removed, nothing added), `.claude/state/retired-3.0/` (where the migration moves the retired copies), and the frontmatter `status:` line of feature docs the `3.1.0-doc-status` migration rewrites
 - Never update `.myspec.json` project fields (`name`, `techStack`) or `aiDir`. Keys a migration retires are deleted only by it: `codeReview` by `3.0.0-code-review`, `reuseAudit` by `3.0.0-reuse-audit`, `project.description` by `3.0.0-schema-v2`. A pin's `hash` and `upstreamHash` are written only by `pin-reconcile.mjs` (`--backfill`, `--record`)
 - Never run a migration whose id is already in `.myspec.json` `migrations`; record each one the moment it completes
 - If a source file is missing from the plugin, skip it and warn the user — do not delete the destination
@@ -250,6 +258,7 @@ After running the skill:
 - [ ] Every `manifest.json` entry processed with its declared strategy (`overwrite` / `marker-merge`)
 - [ ] Every entry carrying `renamedFrom` checked before applying: destination migrated and its `frameworkFiles` key renamed (kept even when the apply could not merge), a dead old key dropped, or the both-exist case offered a merge (or deletion, for a marker-less old file)
 - [ ] Every `marker-merge` destination without an end marker offered replace / prepend / pin, and the answer applied
+- [ ] `visualQuestions` handled: asked once through the `visual-questions` blueprint when absent, the rule refreshed when `auto`, the rule absent when `off`
 - [ ] Every `removed` entry deleted (or kept when pinned) and, for hooks, unwired from `settings.json`
 - [ ] Entries pinned in `.myspec.json` skipped and listed in the summary; `pin-reconcile.mjs` run, every `drop`, `review` and `diverged` verdict offered its choice, every `unrecorded` pin backfilled, nothing decided alone
 - [ ] `templates/*` entries written to `{aiDir}/.templates/` (no `{aiDir}/templates/` created)
