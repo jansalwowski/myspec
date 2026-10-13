@@ -38,6 +38,13 @@ rm "$TMP/old/framework-files/work-isolation.md"
 if out=$(scaffold "$TMP/old" "$TMP/ws-old"); then ok "a tree without work-isolation.md scaffolds"; else nok "a tree without work-isolation.md scaffolds" "$out"; fi
 if [ ! -e "$TMP/ws-old/.ai/work-isolation.md" ]; then ok "nothing is invented for the older tree"; else nok "nothing is invented for the older tree"; fi
 
+# git_commit_all: the agent starts off main (#352 asks before doc writes on
+# the default branch), and main follows every fixture commit.
+(cd "$TMP/ws-head" && bash -c '. "$1/evals/_fixtures/lib.sh" && git_commit_all one && echo x > x.txt && git_commit_all two' _ "$TMP/head") > /dev/null 2>&1
+br=$(git -C "$TMP/ws-head" symbolic-ref --short HEAD)
+if [ "$br" = feat/eval-work ]; then ok "fixture commits leave HEAD off main"; else nok "fixture commits leave HEAD off main" "on: $br"; fi
+if [ "$(git -C "$TMP/ws-head" rev-parse main)" = "$(git -C "$TMP/ws-head" rev-parse HEAD)" ]; then ok "main follows every fixture commit"; else nok "main follows every fixture commit"; fi
+
 echo
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]

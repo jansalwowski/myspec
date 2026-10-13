@@ -163,7 +163,10 @@ copy_tree() {
   cp -R "$src/." .
 }
 
-# git_commit_all <message> — initialise a repo on main (if needed) and commit everything.
+# git_commit_all <message> — initialise a repo on main (if needed) and commit
+# everything. The agent starts on feat/eval-work, with main kept at the same
+# commit: on main, the default branch, require-isolation-decision.sh asks
+# before doc writes too (#352), and the eval sandbox cannot answer.
 git_commit_all() {
   if [ ! -d .git ]; then
     git init -q -b main .
@@ -172,4 +175,8 @@ git_commit_all() {
   fi
   git add -A
   git commit -qm "$1"
+  case "$(git symbolic-ref --short HEAD)" in
+    main) git checkout -q -b feat/eval-work ;;
+    feat/eval-work) git branch -f main HEAD ;;
+  esac
 }
