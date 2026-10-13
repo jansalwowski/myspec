@@ -38,7 +38,8 @@
 #      (same cases, old plugin): the whole suite for models that need it,
 #      single cases whose inputs changed for the rest. After an
 #      evals/_fixtures/ change, the worktree's workspace hashes decide which
-#      cases those are.
+#      cases those are. A case new since the baseline whose fixture cannot be
+#      built on the previous tag (every run a scaffold failure) is left out.
 #   4. compare.mjs previous vs HEAD         → report, <out>/compare.json
 #   5. stage baselines and the trend line in <out>/staged/. Nothing touches
 #      quality/ until --record.
@@ -316,6 +317,19 @@ make_prev_worktree() {
     || die "cannot copy evals/ into the $PREV_TAG worktree"
 }
 
+# only_scaffold_failed <results-dir>: every run of every result under it ended
+# in a fixture scaffold failure (none scored, none failed for another reason).
+only_scaffold_failed() {
+  node -e '
+    const fs = require("fs"), path = require("path");
+    const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? walk(path.join(d, e.name)) : e.name === "aggregate-result.json" ? [path.join(d, e.name)] : []);
+    const runs = walk(process.argv[1]).flatMap((f) =>
+      JSON.parse(fs.readFileSync(f, "utf8")).cases.flatMap((c) => Object.values(c.arms ?? {}).flat()));
+    process.exit(runs.length && runs.every((r) => /^scaffold failed/.test(String(r.error ?? ""))) ? 0 : 1);
+  ' "$1" 2>/dev/null
+}
+
 check_baseline() {
   node "$SCRIPT_DIR/baseline.mjs" check "$PREV_FILE" "$OUT/head-baseline.json" --models "$MODELS" \
     --evals-dir "$REPO_ROOT/evals" --cc-match "$CC_MATCH" ${CASE_GLOB:+--case "$CASE_GLOB"} "$@"
@@ -349,7 +363,18 @@ if [ -n "$rerun_models" ] || { [ -n "$rerun_cases" ] && [ -n "$reuse_models" ]; 
     while IFS= read -r c; do
       [ -n "$c" ] || continue
       echo "release-check: $PREV_TAG, changed case $c: $reuse_models"
-      run_suite "$OUT/prev/case-$c" "$reuse_models" "$WT" "$c" || die "$PREV_TAG eval run of $c failed (run.sh exit $?); no verdict"
+      run_suite "$OUT/prev/case-$c" "$reuse_models" "$WT" "$c" && continue
+      rc=$?
+      # A case added since the previous tag can need what only HEAD ships (a
+      # framework file its fixture copies). Every run failing in its scaffold
+      # is that, not an outage: leave the case out ("only in new").
+      if printf '%s\n' "$decisions" | grep -qxF "RERUN-CASE $c not in the baseline" \
+          && only_scaffold_failed "$OUT/prev/case-$c"; then
+        echo "release-check: $c is new since $PREV_TAG and its fixture cannot be built there; left out of the comparison"
+        rm -rf "$OUT/prev/case-$c"
+        continue
+      fi
+      die "$PREV_TAG eval run of $c failed (run.sh exit $rc); no verdict"
     done <<< "$rerun_cases"
   fi
   cleanup
