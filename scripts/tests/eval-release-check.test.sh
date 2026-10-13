@@ -77,7 +77,8 @@ if (a[0] === 'plugin' && a[1] === 'eval') {
     schemaVersion: 1, claudeVersion: env.STUB_CC_VERSION || '2.1.284', durationSeconds: 20, partial: false,
     suite: { modelOverride: opt('--model'), judgeModel: 'sonnet' },
     cases: cases.map((name) => ({ name, graders: [], aggregates: { score: q },
-      arms: { with: Array.from({ length: runsOf(name) }, () => ({ score: q, costUsd: 0.1, judgeCostUsd: 0, durationSeconds: 5, error: null,
+      arms: { with: Array.from({ length: runsOf(name) }, () => ({ score: q, costUsd: 0.1, judgeCostUsd: 0, durationSeconds: 5,
+        error: !isHead && name === env.STUB_SCAFFOLD_FAIL_PREV ? 'scaffold failed (exit 1): cp: framework-files/x.md: No such file or directory' : null,
         graders: [{ name: 'g', passed: q >= 1, scored: true }] })) } })),
   }));
   process.exit(0);
@@ -214,6 +215,19 @@ expect_eq "staged previous baseline merges the rerun case into the stored ones" 
 record casechg
 rc_run casechg2 --version 1.2.0 --models sonnet --runs 2
 expect_eq "after recording, the changed case is reused" "$(grep -c '^EVAL PREV' "$STUB_LOG")" 0
+
+echo "# a case new since the baseline whose fixture needs what only HEAD ships"
+mkdir -p "$REPO/evals/case-g" && echo "prompt g" > "$REPO/evals/case-g/prompt.md"
+STUB_SCAFFOLD_FAIL_PREV=case-g rc_run newscaffold --version 1.2.0 --models sonnet --runs 2
+expect_eq "exit 0: the scaffold failure on the previous tag is not an outage" "$RC" 0
+expect_has "the case is named as left out" "$OUTPUT" "case-g is new since v1.1.0 and its fixture cannot be built there; left out of the comparison"
+expect_has "it is compared as only in new" "$OUTPUT" "only in new (excluded): case-g"
+echo "prompt b, reworded again" > "$REPO/evals/case-b/prompt.md"
+STUB_SCAFFOLD_FAIL_PREV=case-b rc_run oldscaffold --version 1.2.0 --models sonnet --runs 2
+expect_eq "a case already in the baseline failing its scaffold is still exit 2" "$RC" 2
+expect_has "and says why" "$OUTPUT" "v1.1.0 eval run of case-b failed"
+echo "prompt b, reworded" > "$REPO/evals/case-b/prompt.md"
+rm -rf "$REPO/evals/case-g"
 echo "lib v2" > "$REPO/evals/_fixtures/lib.sh"
 rc_run fixchg --version 1.2.0 --models sonnet --runs 2
 expect_has "a _fixtures/ change compares the previous tag's fixture workspaces first" "$OUTPUT" "baseline WORKSPACES evals/_fixtures/ changed since the baseline"
