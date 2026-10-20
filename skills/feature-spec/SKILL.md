@@ -10,6 +10,7 @@ tags: [feature, specification, planning, documentation]
 
 - `/myspec:feature-spec {feature}` — the full workflow below.
 - `/myspec:feature-spec {feature} scenarios` or `… seed-data` — a revisit of an existing feature. Parse this before anything else: when the second argument is one of these, `${aiDir}/features/{feature}/spec.md` must already exist (if it does not, stop and say so — the full workflow creates it); skip to Step 6, do only the named part, and never re-create or rewrite spec.md, dependencies.md or the manifest entry. Then Step 7 for the new file only.
+- `--review` / `--no-review` — answers Step 1's auto-review question in advance.
 
 ## Workflow
 
@@ -17,6 +18,15 @@ tags: [feature, specification, planning, documentation]
    - Ask the user about the feature concept
    - Identify dependencies from `${aiDir}/features/index.yaml`
    - Check for related existing features
+   - Ask whether to review the spec as soon as it is written, in the same `AskUserQuestion` call as any concept questions, unless `--review` / `--no-review` already answered it. Not every spec needs a review before the user reads it, so the user decides per run:
+     ```
+     question: "Run the spec review automatically once the draft is written?"
+     header:   "Auto-review"
+     options:
+       - "Yes, review before showing me (Recommended)" → Step 5 runs feature-spec-review in a subagent, you see the reviewed draft
+       - "No, show me the draft first"                  → Step 5 presents the draft; review stays a separate step
+     ```
+     Under autopilot ([`_shared/autopilot.md`](../_shared/autopilot.md)) take the recommended option. When the user only asked for the draft without questions, take "No" and say so in one line: they plan to read it first.
 
 2. **Create Spec Document**
    Create `${aiDir}/features/{feature-name}/spec.md` with:
@@ -60,7 +70,8 @@ Required sections:
 ```
 
 5. **Present for Review**
-   Show the created documents and ask for approval.
+   - **Auto-review off:** show the created documents and ask for approval.
+   - **Auto-review on:** invoke `/myspec:feature-spec-review {feature} --from-author` before showing anything. Its reviewer subagent gets only the file paths, never this conversation. Its gates replace this step's approval: the user sees the findings with `[auto-fix]` fixes applied, decides the `[requires confirmation]` fixes, and answers whether to mark the spec `approved`. Then continue here at Step 6.
 
 6. **Offer Scenarios and Seed Data** [OPTIONAL]
    Once the spec is approved, offer both; the user may take either, both or
@@ -112,7 +123,8 @@ Required sections:
 ## Verification Checklist
 
 - [ ] `${aiDir}/features/{feature}/spec.md` created with valid YAML frontmatter
-- [ ] `status: draft` field present in frontmatter
+- [ ] `status: draft` field present in frontmatter (`approved` only when the auto-review passed and the user said yes)
+- [ ] Auto-review question asked or answered by argument (Step 1); when on, feature-spec-review ran with `--from-author`
 - [ ] All required sections present: Overview, Goals, User Stories, Acceptance Criteria, Out of Scope, Open Questions
 - [ ] `${aiDir}/features/{feature}/dependencies.md` created
 - [ ] Entry added to `${aiDir}/features/index.yaml`
@@ -123,5 +135,5 @@ Required sections:
 
 ## Integration
 
-**Next** [REQUIRED — owns the draft → approved transition]: `/myspec:feature-spec-review` — validate spec before proceeding to technical design
+**Next** [REQUIRED — owns the draft → approved transition]: `/myspec:feature-spec-review` — validate spec before proceeding to technical design. When the auto-review already approved the spec, offer its next step instead: `/myspec:cross-spec-validation` (Recommended) or `/myspec:feature-tech-spec`
 **Next (large features)** [OPTIONAL]: `/myspec:feature-decompose` — split into sub-features before feature-spec-review

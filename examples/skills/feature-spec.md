@@ -7,6 +7,7 @@ Creates `spec.md` + `dependencies.md` for a new feature, and adds a manifest ent
 - [Greenfield — small self-contained feature](#greenfield--small-self-contained-feature)
 - [Feature with cross-feature dependencies](#feature-with-cross-feature-dependencies)
 - [Skill recommends decomposing first](#skill-recommends-decomposing-first)
+- [Auto-review on — the user sees a reviewed draft](#auto-review-on--the-user-sees-a-reviewed-draft)
 
 ---
 
@@ -32,8 +33,9 @@ The skill reads `ai/features/index.yaml`, confirms the slug is unused, then asks
 > 2. **Limits** — is there a max number of favorites per user?
 > 3. **UI placement** — star icon in the report list row, the report header, or both?
 > 4. **Out of scope** — sharing a favorite list with other users? Tagging?
+> 5. **Auto-review** — run the spec review automatically once the draft is written?
 
-**User**: per-account; no limit; star in list row only; sharing/tagging out of scope.
+**User**: per-account; no limit; star in list row only; sharing/tagging out of scope; no auto-review, show me the draft first.
 
 The skill drafts `spec.md`:
 
@@ -88,7 +90,7 @@ Three files written, manifest updated. The commit prompt stages `scenarios.md` a
 
 ### Why this example matters
 
-The simplest path: 4 questions, 1 draft, 1 approval. No back-and-forth, no decomposition signal. Most small features look like this. The scenarios step is an offer, not a gate: declining seed data costs nothing, and the `seed-data` argument picks it up later without redoing the spec.
+The simplest path: 5 questions, 1 draft, 1 approval. No back-and-forth, no decomposition signal. Most small features look like this. The scenarios step is an offer, not a gate: declining seed data costs nothing, and the `seed-data` argument picks it up later without redoing the spec.
 
 ---
 
@@ -246,3 +248,44 @@ Umbrella `spec.md` + `dependencies.md` written. The skill's hand-off line:
 - **Routing, not just authoring** — when the skill recognizes a poor fit, it offers a different path instead of plowing ahead. Saves the user from a 30-criterion spec that no human will read.
 - **The umbrella pattern** is intentional: keeps the cross-cutting context in one place, defers the per-capability detail until decomposition. See [flows/feature-decomposition.md](../flows/feature-decomposition.md) for the rest of this pipeline.
 - **Spec scope is detected from input shape**, not feature size. A small feature with 10 acceptance criteria is fine. A feature with 5 distinct capability areas is the trigger for decomposition.
+
+---
+
+## Auto-review on — the user sees a reviewed draft
+
+The user wants the review done before they read the spec.
+
+### Invocation
+
+```
+/myspec:feature-spec invoice-reminders --review
+```
+
+`--review` answers the auto-review question, so Step 1 asks only about the concept.
+
+### Skill flow
+
+The skill drafts `spec.md` and `dependencies.md` as usual, then runs `/myspec:feature-spec-review invoice-reminders --from-author` instead of showing them. The review dispatches a reviewer subagent with the file paths only. It never sees the conversation, so it reads the spec the way the tech-spec author will. It returns:
+
+```markdown
+| Severity | Dimension | Issue | File | Line(s) | Finding |
+|----------|-----------|-------|------|---------|---------|
+| High | Completeness | No failure state | spec.md | 22-30 | Nothing says what happens when the reminder email bounces |
+| Low | Clarity | Vague wording | spec.md | 14 | "shortly before" in Goals; REQ-001 says three days |
+```
+
+The Low fix is `[auto-fix]` and is applied at once. The High fix adds a requirement, so it is `[requires confirmation]`:
+
+> **Which fixes should I apply?** All (Recommended) / Critical+High / Individually / None
+
+**User**: All.
+
+The new requirement changed the spec's meaning, so the reviewer runs once more with the first findings attached. It finds nothing new. The review asks whether to mark the spec `approved`, the user says yes, and control returns to `feature-spec` for the scenarios offer and the commit.
+
+### Result
+
+One gate instead of two: the user read the spec once, after the review, and approved it in the same sitting. The hand-off offers `/myspec:cross-spec-validation` (Recommended) or `/myspec:feature-tech-spec`, not the review that already ran.
+
+### Why this example matters
+
+The review is opt-in per run. A small spec the user wants to read first takes "No" and keeps the old two-step flow. When it runs, it runs in a subagent: a reviewer that shares the author's context reads the spec as the author meant it and misses what the page leaves out.

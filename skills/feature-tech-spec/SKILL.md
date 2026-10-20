@@ -9,12 +9,26 @@ tags: [technical, specification, architecture, implementation]
 ## Prerequisites
 - `${aiDir}/features/{feature}/spec.md` must exist with `status: approved`
 
+## Arguments
+
+- `/myspec:feature-tech-spec {feature}` — the workflow below.
+- `--review` / `--no-review` — answers Step 1's auto-review question in advance.
+
 ## Workflow
 
 1. **Read the Product Spec**
    - Read `${aiDir}/features/{feature}/spec.md`
    - Note the current `spec_version`
    - Understand all requirements and acceptance criteria
+   - Ask whether to review the tech-spec as soon as it is written, unless `--review` / `--no-review` already answered it:
+     ```
+     question: "Run the tech-spec review automatically once the draft is written?"
+     header:   "Auto-review"
+     options:
+       - "Yes, review before showing me" → Step 5 runs feature-tech-spec-review in a subagent, you see the reviewed draft
+       - "No, show me the draft first"    → Step 5 presents the draft; review stays a separate step
+     ```
+     Mark `(Recommended)` on the answer the user gave `feature-spec`'s auto-review question earlier in this session, and on "Yes" when there was none. Still ask: the earlier answer is a default, not a decision for this document. Under autopilot ([`_shared/autopilot.md`](../_shared/autopilot.md)) take the recommended option. When the user only asked for the draft without questions, take "No" and say so in one line.
 
 2. **Research Existing Patterns**
    - Examine similar implementations in the codebase
@@ -136,12 +150,14 @@ Document key architectural decisions as ADRs:
    - All requirements are addressed
 
 5. **Present for Review**
-   Show the tech spec and ask for approval before implementation.
+   - **Auto-review off:** show the tech spec and ask for approval before implementation.
+   - **Auto-review on:** invoke `/myspec:feature-tech-spec-review {feature} --from-author` before showing anything. Its reviewer subagent gets only the file paths, never this conversation. Its gates replace this step's approval: the user sees the findings with small fixes applied, decides the `[requires confirmation]` fixes, and answers whether to mark the tech-spec `approved`. Then recommend the next step under Integration.
 
 ## Verification Checklist
 
 - [ ] `${aiDir}/features/{feature}/tech-spec.md` created with valid YAML frontmatter
 - [ ] `based_on_spec_version` matches `spec_version` in spec.md
+- [ ] Auto-review question asked or answered by argument (Step 1); when on, feature-tech-spec-review ran with `--from-author`
 - [ ] Every acceptance criterion from spec.md has at least one implementation step
 - [ ] All implementation steps have dependency notes where applicable
 - [ ] Implementation Steps is a numbered outline with no `[ ]`/`[x]` checkboxes
@@ -155,4 +171,5 @@ Document key architectural decisions as ADRs:
 ## Integration
 
 **Called by:** `/myspec:feature-spec-review` or `/myspec:cross-spec-validation` (after spec is approved and optionally cross-validated)
-**Next:** `/myspec:feature-plan` — REQUIRED: create execution-ready implementation plan from this tech-spec
+**Next:** `/myspec:feature-tech-spec-review` — REQUIRED when the auto-review was off: it owns the draft → approved transition
+**Next:** `/myspec:feature-plan` — REQUIRED: create execution-ready implementation plan from this tech-spec, once the tech-spec is approved

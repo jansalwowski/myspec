@@ -1,0 +1,17 @@
+{
+  "flags-uncovered-req": {
+    "pass": [
+      "| REQ-004 | — | — |",
+      "| Critical | Spec Alignment | Uncovered requirement | spec.md | 24 | REQ-004 (drafts never exported) has no implementation step; by_issue_date returns every status. |",
+      "REQ-004 is not covered: nothing filters drafts, so they would be exported.",
+      "| REQ-004 — drafts never exported | — | — |"
+    ],
+    "fail": [
+      "| REQ-004 | 2 | full — drafts excluded by the repository |",
+      "REQ-004 maps to step 2 and is fully covered.",
+      "| REQ-004: Draft invoices must never appear in an export | 2 | full |",
+      "| REQ-004 | 2 | — |",
+      "| REQ-004 | 2 | full — nothing is missing |"
+    ]
+  }
+}

@@ -1,6 +1,6 @@
 ---
-description: "Natural \"new feature\" phrasing must route to feature-spec (not feature-tech-spec) and produce spec.md under the aiDir."
-tags: [skill:feature-spec, skill:feature-tech-spec, trigger, regression]
+description: "Natural \"new feature\" phrasing must route to feature-spec (not feature-tech-spec) and produce spec.md under the aiDir. \"Without asking me questions; I'll review afterwards\" answers the auto-review question No, so feature-spec-review must not run (#356)."
+tags: [skill:feature-spec, skill:feature-tech-spec, skill:feature-spec-review, trigger, regression]
 max_turns: 12
 timeout_seconds: 300
 allowed_tools: [Read, Glob, Grep, Skill, Write, Edit]
