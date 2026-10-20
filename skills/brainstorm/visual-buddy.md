@@ -55,7 +55,7 @@ Save both `screen_dir` (where you write HTML) and `state_dir` (where you read th
 
 **Finding connection info:** The server writes its startup JSON to `$STATE_DIR/server-info`. If you launched the server in the background and didn't capture stdout, read that file to get the URL and port. When using `--project-dir`, check `<project>/.myspec/brainstorm/` for the session directory.
 
-**Note:** Pass the project root as `--project-dir` so screens persist in `.myspec/brainstorm/` and survive server restarts. Without it, files go to `/tmp` and get cleaned up. Remind the user to add `.myspec/` to `.gitignore` if it's not already there.
+**Note:** Pass the project root as `--project-dir` so screens persist in `.myspec/brainstorm/` and survive server restarts. Without it, files go to `/tmp` and get cleaned up. The start script writes a `.gitignore` of `*` into `.myspec/brainstorm/`, so the screens never show up as untracked files.
 
 **Windows behavior:** the script auto-detects a Windows-like shell (MSYS2/Git Bash/Cygwin) and switches to foreground mode, which blocks the tool call. Run it with `run_in_background: true` on the Bash tool call so the server survives across turns, then read `$STATE_DIR/server-info` on the next turn to get the URL.
 

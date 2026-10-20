@@ -41,7 +41,7 @@ Both need `node` on `PATH`. Visual Buddy costs tokens: every option preview and 
 
 ## Where the files live
 
-By default a session lives in a temporary directory and is deleted when it stops. Brainstorm may start it with `--project-dir`, which keeps the screens in `.myspec/brainstorm/<session>/` in your project so they survive restarts and stay for later reference. Add `.myspec/` to `.gitignore`. The work-isolation hook treats `.myspec/` as scratch, so writing screens there needs no develop/worktree decision.
+By default a session lives in a temporary directory and is deleted when it stops. Brainstorm may start it with `--project-dir`, which keeps the screens in `.myspec/brainstorm/<session>/` in your project so they survive restarts and stay for later reference. The start script makes that directory ignore itself (a `.gitignore` of `*`), so nothing there is ever committed by accident. The work-isolation hook treats `.myspec/brainstorm/` as scratch, so writing screens there needs no develop/worktree decision.
 
 ## Remote machines, containers, other browsers
 
