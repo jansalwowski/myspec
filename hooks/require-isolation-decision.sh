@@ -123,6 +123,18 @@ MAIN_CHECKOUT_ONLY_PREFIXES=(
   "$AI_DIR/memory/sessions/"
 )
 
+# Plugin-owned scratch that is never gated, whatever the session answered and
+# on any branch, protected ones included (#360). Nothing here is shipped
+# source: it is session output a plugin tool writes and a browser reads.
+#
+#   .myspec/   the visual companion's --project-dir session directory
+#              (screens under .myspec/brainstorm/<session>/content/). Asking
+#              develop-vs-worktree for a throwaway screen, or blocking it
+#              after a worktree answer, only pushes the agent to /tmp.
+SCRATCH_PREFIXES=(
+  ".myspec/"
+)
+
 case "$FILE_PATH" in
   /*) ABS_PATH="$FILE_PATH" ;;
   *)  ABS_PATH="$CWD_ROOT/$FILE_PATH" ;;
@@ -153,8 +165,9 @@ REL_PATH="${ABS_PATH#"$REPO_ROOT"/}"
 [ "$REL_PATH" != "$ABS_PATH" ] || exit 0
 
 # Checked BEFORE any mode logic: these paths have exactly one correct location,
-# so no isolation answer can redirect them. See the list's comment above.
-for PREFIX in "${MAIN_CHECKOUT_ONLY_PREFIXES[@]}"; do
+# so no isolation answer can redirect them; the scratch paths are never gated.
+# See the lists' comments above.
+for PREFIX in "${MAIN_CHECKOUT_ONLY_PREFIXES[@]}" "${SCRATCH_PREFIXES[@]}"; do
   case "$REL_PATH" in
     "$PREFIX"*) exit 0 ;;
   esac

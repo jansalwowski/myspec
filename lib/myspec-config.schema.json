@@ -239,7 +239,7 @@
       "type": ["boolean"],
       "default": false,
       "issue": ["#329"],
-      "description": "Read by require-isolation-decision.sh: ask the develop-vs-worktree question for edits under aiDir, .claude/, docs/ and the root agent files too, which are otherwise exempt from it, on every branch. On a protected branch (isolation.protectedBranches) they are asked whatever this says. The paths pinned to the main checkout stay exempt."
+      "description": "Read by require-isolation-decision.sh: ask the develop-vs-worktree question for edits under aiDir, .claude/, docs/ and the root agent files too, which are otherwise exempt from it, on every branch. On a protected branch (isolation.protectedBranches) they are asked whatever this says. The paths pinned to the main checkout and the plugin scratch directory .myspec/ stay exempt."
     },
     "isolation.protectedBranches": {
       "file": "project",
