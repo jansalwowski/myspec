@@ -70,7 +70,7 @@ See [evals/README.md](evals/README.md) and the Quality gates section of [AGENTS.
 
 ## Visual Buddy
 
-When something is easier to see than to read (layouts to pick between, an architecture diagram, a graph, the images a spike just rendered), the agent can put it in **Visual Buddy**, a local browser tab beside the conversation. `/myspec:brainstorm` offers it when it helps; `/myspec:setup visual-questions` turns it on across every skill. Guide: [docs/visual-buddy.md](docs/visual-buddy.md).
+When something is easier to see than to read (layouts to pick between, an architecture diagram, a graph, the images a spike just rendered), the agent can put it in **Visual Buddy**, a local browser tab beside the conversation. `/myspec:brainstorm` offers it when it helps; `/myspec:setup visual-questions` turns it on across every skill. Guide with screenshots and examples: [Visual Buddy](https://jansalwowski.github.io/myspec/visual-buddy/).
 
 ## Skills Reference
 
@@ -88,7 +88,7 @@ When something is easier to see than to read (layouts to pick between, an archit
 | `/myspec:feature-spec-review` | Validate spec for completeness and consistency |
 | `/myspec:cross-spec-validation` | Check spec against related specs for contradictions and broken contracts |
 | `/myspec:feature-mockup` | Build spec-validation UI mockups under `${aiDir}/features/{feature}/mockups/` — technology-agnostic; stack config via `/myspec:setup mockup` ([examples](examples/skills/feature-mockup.md)) |
-| `/myspec:visualize-options` | Visual AskUserQuestion: one [Visual Buddy](docs/visual-buddy.md) screen with each option's preview side by side (phone-width toggle); Submit returns the pick in AskUserQuestion's shape. Show mode puts a diagram, graph or visual result on screen instead of a file path ([examples](examples/skills/visualize-options.md)) |
+| `/myspec:visualize-options` | Visual AskUserQuestion: one [Visual Buddy](https://jansalwowski.github.io/myspec/visual-buddy/) screen with each option's preview side by side (phone-width toggle); Submit returns the pick in AskUserQuestion's shape. Show mode puts a diagram, graph or visual result on screen instead of a file path ([examples](examples/skills/visualize-options.md)) |
 | `/myspec:feature-mockup-review` | Audit mockups for UX issues, scope creep, loose ends, missing states, and project hard-guard violations ([examples](examples/skills/feature-mockup-review.md)) |
 | `/myspec:feature-tech-spec` | Create technical design from approved spec |
 | `/myspec:feature-tech-spec-review` | Review tech-spec for implementability and pattern conformance |
@@ -115,7 +115,7 @@ When something is easier to see than to read (layouts to pick between, an archit
 | `/myspec:idea-intake` | Process new idea into priority queue |
 | `/myspec:idea-process` | Convert idea to feature specification |
 | **Utilities** | |
-| `/myspec:brainstorm` | Explore a problem space before committing to a spec; offers [Visual Buddy](docs/visual-buddy.md) for mockups, diagrams and visual results |
+| `/myspec:brainstorm` | Explore a problem space before committing to a spec; offers [Visual Buddy](https://jansalwowski.github.io/myspec/visual-buddy/) for mockups, diagrams and visual results |
 | `/myspec:root-cause-debugging` | Systematic 4-phase debugging methodology with 3-attempt escalation rule |
 | `/myspec:skill-verify` | Verify a skill file follows optimization guidelines |
 | `/myspec:backbone-sync` | Audit the project topology file against the repo in both directions — stale entries, undocumented workspace members and commands, git-backed liveness signals (`lib/backbone-audit/audit.mjs`) — then fix it. Refuses to run rather than half-read unsupported YAML, and names every check that could not run instead of reporting clean |

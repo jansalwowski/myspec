@@ -59,6 +59,10 @@ nav:
   - Getting started:
       - Quickstart: quickstart.md
       - The feature lifecycle: lifecycle.md
+  - Visual Buddy:
+      - Using Visual Buddy: visual-buddy.md
+      - visualize-options examples: examples/skills/visualize-options.md
+      - brainstorm examples: examples/skills/brainstorm.md
   - Examples:
       - Overview: examples/README.md
       - Full feature delivery: examples/flows/full-feature-delivery.md
