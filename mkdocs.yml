@@ -1,0 +1,68 @@
+site_name: myspec
+site_description: Specification-driven development for Claude Code
+site_url: https://jansalwowski.github.io/myspec/
+repo_url: https://github.com/jansalwowski/myspec
+repo_name: jansalwowski/myspec
+edit_uri: edit/main/website/
+
+docs_dir: website
+site_dir: _site
+
+theme:
+  name: material
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - content.code.copy
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      toggle:
+        icon: material/weather-night
+        name: Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+# examples/ is rendered in place through the website/examples symlink, so its
+# links into skills/, docs/ and lib/ point outside the site. Report them
+# without failing the strict build.
+validation:
+  links:
+    not_found: info
+    unrecognized_links: info
+
+nav:
+  - Home: index.md
+  - Getting started:
+      - Quickstart: quickstart.md
+      - The feature lifecycle: lifecycle.md
+  - Examples:
+      - Overview: examples/README.md
+      - Full feature delivery: examples/flows/full-feature-delivery.md
+      - Feature decomposition: examples/flows/feature-decomposition.md
+      - Spec drift recovery: examples/flows/spec-drift-recovery.md
+      - Debugging with memory: examples/flows/debugging-with-memory.md
+      - Session with memory extraction: examples/flows/session-with-memory-extraction.md
