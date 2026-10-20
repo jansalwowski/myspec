@@ -131,6 +131,13 @@ SERVER_ID_FILE="${STATE_DIR}/server-instance-id"
 # (SESSION_DIR is unique per run, so no prior PID file can exist here)
 mkdir -p "${SESSION_DIR}/content" "$STATE_DIR"
 
+# A --project-dir session lives inside the user's repo: keep its screens and
+# the .last-port/.last-token files out of git there, whatever the repo's own
+# .gitignore says. An existing file is the user's and is left alone.
+if [[ -n "$PROJECT_DIR" && ! -e "${PROJECT_DIR}/.myspec/brainstorm/.gitignore" ]]; then
+  printf '*\n' > "${PROJECT_DIR}/.myspec/brainstorm/.gitignore"
+fi
+
 SERVER_ID=""
 if [[ -r /dev/urandom ]]; then
   SERVER_ID="$(od -An -N24 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n' || true)"

@@ -481,6 +481,8 @@ check block "on main, cp into the aiDir"               'cp /etc/hosts .ai/ideas/
 check allow "redirect to /dev/null"                    'ls > /dev/null 2>&1'
 check allow "redirect outside the repo"                "echo x > $(dirname "$REPO")/scratch.txt"
 check allow "session state stays pinned"               'echo x > .claude/state/sessions/note.md'
+check allow "no decision, companion screen (#360)"   'mkdir -p .myspec/brainstorm/s/content && echo x > .myspec/brainstorm/s/content/x.html'
+check block "no decision, .. out of the screen dir"   'echo x > .myspec/brainstorm/../../src/a.js'
 check allow "read-only command"                        'cat .ai/ideas/PRIORITY-LISTING.md'
 check block "bash -c payload"                          "bash -c 'echo x > src/a.js'"
 check block "eval payload"                             "eval 'echo x > src/a.js'"
@@ -506,6 +508,7 @@ check_in "$REPO" allow "develop recorded, redirect into source" c-dev 'echo x > 
 check_in "$REPO" allow "develop recorded, aiDir doc"            c-dev 'echo x > .ai/ideas/new.md'
 mark c-wt worktree 60
 check_in "$REPO" block "worktree mode, redirect into main checkout" c-wt 'echo x > .ai/ideas/new.md'
+check_in "$REPO" allow "worktree mode, companion screen (#360)"  c-wt 'echo x > .myspec/brainstorm/s/content/x.html'
 check_in "$REPO" allow "worktree mode, cd into the worktree first"  c-wt "cd $WT && echo x > src.js"
 check_in "$WT"   allow "worktree mode, cwd in the worktree"         c-wt 'echo x > src.js'
 check_in "$REPO" allow "worktree mode, escape hatch"                c-wt 'MYSPEC_ALLOW_MAIN_CHECKOUT=1 echo x > .ai/ideas/new.md'
