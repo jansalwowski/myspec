@@ -6,7 +6,8 @@
     ],
     "fail": [
       "The renders are in spike/out/compare-synthetic.png and spike/out/compare-crops.png. The synthetic blur reads as a smear; the crops look more natural. Next, try softening the crop edges.",
-      "Open spike/out/compare-crops.png and compare it with the synthetic one; I think the crops win."
+      "Open spike/out/compare-crops.png and compare it with the synthetic one; I think the crops win.",
+      "Open spike/out/compare-crops.png in your browser and compare it with the synthetic one."
     ]
   }
 }

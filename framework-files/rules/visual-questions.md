@@ -14,6 +14,8 @@ Before you call AskUserQuestion, or lay out options in a reply (approaches, desi
 
 ## Results
 
-Show, don't link. When you produce something visual (an image, a render, a chart, a screenshot, a before/after) or an explanation a diagram or graph carries better than prose (a data flow, a state machine, measurements whose shape matters), and Visual Buddy is running, show it there through `/myspec:visualize-options` (show mode). When it is not running, offer it in one line and keep the path or prose as the fallback; do not open it unasked.
+Show, don't link. When you produce something visual (an image, a render, a chart, a screenshot, a before/after) or an explanation a diagram or graph carries better than prose (a data flow, a state machine, measurements whose shape matters), and Visual Buddy is running, show it there through `/myspec:visualize-options` (show mode). It is running when you started it in this conversation and its `state_dir` has `server-info` and no `server-stopped`; a session you did not start is not yours to push to. When it is not running, offer it in one line and keep the path or prose as the fallback; do not open it unasked.
+
+Inside `/myspec:brainstorm`, its own offer (a message of its own) replaces these one-line offers.
 
 When the user cannot open a local URL (a remote session, no browser), stay in the terminal for all of this.

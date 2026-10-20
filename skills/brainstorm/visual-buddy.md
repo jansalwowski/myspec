@@ -234,20 +234,20 @@ The frame template provides these CSS classes for your content:
 
 ## Diagrams and graphs
 
-Draw them as inline SVG inside a content fragment: no scripts, no network, so a screen works offline and renders the same on every reload. Keep one idea per diagram, label every box and arrow, and put two candidate designs in a `.split` so the user compares structure side by side.
+Draw them as inline SVG inside a content fragment: no scripts, no network, so a screen works offline and renders the same on every reload. Keep one idea per diagram, label every box and arrow, draw with `currentColor` (strokes, text and markers) so it reads in the dark theme too, give each SVG's marker its own id (`arrow-a`, `arrow-b`): ids are page-wide, and put two candidate designs in a `.split` so the user compares structure side by side.
 
 ```html
 <h2>Where does the retry live?</h2>
 <div class="split">
   <div class="mockup"><div class="mockup-header">A: retry in the client</div><div class="mockup-body">
     <svg viewBox="0 0 320 90" width="100%" role="img" aria-label="Client retries calls to the API, which writes to the queue">
-      <defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>
-      <rect x="5" y="25" width="80" height="40" rx="6" fill="none" stroke="currentColor"/><text x="45" y="50" text-anchor="middle">Client ⟳</text>
-      <rect x="120" y="25" width="80" height="40" rx="6" fill="none" stroke="currentColor"/><text x="160" y="50" text-anchor="middle">API</text>
-      <rect x="235" y="25" width="80" height="40" rx="6" fill="none" stroke="currentColor"/><text x="275" y="50" text-anchor="middle">Queue</text>
-      <line x1="85" y1="45" x2="118" y2="45" stroke="currentColor" marker-end="url(#arrow)"/><line x1="200" y1="45" x2="233" y2="45" stroke="currentColor" marker-end="url(#arrow)"/>
+      <defs><marker id="arrow-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <rect x="5" y="25" width="80" height="40" rx="6" fill="none" stroke="currentColor"/><text fill="currentColor" x="45" y="50" text-anchor="middle">Client ⟳</text>
+      <rect x="120" y="25" width="80" height="40" rx="6" fill="none" stroke="currentColor"/><text fill="currentColor" x="160" y="50" text-anchor="middle">API</text>
+      <rect x="235" y="25" width="80" height="40" rx="6" fill="none" stroke="currentColor"/><text fill="currentColor" x="275" y="50" text-anchor="middle">Queue</text>
+      <line x1="85" y1="45" x2="118" y2="45" stroke="currentColor" marker-end="url(#arrow-a)"/><line x1="200" y1="45" x2="233" y2="45" stroke="currentColor" marker-end="url(#arrow-a)"/>
     </svg></div></div>
-  <div class="mockup"><div class="mockup-header">B: retry in the worker</div><div class="mockup-body"><!-- same shape --></div></div>
+  <div class="mockup"><div class="mockup-header">B: retry in the worker</div><div class="mockup-body"><!-- same shape; its own marker id, arrow-b --></div></div>
 </div>
 ```
 

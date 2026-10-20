@@ -107,7 +107,7 @@ Push a waiting screen if Visual Buddy stays in use (brainstorm's convention), or
 
 ## The `visualQuestions` setting
 
-`/myspec:setup visual-questions` turns this on for a whole project (`.myspec.json` `visualQuestions: "auto"`, with a token heads-up). It installs `.claude/rules/visual-questions.md`, which routes every clearly visual question here has the agent add a `Show in Visual Buddy` option to partly visual ones, and sends visual results here in show mode instead of as file paths. When the user picks that option, run this skill with the same question; leave the extra option out of the screen.
+`/myspec:setup visual-questions` turns this on for a whole project (`.myspec.json` `visualQuestions: "auto"`, with a token heads-up). It installs `.claude/rules/visual-questions.md`, which routes every clearly visual question here, has the agent add a `Show in Visual Buddy` option to partly visual ones, and sends visual results here in show mode instead of as file paths. When the user picks that option, run this skill with the same question; leave the extra option out of the screen.
 
 ## Calling it from another skill
 
