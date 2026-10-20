@@ -70,11 +70,12 @@ Write the reviewer's output to `${aiDir}/features/{feature}/conformance-report.m
 
 ```yaml
 ---
+title: "Conformance report: {feature}"
 feature: {feature}
 reviewed_range: {BASE_SHA}..{HEAD}
 base_sha: {BASE_SHA}
 head_sha: {HEAD}
-reviewed: {YYYY-MM-DD}
+updated: {YYYY-MM-DD}
 verdict: conformant | divergent | gaps | not-verifiable
 holistic_reused: true | false
 verdict_history: complete | partial
@@ -101,7 +102,7 @@ Overwrite the previous report (the frontmatter records which commit was reviewed
 
 `delivery-metrics` reads the first decisive row as the feature's first-time conformance result. The rows are the only record of earlier runs: every run overwrites the report, and a squash merge keeps only its last version.
 
-1. Append one row per run, at the bottom, including each Step 6 re-run: `reviewed`, `head_sha`, the verdict, and the number of findings at each severity before routing.
+1. Append one row per run, at the bottom, including each Step 6 re-run: `updated` (an older report names it `reviewed`), `head_sha`, the verdict, and the number of findings at each severity before routing.
 2. Write the Verdict cell as the plain verdict word from the frontmatter (`conformant`, `divergent`, `gaps`, `not-verifiable`), with no emphasis, symbols, or backticks. Keep the heading and header exactly as shown. Do not copy the matrix's `✓ conformant` or `✗ gap`.
 3. Copy every existing row across unchanged, in order. Never drop, reorder, or rewrite one.
 4. No previous report, in the working tree or in git: create the section with this run's row and set `verdict_history: complete`.

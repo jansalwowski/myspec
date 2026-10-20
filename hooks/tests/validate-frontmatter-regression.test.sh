@@ -22,6 +22,10 @@
 #            content: a Write that creates the doc by its content, any
 #            other Write or Edit only when it changes
 #            the frontmatter region.
+#   #357     The report templates feature-implement and feature-implement-review
+#            ship (holistic-review.md, conformance-report.md) carried feature/
+#            reviewed, neither an identity nor a temporal field, so every run
+#            that persisted one was blocked by this hook.
 #
 # Usage: validate-frontmatter-regression.test.sh [path-to-hook]
 
@@ -233,6 +237,26 @@ F="$REPO/.ai/features/x/fenced.md"
 printf -- '---\ntitle: F\nupdated: 2026-01-01\n---\nbody\n' > "$F"
 edit "$REPO" "$F" $'---\ntitle: F\nupdated: 2026-01-01\n---\n' ""
 expect_block "an edit that removes the fence is a frontmatter change"
+
+# --- #357: the report frontmatter myspec's own skills ship passes ---------------
+# The templates under test are this checkout's, wherever CLAUDE_PLUGIN_ROOT points.
+SKILLS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/skills"
+mkdir -p "$REPO/.ai/features/x"
+for tpl in feature-implement/holistic-reviewer-prompt.md:holistic-review.md \
+           feature-implement-review/SKILL.md:conformance-report.md; do
+  src="$SKILLS/${tpl%%:*}"
+  F="$REPO/.ai/features/x/${tpl##*:}"
+  # The first ```yaml block holding head_sha is the persisted report's frontmatter.
+  awk '/^```yaml$/ { inb=1; buf=""; next }
+       inb && /^```$/ { if (buf ~ /head_sha:/) { printf "%s", buf; exit } inb=0; next }
+       inb { buf = buf $0 "\n" }' "$src" > "$F"
+  if grep -q '^head_sha:' "$F"; then
+    run "$REPO" "$F"
+    expect_quiet "the ${tpl##*:} template frontmatter passes"
+  else
+    fail "no report frontmatter block found in ${tpl%%:*}"
+  fi
+done
 
 # --- 4eb8ccb: ideas/ seed docs are exempt --------------------------------------
 mkdir -p "$REPO/.ai/ideas"
