@@ -7,7 +7,7 @@
 # — which is the majority of the files a docs-PR session touches. The second
 # property is the MAIN_CHECKOUT_ONLY carve-out: session state and the session
 # archive have exactly one correct location, whatever the session answered.
-# The third is SCRATCH_PREFIXES: plugin scratch (.myspec/, the visual
+# The third is SCRATCH_PREFIXES: plugin scratch (.myspec/brainstorm/, the visual
 # companion's screens) is never gated, on any branch, after any answer (#360).
 #
 # Runs against a synthetic checkout in a temp dir; never touches a real repo.
@@ -147,6 +147,7 @@ check allow "worktree mode, companion screen"    wt-sess "$REPO/.myspec/brainsto
 check allow "no decision, companion screen"      scr-sess "$REPO/.myspec/brainstorm/s1/content/screen.html"
 check block "no decision, source file"           scr-sess "$REPO/src/foo.ts"
 check block "no decision, .myspec lookalike"     scr-sess "$REPO/.myspec-notes/x.html"
+check block "no decision, other .myspec path"     scr-sess "$REPO/.myspec/notes.md"
 
 # --- a configured aiDir moves the exemption with it ---------------------------
 rm -f "$STATE/"*.jsonl
@@ -363,6 +364,11 @@ check block "on main, no decision, AGENTS.md"      pb-main "$REPO/AGENTS.md"
 check allow "on main, live session log"            pb-main "$REPO/.claude/state/sessions/abc123.md"
 check allow "on main, archived session"            pb-main "$REPO/.ai/memory/sessions/archive/2026-08-31-x.md"
 check allow "on main, companion screen"            pb-main "$REPO/.myspec/brainstorm/s1/content/screen.html"
+# A `..` segment is never scratch or pinned: below the nearest existing
+# directory the path stays unresolved, so a prefix test would let it out.
+check block "on main, .. out of a missing .myspec"  pb-main "$REPO/.myspec/../src/foo.ts"
+check block "on main, .. out of the screen dir"     pb-main "$REPO/.myspec/brainstorm/x/../../../src/foo.ts"
+check block "on main, .. out of .claude/state"      pb-main "$REPO/.claude/state/nope/../../../src/foo.ts"
 check block "on main, no decision, source file"    pb-main "$REPO/src/foo.ts"
 if run_hook "$REPO" pb-main "$REPO/.ai/ideas/new.md" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -qF 'edits files on branch main'; then
   PASS=$((PASS + 1))

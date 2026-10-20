@@ -127,12 +127,12 @@ MAIN_CHECKOUT_ONLY_PREFIXES=(
 # on any branch, protected ones included (#360). Nothing here is shipped
 # source: it is session output a plugin tool writes and a browser reads.
 #
-#   .myspec/   the visual companion's --project-dir session directory
-#              (screens under .myspec/brainstorm/<session>/content/). Asking
+#   .myspec/brainstorm/  the visual companion's --project-dir session
+#              directory (screens under <session>/content/). Asking
 #              develop-vs-worktree for a throwaway screen, or blocking it
 #              after a worktree answer, only pushes the agent to /tmp.
 SCRATCH_PREFIXES=(
-  ".myspec/"
+  ".myspec/brainstorm/"
 )
 
 case "$FILE_PATH" in
@@ -166,12 +166,19 @@ REL_PATH="${ABS_PATH#"$REPO_ROOT"/}"
 
 # Checked BEFORE any mode logic: these paths have exactly one correct location,
 # so no isolation answer can redirect them; the scratch paths are never gated.
-# See the lists' comments above.
-for PREFIX in "${MAIN_CHECKOUT_ONLY_PREFIXES[@]}" "${SCRATCH_PREFIXES[@]}"; do
-  case "$REL_PATH" in
-    "$PREFIX"*) exit 0 ;;
-  esac
-done
+# See the lists' comments above. A `..` segment is never matched: the part of
+# the path below the nearest existing directory stays unresolved, so
+# .myspec/brainstorm/../../src/foo.ts would pass a prefix test.
+case "/$REL_PATH/" in
+  */../*) ;;
+  *)
+    for PREFIX in "${MAIN_CHECKOUT_ONLY_PREFIXES[@]}" "${SCRATCH_PREFIXES[@]}"; do
+      case "$REL_PATH" in
+        "$PREFIX"*) exit 0 ;;
+      esac
+    done
+    ;;
+esac
 
 # Exemption is about the PROMPT, not about the tree. A doc edit never triggers
 # the isolation question (branch 2 below), but once a session has answered

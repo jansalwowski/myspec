@@ -88,6 +88,23 @@ else
        "expected valid id in state, got '$server_id_value'"
 fi
 
+ignore_file="$TEST_DIR/project/.myspec/brainstorm/.gitignore"
+if [[ "$(cat "$ignore_file" 2>/dev/null)" == "*" ]]; then
+  pass "--project-dir writes a self-ignoring .myspec/brainstorm/.gitignore"
+else
+  fail "--project-dir writes a self-ignoring .myspec/brainstorm/.gitignore" \
+       "expected '*', got '$(cat "$ignore_file" 2>&1)'"
+fi
+
+printf 'mine\n' > "$ignore_file"
+PATH="$TEST_DIR/fake-bin:$PATH" MSYSTEM="" \
+  bash "$START_SCRIPT" --project-dir "$TEST_DIR/project" --foreground >/dev/null 2>&1 || true
+if [[ "$(cat "$ignore_file")" == "mine" ]]; then
+  pass "an existing .myspec/brainstorm/.gitignore is left alone"
+else
+  fail "an existing .myspec/brainstorm/.gitignore is left alone" "got '$(cat "$ignore_file")'"
+fi
+
 rm -rf "$TEST_DIR/project"/*
 
 cat > "$TEST_DIR/fake-bin/node" <<'EOF'
