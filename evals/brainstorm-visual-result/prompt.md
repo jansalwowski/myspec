@@ -7,4 +7,4 @@ timeout_seconds: 300
 allowed_tools: [Read, Glob, Grep, Skill]
 ---
 
-We've been going back and forth on how to anonymise licence plates in our street photos before we publish them. I ran the quick experiment we talked about; the renders are in spike/out/ (see spike/NOTES.md). Let's think it through together: which approach looks less fake, and what should we try next?
+We've been going back and forth on how to anonymise licence plates in our street photos before we publish them. I ran the quick experiment we talked about; the renders are in spike/out/ (see spike/NOTES.md). Help me explore what to try next and pressure-test the direction: which approach looks less fake, and is either good enough to publish?
