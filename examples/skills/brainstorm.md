@@ -7,6 +7,7 @@ Mode-based facilitation. The agent reads what the user brought, **infers the mod
 - [Generate mode — infer, go wide, converge, hand off](#generate-mode--infer-go-wide-converge-hand-off) — names the mode, diverges then narrows, ends with a hand-off to `/myspec:idea-intake`
 - [Topic too large — scope check recommends decomposing](#topic-too-large--scope-check-recommends-decomposing) — pre-flight catches a multi-area topic and splits before generating
 - [Sharpen mode that pivots to Generate](#sharpen-mode-that-pivots-to-generate) — devil's-advocate stress-test that re-reads the framing mid-session and announces the pivot
+- [Solve mode that turns into an experiment — show, don't link](#solve-mode-that-turns-into-an-experiment--show-dont-link) — the spike produces images; the agent offers Visual Buddy and shows them side by side instead of pasting a file path
 
 The named techniques (How Might We, Laddering, SCAMPER, Six Hats, reverse brainstorming, first-principles, pre-mortem, 5 Whys, …) live in `skills/brainstorm/techniques.md`; the agent reaches for them naturally and rarely labels them out loud. Where a technique is doing the work below, it's noted in an *italic side-note* so you can see the reasoning.
 
@@ -227,3 +228,53 @@ After confirming the synthesis, the agent asks what to do with it. (Not shown �
 - **The pivot is the point.** A real brainstorm walks between modes; here the agent re-read the framing, decided the binary question was the actual weakness, and **announced the switch from Sharpen to Generate** instead of silently sliding into it.
 - **Memory makes it contextual.** P019 (the connection-pool incident, loaded at bootstrap) turns a generic objection into a specific, personal one — this is what separates brainstorm from a stock pros-and-cons list.
 - **Good devil's advocacy redirects, it doesn't just block.** The strongest critique wasn't "no" — it was a better frame ("which workloads"), and the user took it.
+
+---
+
+## Solve mode that turns into an experiment — show, don't link
+
+The brainstorm pivots into a spike that produces images. The result is visual, so the agent offers Visual Buddy at that moment and, once accepted, shows the images side by side instead of handing over a file path.
+
+### Setup
+
+The user is deciding how to anonymise licence plates in street photos before publishing them. Visual Buddy has not come up yet: the conversation so far was words (privacy rules, which detector to try).
+
+### Invocation
+
+```
+/myspec:brainstorm synthetic blur vs real crops for licence plates — which looks less fake?
+```
+
+### Skill flow
+
+#### 1. Infer and name the mode
+
+> "Reading this as **solve**: you have a concrete problem with two candidate fixes. I'll lay out what decides it, then we test. (Say so if you'd rather go wide on other anonymisation ideas.)"
+
+#### 2. Pivot into an experiment
+
+After two rounds the user says *"just try it on a few frames."* The agent names the switch ("pivoting to a quick spike, throwaway code"), writes a short script, and renders `out/compare-synthetic.png` and `out/compare-crops.png` from five sample frames.
+
+#### 3. A visual result, so offer Visual Buddy, alone
+
+The session is no longer asking questions, but the result is an image, so the show-don't-link rule applies. Visual Buddy was never offered, so the agent sends the offer as its own message and holds the result for the next one:
+
+> "This next part might be easier if I show you: I can put mockups, diagrams and comparisons in a browser tab (Visual Buddy) as we go. It uses more tokens. Want me to? I'll open it for you."
+
+**User:** yes.
+
+#### 4. Show, don't link
+
+The agent starts the server with `--open`, copies both PNGs into `screen_dir`, and pushes `blur-compare.html`: a `.split` with `<img src="/files/compare-synthetic.png">` and `<img src="/files/compare-crops.png">`, each captioned with what differs. Then, in the terminal:
+
+> "On screen: synthetic blur (left) and real-crop replacement (right) on the same five frames. Full URL: `<url with ?key=…>`. Files are in `out/` if you want them later. Which reads as less fake to you?"
+
+#### 5. Back to the terminal
+
+The user picks the crops but wants the edges softened. The agent iterates (`blur-compare-v2.html`), then pushes a waiting screen once the conversation moves on to rollout questions, which are words.
+
+### Why this example matters
+
+- **Results trigger the offer, not only questions.** After the pivot nothing was a question; an offer that waited for a visual question would never have fired, and the images would have gone out as a path in chat.
+- **The offer is still its own message.** The rendered images wait one turn; the user is never shown the offer and a wall of output together.
+- **Show, don't link.** The file path survives as a one-line footnote; the comparison itself is on screen, side by side.
