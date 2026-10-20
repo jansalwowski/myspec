@@ -57,11 +57,12 @@ Verdict: conformant — every criterion met, proven by a passing test, and exerc
 
 ```yaml
 ---
+title: "Conformance report: saved-searches"
 feature: saved-searches
 reviewed_range: a1b2c3d..f4e5d6c
 base_sha: a1b2c3d
 head_sha: f4e5d6c
-reviewed: 2026-05-27
+updated: 2026-05-27
 verdict: conformant
 holistic_reused: true
 verdict_history: complete

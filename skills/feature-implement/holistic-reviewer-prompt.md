@@ -113,11 +113,12 @@ The reviewer stays read-only; the controller writes its final message verbatim t
 
 ```yaml
 ---
+title: "Holistic review: {feature}"
 feature: {feature}
 reviewed_range: {BASE_SHA}..{HEAD}
 base_sha: {BASE_SHA}
 head_sha: {HEAD}
-reviewed: {YYYY-MM-DD}
+updated: {YYYY-MM-DD}
 verdict: ready-to-merge | needs-fixes | needs-discussion
 ---
 ```

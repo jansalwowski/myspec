@@ -70,11 +70,12 @@ Write the reviewer's output to `${aiDir}/features/{feature}/conformance-report.m
 
 ```yaml
 ---
+title: "Conformance report: {feature}"
 feature: {feature}
 reviewed_range: {BASE_SHA}..{HEAD}
 base_sha: {BASE_SHA}
 head_sha: {HEAD}
-reviewed: {YYYY-MM-DD}
+updated: {YYYY-MM-DD}
 verdict: conformant | divergent | gaps | not-verifiable
 holistic_reused: true | false
 verdict_history: complete | partial
