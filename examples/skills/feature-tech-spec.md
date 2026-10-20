@@ -7,6 +7,7 @@ Creates `tech-spec.md` from an approved `spec.md`. The skill reads the spec, exa
 - [Pattern-following design](#pattern-following-design)
 - [ADR-heavy design with architectural alternatives](#adr-heavy-design-with-architectural-alternatives)
 - [Discovers spec gap during design](#discovers-spec-gap-during-design)
+- [Auto-review carried over from feature-spec](#auto-review-carried-over-from-feature-spec)
 
 ---
 
@@ -242,3 +243,37 @@ Both files written. The skill ends with a different hand-off than usual:
 - **The skill refuses to invent product behavior.** TTL, cancellation, resend — these are user-facing decisions, not implementation details. The skill names the gap and stops.
 - **Spec changes during tech-spec are first-class.** The skill knows how to bump `spec_version` and re-route through review — it doesn't pretend the spec was always v2.
 - **The Decisions section captures the discovery.** Future readers will see why spec_version skipped from 1 to 2 — useful when archaeology is needed later.
+
+---
+
+## Auto-review carried over from feature-spec
+
+Earlier in the same session the user ran `/myspec:feature-spec invoice-reminders` and answered the auto-review question "Yes".
+
+### Invocation
+
+```
+/myspec:feature-tech-spec invoice-reminders
+```
+
+### Skill flow
+
+Step 1 still asks, with the earlier answer marked as the default:
+
+> **Run the tech-spec review automatically once the draft is written?** Yes, review before showing me (Recommended) / No, show me the draft first
+
+**User**: Yes.
+
+After drafting, the skill runs `/myspec:feature-tech-spec-review invoice-reminders --from-author`. Its reviewer subagent reads the spec, the tech-spec and the project conventions, and reports a Critical: REQ-003 (no reminder for an invoice paid in the meantime) has no implementation step. The fix adds a step, a big fix under the review's Fix Policy, so it waits for the user. Two Medium findings (a missing edge case, a missing File Inventory row) are small fixes and are applied at once.
+
+**User**: apply the REQ-003 step.
+
+The reviewer runs once more and confirms REQ-003 now maps to step 4. The user approves the tech-spec.
+
+### Result
+
+`tech-spec.md` is `approved` and the skill recommends `/myspec:feature-plan invoice-reminders`.
+
+### Why this example matters
+
+The earlier answer sets the default, not the outcome. A tech-spec can warrant a review when its spec did not, or the other way round, so each document gets its own question.

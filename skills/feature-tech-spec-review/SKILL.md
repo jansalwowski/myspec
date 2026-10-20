@@ -8,6 +8,15 @@ tags: [feature, tech-spec, validation, critical-thinking, review]
 
 **Autopilot:** when the user opted in, answer this skill's gates per [`_shared/autopilot.md`](../_shared/autopilot.md).
 
+## Arguments
+
+- `/myspec:feature-tech-spec-review {feature}`: the workflow below.
+- `--from-author`: `feature-tech-spec` runs this review right after writing the tech-spec. Step 8 adds one re-review round and Step 9 skips its next-step recommendation; control returns to `feature-tech-spec`.
+
+## Independent Reviewer
+
+Steps 1–6 run in a fresh subagent, so the review never reads the tech-spec with the context of whoever wrote it. Dispatch it per [`_shared/spec-reviewer-prompt.md`](../_shared/spec-reviewer-prompt.md), with `[REVIEW_SKILL_PATH]` set to `${CLAUDE_PLUGIN_ROOT}/skills/feature-tech-spec-review/SKILL.md`. It tags each fix by the [Fix Policy](#fix-policy). Show the findings table and fix proposals it returns as they came back, then continue at Step 7. When the Agent tool is not available or the dispatch fails, run Steps 1–6 yourself and say so in one line.
+
 ## Workflow
 
 1. **Load Context**
@@ -74,12 +83,13 @@ tags: [feature, tech-spec, validation, critical-thinking, review]
    - Apply confirmed big fixes
    - Update `last_updated` date in frontmatter
    - If `based_on_spec_version` was stale but spec is unchanged: update it
+   - With `--from-author`, when a confirmed big fix was applied: dispatch the reviewer once more, with `[PRIOR_FINDINGS]` filled, and take its findings through Steps 7–8. There is no third round; what it leaves open is listed in Step 9.
 
 9. **Approve & Summary**
    - Show changes made (file paths, sections affected)
    - List remaining issues (if any were rejected)
    - If no Critical/High remain, ask: "Review passed — mark tech-spec.md `status: approved`?" On yes, set `status: approved` in tech-spec.md frontmatter — the transition `feature-plan` gates on (see the Status State Machine in `.claude/rules/workflow.md`). Otherwise it stays `draft`.
-   - Recommend next step: re-review, `/myspec:feature-plan`, or address open issues first
+   - Recommend next step: re-review, `/myspec:feature-plan`, or address open issues first. With `--from-author`, skip it and return to `feature-tech-spec`, which recommends it.
 
 ## Review Dimensions Reference
 
@@ -245,6 +255,7 @@ The `[requires confirmation]` case that recurs here is a decompose proposal:
 
 After running the skill:
 
+- [ ] Steps 1–6 ran in a reviewer subagent given only the paths, or the fallback was announced
 - [ ] All 10 review dimensions checked against tech-spec.md
 - [ ] Each implementation step is task-extractable (concrete enough for a plan task without interpretation)
 - [ ] Reuse-audit gate applied: section present, >= 1 row, valid Decision/Reason (or a `<!-- myspec:reuse-audit skip: <reason> -->` marker with a reason)
@@ -266,5 +277,5 @@ After running the skill:
 
 ## Integration
 
-**Called by** [OPTIONAL]: `/myspec:feature-tech-spec` (after tech-spec is created and user wants review)
+**Called by** [OPTIONAL]: `/myspec:feature-tech-spec` with `--from-author` (the user chose the review up front)
 **Next** [REQUIRED]: `/myspec:feature-plan` — create execution-ready implementation plan once tech-spec passes review

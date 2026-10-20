@@ -86,7 +86,7 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 
 | Case | Family | What it proves |
 |---|---|---|
-| `trigger-new-feature` | trigger | "start a new feature … write the requirements" → feature-spec, spec.md written |
+| `trigger-new-feature` | trigger | "start a new feature … write the requirements" → feature-spec, spec.md written; "I'll review afterwards" means no auto-review, so feature-spec-review stays quiet (#356) |
 | `route-spec-review` | trigger, near-miss | "before the technical design, check the requirements doc" → feature-spec-review, not tech-spec-review or the built-in /code-review |
 | `trigger-memorize` | trigger | a named fact to keep → memorize, not memorify or session-complete |
 | `nearmiss-personal-preference` | near-miss | "remember that I prefer short answers" → auto-memory, not memorize or memorify |
@@ -105,6 +105,9 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 | `trigger-feature-spec-scenarios` | trigger, near-miss | "write the test scenarios in Gherkin for the approved spec" → feature-spec (its `scenarios` argument; feature-scenario is gone in 3.0), not feature-tech-spec, feature-spec-review or feature-plan; scenarios.md written beside the spec |
 | `spec-review-planted-flaws` | planted flaw | feature-spec-review fires and flags an untestable AC, a REQ-002/REQ-004 contradiction, and missing error states; does not pass the review |
 | `tech-spec-review-planted-flaws` | planted flaw | feature-tech-spec-review flags a requirement with no step (REQ-004) and an ignored shared CSV writer the conventions mandate; reports a Critical and does not pass; flags the data-deriving export's missing `verification_mode` as Medium (#169) |
+| `spec-review-subagent` | orchestration | Agent granted → feature-spec-review runs Steps 1–6 in a reviewer subagent dispatched with `_shared/spec-reviewer-prompt.md`, and relays the REQ-002/REQ-004 contradiction (#356) |
+| `tech-spec-review-subagent` | orchestration | the same for feature-tech-spec-review on the tech-spec planted-flaw project; relays the uncovered REQ-004 (#356) |
+| `feature-spec-auto-review` | orchestration | "get it reviewed before you show it to me" → feature-spec runs feature-spec-review, which dispatches the reviewer; spec.md stays `draft`, since nobody said yes to approval (#356) |
 | `feature-spec-contract` | artifact contract | feature-spec writes spec.md with every section and frontmatter key feature-spec-review checks, plus dependencies.md and a manifest entry |
 | `feature-plan-coverage` | artifact contract | feature-plan (Python fixture) writes implementation-plan.md whose Spec Coverage table maps every REQ ID to a task, including two no AC restates (837f68d), names a test per row in a Test column (#190), plus the Execution Order table feature-implement parses, and closes with the Step 4.6 `## Plan Self-Check` (#188) |
 | `feature-plan-gate` | procedure | spec and tech-spec still `status: draft` → feature-plan stops at its gate: no plan written, the reply says they are not approved (a3562ed) |
@@ -115,7 +118,7 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 | `feature-implement-restart-state` | orchestration | approved 2-task plan → before Phase 1's first dispatch the plan's Execution Log gets a `Base (Phase 1): <sha>` entry a restarted session can recover (#166) |
 | `feature-implement-probe-gate` | orchestration | both tasks `[x]`, Checkpoint probes not yet run → the Step 4b probe gate dispatches the plugin agent `myspec:probe-executor`, never a general-purpose subagent carrying the executor prompt (#171) |
 
-`nearmiss-personal-preference` is a `capability` case until it has been run across releases, and so are `trigger-feature-spec-scenarios` (added with #264, not yet run), `trigger-visualize-options`, `visual-questions-auto` and `visual-questions-off` (added with the skill) and `trigger-memory-sanitize` (added with #161, not yet run). So are two of the three feature-plan and feature-implement cases (Sonnet, 2026-09-29), and `feature-implement-probe-gate`:
+`nearmiss-personal-preference` is a `capability` case until it has been run across releases, and so are `trigger-feature-spec-scenarios` (added with #264, not yet run), `trigger-visualize-options`, `visual-questions-auto` and `visual-questions-off` (added with the skill) and `trigger-memory-sanitize` (added with #161, not yet run), and `spec-review-subagent`, `tech-spec-review-subagent` and `feature-spec-auto-review` (added with #356, not yet run). So are two of the three feature-plan and feature-implement cases (Sonnet, 2026-09-29), and `feature-implement-probe-gate`:
 
 - `feature-plan-coverage` passed 6 of 6.
 - `feature-implement-dispatch` dispatched the implementer in 5 of 6. In the sixth, the controller wrote both tasks itself (#174). `dispatch-before-source-write` also fails when the implementer writes no file at all: in 1 of 3 runs its Bash heredoc was denied and it reported BLOCKED.

@@ -1,0 +1,12 @@
+{
+  "spec-still-draft": {
+    "pass": [
+      "---\ntitle: \"Invoice Reminders\"\nstatus: draft\nphase: 1\npriority: P2\nspec_version: 2\n---\n\n# Invoice Reminders\n",
+      "---\ntitle: \"Invoice Reminders\"\nstatus: \"draft\"\nspec_version: 1\n---\n"
+    ],
+    "fail": [
+      "---\ntitle: \"Invoice Reminders\"\nstatus: approved\nphase: 1\npriority: P2\nspec_version: 2\n---\n\n# Invoice Reminders\n",
+      "---\ntitle: \"Invoice Reminders\"\nstatus: approved\nspec_version: 2\n---\n\n## Example\n\nstatus: draft\n"
+    ]
+  }
+}
