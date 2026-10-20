@@ -1,7 +1,6 @@
 ---
 type: regex
-flags: m
-pattern: '^-{3}\n(?=[\s\S]*?^status: *draft\b)'
+pattern: '^-{3}\n(?:(?!-{3}(?:\n|$))[^\n]*\n)*?status: *["'']?draft["'']? *(?:\n|$)'
 target:
   source: file
   path: .ai/features/invoice-reminders/spec.md

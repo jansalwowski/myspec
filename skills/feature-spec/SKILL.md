@@ -18,7 +18,7 @@ tags: [feature, specification, planning, documentation]
    - Ask the user about the feature concept
    - Identify dependencies from `${aiDir}/features/index.yaml`
    - Check for related existing features
-   - Ask whether to review the spec as soon as it is written, in the same `AskUserQuestion` call as any concept questions, unless `--review` / `--no-review` already answered it. Not every spec needs a review before the user reads it, so the user decides per run:
+   - Ask whether to review the spec as soon as it is written, in the same `AskUserQuestion` call as the concept questions when it has room (a call takes at most 4 questions; otherwise ask it in its own call), unless `--review` / `--no-review` already answered it. Not every spec needs a review before the user reads it, so the user decides per run:
      ```
      question: "Run the spec review automatically once the draft is written?"
      header:   "Auto-review"
@@ -26,7 +26,7 @@ tags: [feature, specification, planning, documentation]
        - "Yes, review before showing me (Recommended)" → Step 5 runs feature-spec-review in a subagent, you see the reviewed draft
        - "No, show me the draft first"                  → Step 5 presents the draft; review stays a separate step
      ```
-     Under autopilot ([`_shared/autopilot.md`](../_shared/autopilot.md)) take the recommended option. When the user only asked for the draft without questions, take "No" and say so in one line: they plan to read it first.
+     Under autopilot ([`_shared/autopilot.md`](../_shared/autopilot.md)) take the recommended option. When the request already says to review the draft before showing it, take "Yes". When the user only asked for the draft without questions, take "No" and say so in one line: they plan to read it first.
 
 2. **Create Spec Document**
    Create `${aiDir}/features/{feature-name}/spec.md` with:
@@ -71,7 +71,7 @@ Required sections:
 
 5. **Present for Review**
    - **Auto-review off:** show the created documents and ask for approval.
-   - **Auto-review on:** invoke `/myspec:feature-spec-review {feature} --from-author` before showing anything. Its reviewer subagent gets only the file paths, never this conversation. Its gates replace this step's approval: the user sees the findings with `[auto-fix]` fixes applied, decides the `[requires confirmation]` fixes, and answers whether to mark the spec `approved`. Then continue here at Step 6.
+   - **Auto-review on:** invoke `/myspec:feature-spec-review {feature} --from-author` before showing anything. Its reviewer subagent gets only the file paths, never this conversation. Its gates replace this step's approval: the user sees the findings with `[auto-fix]` fixes applied, decides the `[requires confirmation]` fixes, and answers whether to mark the spec `approved`. Then continue here: Step 6 when the spec is now approved, otherwise Step 7, and the hand-off names the open findings to resolve before rerunning `/myspec:feature-spec-review`.
 
 6. **Offer Scenarios and Seed Data** [OPTIONAL]
    Once the spec is approved, offer both; the user may take either, both or

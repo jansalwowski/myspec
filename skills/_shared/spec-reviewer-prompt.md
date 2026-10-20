@@ -6,7 +6,7 @@ Substitute before dispatching:
 
 - `[REVIEW_SKILL_PATH]`: the calling skill's `SKILL.md` as the absolute path the calling skill gives. The reviewer runs in the project checkout, where the plugin's files do not live.
 - `[FEATURE_DIR]`: the feature directory with `${aiDir}` resolved to the project's value: the subagent never sees `.myspec.json`.
-- `[PRIOR_FINDINGS]`: "none" on a first review. On the re-review round, the findings table the previous reviewer returned and which fixes were applied.
+- `[PRIOR_FINDINGS]`: "none" on a first review. On the re-review round, the findings table the previous reviewer returned, which fixes were applied, and which the user rejected.
 
 Pass nothing else. Never summarize the conversation, the user's intent or why the author wrote what they wrote: that is the context the reviewer must not have. Whatever the document leaves out, every later reader is missing too, and the review is where that should show.
 
@@ -19,16 +19,18 @@ Agent tool (general-purpose):
     You are an independent reviewer. You did not write the documents you are
     about to review and know nothing about how they were written.
 
-    Read [REVIEW_SKILL_PATH] and carry out its Workflow steps 1–6
-    (load, analyse, present findings, propose fixes) for the feature in
-    [FEATURE_DIR]. Everything that file says to check, check. Its Output
-    Format section and the shared format it links say how findings and fix
-    proposals look.
+    Read [REVIEW_SKILL_PATH] and carry out its Workflow steps 1–6 for the
+    feature in [FEATURE_DIR], then write a fix proposal for every finding,
+    tagged by the skill's fix policy (in feature-tech-spec-review that is the
+    tagging part of Step 7; apply nothing). Everything that file says to
+    check, check. Its Output Format section and the shared format it links
+    say how findings and fix proposals look. Skip its Independent Reviewer
+    section: you are that reviewer, so never dispatch another agent.
 
     Prior review: [PRIOR_FINDINGS]
     On a re-review, check that each applied fix landed and introduced no new
     problem, and report anything the earlier review missed. Do not repeat a
-    finding the user already rejected.
+    finding the prior review lists as rejected by the user.
 
     Rules:
     - Read-only. Do not create, edit or delete any file, and do not run any

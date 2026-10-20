@@ -75,7 +75,7 @@ Steps 1–6 run in a fresh subagent, so the review never reads the spec with the
    - Apply auto-fixes and approved fixes to spec.md and/or dependencies.md
    - Increment `spec_version` in spec.md frontmatter
    - Update `last_updated` date in frontmatter (that is the field's name — do not add an `updated` field)
-   - With `--from-author`, when an applied `[requires confirmation]` fix changed requirements, scope or acceptance criteria: dispatch the reviewer once more, with `[PRIOR_FINDINGS]` filled, and take its findings through Steps 7–8. There is no third round; what it leaves open is listed in Step 9.
+   - With `--from-author`, when an applied `[requires confirmation]` fix changed requirements, scope or acceptance criteria: dispatch the reviewer once more, with `[PRIOR_FINDINGS]` filled, and take its findings through Steps 7–8, without incrementing `spec_version` a second time: one review run is one version. There is no third round; what it leaves open is listed in Step 9.
 
 9. **Approve & Next Step**
    - Show changes made (file paths, sections affected)

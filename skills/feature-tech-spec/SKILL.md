@@ -28,7 +28,7 @@ tags: [technical, specification, architecture, implementation]
        - "Yes, review before showing me" → Step 5 runs feature-tech-spec-review in a subagent, you see the reviewed draft
        - "No, show me the draft first"    → Step 5 presents the draft; review stays a separate step
      ```
-     Mark `(Recommended)` on the answer the user gave `feature-spec`'s auto-review question earlier in this session, and on "Yes" when there was none. Still ask: the earlier answer is a default, not a decision for this document. Under autopilot ([`_shared/autopilot.md`](../_shared/autopilot.md)) take the recommended option. When the user only asked for the draft without questions, take "No" and say so in one line.
+     Mark `(Recommended)` on the answer the user gave `feature-spec`'s auto-review question earlier in this session, and on "Yes" when there was none. Still ask: the earlier answer is a default, not a decision for this document. Under autopilot ([`_shared/autopilot.md`](../_shared/autopilot.md)) take the recommended option. When the request already says to review the draft before showing it, take "Yes". When the user only asked for the draft without questions, take "No" and say so in one line.
 
 2. **Research Existing Patterns**
    - Examine similar implementations in the codebase
