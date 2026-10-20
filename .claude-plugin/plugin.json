@@ -5,7 +5,7 @@
   "author": {
     "name": "Jan Salwowski"
   },
-  "homepage": "https://github.com/jansalwowski/myspec",
+  "homepage": "https://jansalwowski.github.io/myspec/",
   "repository": "https://github.com/jansalwowski/myspec",
   "hooks": "./hooks.json"
 }
