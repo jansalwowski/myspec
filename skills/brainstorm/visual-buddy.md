@@ -1,6 +1,6 @@
-# Visual Companion Guide
+# Visual Buddy Guide
 
-Browser-based visual brainstorming companion for showing mockups, diagrams, and options.
+Visual Buddy is a browser tab beside the conversation for mockups, diagrams, graphs, side-by-side options and generated results. The server lives at `<plugin lib>/brainstorm-server/` (the directory keeps its pre-rename name until v4).
 
 ## When to Use
 
@@ -12,7 +12,9 @@ Decide per-question, not per-session. The test: **would the user understand this
 - **Architecture diagrams** — system components, data flow, relationship maps
 - **Side-by-side visual comparisons** — comparing two layouts, two color schemes, two design directions
 - **Design polish** — when the question is about look and feel, spacing, visual hierarchy
-- **Spatial relationships** — state machines, flowcharts, entity relationships rendered as diagrams
+- **Spatial relationships** — state machines, flowcharts, sequences, entity relationships rendered as diagrams
+- **Graphs** — measurements, distributions, trends, before/after numbers, where the shape matters more than the values
+- **Visual results** — an image, render, chart, screenshot or comparison sheet you just produced (see "Showing results")
 
 **Use the terminal** when the content is text or tabular:
 
@@ -37,7 +39,7 @@ The server watches a directory for HTML files and serves the newest one to the b
 `<plugin lib>` below is the resolved path the brainstorm skill gave you. This file is not substituted, and the Bash tool does not export the plugin-root variable.
 
 ```bash
-# Start AFTER the user approves the companion. --open auto-opens their browser on
+# Start AFTER the user approves Visual Buddy. --open auto-opens their browser on
 # the first screen; --project-dir persists mockups and enables same-port restart.
 bash <plugin lib>/brainstorm-server/start-server.sh --project-dir /path/to/project --open
 
@@ -53,7 +55,7 @@ Save both `screen_dir` (where you write HTML) and `state_dir` (where you read th
 
 **Finding connection info:** The server writes its startup JSON to `$STATE_DIR/server-info`. If you launched the server in the background and didn't capture stdout, read that file to get the URL and port. When using `--project-dir`, check `<project>/.myspec/brainstorm/` for the session directory.
 
-**Note:** Pass the project root as `--project-dir` so mockups persist in `.myspec/brainstorm/` and survive server restarts. Without it, files go to `/tmp` and get cleaned up. Remind the user to add `.myspec/` to `.gitignore` if it's not already there.
+**Note:** Pass the project root as `--project-dir` so screens persist in `.myspec/brainstorm/` and survive server restarts. Without it, files go to `/tmp` and get cleaned up. The start script writes a `.gitignore` of `*` into `.myspec/brainstorm/`, so the screens never show up as untracked files.
 
 **Windows behavior:** the script auto-detects a Windows-like shell (MSYS2/Git Bash/Cygwin) and switches to foreground mode, which blocks the tool call. Run it with `run_in_background: true` on the Bash tool call so the server survives across turns, then read `$STATE_DIR/server-info` on the next turn to get the URL.
 
@@ -76,7 +78,7 @@ bash <plugin lib>/brainstorm-server/start-server.sh \
 
 Use `--url-host` to control what hostname is printed in the returned URL JSON.
 
-**Custom browser launcher:** set `BRAINSTORM_OPEN_CMD` to the command that opens a URL (`firefox`, `flatpak run org.mozilla.firefox`, `node "/path/capture.js"`) when `--open`'s platform launcher does not apply. The server appends the URL as the last argument and runs the command without a shell: quotes group arguments (`""` is an empty one), a backslash escapes the next character, and nothing else is interpreted. A shell builtin is not a command on its own: on Windows use `cmd /c start ""`. A value that cannot be parsed, or a launch that fails, is logged to the server's stderr.
+**Custom browser launcher:** set `VISUAL_BUDDY_OPEN_CMD` (pre-rename name `BRAINSTORM_OPEN_CMD`, still read until v4) to the command that opens a URL (`firefox`, `flatpak run org.mozilla.firefox`, `node "/path/capture.js"`) when `--open`'s platform launcher does not apply. The server appends the URL as the last argument and runs the command without a shell: quotes group arguments (`""` is an empty one), a backslash escapes the next character, and nothing else is interpreted. A shell builtin is not a command on its own: on Windows use `cmd /c start ""`. A value that cannot be parsed, or a launch that fails, is logged to the server's stderr.
 
 ## The Loop
 
@@ -229,6 +231,37 @@ The frame template provides these CSS classes for your content:
 - `.subtitle` — secondary text below title
 - `.section` — content block with bottom margin
 - `.label` — small uppercase label text
+
+## Diagrams and graphs
+
+Draw them as inline SVG inside a content fragment: no scripts, no network, so a screen works offline and renders the same on every reload. Keep one idea per diagram, label every box and arrow, draw with `currentColor` (strokes, text and markers) so it reads in the dark theme too, give each SVG's marker its own id (`arrow-a`, `arrow-b`): ids are page-wide, and put two candidate designs in a `.split` so the user compares structure side by side.
+
+```html
+<h2>Where does the retry live?</h2>
+<div class="split">
+  <div class="mockup"><div class="mockup-header">A: retry in the client</div><div class="mockup-body">
+    <svg viewBox="0 0 320 90" width="100%" role="img" aria-label="Client retries calls to the API, which writes to the queue">
+      <defs><marker id="arrow-a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>
+      <rect x="5" y="25" width="80" height="40" rx="6" fill="none" stroke="currentColor"/><text fill="currentColor" x="45" y="50" text-anchor="middle">Client ⟳</text>
+      <rect x="120" y="25" width="80" height="40" rx="6" fill="none" stroke="currentColor"/><text fill="currentColor" x="160" y="50" text-anchor="middle">API</text>
+      <rect x="235" y="25" width="80" height="40" rx="6" fill="none" stroke="currentColor"/><text fill="currentColor" x="275" y="50" text-anchor="middle">Queue</text>
+      <line x1="85" y1="45" x2="118" y2="45" stroke="currentColor" marker-end="url(#arrow-a)"/><line x1="200" y1="45" x2="233" y2="45" stroke="currentColor" marker-end="url(#arrow-a)"/>
+    </svg></div></div>
+  <div class="mockup"><div class="mockup-header">B: retry in the worker</div><div class="mockup-body"><!-- same shape; its own marker id, arrow-b --></div></div>
+</div>
+```
+
+For a graph, draw bars or points in SVG from the real numbers you measured, label the axes with units, and state the source under it (`.subtitle`). Never draw a graph from estimates.
+
+## Showing results
+
+When you produce something visual (an image, a render, a chart, a screenshot, a before/after), show it instead of linking it:
+
+1. Copy the file into `screen_dir` under a new name (`cp out/blur-v2.png <screen_dir>/blur-v2.png`). Only `.html` files become screens, so the copy does not replace what is on screen.
+2. Push a screen that references it by `/files/<name>`: `<img src="/files/blur-v2.png" alt="…" style="max-width:100%">`. For a comparison, put the images in a `.split`, each with a one-line caption saying what differs.
+3. Tell the user what is on screen in one line, and keep the file path for the record.
+
+If Visual Buddy is not running and was never offered, offer it now, as its own message (brainstorm's offer text). If the user declined earlier, offer once more for this result; a second no stands for the session.
 
 ## Decision screens
 

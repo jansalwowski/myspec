@@ -20,7 +20,7 @@ PATTERN='(localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]):[0-9]+'
 # Files that show real output of a myspec-owned tool, whose port is chosen at
 # runtime. Keep this list short; repo-relative.
 ALLOW=(
-  skills/brainstorm/visual-companion.md
+  skills/brainstorm/visual-buddy.md
 )
 
 EXCLUDES=()
