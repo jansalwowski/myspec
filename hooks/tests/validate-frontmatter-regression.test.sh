@@ -239,7 +239,9 @@ edit "$REPO" "$F" $'---\ntitle: F\nupdated: 2026-01-01\n---\n' ""
 expect_block "an edit that removes the fence is a frontmatter change"
 
 # --- #357: the report frontmatter myspec's own skills ship passes ---------------
-SKILLS="$CLAUDE_PLUGIN_ROOT/skills"
+# The templates under test are this checkout's, wherever CLAUDE_PLUGIN_ROOT points.
+SKILLS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)/skills"
+mkdir -p "$REPO/.ai/features/x"
 for tpl in feature-implement/holistic-reviewer-prompt.md:holistic-review.md \
            feature-implement-review/SKILL.md:conformance-report.md; do
   src="$SKILLS/${tpl%%:*}"
