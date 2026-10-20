@@ -2,6 +2,8 @@
 
 Specification-Driven Development framework for Claude Code. Provides skills for feature workflows, memory system, ideas pipeline, and project scaffolding.
 
+**Documentation:** https://jansalwowski.github.io/myspec/ (start with the [quickstart](https://jansalwowski.github.io/myspec/quickstart/)).
+
 ## Installation
 
 Requirements — the host floor (raising it is a major, RELEASING.md "Breaking changes"):

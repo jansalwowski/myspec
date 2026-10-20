@@ -12,7 +12,8 @@
         "ref": "v3.4.0"
       },
       "description": "Specification-Driven Development framework with feature workflows, memory system, ideas pipeline, and project scaffolding",
-      "version": "3.4.0"
+      "version": "3.4.0",
+      "homepage": "https://jansalwowski.github.io/myspec/"
     }
   ]
 }
