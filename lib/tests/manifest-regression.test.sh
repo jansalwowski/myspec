@@ -51,8 +51,10 @@ if jq -e '.migrations | index("3.0.0-plugin-hooks")' "$MANIFEST" >/dev/null; the
 if jq -e '.migrations | index("3.0.0-memory-registry")' "$MANIFEST" >/dev/null; then ok; else fail "the manifest lists the 3.0.0-memory-registry migration"; fi
 
 RETIRED=$(jq -r '.removed | to_entries[] | select(.value.since == "3.0.0") | select(.key | startswith("hooks/") or startswith("lib/")) | "\(.key)\t\(.value.dest)"' "$MANIFEST")
-for h in "$PLUGIN"/hooks/*.sh; do
-  name=$(basename "$h")
+# The hooks 2.x copied. A hook added since 3.0 was never copied, so it has
+# nothing to retire.
+for name in guard-worktree-context.sh require-isolation-decision.sh validate-frontmatter.sh mark-code-changed.sh \
+    verify-before-stop.sh no-absolute-paths.sh require-reuse-audit.sh record-session-metrics.sh; do
   if printf '%s\n' "$RETIRED" | grep -qxF -- "hooks/$name"$'\t'".claude/hooks/$name"; then ok; else fail "hooks/$name has no removed entry since 3.0.0 with dest .claude/hooks/$name"; fi
 done
 for key in path-normalize.sh markdown-section-check.sh command-scan.sh glob-regex.sh hook-core.sh session-event.sh \

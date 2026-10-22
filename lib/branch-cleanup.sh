@@ -116,17 +116,18 @@ mtime_of() {
   printf '%s' "$t"
 }
 
-# Echoes the merged PR head SHA, or nothing.
-merged_pr_head() {
+# Sets PR_HEAD and PR_NUM from the branch's merged PR, or empties them.
+# One network call, made only when classify() needs it: the local proofs
+# settle most branches, and a repo with hundreds of branches otherwise pays
+# a gh round trip for each.
+merged_pr() {
+  local out
+  PR_HEAD="" PR_NUM=""
   command -v gh >/dev/null 2>&1 || return 0
-  gh pr list --head "$1" --state merged --json headRefOid --limit 1 2>/dev/null \
-    | jq -r '.[0].headRefOid // empty' 2>/dev/null
-}
-
-merged_pr_number() {
-  command -v gh >/dev/null 2>&1 || return 0
-  gh pr list --head "$1" --state merged --json number --limit 1 2>/dev/null \
-    | jq -r '.[0].number // empty' 2>/dev/null
+  out=$(gh pr list --head "$1" --state merged --json headRefOid,number --limit 1 2>/dev/null \
+    | jq -r '.[0] // empty | "\(.headRefOid) \(.number)"' 2>/dev/null) || return 0
+  [ -n "$out" ] || return 0
+  PR_HEAD="${out%% *}" PR_NUM="${out#* }"
 }
 
 # Proof A: every path the branch introduced is byte-identical in the base.
@@ -203,10 +204,9 @@ classify() {
     fi
   fi
 
-  local pr_head pr_num tip
+  local tip pr_looked=0
   tip=$(git rev-parse "$br")
-  pr_head=$(merged_pr_head "$br")
-  pr_num=$(merged_pr_number "$br")
+  PR_HEAD="" PR_NUM=""
 
   # "Was this branch ever published?" Three independent signals, because each
   # one alone has a blind spot: `git push` without -u sets no upstream config;
@@ -215,9 +215,13 @@ classify() {
   upstream_remote=$(git config --get "branch.${br}.remote" 2>/dev/null)
   git rev-parse --verify --quiet "origin/$br" >/dev/null && has_remote_ref=1
 
-  if [ -z "$upstream_remote" ] && [ "$has_remote_ref" -eq 0 ] && [ -z "$pr_head" ]; then
-    DETAIL="never pushed and no merged PR — local-only work"
-    return
+  if [ -z "$upstream_remote" ] && [ "$has_remote_ref" -eq 0 ]; then
+    merged_pr "$br"
+    pr_looked=1
+    if [ -z "$PR_HEAD" ]; then
+      DETAIL="never pushed and no merged PR — local-only work"
+      return
+    fi
   fi
 
   # Commits sitting ahead of a remote-tracking ref that still exists.
@@ -246,13 +250,14 @@ classify() {
     return
   fi
 
-  if [ -n "$pr_head" ]; then
-    if [ "$pr_head" = "$tip" ]; then
+  [ "$pr_looked" -eq 1 ] || merged_pr "$br"
+  if [ -n "$PR_HEAD" ]; then
+    if [ "$PR_HEAD" = "$tip" ]; then
       VERDICT=DELETE
-      PROOF="PR #${pr_num} merged, tip matches its head"
+      PROOF="PR #${PR_NUM} merged, tip matches its head"
       return
     fi
-    DETAIL="PR #${pr_num} merged but local tip ${tip:0:8} != PR head ${pr_head:0:8} — work added after the merge"
+    DETAIL="PR #${PR_NUM} merged but local tip ${tip:0:8} != PR head ${PR_HEAD:0:8} — work added after the merge"
     return
   fi
 
