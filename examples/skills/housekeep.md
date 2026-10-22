@@ -33,13 +33,13 @@ Since the last run, three PRs were squash-merged, a dozen sessions came and went
 ### Output
 
 ```
-branches: removed 3 merged (feat/export-csv, fix/invoice-rounding, docs/readme-badges); 4 kept
+branches: removed 3 merged (feat/export-csv, fix/invoice-rounding, docs/readme-badges); 4 kept (1 with a worktree that may be in use, run /myspec:worktree-clean)
 sessions: removed 11 state file(s) older than 24h; 2 live log(s) older than 6h, run /myspec:session-clean
 brainstorm: removed 1 session(s) idle over 7d; 0 kept
 memory: 0 error(s), 3 warning(s), run /myspec:memory-optimize
 ```
 
-The agent shows the lines as printed and offers the two follow-ups in one line: "Two live logs and three memory warnings need a decision. Run `/myspec:session-clean` or `/myspec:memory-optimize`?" It runs neither on its own.
+The held worktree belongs to a merged branch that another session committed to this morning, so housekeep leaves it for `/myspec:worktree-clean`, which asks. The agent shows the lines as printed and offers the follow-ups in one line: "One worktree, two live logs and three memory warnings need a decision. Run `/myspec:worktree-clean`, `/myspec:session-clean` or `/myspec:memory-optimize`?" It runs none of them on its own.
 
 ---
 

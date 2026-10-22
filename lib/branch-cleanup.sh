@@ -36,10 +36,22 @@
 #   - it was never pushed and has no merged PR
 #   - it has commits ahead of its remote-tracking ref
 #
+# UNATTENDED VETOES (--unattended, for callers that remove without asking,
+# such as housekeep.sh) — a worktree is also kept when:
+#   - git recorded activity in it in the last 24h (HEAD or its reflog in
+#     its admin dir: a commit or checkout in a subdirectory never touches
+#     the top-level directory the 1h veto reads)
+#   - a session event in the last 24h names it (lib/session-event.sh
+#     session_claims: a write, a verify, or an isolation decision)
+#   - a running process has its working directory inside it
+#   - it holds ignored files (.env, local config): `git worktree remove`
+#     deletes them, and they exist nowhere else
+# Each such DETAIL starts with "may be in use" or "holds ignored files".
+#
 # Usage:
 #   branch-cleanup.sh                              audit every candidate (default)
 #   branch-cleanup.sh --apply --branch <name>...   remove the named ones
-#   branch-cleanup.sh [--base <ref>] [--no-fetch] [--json]
+#   branch-cleanup.sh [--base <ref>] [--no-fetch] [--json] [--unattended]
 #
 # Deletion is never bulk: --apply requires each branch to be named, and every
 # candidate is re-verified at apply time.
@@ -50,6 +62,7 @@ BASE=""
 APPLY=0
 DO_FETCH=1
 AS_JSON=0
+UNATTENDED=0
 NAMED_BRANCHES=()
 
 while [ "$#" -gt 0 ]; do
@@ -59,7 +72,8 @@ while [ "$#" -gt 0 ]; do
     --base)     BASE="${2:-}"; shift 2 ;;
     --no-fetch) DO_FETCH=0; shift ;;
     --json)     AS_JSON=1; shift ;;
-    -h|--help)  sed -n '2,40p' "$0"; exit 0 ;;
+    --unattended) UNATTENDED=1; shift ;;
+    -h|--help)  sed -n '2,56p' "$0"; exit 0 ;;
     *)          echo "branch-cleanup: unknown argument '$1'" >&2; exit 2 ;;
   esac
 done
@@ -93,6 +107,17 @@ if [ "$DO_FETCH" -eq 1 ]; then
 fi
 
 CURRENT=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
+
+# The session files the unattended vetoes read live with the main checkout,
+# and only lib/session-event.sh reads them.
+SESSION_HOME=""
+if [ "$UNATTENDED" -eq 1 ]; then
+  # shellcheck source=lib/hook-core.sh
+  . "$(dirname "${BASH_SOURCE[0]}")/hook-core.sh"
+  # shellcheck source=lib/session-event.sh
+  . "$(dirname "${BASH_SOURCE[0]}")/session-event.sh"
+  SESSION_HOME=$(session_home "$REPO_ROOT") || SESSION_HOME="$REPO_ROOT"
+fi
 
 worktree_for_branch() {
   git worktree list --porcelain 2>/dev/null | awk -v want="refs/heads/$1" '
@@ -171,6 +196,63 @@ patches_upstream() {
   ! grep -q '^+' <<< "$out"
 }
 
+# The working directory of every running process, one per line, read once.
+# lsof where present (macOS, most Linux), else /proc. Neither: nothing, and
+# the other unattended vetoes still hold.
+PROCESS_CWDS=""
+PROCESS_CWDS_READ=0
+process_cwds() {
+  local p
+  if [ "$PROCESS_CWDS_READ" -eq 0 ]; then
+    PROCESS_CWDS_READ=1
+    if command -v lsof >/dev/null 2>&1; then
+      PROCESS_CWDS=$(lsof -a -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
+    elif [ -d /proc/self ]; then
+      PROCESS_CWDS=$(for p in /proc/[0-9]*/cwd; do readlink "$p" 2>/dev/null; done)
+    fi
+  fi
+  printf '%s\n' "$PROCESS_CWDS"
+}
+
+# unattended_veto <worktree> -> 0, with DETAIL set, when the worktree may be
+# in use or holds files a removal would destroy.
+unattended_veto() {
+  local wt="$1" phys admin f since
+  phys=$(cd "$wt" 2>/dev/null && pwd -P) || phys="$wt"
+  since=$(( $(date +%s) - 86400 ))
+
+  admin=$(git -C "$wt" rev-parse --absolute-git-dir 2>/dev/null) || admin=""
+  # Not index: the dirty-tree veto's `git status` may rewrite it, and a
+  # staged change is already dirty.
+  for f in "$admin/HEAD" "$admin/logs/HEAD"; do
+    if [ -n "$admin" ] && [ -e "$f" ] && [ "$(mtime_of "$f")" -ge "$since" ]; then
+      DETAIL="may be in use: git activity in the last 24h"
+      return 0
+    fi
+  done
+
+  if session_claims "$SESSION_HOME" "$since" "$wt" "$phys"; then
+    DETAIL="may be in use: a session worked in it in the last 24h"
+    return 0
+  fi
+
+  local cwds ignored
+  cwds=$(process_cwds)
+  if awk -v a="$wt" -v b="$phys" '
+      $0 == a || $0 == b || index($0, a "/") == 1 || index($0, b "/") == 1 { found = 1; exit }
+      END { exit !found }' <<< "$cwds"; then
+    DETAIL="may be in use: a running process is inside it"
+    return 0
+  fi
+
+  ignored=$(git -C "$wt" status --porcelain --ignored=matching 2>/dev/null)
+  if grep -q '^!!' <<< "$ignored"; then
+    DETAIL="holds ignored files that removal would delete"
+    return 0
+  fi
+  return 1
+}
+
 # Sets VERDICT, PROOF, DETAIL for one branch.
 classify() {
   local br="$1"
@@ -200,6 +282,10 @@ classify() {
     age=$(( $(date +%s) - $(mtime_of "$WT") ))
     if [ "$age" -lt 3600 ]; then
       DETAIL="worktree touched $(( age / 60 ))min ago — may be a live session"
+      return
+    fi
+
+    if [ "$UNATTENDED" -eq 1 ] && unattended_veto "$WT"; then
       return
     fi
   fi

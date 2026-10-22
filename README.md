@@ -120,7 +120,7 @@ When something is easier to see than to read (layouts to pick between, an archit
 | `/myspec:skill-verify` | Verify a skill file follows optimization guidelines |
 | `/myspec:backbone-sync` | Audit the project topology file against the repo in both directions — stale entries, undocumented workspace members and commands, git-backed liveness signals (`lib/backbone-audit/audit.mjs`) — then fix it. Refuses to run rather than half-read unsupported YAML, and names every check that could not run instead of reporting clean |
 | `/myspec:worktree-clean` | Clean up git worktrees after feature branches |
-| `/myspec:housekeep` | Everyday sweep in one script call, no prompts: merged branches and worktrees, session state older than 24h, brainstorm sessions idle 7 days; counts what needs judgement and names the skill for it. A SessionStart hook nudges after 7 days ([examples](examples/skills/housekeep.md)) |
+| `/myspec:housekeep` | Everyday sweep in one script call, no prompts: merged branches and worktrees not in use, session state older than 24h, brainstorm sessions idle 7 days; counts what needs judgement and names the skill for it. A SessionStart hook nudges after 7 days ([examples](examples/skills/housekeep.md)) |
 | `/myspec:doctor` | Health check of every agent-facing surface, in three tiers: `lib/setup-doctor.mjs` for the mechanical checks (~1s, no model), one surface on request, or the full six-surface audit (CLAUDE.md + rules, skills/agents, `${aiDir}` docs, memory tree, hooks + harness config, feature manifest) with approval-gated fixes as grouped PRs |
 
 ## Configuration

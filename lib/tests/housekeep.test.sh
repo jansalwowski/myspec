@@ -98,10 +98,13 @@ printf '%s' "$OUT" | grep -qE '^memory: ' && ok || fail "the memory step reports
 # --- from a linked worktree ---------------------------------------------------
 git worktree add -q "$ROOT/wt" -b wt-branch
 git -C "$ROOT/wt" push -q -u origin wt-branch
-# Past branch-cleanup's own 1h veto, so only housekeep's filter keeps it.
+# Two guards keep it: housekeep's filter on the branch where it runs, and the
+# --unattended process veto (housekeep's own cwd is inside it), which this
+# test cannot switch off portably. The report names the held worktree.
 touch -t "$(date -r $(( $(date +%s) - 7200 )) +%Y%m%d%H%M 2>/dev/null || date -d "@$(( $(date +%s) - 7200 ))" +%Y%m%d%H%M)" "$ROOT/wt"
 OUT=$(cd "$ROOT/wt" && "$SCRIPT" --no-fetch 2>&1)
 git rev-parse --verify -q wt-branch >/dev/null && [ -d "$ROOT/wt" ] && ok || fail "the branch checked out where housekeep runs is kept (got: $OUT)"
+printf '%s' "$OUT" | grep -qF 'may be in use, run /myspec:worktree-clean' && ok || fail "the report points held worktrees at worktree-clean (got: $OUT)"
 
 OUT=$("$SCRIPT" --stale-days x 2>&1); STATUS=$?
 [ "$STATUS" -eq 2 ] && ok || fail "a bad --stale-days exits 2 (got $STATUS)"

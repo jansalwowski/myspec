@@ -70,6 +70,8 @@ Any one of these keeps the branch, before proofs are considered:
 - it was never pushed and has no merged PR
 - it has commits ahead of its remote-tracking ref
 
+`--unattended`, which `housekeep` passes because it removes without asking, also keeps a worktree with git activity, a session event or a running process in it in the last 24h, or with ignored files. Do not pass it here: this skill asks, so the shorter rules hold.
+
 ## Constraints
 
 - **Never** pass `--force` to `git worktree remove`, never `rm -rf` a worktree to get past a refusal, and never edit the script to do so. Git's refusal to drop a dirty tree is the last backstop — a refusal means files exist only there, and "just finishing the cleanup" with force destroys them permanently.

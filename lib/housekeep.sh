@@ -15,8 +15,10 @@
 #
 # Steps (each prints one line, "<step>: <what happened>"):
 #   branches    branch-cleanup.sh audit, then --apply on every provably
-#               contained branch; it fetches with --prune first. The branch
-#               checked out where this runs is never removed.
+#               contained branch, in --unattended mode (worktrees that may
+#               be in use or hold ignored files are kept); it fetches with
+#               --prune first. The branch checked out where this runs is
+#               never removed.
 #   sessions    .claude/state/sessions/*.jsonl older than 24h, with their
 #               .blobs/ and .bash/ directories; live logs (*.md) older than
 #               6h are counted for /myspec:session-clean
@@ -90,12 +92,12 @@ mtime_of() {
 
 # --- branches ---------------------------------------------------------------
 step_branches() {
-  local audit names=() kept n out
+  local audit names=() kept held tail n out
   if [ -z "$MAIN" ]; then
     echo "branches: skipped (no main checkout to run branch-cleanup.sh from)"
     return
   fi
-  if ! audit=$(cd "$MAIN" && "$LIB/branch-cleanup.sh" --json "${FETCH_ARG[@]}" 2>/dev/null); then
+  if ! audit=$(cd "$MAIN" && "$LIB/branch-cleanup.sh" --json --unattended "${FETCH_ARG[@]}" 2>/dev/null); then
     echo "branches: FAILED (branch-cleanup.sh audit did not run; try /myspec:worktree-clean)"
     STATUS=1
     return
@@ -104,21 +106,24 @@ step_branches() {
     [ -n "$n" ] && [ "$n" != "$HERE_BRANCH" ] && names+=("$n")
   done < <(printf '%s' "$audit" | jq -r '.[] | select(.verdict == "DELETE") | .branch')
   kept=$(printf '%s' "$audit" | jq '[.[] | select(.verdict != "DELETE")] | length')
+  held=$(printf '%s' "$audit" | jq '[.[] | select(.detail | test("^(may be in use|holds ignored files)"))] | length')
+  tail=""
+  [ "$held" -gt 0 ] && tail=" ($held with a worktree that may be in use, run /myspec:worktree-clean)"
 
   if [ "${#names[@]}" -eq 0 ]; then
-    echo "branches: nothing provably merged; $kept kept"
+    echo "branches: nothing provably merged; $kept kept$tail"
     return
   fi
   if [ "$DRY" -eq 0 ]; then
     local args=()
     for n in "${names[@]}"; do args+=(--branch "$n"); done
     # --no-fetch: the audit above just fetched.
-    if ! out=$(cd "$MAIN" && "$LIB/branch-cleanup.sh" --apply --no-fetch "${args[@]}" 2>&1); then
+    if ! out=$(cd "$MAIN" && "$LIB/branch-cleanup.sh" --apply --unattended --no-fetch "${args[@]}" 2>&1); then
       STATUS=1
     fi
     printf '%s\n' "$out" | grep -E '^(SKIP|FAILED)' | sed 's/^/  /'
   fi
-  echo "branches: $VERB ${#names[@]} merged ($(IFS=,; printf '%s' "${names[*]}" | sed 's/,/, /g')); $kept kept"
+  echo "branches: $VERB ${#names[@]} merged ($(IFS=,; printf '%s' "${names[*]}" | sed 's/,/, /g')); $kept kept$tail"
 }
 
 # --- sessions ---------------------------------------------------------------
