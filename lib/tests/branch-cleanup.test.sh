@@ -150,6 +150,13 @@ expect picked           DELETE "every commit cherry-picked into the base"
 expect picked-plus      KEEP   "one commit still only on the branch"
 expect develop          KEEP   "base and current branch"
 
+# A flag missing its value is a usage error, not an endless loop.
+"$SCRIPT" --no-fetch --branch >/dev/null 2>&1 & BC=$!
+( sleep 10; kill "$BC" 2>/dev/null ) & WD=$!
+wait "$BC"; BC_STATUS=$?
+kill "$WD" 2>/dev/null
+if [ "$BC_STATUS" -eq 2 ]; then PASS=$((PASS + 1)); else FAIL=$((FAIL + 1)); echo "FAIL  --branch with no value should exit 2 (got $BC_STATUS)" >&2; fi
+
 # --apply must refuse to act without an explicit branch list.
 if "$SCRIPT" --base develop --no-fetch --apply >/dev/null 2>&1; then
   FAIL=$((FAIL + 1))

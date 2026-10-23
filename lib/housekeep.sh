@@ -26,7 +26,7 @@
 #               --stale-days days and no running server
 #   memory      memory-doctor.mjs error and warning counts, read-only
 #   stamp       <state dir>/housekeep-last-run, which hooks/housekeep-nudge.sh
-#               reads at session start
+#               reads at session start; written only when every step ran
 #
 # Usage:
 #   housekeep.sh [--dry-run] [--no-fetch] [--stale-days <n>]
@@ -48,7 +48,8 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --dry-run)    DRY=1; shift ;;
     --no-fetch)   FETCH_ARG=(--no-fetch); shift ;;
-    --stale-days) STALE_DAYS="${2:-}"; shift 2 ;;
+    --stale-days) [ "$#" -ge 2 ] || { echo "housekeep: --stale-days needs a value" >&2; exit 2; }
+                  STALE_DAYS="$2"; shift 2 ;;
     -h|--help)    sed -n '2,36p' "$0"; exit 0 ;;
     *)            echo "housekeep: unknown argument '$1'" >&2; exit 2 ;;
   esac
@@ -207,8 +208,11 @@ step_memory() {
 }
 
 # --- stamp ------------------------------------------------------------------
+# Only after a clean run: a stamp after a FAILED step would silence the
+# nudge for a sweep that did not happen.
 step_stamp() {
   [ "$DRY" -eq 1 ] && return
+  [ "$STATUS" -eq 0 ] || return
   if mkdir -p "$STATE_ROOT" 2>/dev/null && printf '%s\n' "$NOW" > "$STATE_ROOT/housekeep-last-run"; then
     return
   fi

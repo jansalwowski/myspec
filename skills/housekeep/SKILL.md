@@ -30,7 +30,7 @@ A real run also writes the timestamp that `hooks/housekeep-nudge.sh` reads.
 
 ### Step 2: Report
 
-Show the script's lines as printed. A line naming a skill (`run /myspec:session-clean`, `run /myspec:memory-optimize`) is the follow-up: offer it in one line, never run it inline. Those skills ask per item, which is why they are not part of this sweep.
+Show the script's lines as printed. A line naming a skill (`run /myspec:worktree-clean`, `run /myspec:session-clean`, `run /myspec:memory-optimize`) is the follow-up: offer it in one line, never run it inline. Those skills ask per item, which is why they are not part of this sweep.
 
 A `FAILED` line or a non-zero exit means a step did not run or a removal was refused: report it as such. An indented `SKIP` line under `branches` is a branch that failed re-verification at apply time; `/myspec:worktree-clean` explains the hold.
 

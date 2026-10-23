@@ -70,8 +70,11 @@ NAMED_BRANCHES=()
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --apply)    APPLY=1; shift ;;
-    --branch)   NAMED_BRANCHES+=("${2:-}"); shift 2 ;;
-    --base)     BASE="${2:-}"; shift 2 ;;
+    --branch|--base)
+      # A missing value would leave `shift 2` failing and the loop spinning.
+      [ "$#" -ge 2 ] || { echo "branch-cleanup: $1 needs a value" >&2; exit 2; }
+      if [ "$1" = --branch ]; then NAMED_BRANCHES+=("$2"); else BASE="$2"; fi
+      shift 2 ;;
     --no-fetch) DO_FETCH=0; shift ;;
     --json)     AS_JSON=1; shift ;;
     --unattended) UNATTENDED=1; shift ;;

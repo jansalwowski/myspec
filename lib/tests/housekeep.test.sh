@@ -108,6 +108,15 @@ printf '%s' "$OUT" | grep -qF 'may be in use, run /myspec:worktree-clean' && ok 
 
 OUT=$("$SCRIPT" --stale-days x 2>&1); STATUS=$?
 [ "$STATUS" -eq 2 ] && ok || fail "a bad --stale-days exits 2 (got $STATUS)"
+OUT=$(perl -e 'alarm 10; exec @ARGV' "$SCRIPT" --dry-run --stale-days 2>&1); STATUS=$?
+[ "$STATUS" -eq 2 ] && ok || fail "--stale-days with no value exits 2 instead of looping (got $STATUS)"
+
+# A FAILED step leaves the stamp alone, so the nudge keeps nagging.
+rm -f "$REPO/.claude/state/housekeep-last-run"
+mkdir -p "$ROOT/brokenbin"; printf '#!/bin/sh\nexit 3\n' > "$ROOT/brokenbin/node"; chmod +x "$ROOT/brokenbin/node"
+OUT=$(PATH="$ROOT/brokenbin:$PATH" "$SCRIPT" --no-fetch 2>&1); STATUS=$?
+[ "$STATUS" -eq 1 ] && printf '%s' "$OUT" | grep -qF 'memory: FAILED' && ok || fail "a broken memory-doctor fails the run (got $STATUS: $OUT)"
+[ ! -e "$REPO/.claude/state/housekeep-last-run" ] && ok || fail "a failed run writes no stamp"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

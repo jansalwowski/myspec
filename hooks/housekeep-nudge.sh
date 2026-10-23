@@ -43,10 +43,13 @@ if [ ! -f "$STAMP" ]; then
 fi
 
 LAST=$(tr -cd '0-9' < "$STAMP" 2>/dev/null)
-[ -n "$LAST" ] || LAST=0
+TODO="Run /myspec:housekeep to clear merged branches, stale session state and idle brainstorm sessions."
+if [ -z "$LAST" ] || [ "$LAST" -gt "$NOW" ]; then
+  jq -cn --arg m "myspec: no readable record of the last housekeep run. $TODO" '{systemMessage: $m}'
+  exit 0
+fi
 DAYS=$(( (NOW - LAST) / 86400 ))
 [ "$DAYS" -ge 7 ] || exit 0
 
-jq -cn --arg m "myspec: housekeep last ran $DAYS days ago. Run /myspec:housekeep to clear merged branches, stale session state and idle brainstorm sessions." \
-  '{systemMessage: $m}'
+jq -cn --arg m "myspec: housekeep last ran $DAYS days ago. $TODO" '{systemMessage: $m}'
 exit 0

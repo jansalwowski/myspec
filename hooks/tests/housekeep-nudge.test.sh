@@ -58,7 +58,7 @@ printf '%s' "$MSG" | grep -qF '/myspec:housekeep' && ok || fail "9 days: names t
 
 echo garbage > "$STAMP"
 run_in "$REPO"
-printf '%s' "$OUT" | jq -e '.systemMessage' >/dev/null 2>&1 && ok || fail "unreadable stamp: nudges rather than staying silent forever"
+printf '%s' "$OUT" | jq -r '.systemMessage' 2>/dev/null | grep -qF 'no readable record' && ok || fail "unreadable stamp: says so rather than inventing an age (got: $OUT)"
 
 # A linked worktree reads the main checkout's stamp.
 git -C "$REPO" commit -q --allow-empty -m init
