@@ -44,8 +44,10 @@
 #   - a session event in the last 24h names it (lib/session-event.sh
 #     session_claims: a write, a verify, or an isolation decision)
 #   - a running process has its working directory inside it
-#   - it holds ignored files (.env, local config): `git worktree remove`
-#     deletes them, and they exist nowhere else
+#   - it holds ignored files outside REGENERABLE (.env, local config):
+#     `git worktree remove` deletes them, and they exist nowhere else.
+#     Dependency, build and cache output is rebuilt by one install or build,
+#     and is usually what makes a stale worktree worth removing.
 # Each such DETAIL starts with "may be in use" or "holds ignored files".
 #
 # Usage:
@@ -196,6 +198,32 @@ patches_upstream() {
   ! grep -q '^+' <<< "$out"
 }
 
+# Ignored paths that one install, build or test run recreates, by any path
+# component (a directory) or by basename. Data, not one ecosystem's rule:
+# JS, Python, PHP/Ruby/Go, JVM/Rust and OS litter.
+REGENERABLE=" node_modules .pnp bower_components .venv venv .virtualenv __pycache__ .pytest_cache .mypy_cache .ruff_cache .tox .nox .hypothesis vendor .bundle target build dist out .next .nuxt .svelte-kit .turbo .parcel-cache .gradle .cache coverage .nyc_output .DS_Store Thumbs.db "
+
+# irreplaceable_ignored <git status --ignored porcelain> -> the first ignored
+# path no REGENERABLE entry covers, or nothing.
+irreplaceable_ignored() {
+  local line path part covered
+  while IFS= read -r line; do
+    case "$line" in '!! '*) ;; *) continue ;; esac
+    path="${line#!! }"
+    path="${path%/}"
+    covered=0
+    local IFS=/
+    for part in $path; do
+      case "$REGENERABLE" in *" $part "*) covered=1; break ;; esac
+    done
+    case "$path" in *.pyc|*.pyo|*.class) covered=1 ;; esac
+    if [ "$covered" -eq 0 ]; then
+      printf '%s\n' "$path"
+      return
+    fi
+  done <<< "$1"
+}
+
 # The working directory of every running process, one per line, read once.
 # lsof where present (macOS, most Linux), else /proc. Neither: nothing, and
 # the other unattended vetoes still hold.
@@ -236,7 +264,7 @@ unattended_veto() {
     return 0
   fi
 
-  local cwds ignored
+  local cwds ignored keep
   cwds=$(process_cwds)
   if awk -v a="$wt" -v b="$phys" '
       $0 == a || $0 == b || index($0, a "/") == 1 || index($0, b "/") == 1 { found = 1; exit }
@@ -246,8 +274,9 @@ unattended_veto() {
   fi
 
   ignored=$(git -C "$wt" status --porcelain --ignored=matching 2>/dev/null)
-  if grep -q '^!!' <<< "$ignored"; then
-    DETAIL="holds ignored files that removal would delete"
+  keep=$(irreplaceable_ignored "$ignored")
+  if [ -n "$keep" ]; then
+    DETAIL="holds ignored files that removal would delete ($keep)"
     return 0
   fi
   return 1

@@ -70,7 +70,7 @@ Any one of these keeps the branch, before proofs are considered:
 - it was never pushed and has no merged PR
 - it has commits ahead of its remote-tracking ref
 
-`--unattended`, which `housekeep` passes because it removes without asking, also keeps a worktree with git activity, a session event or a running process in it in the last 24h, or with ignored files. Do not pass it here: this skill asks, so the shorter rules hold.
+`--unattended`, which `housekeep` passes because it removes without asking, also keeps a worktree with git activity, a session event or a running process in it in the last 24h, or with ignored files other than dependencies, build output and caches (`node_modules`, `.venv`, `target`, …). Do not pass it here: this skill asks, so the shorter rules hold.
 
 ## Constraints
 

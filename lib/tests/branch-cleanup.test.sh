@@ -184,8 +184,8 @@ old_admin() {  # back-date the worktree and git's record of activity in it
   admin=$(git -C "$1" rev-parse --absolute-git-dir)
   touch -t 202001010000 "$1" "$admin/HEAD" "$admin/logs/HEAD"
 }
-printf '*.local\n' > .gitignore; git add .gitignore; git commit -qm ignore; git push -q origin develop
-for b in uw-git uw-session uw-proc uw-ignored uw-idle; do
+printf '*.local\nnode_modules/\n__pycache__/\n' > .gitignore; git add .gitignore; git commit -qm ignore; git push -q origin develop
+for b in uw-git uw-session uw-proc uw-ignored uw-idle uw-deps; do
   mkbranch "$b"; seed "$b.txt" "$b" "$b"
   squash_merge "$b"
   git push -q origin "$b"
@@ -193,12 +193,16 @@ for b in uw-git uw-session uw-proc uw-ignored uw-idle; do
   touch -t 202001010000 "$ROOT/$b"
 done
 git checkout -q develop
-for b in uw-session uw-proc uw-ignored uw-idle; do old_admin "$ROOT/$b"; done
+for b in uw-session uw-proc uw-ignored uw-idle uw-deps; do old_admin "$ROOT/$b"; done
 mkdir -p .claude/state/sessions
 jq -cn --arg r "$ROOT/uw-session" --argjson at "$(date +%s)" \
   '{t:"write",root:$r,rel:"x.txt",kind:"code",via:"tool",at:$at}' > .claude/state/sessions/s1.jsonl
 (cd "$ROOT/uw-proc/" && exec sleep 300) & PROC=$!
 echo secret > "$ROOT/uw-ignored/dev.local"; touch -t 202001010000 "$ROOT/uw-ignored"
+# Dependencies and caches are rebuilt by an install: they do not hold it.
+mkdir -p "$ROOT/uw-deps/node_modules/pkg" "$ROOT/uw-deps/src/__pycache__"
+touch "$ROOT/uw-deps/node_modules/pkg/index.js" "$ROOT/uw-deps/src/__pycache__/m.pyc"
+touch -t 202001010000 "$ROOT/uw-deps"
 sleep 1
 
 RESULT=$("$SCRIPT" --base develop --no-fetch --json --unattended 2>/dev/null)
@@ -207,6 +211,7 @@ expect uw-session KEEP   "--unattended: a session wrote in the worktree in the l
 expect uw-proc    KEEP   "--unattended: a process runs inside the worktree"
 expect uw-ignored KEEP   "--unattended: the worktree holds an ignored file"
 expect uw-idle    DELETE "--unattended: none of the above"
+expect uw-deps    DELETE "--unattended: only regenerable ignored files (node_modules, __pycache__)"
 kill "$PROC" 2>/dev/null; wait "$PROC" 2>/dev/null
 
 RESULT=$("$SCRIPT" --base develop --no-fetch --json 2>/dev/null)
