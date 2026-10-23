@@ -107,9 +107,13 @@ step_branches() {
     [ -n "$n" ] && [ "$n" != "$HERE_BRANCH" ] && names+=("$n")
   done < <(printf '%s' "$audit" | jq -r '.[] | select(.verdict == "DELETE") | .branch')
   kept=$(printf '%s' "$audit" | jq '[.[] | select(.verdict != "DELETE")] | length')
-  held=$(printf '%s' "$audit" | jq '[.[] | select(.detail | test("^(may be in use|holds ignored files)"))] | length')
+  held=$(printf '%s' "$audit" | jq '[.[] | select(.detail | test("^may be in use"))] | length')
+  local files
+  files=$(printf '%s' "$audit" | jq '[.[] | select(.detail | test("^holds ignored files"))] | length')
   tail=""
-  [ "$held" -gt 0 ] && tail=" ($held with a worktree that may be in use, run /myspec:worktree-clean)"
+  [ "$held" -gt 0 ] && tail="; $held worktree(s) may be in use"
+  [ "$files" -gt 0 ] && tail="$tail; $files worktree(s) hold local files"
+  [ -n "$tail" ] && tail="$tail, run /myspec:worktree-clean"
 
   if [ "${#names[@]}" -eq 0 ]; then
     echo "branches: nothing provably merged; $kept kept$tail"

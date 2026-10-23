@@ -333,11 +333,12 @@ session_isolation() {
 # at or after <since> names one of the paths, or a path under one, as the
 # checkout it wrote in or verified (root) or its isolation worktree (path).
 # The unattended branch cleanup asks it before removing a worktree. Files
-# last modified before <since> are skipped unread.
+# last modified before <since> are skipped unread. A recorded path is
+# compared as written and resolved (pwd -P): set-isolation.sh stores
+# --worktree-path as given, which may run through a symlink (/tmp on macOS).
 session_claims() {
-  local home="$1" since="$2" dir f t paths
+  local home="$1" since="$2" dir f t rec w x phys
   shift 2
-  paths=$(jq -cn '$ARGS.positional' --args "$@") || return 1
   dir=$(session_dir "$home")
   for f in "$dir"/*.jsonl; do
     [ -f "$f" ] || continue
@@ -345,12 +346,18 @@ session_claims() {
     case "$t" in ''|*[!0-9]*) t=$(stat -f %m "$f" 2>/dev/null) || t="" ;; esac
     case "$t" in ''|*[!0-9]*) t=0 ;; esac
     [ "$t" -ge "$since" ] || continue
-    # shellcheck disable=SC2016 # a jq program: $ev, $s and $p are jq variables
-    [ "$(session_query "$home" "$(basename "$f" .jsonl)" '
-      any($ev[]; (.at // 0) >= $s and
-        ([.root, .path] | map(select(type == "string" and . != ""))
-          | any(. as $x | $p | any(. as $w | $x == $w or ($x | startswith($w + "/"))))))' \
-      --argjson s "$since" --argjson p "$paths")" = true ] && return 0
+    # shellcheck disable=SC2016 # a jq program: $ev and $s are jq variables
+    rec=$(session_query "$home" "$(basename "$f" .jsonl)" '
+      [$ev[] | select((.at // 0) >= $s) | .root, .path
+        | select(type == "string" and . != "")] | unique[]' --argjson s "$since")
+    while IFS= read -r x; do
+      [ -n "$x" ] || continue
+      phys=$(cd "$x" 2>/dev/null && pwd -P) || phys=""
+      for w in "$@"; do
+        case "$x/" in "$w"/*) return 0 ;; esac
+        [ -n "$phys" ] && case "$phys/" in "$w"/*) return 0 ;; esac
+      done
+    done <<< "$rec"
   done
   return 1
 }

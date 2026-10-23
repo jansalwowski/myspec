@@ -191,8 +191,8 @@ old_admin() {  # back-date the worktree and git's record of activity in it
   admin=$(git -C "$1" rev-parse --absolute-git-dir)
   touch -t 202001010000 "$1" "$admin/HEAD" "$admin/logs/HEAD"
 }
-printf '*.local\nnode_modules/\n__pycache__/\n' > .gitignore; git add .gitignore; git commit -qm ignore; git push -q origin develop
-for b in uw-git uw-session uw-proc uw-ignored uw-idle uw-deps; do
+printf '*.local\nnode_modules/\n__pycache__/\n.idea/\n.env\nout/\n' > .gitignore; git add .gitignore; git commit -qm ignore; git push -q origin develop
+for b in uw-git uw-session uw-proc uw-ignored uw-idle uw-deps uw-nested uw-outenv uw-link; do
   mkbranch "$b"; seed "$b.txt" "$b" "$b"
   squash_merge "$b"
   git push -q origin "$b"
@@ -200,7 +200,7 @@ for b in uw-git uw-session uw-proc uw-ignored uw-idle uw-deps; do
   touch -t 202001010000 "$ROOT/$b"
 done
 git checkout -q develop
-for b in uw-session uw-proc uw-ignored uw-idle uw-deps; do old_admin "$ROOT/$b"; done
+for b in uw-session uw-proc uw-ignored uw-idle uw-deps uw-nested uw-outenv uw-link; do old_admin "$ROOT/$b"; done
 mkdir -p .claude/state/sessions
 jq -cn --arg r "$ROOT/uw-session" --argjson at "$(date +%s)" \
   '{t:"write",root:$r,rel:"x.txt",kind:"code",via:"tool",at:$at}' > .claude/state/sessions/s1.jsonl
@@ -209,7 +209,18 @@ echo secret > "$ROOT/uw-ignored/dev.local"; touch -t 202001010000 "$ROOT/uw-igno
 # Dependencies and caches are rebuilt by an install: they do not hold it.
 mkdir -p "$ROOT/uw-deps/node_modules/pkg" "$ROOT/uw-deps/src/__pycache__"
 touch "$ROOT/uw-deps/node_modules/pkg/index.js" "$ROOT/uw-deps/src/__pycache__/m.pyc"
+mkdir -p "$ROOT/uw-deps/.idea"; touch "$ROOT/uw-deps/.idea/workspace.xml"
 touch -t 202001010000 "$ROOT/uw-deps"
+# A secret under a directory named like build output is still a secret.
+mkdir -p "$ROOT/uw-nested/docker/build"; echo s > "$ROOT/uw-nested/docker/build/.env"
+touch -t 202001010000 "$ROOT/uw-nested"
+# A secret put directly in an ignored output directory.
+mkdir -p "$ROOT/uw-outenv/out"; echo s > "$ROOT/uw-outenv/out/.env"
+touch -t 202001010000 "$ROOT/uw-outenv"
+# An isolation decision recorded through a symlink to the worktree.
+ln -s "$ROOT/uw-link" "$ROOT/uw-link-alias"
+jq -cn --arg p "$ROOT/uw-link-alias" --argjson at "$(date +%s)" \
+  '{t:"isolation",mode:"worktree",path:$p,at:$at}' > .claude/state/sessions/s2.jsonl
 sleep 1
 
 RESULT=$("$SCRIPT" --base develop --no-fetch --json --unattended 2>/dev/null)
@@ -218,7 +229,10 @@ expect uw-session KEEP   "--unattended: a session wrote in the worktree in the l
 expect uw-proc    KEEP   "--unattended: a process runs inside the worktree"
 expect uw-ignored KEEP   "--unattended: the worktree holds an ignored file"
 expect uw-idle    DELETE "--unattended: none of the above"
-expect uw-deps    DELETE "--unattended: only regenerable ignored files (node_modules, __pycache__)"
+expect uw-deps    DELETE "--unattended: only regenerable ignored files (node_modules, __pycache__, .idea)"
+expect uw-nested  KEEP   "--unattended: docker/build/.env is not build output"
+expect uw-outenv  KEEP   "--unattended: a .env directly inside ignored out/"
+expect uw-link    KEEP   "--unattended: an isolation path recorded through a symlink"
 kill "$PROC" 2>/dev/null; wait "$PROC" 2>/dev/null
 
 RESULT=$("$SCRIPT" --base develop --no-fetch --json 2>/dev/null)

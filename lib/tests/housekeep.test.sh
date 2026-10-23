@@ -104,7 +104,7 @@ git -C "$ROOT/wt" push -q -u origin wt-branch
 touch -t "$(date -r $(( $(date +%s) - 7200 )) +%Y%m%d%H%M 2>/dev/null || date -d "@$(( $(date +%s) - 7200 ))" +%Y%m%d%H%M)" "$ROOT/wt"
 OUT=$(cd "$ROOT/wt" && "$SCRIPT" --no-fetch 2>&1)
 git rev-parse --verify -q wt-branch >/dev/null && [ -d "$ROOT/wt" ] && ok || fail "the branch checked out where housekeep runs is kept (got: $OUT)"
-printf '%s' "$OUT" | grep -qF 'may be in use, run /myspec:worktree-clean' && ok || fail "the report points held worktrees at worktree-clean (got: $OUT)"
+printf '%s' "$OUT" | grep -qE 'may be in use.*run /myspec:worktree-clean' && ok || fail "the report points held worktrees at worktree-clean (got: $OUT)"
 
 OUT=$("$SCRIPT" --stale-days x 2>&1); STATUS=$?
 [ "$STATUS" -eq 2 ] && ok || fail "a bad --stale-days exits 2 (got $STATUS)"

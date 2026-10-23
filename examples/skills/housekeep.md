@@ -33,7 +33,7 @@ Since the last run, three PRs were squash-merged, a dozen sessions came and went
 ### Output
 
 ```
-branches: removed 3 merged (feat/export-csv, fix/invoice-rounding, docs/readme-badges); 4 kept (1 with a worktree that may be in use, run /myspec:worktree-clean)
+branches: removed 3 merged (feat/export-csv, fix/invoice-rounding, docs/readme-badges); 4 kept; 1 worktree(s) may be in use, run /myspec:worktree-clean
 sessions: removed 11 state file(s) older than 24h; 2 live log(s) older than 6h, run /myspec:session-clean
 brainstorm: removed 1 session(s) idle over 7d; 0 kept
 memory: 0 error(s), 3 warning(s), run /myspec:memory-optimize

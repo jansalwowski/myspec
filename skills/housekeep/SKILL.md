@@ -21,7 +21,7 @@ Give the Bash call a 10-minute timeout: the branch step looks up merged PRs with
 
 | Step | Removes without asking | Only counts |
 |------|------------------------|-------------|
-| branches | branches and worktrees `branch-cleanup.sh --unattended` proves merged, except the branch checked out where it runs | branches with no proof; worktrees that may be in use (git activity, a session or a process in the last 24h) or hold ignored files other than dependencies, build output and caches |
+| branches | branches and worktrees `branch-cleanup.sh --unattended` proves merged, except the branch checked out where it runs | branches with no proof; worktrees that may be in use (git activity or a session in the last 24h, or a running process) or hold ignored files other than dependencies, build output, caches and editor state |
 | sessions | `.jsonl` session state older than 24h, with its `.blobs/` and `.bash/` | live logs older than 6h |
 | brainstorm | `.myspec/brainstorm/<session>/` idle 7 days with no running server | — |
 | memory | — | memory-doctor errors and warnings |

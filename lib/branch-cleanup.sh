@@ -44,7 +44,7 @@
 #   - a session event in the last 24h names it (lib/session-event.sh
 #     session_claims: a write, a verify, or an isolation decision)
 #   - a running process has its working directory inside it
-#   - it holds ignored files outside REGENERABLE (.env, local config):
+#   - it holds ignored files that are not regenerable (.env, local config):
 #     `git worktree remove` deletes them, and they exist nowhere else.
 #     Dependency, build and cache output is rebuilt by one install or build,
 #     and is usually what makes a stale worktree worth removing.
@@ -201,30 +201,47 @@ patches_upstream() {
   ! grep -q '^+' <<< "$out"
 }
 
-# Ignored paths that one install, build or test run recreates, by any path
-# component (a directory) or by basename. Data, not one ecosystem's rule:
-# JS, Python, PHP/Ruby/Go, JVM/Rust and OS litter.
-REGENERABLE=" node_modules .pnp bower_components .venv venv .virtualenv __pycache__ .pytest_cache .mypy_cache .ruff_cache .tox .nox .hypothesis vendor .bundle target build dist out .next .nuxt .svelte-kit .turbo .parcel-cache .gradle .cache coverage .nyc_output .DS_Store Thumbs.db "
+# Ignored entries that one install, build or test run recreates, matched on
+# the ignored entry's own name, never on a parent directory's: git lists
+# `docker/build/.env` file by file when only `.env` is ignored, and `build`
+# must not cover it. Data, not one ecosystem's rule: JS, Python, PHP/Ruby/
+# Go, JVM/Rust, editor state and OS litter. .claude/settings.local.json is
+# per-checkout permission grants, re-granted at the next prompt.
+REGENERABLE_DIRS=" node_modules .pnp bower_components .venv venv .virtualenv __pycache__ .pytest_cache .mypy_cache .ruff_cache .tox .nox .hypothesis vendor .bundle target build dist out .next .nuxt .svelte-kit .turbo .parcel-cache .gradle .cache coverage .nyc_output .idea "
+REGENERABLE_FILES=" .DS_Store Thumbs.db .eslintcache "
 
-# irreplaceable_ignored <git status --ignored porcelain> -> the first ignored
-# path no REGENERABLE entry covers, or nothing.
+# irreplaceable_ignored <worktree> <git status --ignored porcelain> -> the
+# first ignored path that is not regenerable, or nothing. A regenerable
+# directory ignored as a whole is opened one level for secrets (.env*,
+# *.local, *.pem, *.key) put directly in it; deeper ones are not looked for.
 irreplaceable_ignored() {
-  local line path part covered
+  local wt="$1" line path name hit
   while IFS= read -r line; do
     case "$line" in '!! '*) ;; *) continue ;; esac
     path="${line#!! }"
-    path="${path%/}"
-    covered=0
-    local IFS=/
-    for part in $path; do
-      case "$REGENERABLE" in *" $part "*) covered=1; break ;; esac
-    done
-    case "$path" in *.pyc|*.pyo|*.class) covered=1 ;; esac
-    if [ "$covered" -eq 0 ]; then
-      printf '%s\n' "$path"
-      return
-    fi
-  done <<< "$1"
+    case "$path" in
+      */)
+        path="${path%/}"
+        name="${path##*/}"
+        case "$REGENERABLE_DIRS" in
+          *" $name "*)
+            hit=$(find "$wt/$path" -mindepth 1 -maxdepth 1 \( -name '.env' -o -name '.env.*' \
+              -o -name '*.local' -o -name '*.pem' -o -name '*.key' \) -print -quit 2>/dev/null)
+            if [ -n "$hit" ]; then
+              printf '%s\n' "${hit#"$wt"/}"
+              return
+            fi
+            continue ;;
+        esac ;;
+      *)
+        name="${path##*/}"
+        case "$REGENERABLE_FILES" in *" $name "*) continue ;; esac
+        case "$name" in *.pyc|*.pyo|*.class|*.log) continue ;; esac
+        [ "$path" = .claude/settings.local.json ] && continue ;;
+    esac
+    printf '%s\n' "$path"
+    return
+  done <<< "$2"
 }
 
 # The working directory of every running process, one per line, read once.
@@ -277,7 +294,7 @@ unattended_veto() {
   fi
 
   ignored=$(git -C "$wt" status --porcelain --ignored=matching 2>/dev/null)
-  keep=$(irreplaceable_ignored "$ignored")
+  keep=$(irreplaceable_ignored "$wt" "$ignored")
   if [ -n "$keep" ]; then
     DETAIL="holds ignored files that removal would delete ($keep)"
     return 0
