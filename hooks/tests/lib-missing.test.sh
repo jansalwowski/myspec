@@ -76,6 +76,13 @@ run_without record-session-metrics
 printf '%s' "$ERR" | grep -qF 'CLAUDE_PLUGIN_ROOT is unset' && ok || fail "record-session-metrics: stderr names the unset variable before the streams close (got: ${ERR:0:160})"
 printf '%s' "$ERR" | grep -qF '/myspec:update' && ok || fail "record-session-metrics: stderr names the repair"
 
+# SessionStart cannot block either: stderr, nothing on stdout.
+run_without housekeep-nudge
+[ "$STATUS" -eq 0 ] && ok || fail "housekeep-nudge: exits 0 without the variable"
+[ -z "$OUT" ] && ok || fail "housekeep-nudge: prints nothing to stdout without the variable"
+printf '%s' "$ERR" | grep -qF 'CLAUDE_PLUGIN_ROOT is unset' && ok || fail "housekeep-nudge: stderr names the unset variable (got: ${ERR:0:160})"
+printf '%s' "$ERR" | grep -qF '/myspec:update' && ok || fail "housekeep-nudge: stderr names the repair"
+
 # A set variable whose lib/ lacks hook-core.sh is the same condition, and the
 # reason names the root that was looked under.
 mkdir -p "$ROOT/empty-plugin/lib"

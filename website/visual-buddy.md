@@ -94,7 +94,7 @@ The file path still appears in the terminal as a one-line footnote. A brainstorm
 
 ## Where the files live
 
-By default, a session lives in a temporary directory and is deleted when it stops. Brainstorm may start it with `--project-dir`, which keeps the screens in `.myspec/brainstorm/<session>/` in your project, so they survive restarts and stay around for later reference. The start script makes that directory ignore itself with a `.gitignore` of `*`, so nothing there is ever committed by accident. The work-isolation hook treats `.myspec/brainstorm/` as scratch, so writing screens there doesn't require a develop/worktree decision.
+By default, a session lives in a temporary directory and is deleted when it stops. Brainstorm may start it with `--project-dir`, which keeps the screens in `.myspec/brainstorm/<session>/` in your project, so they survive restarts and stay around for later reference. The start script makes that directory ignore itself with a `.gitignore` of `*`, so nothing there is ever committed by accident. The work-isolation hook treats `.myspec/brainstorm/` as scratch, so writing screens there doesn't require a develop/worktree decision. `/myspec:housekeep` removes a session there once no file in it has changed for 7 days and its server is not running.
 
 ## Remote machines, containers, other browsers
 

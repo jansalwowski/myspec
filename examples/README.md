@@ -54,12 +54,14 @@ The review pass that runs on built code before completion. For bugs in the diff,
 | [skills/session-clean.md](skills/session-clean.md) | Routine sweep (mixed empty + substantive) · Ambiguous siblings with live worktree · Nothing to do (clean directory) |
 | [skills/memory-sanitize.md](skills/memory-sanitize.md) | Routine triage with mixed buckets (drop/promote/merge) · Promotion with ambiguous routing · Compressing a bloated entry · Resolving a conflict between two KEEP memories · Nothing to do (clean store) |
 | [skills/memory-optimize.md](skills/memory-optimize.md) | Routine pass with mixed buckets · Never-fired memory retuned · Colliding triggers merged · Episode decay (consolidate vs. expire) · Nothing to do (healthy store) |
+| [skills/housekeep.md](skills/housekeep.md) | Weekly nudge (routine sweep) · Dry run before a big cleanup · A branch held back |
 
 ### When to use which memory skill
 
 - **`/memorize`** — you already know the exact thing to save. Hand it over inline.
 - **`/memorify`** — you want the agent to look back over the conversation and propose what's worth keeping.
 - **`/session-complete`** — wrapping up a tracked session; extracts memories from the session log table.
+- **`/housekeep`** — the everyday sweep with no prompts: removes only what a rule proves safe and points at `/session-clean` or `/memory-optimize` for the rest.
 - **`/session-clean`** — periodic sweep of the active sessions directory; deletes empty leftovers and archives substantive ones that were never closed.
 - **`/memory-lookup`** — search before you start work or debug. The first thing to run on a new bug or unfamiliar area.
 - **`/memory-sanitize`** — periodic groomer for the *user-level* auto-memory store at `<config_dir>/projects/<encoded_cwd>/memory/`. Triages every entry: drops stale, promotes feedback to CLAUDE.md / `.claude/rules/`, merges duplicates, **compresses bloated bodies** against the length budget in `.claude/rules/auto-memory-style.md`, and **supersedes contradictions** non-destructively (loser becomes a one-line stub on disk). Distinct from `session-clean`, which sweeps project-level session files.

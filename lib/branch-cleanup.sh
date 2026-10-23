@@ -36,10 +36,24 @@
 #   - it was never pushed and has no merged PR
 #   - it has commits ahead of its remote-tracking ref
 #
+# UNATTENDED VETOES (--unattended, for callers that remove without asking,
+# such as housekeep.sh) — a worktree is also kept when:
+#   - git recorded activity in it in the last 24h (HEAD or its reflog in
+#     its admin dir: a commit or checkout in a subdirectory never touches
+#     the top-level directory the 1h veto reads)
+#   - a session event in the last 24h names it (lib/session-event.sh
+#     session_claims: a write, a verify, or an isolation decision)
+#   - a running process has its working directory inside it
+#   - it holds ignored files that are not regenerable (.env, local config):
+#     `git worktree remove` deletes them, and they exist nowhere else.
+#     Dependency, build and cache output is rebuilt by one install or build,
+#     and is usually what makes a stale worktree worth removing.
+# Each such DETAIL starts with "may be in use" or "holds ignored files".
+#
 # Usage:
 #   branch-cleanup.sh                              audit every candidate (default)
 #   branch-cleanup.sh --apply --branch <name>...   remove the named ones
-#   branch-cleanup.sh [--base <ref>] [--no-fetch] [--json]
+#   branch-cleanup.sh [--base <ref>] [--no-fetch] [--json] [--unattended]
 #
 # Deletion is never bulk: --apply requires each branch to be named, and every
 # candidate is re-verified at apply time.
@@ -50,16 +64,21 @@ BASE=""
 APPLY=0
 DO_FETCH=1
 AS_JSON=0
+UNATTENDED=0
 NAMED_BRANCHES=()
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --apply)    APPLY=1; shift ;;
-    --branch)   NAMED_BRANCHES+=("${2:-}"); shift 2 ;;
-    --base)     BASE="${2:-}"; shift 2 ;;
+    --branch|--base)
+      # A missing value would leave `shift 2` failing and the loop spinning.
+      [ "$#" -ge 2 ] || { echo "branch-cleanup: $1 needs a value" >&2; exit 2; }
+      if [ "$1" = --branch ]; then NAMED_BRANCHES+=("$2"); else BASE="$2"; fi
+      shift 2 ;;
     --no-fetch) DO_FETCH=0; shift ;;
     --json)     AS_JSON=1; shift ;;
-    -h|--help)  sed -n '2,40p' "$0"; exit 0 ;;
+    --unattended) UNATTENDED=1; shift ;;
+    -h|--help)  sed -n '2,56p' "$0"; exit 0 ;;
     *)          echo "branch-cleanup: unknown argument '$1'" >&2; exit 2 ;;
   esac
 done
@@ -94,6 +113,17 @@ fi
 
 CURRENT=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
 
+# The session files the unattended vetoes read live with the main checkout,
+# and only lib/session-event.sh reads them.
+SESSION_HOME=""
+if [ "$UNATTENDED" -eq 1 ]; then
+  # shellcheck source=lib/hook-core.sh
+  . "$(dirname "${BASH_SOURCE[0]}")/hook-core.sh"
+  # shellcheck source=lib/session-event.sh
+  . "$(dirname "${BASH_SOURCE[0]}")/session-event.sh"
+  SESSION_HOME=$(session_home "$REPO_ROOT") || SESSION_HOME="$REPO_ROOT"
+fi
+
 worktree_for_branch() {
   git worktree list --porcelain 2>/dev/null | awk -v want="refs/heads/$1" '
     /^worktree /  { path = $2 }
@@ -116,17 +146,18 @@ mtime_of() {
   printf '%s' "$t"
 }
 
-# Echoes the merged PR head SHA, or nothing.
-merged_pr_head() {
+# Sets PR_HEAD and PR_NUM from the branch's merged PR, or empties them.
+# One network call, made only when classify() needs it: the local proofs
+# settle most branches, and a repo with hundreds of branches otherwise pays
+# a gh round trip for each.
+merged_pr() {
+  local out
+  PR_HEAD="" PR_NUM=""
   command -v gh >/dev/null 2>&1 || return 0
-  gh pr list --head "$1" --state merged --json headRefOid --limit 1 2>/dev/null \
-    | jq -r '.[0].headRefOid // empty' 2>/dev/null
-}
-
-merged_pr_number() {
-  command -v gh >/dev/null 2>&1 || return 0
-  gh pr list --head "$1" --state merged --json number --limit 1 2>/dev/null \
-    | jq -r '.[0].number // empty' 2>/dev/null
+  out=$(gh pr list --head "$1" --state merged --json headRefOid,number --limit 1 2>/dev/null \
+    | jq -r '.[0] // empty | "\(.headRefOid) \(.number)"' 2>/dev/null) || return 0
+  [ -n "$out" ] || return 0
+  PR_HEAD="${out%% *}" PR_NUM="${out#* }"
 }
 
 # Proof A: every path the branch introduced is byte-identical in the base.
@@ -170,6 +201,107 @@ patches_upstream() {
   ! grep -q '^+' <<< "$out"
 }
 
+# Ignored entries that one install, build or test run recreates, matched on
+# the ignored entry's own name, never on a parent directory's: git lists
+# `docker/build/.env` file by file when only `.env` is ignored, and `build`
+# must not cover it. Data, not one ecosystem's rule: JS, Python, PHP/Ruby/
+# Go, JVM/Rust, editor state and OS litter. .claude/settings.local.json is
+# per-checkout permission grants, re-granted at the next prompt.
+REGENERABLE_DIRS=" node_modules .pnp bower_components .venv venv .virtualenv __pycache__ .pytest_cache .mypy_cache .ruff_cache .tox .nox .hypothesis vendor .bundle target build dist out .next .nuxt .svelte-kit .turbo .parcel-cache .gradle .cache coverage .nyc_output .idea "
+REGENERABLE_FILES=" .DS_Store Thumbs.db .eslintcache "
+
+# irreplaceable_ignored <worktree> <git status --ignored porcelain> -> the
+# first ignored path that is not regenerable, or nothing. A regenerable
+# directory ignored as a whole is opened one level for secrets (.env*,
+# *.local, *.pem, *.key) put directly in it; deeper ones are not looked for.
+irreplaceable_ignored() {
+  local wt="$1" line path name hit
+  while IFS= read -r line; do
+    case "$line" in '!! '*) ;; *) continue ;; esac
+    path="${line#!! }"
+    case "$path" in
+      */)
+        path="${path%/}"
+        name="${path##*/}"
+        case "$REGENERABLE_DIRS" in
+          *" $name "*)
+            hit=$(find "$wt/$path" -mindepth 1 -maxdepth 1 \( -name '.env' -o -name '.env.*' \
+              -o -name '*.local' -o -name '*.pem' -o -name '*.key' \) -print -quit 2>/dev/null)
+            if [ -n "$hit" ]; then
+              printf '%s\n' "${hit#"$wt"/}"
+              return
+            fi
+            continue ;;
+        esac ;;
+      *)
+        name="${path##*/}"
+        case "$REGENERABLE_FILES" in *" $name "*) continue ;; esac
+        case "$name" in *.pyc|*.pyo|*.class|*.log) continue ;; esac
+        [ "$path" = .claude/settings.local.json ] && continue ;;
+    esac
+    printf '%s\n' "$path"
+    return
+  done <<< "$2"
+}
+
+# The working directory of every running process, one per line, read once.
+# lsof where present (macOS, most Linux), else /proc. Neither: nothing, and
+# the other unattended vetoes still hold.
+PROCESS_CWDS=""
+PROCESS_CWDS_READ=0
+process_cwds() {
+  local p
+  if [ "$PROCESS_CWDS_READ" -eq 0 ]; then
+    PROCESS_CWDS_READ=1
+    if command -v lsof >/dev/null 2>&1; then
+      PROCESS_CWDS=$(lsof -a -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
+    elif [ -d /proc/self ]; then
+      PROCESS_CWDS=$(for p in /proc/[0-9]*/cwd; do readlink "$p" 2>/dev/null; done)
+    fi
+  fi
+  printf '%s\n' "$PROCESS_CWDS"
+}
+
+# unattended_veto <worktree> -> 0, with DETAIL set, when the worktree may be
+# in use or holds files a removal would destroy.
+unattended_veto() {
+  local wt="$1" phys admin f since
+  phys=$(cd "$wt" 2>/dev/null && pwd -P) || phys="$wt"
+  since=$(( $(date +%s) - 86400 ))
+
+  admin=$(git -C "$wt" rev-parse --absolute-git-dir 2>/dev/null) || admin=""
+  # Not index: the dirty-tree veto's `git status` may rewrite it, and a
+  # staged change is already dirty.
+  for f in "$admin/HEAD" "$admin/logs/HEAD"; do
+    if [ -n "$admin" ] && [ -e "$f" ] && [ "$(mtime_of "$f")" -ge "$since" ]; then
+      DETAIL="may be in use: git activity in the last 24h"
+      return 0
+    fi
+  done
+
+  if session_claims "$SESSION_HOME" "$since" "$wt" "$phys"; then
+    DETAIL="may be in use: a session worked in it in the last 24h"
+    return 0
+  fi
+
+  local cwds ignored keep
+  cwds=$(process_cwds)
+  if awk -v a="$wt" -v b="$phys" '
+      $0 == a || $0 == b || index($0, a "/") == 1 || index($0, b "/") == 1 { found = 1; exit }
+      END { exit !found }' <<< "$cwds"; then
+    DETAIL="may be in use: a running process is inside it"
+    return 0
+  fi
+
+  ignored=$(git -C "$wt" status --porcelain --ignored=matching 2>/dev/null)
+  keep=$(irreplaceable_ignored "$wt" "$ignored")
+  if [ -n "$keep" ]; then
+    DETAIL="holds ignored files that removal would delete ($keep)"
+    return 0
+  fi
+  return 1
+}
+
 # Sets VERDICT, PROOF, DETAIL for one branch.
 classify() {
   local br="$1"
@@ -201,12 +333,15 @@ classify() {
       DETAIL="worktree touched $(( age / 60 ))min ago — may be a live session"
       return
     fi
+
+    if [ "$UNATTENDED" -eq 1 ] && unattended_veto "$WT"; then
+      return
+    fi
   fi
 
-  local pr_head pr_num tip
+  local tip pr_looked=0
   tip=$(git rev-parse "$br")
-  pr_head=$(merged_pr_head "$br")
-  pr_num=$(merged_pr_number "$br")
+  PR_HEAD="" PR_NUM=""
 
   # "Was this branch ever published?" Three independent signals, because each
   # one alone has a blind spot: `git push` without -u sets no upstream config;
@@ -215,9 +350,13 @@ classify() {
   upstream_remote=$(git config --get "branch.${br}.remote" 2>/dev/null)
   git rev-parse --verify --quiet "origin/$br" >/dev/null && has_remote_ref=1
 
-  if [ -z "$upstream_remote" ] && [ "$has_remote_ref" -eq 0 ] && [ -z "$pr_head" ]; then
-    DETAIL="never pushed and no merged PR — local-only work"
-    return
+  if [ -z "$upstream_remote" ] && [ "$has_remote_ref" -eq 0 ]; then
+    merged_pr "$br"
+    pr_looked=1
+    if [ -z "$PR_HEAD" ]; then
+      DETAIL="never pushed and no merged PR — local-only work"
+      return
+    fi
   fi
 
   # Commits sitting ahead of a remote-tracking ref that still exists.
@@ -246,13 +385,14 @@ classify() {
     return
   fi
 
-  if [ -n "$pr_head" ]; then
-    if [ "$pr_head" = "$tip" ]; then
+  [ "$pr_looked" -eq 1 ] || merged_pr "$br"
+  if [ -n "$PR_HEAD" ]; then
+    if [ "$PR_HEAD" = "$tip" ]; then
       VERDICT=DELETE
-      PROOF="PR #${pr_num} merged, tip matches its head"
+      PROOF="PR #${PR_NUM} merged, tip matches its head"
       return
     fi
-    DETAIL="PR #${pr_num} merged but local tip ${tip:0:8} != PR head ${pr_head:0:8} — work added after the merge"
+    DETAIL="PR #${PR_NUM} merged but local tip ${tip:0:8} != PR head ${PR_HEAD:0:8} — work added after the merge"
     return
   fi
 
