@@ -7,4 +7,4 @@ timeout_seconds: 360
 allowed_tools: [Read, Glob, Grep, Skill, Agent]
 ---
 
-Can you run the myspec health check on just the hooks and harness config part of our setup? Only report what you find; don't change anything.
+Can you run the myspec health check on just the hooks and harness config part of our setup? Only report what you find; don't change anything. This sandbox only allows single commands, so no pipes, && or ; chains.

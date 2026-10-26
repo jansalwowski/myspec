@@ -1,0 +1,13 @@
+{
+  "reported-findings": {
+    "pass": [
+      "## Surface E: hooks and harness config\n\nTier 0: 0 errors, 2 warnings.\n\n| File | Category | Evidence |\n|---|---|---|\n| .claude/verification.json | dead | no check runs the test suite |",
+      "The hooks surface is clean: every hook blocks and passes as it claims."
+    ],
+    "fail": [
+      "I couldn't run the hooks and harness config check, because Bash is denied in this session.",
+      "I couldn't finish the health check. The tier 0 script was denied, and I stopped there.",
+      "I could not complete the surface E audit: setup-doctor.mjs was refused."
+    ]
+  }
+}
