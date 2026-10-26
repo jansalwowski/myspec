@@ -109,7 +109,7 @@ const statusOf = (r, id) => r.out.tasks.find((t) => t.id === String(id))?.status
   check('rejected claim: DONE', statusOf(r, 1) === 'DONE', JSON.stringify(r.out.tasks))
   check('rejected claim: re-judged on the mid tier', r.calls.some((c) => c.label === 'rejudge 1' && c.model === 'model-mid'))
   check('rejected claim: no fix round', r.calls.every((c) => !c.label.startsWith('fix')))
-  check('rejected claim: counted as rejected', JSON.stringify(r.out.tasks[0].checkStats) === JSON.stringify({ claims: 1, minor: 0, upheld: 0, rejected: 1, unjudged: 0 }), JSON.stringify(r.out.tasks[0].checkStats))
+  check('rejected claim: counted as rejected', JSON.stringify(r.out.tasks[0].checkStats) === JSON.stringify({ runs: 1, claims: 1, minor: 0, upheld: 0, rejected: 1, unjudged: 0 }), JSON.stringify(r.out.tasks[0].checkStats))
 }
 
 // 4. An upheld finding survives two fix rounds: OPEN_FINDINGS, second round
@@ -129,7 +129,7 @@ const statusOf = (r, id) => r.out.tasks.find((t) => t.id === String(id))?.status
   check('two rounds: round 2 framed as a takeover', fixes[1] && fixes[1].prompt.includes('you own it now'))
   check('two rounds: round 2 carries the round summary', fixes[1] && /Round 1 \(mid\)/.test(fixes[1].prompt))
   check('two rounds: the open finding is returned', r.out.tasks[0].findings.some((f) => f.kind === 'contract'))
-  check('two rounds: stats sum every round', JSON.stringify(r.out.tasks[0].checkStats) === JSON.stringify({ claims: 3, minor: 0, upheld: 3, rejected: 0, unjudged: 0 }), JSON.stringify(r.out.tasks[0].checkStats))
+  check('two rounds: one finding raised in every round counts once, each check run counts', JSON.stringify(r.out.tasks[0].checkStats) === JSON.stringify({ runs: 3, claims: 1, minor: 0, upheld: 1, rejected: 0, unjudged: 0 }), JSON.stringify(r.out.tasks[0].checkStats))
 }
 
 // 5. A minor finding is deferred, never fixed or re-judged.
@@ -155,6 +155,15 @@ const statusOf = (r, id) => r.out.tasks.find((t) => t.id === String(id))?.status
   check('no check stage: every scripted answer used', r.left.length === 0, r.left.join(','))
   const on = await run(payload([task(1)]), { 'implement 1': [done()], 'verify 1': [verified(1)], 'check 1': [clean] })
   check('check stage on by default', on.out.checkStage === true && on.out.tasks[0].checkStats?.claims === 0)
+  const blocked = await run(payload([task(1)]), { 'implement 1': [{ status: 'BLOCKED', summary: 'no db' }] })
+  check('blocked before any check: runs 0, not a clean check', blocked.out.tasks[0].checkStats?.runs === 0 && blocked.out.tasks[0].checkStats?.claims === 0, JSON.stringify(blocked.out.tasks[0].checkStats))
+  const noCheck = await run(payload([task(1)]), { 'implement 1': [done()], 'verify 1': [verified(1)], 'check 1': [null] })
+  check('a check that returned nothing: runs 0', noCheck.out.tasks[0].checkStats?.runs === 0, JSON.stringify(noCheck.out.tasks[0].checkStats))
+  const crashed = await run(payload([task(1), task(2, { workdir: '/wt2' })], { mode: 'parallel' }), {
+    'implement 1': [done()], 'verify 1': [verified(1)], 'check 1': [clean], 'implement 2': [() => { throw new Error('boom') }],
+  })
+  const t2 = crashed.out.tasks.find((t) => t.id === '2')
+  check('a crashed parallel task with the stage on: runs 0, not skipped', t2 && t2.checkStats !== null && t2.checkStats.runs === 0, JSON.stringify(t2 && t2.checkStats))
   const badFlag = await run(payload([task(1)], { checkStage: 'no' }), {})
   check('bad args: a non-boolean checkStage refused', badFlag.out.started === false && /checkStage/.test(badFlag.out.detail))
 }

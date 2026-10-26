@@ -50,7 +50,7 @@ A missing or malformed required field returns `started: false`, `reason: "bad-ar
 | `notChecked` | commands the verify agent could not run, and checks that returned nothing |
 | `notEvidenced` | checks the implementer reported running that the verify agent did not run |
 | `concerns`, `summary` | from the implementer and its fix rounds |
-| `checkStats` | what the check stage did, summed over every round: `{claims, minor, upheld, rejected, unjudged}`. `claims` counts every finding the check raised, `minor` the deferred ones, and the other three the re-judge verdicts on the rest. `null` when `checkStage` was `false` |
+| `checkStats` | what the check stage did: `{runs, claims, minor, upheld, rejected, unjudged}`. `runs` counts the check runs that returned; 0 means the stage never ran on this task (a BLOCKED implementer, no diff, a check that returned nothing), not that it found nothing. `claims` counts distinct findings (file and rule) over every round, so one raised again each round counts once. Each one is `minor` (deferred) or carries its best re-judge verdict: `upheld`, else `rejected`, else `unjudged`. `null` when `checkStage` was `false` |
 
 ## Status → controller action
 
@@ -62,11 +62,11 @@ A missing or malformed required field returns `started: false`, `reason: "bad-ar
 | `BLOCKED` / `NEEDS_CONTEXT` | Handle as in controller mode: supply the context, raise the tier, split the task, or ask the user. Then launch the workflow again with only that task and the `notRun` tasks, with `phaseBase` set to the current HEAD. That field is only the workflow's diff base: the phase review keeps the recorded `PHASE_BASE`. The task stays `[~]` |
 | `started: false` | Fix the payload, or run the phase in controller mode, and log a `Ruling:` |
 
-For every task: append each `deferredMinors` entry to the Execution Log as `Deferred minor (Phase N)`, and log its `checkStats` as `Check stage (Phase N, Task <id>): <claims> claims, <minor> minor, <upheld> upheld, <rejected> rejected, <unjudged> unjudged`, or `Check stage (Phase N, Task <id>): skipped` when it is `null`. Pass `notChecked` and `notEvidenced` to the phase reviewer: they are claims nobody verified, and the barrier's full suite is what decides them.
+For every task: append each `deferredMinors` entry to the Execution Log as `Deferred minor (Phase N)`, and log its `checkStats` as `Check stage (Phase N, Task <id>): <runs> runs, <claims> claims, <minor> minor, <upheld> upheld, <rejected> rejected, <unjudged> unjudged`, as `Check stage (Phase N, Task <id>): not run` when `runs` is 0, or as `Check stage (Phase N, Task <id>): skipped` when it is `null`. Pass `notChecked` and `notEvidenced` to the phase reviewer: they are claims nobody verified, and the barrier's full suite is what decides them.
 
 ## Measuring the check stage
 
 The check and its re-judge cost up to two agents per task per round, on top of the verify agent and before the phase reviewer reads the same diff. Nobody has measured whether they catch what the phase review would miss, so the stage stays only while the logs show it earning its cost.
 
-- **Read the logged lines across runs.** `upheld` findings are the stage's catches: each cost a fix round before the phase review. `rejected` findings are re-judge spend on noise from the cheap tier. Many runs with `upheld` at 0, or a phase review that keeps confirming the same findings the stage upheld, say the stage duplicates the phase review.
+- **Read the logged lines across runs.** `upheld` findings are the stage's catches: each cost a fix round before the phase review. `rejected` findings are re-judge spend on noise from the cheap tier. Many tasks whose check ran (`runs` above 0) with `upheld` at 0, or a phase review that keeps confirming the same findings the stage upheld, say the stage duplicates the phase review.
 - **Compare with it off.** When the user asks to run without the check stage, set `checkStage: false` for the whole feature, so every phase runs the same way. Log `Ruling: check stage off for <feature> at the user's request — cost if wrong: findings it would have caught reach the phase review`. Then compare the phase reviewers' Critical and Important findings and the fix rounds they cost against runs with it on.

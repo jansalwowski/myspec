@@ -13,20 +13,25 @@
 // not an outcome and is left out.
 //
 // Per model and pair, over the runs in the results dirs (a run that ended in an
-// error other than the max_turns cap is left out, as results.mjs does):
+// error other than the max_turns cap is left out, and a grader with
+// scored: false does not count, as in results.mjs runPassed):
 //   outcome rate  runs in which every shared grader passed / runs
 //   per shared grader, its pass rate in each arm
 //   mean cost and duration per run
 //
 // Verdict per pair (evals/README.md, "Fold pairs"):
 //   missing-arm     an arm has no runs
+//   no-signal       both arms scored 0: the fixture or a grader is broken, so
+//                   the pair says nothing either way
 //   keep-subagent   the inline arm's outcome rate is lower
 //   fold-candidate  the inline arm scores no worse: the dispatch buys nothing
 //                   these graders can see
 // Either verdict on fewer than 3 runs in an arm is marked tentative.
 //
 // --lint checks the pairs in --evals-dir: each fold-pair tag on exactly two
-// cases, one per arm, identical prompt bodies, at least one shared grader.
+// cases, one per arm, identical prompt bodies, the same max_turns and
+// timeout_seconds (a lower cap on one arm decides the verdict by itself), and
+// at least one shared grader.
 // Exit: 0 report printed or lint clean, 1 lint problems, 2 bad input.
 
 import fs from 'node:fs';
@@ -37,6 +42,8 @@ import { BENIGN_ERROR_RE, findAggregates, promptTags } from './results.mjs';
 
 const MIN_RUNS = 3;
 
+const frontmatter = (file) => (fs.readFileSync(file, 'utf8').match(/^---\n([\s\S]*?)\n---/) || [, ''])[1];
+const fmValue = (file, key) => (frontmatter(file).match(new RegExp('^' + key + ':\\s*(.*?)\\s*$', 'm')) || [])[1] ?? '(unset)';
 const body = (file) => fs.readFileSync(file, 'utf8').replace(/^---\n[\s\S]*?\n---\n/, '').trim();
 
 function graderFiles(dir) {
@@ -77,6 +84,10 @@ export function foldPairs(evalsDir) {
     if (body(path.join(evalsDir, sub, 'prompt.md')) !== body(path.join(evalsDir, inl, 'prompt.md'))) {
       problems.push(`fold-pair:${name}: ${sub} and ${inl} have different prompts`);
     }
+    for (const key of ['max_turns', 'timeout_seconds']) {
+      const [vs, vi] = [sub, inl].map((c) => fmValue(path.join(evalsDir, c, 'prompt.md'), key));
+      if (vs !== vi) problems.push(`fold-pair:${name}: ${key} differs (${sub} ${vs}, ${inl} ${vi})`);
+    }
     const gs = graderFiles(path.join(evalsDir, sub));
     const gi = graderFiles(path.join(evalsDir, inl));
     const shared = Object.keys(gs).filter((g) => gi[g] === gs[g]).sort();
@@ -98,7 +109,7 @@ function loadRuns(dirs) {
         const list = ((out[model] ??= {})[c.name] ??= []);
         for (const r of runs) {
           list.push({
-            graders: Object.fromEntries((r.graders ?? []).map((g) => [g.name, g.passed === true])),
+            graders: Object.fromEntries((r.graders ?? []).filter((g) => g.scored !== false).map((g) => [g.name, g.passed === true])),
             cost: (r.costUsd ?? 0) + (r.judgeCostUsd ?? 0),
             duration: r.durationSeconds ?? 0,
           });
@@ -115,8 +126,9 @@ const r3 = (x) => (x == null ? null : Math.round(x * 1000) / 1000);
 function armStats(runs, shared) {
   return {
     runs: runs.length,
-    outcome: r3(mean(runs.map((r) => (shared.every((g) => r.graders[g]) ? 1 : 0)))),
-    graders: Object.fromEntries(shared.map((g) => [g, r3(mean(runs.map((r) => (r.graders[g] ? 1 : 0))))])),
+    // A shared grader a run did not score (scored: false) is left out of it.
+    outcome: r3(mean(runs.map((r) => (shared.every((g) => !(g in r.graders) || r.graders[g]) ? 1 : 0)))),
+    graders: Object.fromEntries(shared.map((g) => [g, r3(mean(runs.filter((r) => g in r.graders).map((r) => (r.graders[g] ? 1 : 0))))])),
     cost_usd: r3(mean(runs.map((r) => r.cost))),
     duration_s: r3(mean(runs.map((r) => r.duration))),
   };
@@ -131,8 +143,9 @@ export function foldCompare(pairs, runsByModel) {
       const inline = armStats(cases[p.inline] ?? [], p.shared);
       let verdict;
       if (subagent.runs === 0 || inline.runs === 0) verdict = 'missing-arm';
+      else if (inline.outcome === 0 && subagent.outcome === 0) verdict = 'no-signal';
       else verdict = inline.outcome < subagent.outcome ? 'keep-subagent' : 'fold-candidate';
-      const tentative = verdict !== 'missing-arm' && Math.min(subagent.runs, inline.runs) < MIN_RUNS;
+      const tentative = (verdict === 'keep-subagent' || verdict === 'fold-candidate') && Math.min(subagent.runs, inline.runs) < MIN_RUNS;
       const flipped = p.shared.filter((g) => subagent.graders[g] !== inline.graders[g] && subagent.runs && inline.runs);
       out.push({ model, pair: name, subagent_case: p.subagent, inline_case: p.inline, verdict, tentative, flipped, subagent, inline });
     }

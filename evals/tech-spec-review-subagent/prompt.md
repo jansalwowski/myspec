@@ -3,7 +3,7 @@ description: "Tech-spec with planted flaws and the Agent tool granted. feature-t
 tags: [skill:feature-tech-spec-review, skill:feature-spec-review, orchestration, fold-pair:tech-spec-review, fold-arm:subagent, capability]
 runs: 1
 max_turns: 14
-timeout_seconds: 360
+timeout_seconds: 300
 allowed_tools: [Read, Glob, Grep, Skill, Agent]
 ---
 

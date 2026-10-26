@@ -141,8 +141,8 @@ Two cases started in `capability` and moved to `regression` once a skill fix mad
 A skill that dispatches a subagent pays for the handoff in latency, cost and whatever the summary drops. Keep the subagent only where the inline run scores worse ([When to fold subagents into your main agent loop](https://claude.com/resources/articles/building-agents-when-to-fold-subagents-into-your-main-agent-loop)). A fold pair measures that for one dispatch:
 
 - Two cases tagged `fold-pair:<name>`, one `fold-arm:subagent` (Agent granted, so the skill dispatches) and one `fold-arm:inline` (Agent not granted, so the skill runs its documented inline fallback).
-- Same prompt body and same fixture. Outcome graders are the grader files both cases hold with the same name and content. A grader only one arm has, such as the dispatch grader, is not an outcome.
-- `node scripts/evals/fold-compare.mjs --lint` checks the tags, the prompt bodies and that the arms share a grader. `scripts/tests/eval-fold-compare.test.sh` runs it on this suite in CI.
+- Same prompt body, fixture, `max_turns` and `timeout_seconds`: a lower cap on one arm would decide the verdict by itself. Outcome graders are the grader files both cases hold with the same name and content. A grader only one arm has, such as the dispatch grader, is not an outcome.
+- `node scripts/evals/fold-compare.mjs --lint` checks the tags, the prompt bodies, the turn and time caps, and that the arms share a grader. It does not compare fixtures, since one arm may build from the other's workspace. `scripts/tests/eval-fold-compare.test.sh` runs it on this suite in CI.
 
 Run both arms, then compare:
 
@@ -151,7 +151,7 @@ scripts/evals/run.sh --mode full --runs 3 --models sonnet --case 'spec-review-*'
 node scripts/evals/fold-compare.mjs .eval-results/<run>/
 ```
 
-It prints, per model and pair, each arm's outcome rate (runs in which every shared grader passed), mean cost and time per run, and each shared grader that moved. The verdict is `keep-subagent` when the inline arm's outcome rate is lower, `fold-candidate` when it is not, and `missing-arm` when an arm did not run. Fewer than 3 runs in an arm marks it tentative. A `fold-candidate` is a lead, not a ruling: read the transcripts of the runs that flipped before folding, and check what the graders cannot see. The spec reviewers run in a fresh context so they never read the spec with the author's context, which these fixtures, written by nobody in the session, do not exercise.
+It prints, per model and pair, each arm's outcome rate (runs in which every shared grader passed; a grader with `scored: false` is left out, as in the release comparison), mean cost and time per run, and each shared grader that moved. The verdict is `keep-subagent` when the inline arm's outcome rate is lower, `fold-candidate` when it is not, `no-signal` when both arms score 0 (a broken fixture or grader, not evidence either way), and `missing-arm` when an arm did not run. Fewer than 3 runs in an arm marks it tentative. A `fold-candidate` is a lead, not a ruling: read the transcripts of the runs that flipped before folding, and check what the graders cannot see. The spec reviewers run in a fresh context so they never read the spec with the author's context, which these fixtures, written by nobody in the session, do not exercise.
 
 | Pair | Subagent arm | Inline arm |
 |---|---|---|

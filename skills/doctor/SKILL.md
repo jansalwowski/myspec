@@ -68,8 +68,8 @@ due for a pass; reach for tier 1 when the user named a surface or tier 0 pointed
 ### Phase 1 — Audit the surfaces
 
 **Addressability.** Invoked with an argument (`A`, `hooks`, `skills`, `memory`, …), run only
-the matching surface, yourself, in this conversation: work its checklist below with the
-Phase 0 records as given, read-only, and record each finding with the command that produced
+the matching surface, yourself, in this conversation: work its checklist below plus the
+`## Extra checks` items tagged for it, with the Phase 0 records as given, read-only, and record each finding with the command that produced
 it. Then go to Phase 2. Dispatch no subagent for one surface: nothing runs beside it, and
 Phase 2 re-checks every finding with your own command anyway, so a dispatch adds a handoff
 and a second pass and buys nothing. A user who has been pointed at one surface should not
