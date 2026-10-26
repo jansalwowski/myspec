@@ -125,6 +125,7 @@ if (a.mode !== 'sequential' && a.mode !== 'parallel') return invalid('mode must 
 if (typeof a.phaseBase !== 'string' || !/^[0-9a-f]{7,64}$/.test(a.phaseBase)) return invalid('phaseBase must be the recorded PHASE_BASE sha')
 if (typeof a.stateDir !== 'string' || !a.stateDir.startsWith('/')) return invalid('stateDir must be an absolute path')
 if (!Array.isArray(a.tasks) || a.tasks.length === 0) return invalid('tasks must be a non-empty array')
+if (a.checkStage !== undefined && typeof a.checkStage !== 'boolean') return invalid('checkStage must be true or false')
 for (const t of a.tasks) {
   if (t == null || typeof t !== 'object') return invalid('every task must be an object')
   if (t.id == null || String(t.id).trim() === '') return invalid('a task has no id')
@@ -137,6 +138,9 @@ for (const t of a.tasks) {
 const planPath = typeof a.planPath === 'string' ? a.planPath : ''
 const standards = Array.isArray(a.standards) ? a.standards.filter((s) => typeof s === 'string' && s.trim()) : []
 const reviewDiff = typeof a.reviewDiff === 'string' && a.reviewDiff.trim() ? a.reviewDiff.trim() : null
+// false skips the check and its re-judge: the arm that measures what the
+// stage adds (workflow-args.md, "Measuring the check stage").
+const checkStage = a.checkStage !== false
 
 // ---- helpers (plain code) -------------------------------------------------
 
@@ -275,6 +279,33 @@ function fixPrompt(task, open, history, round) {
   ].join('\n') + IMPL_TAIL
 }
 
+// ---- check-stage stats (plain code) ---------------------------------------
+
+// One entry per distinct finding (file + rule), so a finding raised again
+// in every fix round counts once. Its outcome is the best verdict it ever
+// got: upheld over rejected over unjudged; minor stays minor.
+const OUTCOME_RANK = { minor: 0, unjudged: 1, rejected: 2, upheld: 3 }
+
+function newCheckLog() {
+  return { runs: 0, seen: new Map() }
+}
+
+function noteClaim(check, f, outcome) {
+  const key = norm(f.file) + '|' + String(f.rule || f.claim || '').trim()
+  const prev = check.seen.get(key)
+  if (!prev || OUTCOME_RANK[outcome] > OUTCOME_RANK[prev]) check.seen.set(key, outcome)
+}
+
+// null when the stage was off. runs counts the check agents that returned:
+// 0 means the stage was on but never ran on this task, which is not the
+// same as running and finding nothing.
+function checkStatsOf(check) {
+  if (!checkStage) return null
+  const s = { runs: check.runs, claims: check.seen.size, minor: 0, upheld: 0, rejected: 0, unjudged: 0 }
+  for (const outcome of check.seen.values()) s[outcome]++
+  return s
+}
+
 // ---- the per-task loop ----------------------------------------------------
 
 async function runTask(task, base) {
@@ -292,7 +323,19 @@ async function runTask(task, base) {
     notEvidenced: [],
     concerns: [],
     summary: '',
+    checkStats: null,
   }
+  // What the check stage did, so the controller can log whether it earns its
+  // two extra agents. Set on every return path.
+  const check = newCheckLog()
+  try {
+    return await taskLoop(task, base, id, result, check)
+  } finally {
+    result.checkStats = checkStatsOf(check)
+  }
+}
+
+async function taskLoop(task, base, id, result, check) {
 
   const impl = await agent(task.implementerPrompt + IMPL_TAIL, {
     label: 'implement ' + id, phase: 'Implement', model: models[task.tier], schema: IMPL_SCHEMA,
@@ -327,7 +370,7 @@ async function runTask(task, base) {
     result.notEvidenced = notEvidenced(lastImpl, v)
 
     const open = plainFindings(task, v).concat(checkFindings(v))
-    if (v.baseValid && v.diffPath) {
+    if (checkStage && v.baseValid && v.diffPath) {
       const checked = await agent(checkPrompt(task, v), {
         label: 'check ' + id + (round ? ' r' + round : ''), phase: 'Check', model: models.cheap, schema: CHECK_SCHEMA,
       })
@@ -336,6 +379,8 @@ async function runTask(task, base) {
       result.deferredMinors = claims.filter((f) => f.severity === 'minor')
         .map((f) => (f.file ? f.file + (f.line ? ':' + f.line : '') + ' ' : '') + f.claim)
       const serious = claims.filter((f) => f.severity !== 'minor')
+      if (checked) check.runs++
+      claims.filter((f) => f.severity === 'minor').forEach((f) => noteClaim(check, f, 'minor'))
       const verdicts = await parallel(serious.map((f) => () => agent(rejudgePrompt(task, v, f), {
         label: 'rejudge ' + id, phase: 'Check', model: models.mid, schema: VERDICT_SCHEMA,
       })))
@@ -343,8 +388,15 @@ async function runTask(task, base) {
         const verdict = verdicts[i]
         // A judge that returned nothing upholds nothing, but the claim is
         // kept visible for the phase reviewer.
-        if (verdict && verdict.upheld) open.push({ kind: 'contract', file: f.file, line: f.line, rule: f.rule, claim: f.claim })
-        else if (!verdict) result.notChecked.push('re-judge returned nothing for: ' + f.claim)
+        if (verdict && verdict.upheld) {
+          noteClaim(check, f, 'upheld')
+          open.push({ kind: 'contract', file: f.file, line: f.line, rule: f.rule, claim: f.claim })
+        } else if (verdict) {
+          noteClaim(check, f, 'rejected')
+        } else {
+          noteClaim(check, f, 'unjudged')
+          result.notChecked.push('re-judge returned nothing for: ' + f.claim)
+        }
       })
     }
 
@@ -391,7 +443,7 @@ if (a.mode === 'parallel') {
   // from PHASE_BASE, so each diffs from PHASE_BASE.
   const out = await parallel(a.tasks.map((t) => () => runTask(t, a.phaseBase)))
   out.forEach((r, i) => {
-    results.push(r || { id: String(a.tasks[i].id), status: 'BLOCKED', rounds: 0, findings: [], notChecked: [], deferredMinors: [], notEvidenced: [], concerns: ['the task loop failed'] })
+    results.push(r || { id: String(a.tasks[i].id), status: 'BLOCKED', rounds: 0, findings: [], notChecked: [], deferredMinors: [], notEvidenced: [], concerns: ['the task loop failed'], checkStats: checkStatsOf(newCheckLog()) })
   })
 } else {
   // Sequential tasks share one checkout: each diffs from the head the
@@ -413,4 +465,4 @@ for (const r of results) {
   if (!STATUSES.includes(r.status)) r.status = 'BLOCKED'
 }
 
-return { started: true, phase: a.phase, mode: a.mode, tasks: results, notRun }
+return { started: true, phase: a.phase, mode: a.mode, checkStage, tasks: results, notRun }

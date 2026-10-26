@@ -26,7 +26,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 export const SCHEMA = 1;
-const BENIGN_ERROR_RE = /maximum number of turns/i;
+export const BENIGN_ERROR_RE = /maximum number of turns/i;
 
 // The generated project-instructions block at the end of a case.yaml
 // (evals/_fixtures/project-instructions.sh), markers included.
@@ -111,7 +111,7 @@ export function reportOnlyCases(set) {
   return new Set(Object.entries(set?.evals?.tiers ?? {}).filter(([, t]) => t === 'capability').map(([c]) => c));
 }
 
-function findAggregates(dir) {
+export function findAggregates(dir) {
   const out = [];
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
     const p = path.join(dir, e.name);

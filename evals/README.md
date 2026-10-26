@@ -100,13 +100,14 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 | `visual-questions-auto` | trigger, rule | `visualQuestions: "auto"` with its rule installed → a spacing-scale choice goes through visualize-options |
 | `visual-questions-off` | near-miss, rule | the same prompt with the setting off → not visualize-options: the rule, not the skill description, does the routing |
 | `trigger-doctor` | trigger | "health check of our myspec setup" → doctor, not the feature audits |
+| `doctor-surface-inline` | orchestration | "health check on just the hooks and harness config" → doctor audits that one surface in the main conversation: no Agent dispatch, tier 0 run by the controller itself, and a report rather than "couldn't run" |
 | `trigger-feature-verify` | trigger | one feature's drift → feature-verify, not feature-status-audit or doctor |
 | `trigger-feature-status-audit` | trigger | "does index.yaml match the features folder?" → feature-status-audit |
 | `trigger-feature-spec-scenarios` | trigger, near-miss | "write the test scenarios in Gherkin for the approved spec" → feature-spec (its `scenarios` argument; feature-scenario is gone in 3.0), not feature-tech-spec, feature-spec-review or feature-plan; scenarios.md written beside the spec |
 | `spec-review-planted-flaws` | planted flaw | feature-spec-review fires and flags an untestable AC, a REQ-002/REQ-004 contradiction, and missing error states; does not pass the review |
 | `tech-spec-review-planted-flaws` | planted flaw | feature-tech-spec-review flags a requirement with no step (REQ-004) and an ignored shared CSV writer the conventions mandate; reports a Critical and does not pass; flags the data-deriving export's missing `verification_mode` as Medium (#169) |
-| `spec-review-subagent` | orchestration | Agent granted → feature-spec-review runs Steps 1–6 in a reviewer subagent dispatched with `_shared/spec-reviewer-prompt.md`, and relays the REQ-002/REQ-004 contradiction (#356) |
-| `tech-spec-review-subagent` | orchestration | the same for feature-tech-spec-review on the tech-spec planted-flaw project; relays the uncovered REQ-004 (#356) |
+| `spec-review-subagent` | orchestration, fold pair | Agent granted → feature-spec-review runs Steps 1–6 in a reviewer subagent dispatched with `_shared/spec-reviewer-prompt.md`; same prompt and outcome graders as `spec-review-planted-flaws`, its inline arm (#356, [Fold pairs](#fold-pairs)) |
+| `tech-spec-review-subagent` | orchestration, fold pair | the same for feature-tech-spec-review; same prompt and outcome graders as `tech-spec-review-planted-flaws`, its inline arm (#356, [Fold pairs](#fold-pairs)) |
 | `feature-spec-auto-review` | orchestration | "get it reviewed before you show it to me" → feature-spec runs feature-spec-review, which dispatches the reviewer; spec.md stays `draft`, since nobody said yes to approval (#356) |
 | `feature-spec-contract` | artifact contract | feature-spec writes spec.md with every section and frontmatter key feature-spec-review checks, plus dependencies.md and a manifest entry |
 | `feature-plan-coverage` | artifact contract | feature-plan (Python fixture) writes implementation-plan.md whose Spec Coverage table maps every REQ ID to a task, including two no AC restates (837f68d), names a test per row in a Test column (#190), plus the Execution Order table feature-implement parses, and closes with the Step 4.6 `## Plan Self-Check` (#188) |
@@ -118,14 +119,14 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 | `feature-implement-restart-state` | orchestration | approved 2-task plan → before Phase 1's first dispatch the plan's Execution Log gets a `Base (Phase 1): <sha>` entry a restarted session can recover (#166) |
 | `feature-implement-probe-gate` | orchestration | both tasks `[x]`, Checkpoint probes not yet run → the Step 4b probe gate dispatches the plugin agent `myspec:probe-executor`, never a general-purpose subagent carrying the executor prompt (#171) |
 
-`nearmiss-personal-preference` is a `capability` case until it has been run across releases, and so are `trigger-feature-spec-scenarios` (added with #264, not yet run), `trigger-visualize-options`, `visual-questions-auto` and `visual-questions-off` (added with the skill) and `trigger-memory-sanitize` (added with #161, not yet run), and `spec-review-subagent`, `tech-spec-review-subagent` and `feature-spec-auto-review` (added with #356, not yet run). So are two of the three feature-plan and feature-implement cases (Sonnet, 2026-09-29), and `feature-implement-probe-gate`:
+`nearmiss-personal-preference` is a `capability` case until it has been run across releases, and so are `trigger-feature-spec-scenarios` (added with #264, not yet run), `trigger-visualize-options`, `visual-questions-auto` and `visual-questions-off` (added with the skill) and `trigger-memory-sanitize` (added with #161, not yet run), and `spec-review-subagent`, `tech-spec-review-subagent` and `feature-spec-auto-review` (added with #356, not yet run), and `doctor-surface-inline` (added when the skill stopped telling single-surface runs to dispatch; Sonnet, 2026-10-26: 3 of 3 with the change, and also 3 of 3 on the skill before it, which said "one subagent" but was not followed, so the case guards the behaviour rather than proving the change). Its prompt says the sandbox takes single commands only: without that line the controller chained commands, the chain was denied, and it stopped before auditing. So are two of the three feature-plan and feature-implement cases (Sonnet, 2026-09-29), and `feature-implement-probe-gate`:
 
 - `feature-plan-coverage` passed 6 of 6.
 - `feature-implement-dispatch` dispatched the implementer in 5 of 6. In the sixth, the controller wrote both tasks itself (#174). `dispatch-before-source-write` also fails when the implementer writes no file at all: in 1 of 3 runs its Bash heredoc was denied and it reported BLOCKED.
 - After the controller-never-implements rule (#174, Sonnet, 2026-10-06) it dispatched in 7 of 10 runs, and the case stays `capability`. The one kept failing trace stopped at Step 2 after a denied Bash call and reported BLOCKED: that is what the rule asks for, but it fails both dispatch graders, which cannot tell a correct stop from a skipped dispatch. On the branch before the rule, one of 6 kept runs wrote `tests/invoices/test_due_dates.py` in the controller without dispatching; the work-isolation hook stopped it.
 - `feature-implement-restart-state` (#166, Sonnet, 2026-10-06) logged `Base (Phase 1)` in 3 of 8 runs, against 0 of 3 before the change. Every failing run that was kept stopped at Step 2 on a denied Bash call, before any plan edit, so the case measured sandbox friction as much as the entry. Once Step 2 ran through `lib/implement-state.sh` (below) it passed 3 of 3 (2026-10-09), and v3.2.0's run passed too. That is 4 in a row, one short of promotion, so it stays `capability` for a release.
 - `feature-implement-probe-gate` (Sonnet, 2026-10-06) dispatched `myspec:probe-executor` in 3 of 3 runs. On v3, where the executor was a general-purpose template, it did so in 0 of 3: the skill fired once and dispatched general-purpose, and the other two runs ran the probes in the controller. One branch run dispatched the agent without loading the skill, so `skill-fired` failed there. The prompt says only read-only git runs; without that line the controller stopped at the denied `pytest` before the gate. The fixture used to pre-create the gate's artifact directory, because the gate's `mkdir` under `.claude/` was denied. The gate now creates it with `lib/implement-state.sh probe-run`, and the fixture no longer does (2026-10-09: 2 of 3 runs dispatched the executor; the third skipped the skill and ran the probes in the controller).
-- These cases are graded on read-only git plus the plugin helpers `feature-implement` runs as single commands: `run.sh --allow-tools` grants `Bash(*/lib/implement-state.sh *)`, `myspec-config.sh`, `plan-freshness.sh`, `session-event.sh` and `plan-checkbox.sh` the same way. Listing `Bash` in `allowed_tools` grants nothing more. Prototypes, `pytest`, commits and anything chained into a compound command are denied.
+- These cases are graded on read-only git plus the plugin helpers `feature-implement` runs as single commands: `run.sh --allow-tools` grants `Bash(*/lib/implement-state.sh *)`, `myspec-config.sh`, `plan-freshness.sh`, `session-event.sh` and `plan-checkbox.sh` the same way, and `node …lib/setup-doctor.mjs` for doctor's tier 0. Listing `Bash` in `allowed_tools` grants nothing more. Prototypes, `pytest`, commits and anything chained into a compound command are denied.
 
 Three feature-implement cases moved to `regression` on 2026-10-09, after at least 5 consecutive Sonnet passes with Step 2 on `lib/implement-state.sh`: `feature-implement-fix-round` (6 of 6), `feature-implement-phase-review` (6 of 6) and `feature-implement-dispatch` (5 in a row since its last failure). `feature-implement-attribution` (2 of 3 at that point; one dispatch lacked the trailer) and `feature-implement-probe-gate` (2 of 3) stay `capability`.
 - feature-plan's base check (`git merge-base --is-ancestor`) is therefore not graded. 5 of 6 coverage runs skipped it; the sixth ran it inside a compound command that was denied, then planned anyway.
@@ -134,6 +135,28 @@ Three feature-implement cases moved to `regression` on 2026-10-09, after at leas
 Two cases started in `capability` and moved to `regression` once a skill fix made them pass:
 - `feature-plan-gate`: feature-plan wrote a plan from draft documents in 4 of 4 runs on v3 (#173). Once its gates refused a draft spec and asked about a draft tech-spec with no recommended option, it stopped in 6 of 6.
 - `trigger-memorize`: Claude Code's built-in auto-memory took "remember this" prompts (0 of 7 runs fired). Once memorize's description claimed project facts over auto-memory, it fired in 10 of 10.
+
+## Fold pairs
+
+A skill that dispatches a subagent pays for the handoff in latency, cost and whatever the summary drops. Keep the subagent only where the inline run scores worse ([When to fold subagents into your main agent loop](https://claude.com/resources/articles/building-agents-when-to-fold-subagents-into-your-main-agent-loop)). A fold pair measures that for one dispatch:
+
+- Two cases tagged `fold-pair:<name>`, one `fold-arm:subagent` (Agent granted, so the skill dispatches) and one `fold-arm:inline` (Agent not granted, so the skill runs its documented inline fallback).
+- Same prompt body, fixture, `max_turns` and `timeout_seconds`: a lower cap on one arm would decide the verdict by itself. Outcome graders are the grader files both cases hold with the same name and content. A grader only one arm has, such as the dispatch grader, is not an outcome.
+- `node scripts/evals/fold-compare.mjs --lint` checks the tags, the prompt bodies, the turn and time caps, and that the arms share a grader. It does not compare fixtures, since one arm may build from the other's workspace. `scripts/tests/eval-fold-compare.test.sh` runs it on this suite in CI.
+
+Run both arms, then compare:
+
+```bash
+scripts/evals/run.sh --mode full --runs 3 --models sonnet --case 'spec-review-*'
+node scripts/evals/fold-compare.mjs .eval-results/<run>/
+```
+
+It prints, per model and pair, each arm's outcome rate (runs in which every shared grader passed; a grader with `scored: false` is left out, as in the release comparison), mean cost and time per run, and each shared grader that moved. The verdict is `keep-subagent` when the inline arm's outcome rate is lower, `fold-candidate` when it is not, `no-signal` when both arms score 0 (a broken fixture or grader, not evidence either way), and `missing-arm` when an arm did not run. Fewer than 3 runs in an arm marks it tentative. A `fold-candidate` is a lead, not a ruling: read the transcripts of the runs that flipped before folding, and check what the graders cannot see. The spec reviewers run in a fresh context so they never read the spec with the author's context, which these fixtures, written by nobody in the session, do not exercise.
+
+| Pair | Subagent arm | Inline arm |
+|---|---|---|
+| `spec-review` | `spec-review-subagent` | `spec-review-planted-flaws` |
+| `tech-spec-review` | `tech-spec-review-subagent` | `tech-spec-review-planted-flaws` |
 
 ## Project instructions
 

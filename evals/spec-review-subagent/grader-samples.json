@@ -11,5 +11,21 @@
       "REQ-002 and REQ-004 are clear, but AC-2 is vague.",
       "REQ-002 is fine.\nThe export in REQ-004 needs a format."
     ]
+  },
+  "flags-untestable-ac": {
+    "pass": [
+      "| High | Testability | spec.md | 28 | AC-2 \"The export should be fast\" has no measurable threshold. |"
+    ],
+    "fail": [
+      "AC-2 is fine as written; REQ-002 contradicts REQ-004."
+    ]
+  },
+  "verdict-not-passed": {
+    "pass": [
+      "1 Critical, 2 High. The spec stays draft until REQ-002 and REQ-004 agree."
+    ],
+    "fail": [
+      "Review passed — mark spec.md status: approved?"
+    ]
   }
 }
