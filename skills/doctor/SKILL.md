@@ -17,7 +17,7 @@ Runs without configuration. An optional per-repo extension file `.claude/rules/d
 | Tier | Invocation | Cost | Answers |
 |---|---|---|---|
 | 0 | `node "${CLAUDE_PLUGIN_ROOT}/lib/setup-doctor.mjs"` | ~1s, no model | Is anything mechanically broken or drifted? |
-| 1 | `/myspec:doctor <surface>` | one subagent | Is surface X coherent? |
+| 1 | `/myspec:doctor <surface>` | this conversation, no subagent | Is surface X coherent? |
 | 2 | `/myspec:doctor` | six subagents + PRs | Full pass over everything |
 
 Tier 0 is not an optional preliminary — it is where every mechanical fact comes from, and
@@ -29,7 +29,7 @@ due for a pass; reach for tier 1 when the user named a surface or tier 0 pointed
 - **Verify before reporting, re-verify before fixing.** Every finding carries a command-produced evidence line (ls / grep / measured tokens / executed hook). A subagent's finding is a lead, not a fact — the controller re-checks every finding acted on with its own command. Token counts = `wc -c` / 4.
 - **No edits before the user approves the Phase 3 report.**
 - **Never touch gitignored personal files** (`.claude/settings.local.json`) or anything listed under the extension's `## Read-only` — report findings there as recommendations only.
-- **The doctor owns mechanical truth.** File-content drift against the plugin, hook registration and executability, `bash -n`, schema validity of `.myspec.json` / `.claude/verification.json` / `${aiDir}/features/index.yaml`, always-loaded token budgets, dead path and skill references: `setup-doctor.mjs` decides all of these, and its Phase 0 output is handed to the subagents as given. A subagent that re-derives one of them is spending a model on a `diff` and will disagree with the script sooner or later. Judgment — duplication, contradiction, a claim that disagrees with the code, a description that will not trigger — is what the subagents are for.
+- **The doctor owns mechanical truth.** File-content drift against the plugin, hook registration and executability, `bash -n`, schema validity of `.myspec.json` / `.claude/verification.json` / `${aiDir}/features/index.yaml`, always-loaded token budgets, dead path and skill references: `setup-doctor.mjs` decides all of these, and its Phase 0 output is handed to every surface audit as given. A subagent that re-derives one of them is spending a model on a `diff` and will disagree with the script sooner or later. Judgment — duplication, contradiction, a claim that disagrees with the code, a description that will not trigger — is what the subagents are for.
 - **Severity follows false-positive rate.** Report a finding as blocking only when it is deterministic and has no plausible innocent reading. Everything a project might be doing on purpose is a recommendation. The doctor already grades its own findings this way; match it.
 - **Delegate, don't duplicate.** Deep single-skill rework → `/myspec:skill-verify`. Single-feature health → `/myspec:feature-verify`. Session archiving → `/myspec:session-clean`. User-level auto-memory grooming → `/myspec:memory-sanitize`. This skill finds and routes; those skills own the deep passes.
 
@@ -65,14 +65,17 @@ due for a pass; reach for tier 1 when the user named a surface or tier 0 pointed
 
    Hand its `hook_blocks` to surface E and its per-skill `blocked_rate`, `fix_rounds` and `hook_blocks` to surface B. They are leads, not findings: a signature blocking in most sessions earns a behavioral re-run of that hook, and a project skill with repeated BLOCKED runs or fix rounds earns a closer read. A `myspec:*` skill that stands out is framework-side: name it in Phase 3 for an upstream issue instead of auditing it here. Field data never makes a finding blocking on its own.
 
-### Phase 1 — Fan out read-only audit subagents
+### Phase 1 — Audit the surfaces
 
-**Addressability.** Invoked with an argument (`A`, `hooks`, `skills`, `memory`, …), dispatch
-only the matching surface and skip straight to Phase 2 for it. The six-way fan-out is the
-default, not a requirement — a user who has been pointed at one surface should not pay for
-the other five.
+**Addressability.** Invoked with an argument (`A`, `hooks`, `skills`, `memory`, …), run only
+the matching surface, yourself, in this conversation: work its checklist below with the
+Phase 0 records as given, read-only, and record each finding with the command that produced
+it. Then go to Phase 2. Dispatch no subagent for one surface: nothing runs beside it, and
+Phase 2 re-checks every finding with your own command anyway, so a dispatch adds a handoff
+and a second pass and buys nothing. A user who has been pointed at one surface should not
+pay for the other five either.
 
-Dispatch six parallel read-only agents (Agent tool, general-purpose), one per surface. Each brief: the surface's checklist below, plus items from `## Extra checks` tagged for that surface, plus "return structured findings: file, category (invalid | stale-anchor | duplication | contradiction | over-budget | dead | meaningless | restructure), one-line evidence, one-line recommendation, token saving; per-file token table; raw data, no prose". Forbid edits.
+Invoked with no argument, dispatch six parallel read-only agents (Agent tool, general-purpose), one per surface: six fresh contexts running at once is what the fan-out buys. Each brief: the surface's checklist below, plus items from `## Extra checks` tagged for that surface, plus "return structured findings: file, category (invalid | stale-anchor | duplication | contradiction | over-budget | dead | meaningless | restructure), one-line evidence, one-line recommendation, token saving; per-file token table; raw data, no prose". Forbid edits.
 
 **A. Always-loaded context** — `CLAUDE.md` (repo + parent dir), every `.claude/rules/*.md`.
 Tier 0 has already measured the budgets (`over-budget`) and resolved every path and
@@ -113,7 +116,7 @@ is left is judgment:
 
 ### Phase 2 — Verify and rank
 
-1. Spot-check every finding intended for action with a fresh command (minimum: the top finding per surface).
+1. Spot-check every subagent finding intended for action with a fresh command (minimum: the top finding per surface). A finding you produced yourself in a single-surface run already carries its command; re-run it only when you edited something since.
 2. If a finding does not reproduce, drop it. If a rule and reality disagree (e.g. a mandated spelling that 0-of-N files use), the cheaper, non-breaking side wins — usually fixing the rule.
 3. Rank: broken mechanisms > false documentation > contradictions > token waste > restructuring.
 
@@ -158,7 +161,8 @@ Additional per-surface checklist items, tagged [A]–[F].
 
 ## Verification Checklist
 
-- [ ] Tier 0 run in Phase 0 and its records handed to the surfaces; no subagent finding contradicts or re-derives one
+- [ ] Tier 0 run in Phase 0 and its records handed to the surfaces; no surface finding contradicts or re-derives one
+- [ ] A single-surface run audited that surface in this conversation, with no subagent
 - [ ] Every reported finding carries command evidence; every applied fix was re-verified by the controller, not just the subagent
 - [ ] Edited hooks: `bash -n` passes AND a behavioral stdin test was run for the block and pass cases
 - [ ] Edited YAML: parsed with `python3 -c "import yaml; yaml.safe_load(open('<file>'))"`

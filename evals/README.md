@@ -100,13 +100,14 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 | `visual-questions-auto` | trigger, rule | `visualQuestions: "auto"` with its rule installed → a spacing-scale choice goes through visualize-options |
 | `visual-questions-off` | near-miss, rule | the same prompt with the setting off → not visualize-options: the rule, not the skill description, does the routing |
 | `trigger-doctor` | trigger | "health check of our myspec setup" → doctor, not the feature audits |
+| `doctor-surface-inline` | orchestration | "health check on just the hooks and harness config" → doctor audits that one surface in the main conversation: no Agent dispatch, and the controller reads the harness config itself |
 | `trigger-feature-verify` | trigger | one feature's drift → feature-verify, not feature-status-audit or doctor |
 | `trigger-feature-status-audit` | trigger | "does index.yaml match the features folder?" → feature-status-audit |
 | `trigger-feature-spec-scenarios` | trigger, near-miss | "write the test scenarios in Gherkin for the approved spec" → feature-spec (its `scenarios` argument; feature-scenario is gone in 3.0), not feature-tech-spec, feature-spec-review or feature-plan; scenarios.md written beside the spec |
 | `spec-review-planted-flaws` | planted flaw | feature-spec-review fires and flags an untestable AC, a REQ-002/REQ-004 contradiction, and missing error states; does not pass the review |
 | `tech-spec-review-planted-flaws` | planted flaw | feature-tech-spec-review flags a requirement with no step (REQ-004) and an ignored shared CSV writer the conventions mandate; reports a Critical and does not pass; flags the data-deriving export's missing `verification_mode` as Medium (#169) |
-| `spec-review-subagent` | orchestration | Agent granted → feature-spec-review runs Steps 1–6 in a reviewer subagent dispatched with `_shared/spec-reviewer-prompt.md`, and relays the REQ-002/REQ-004 contradiction (#356) |
-| `tech-spec-review-subagent` | orchestration | the same for feature-tech-spec-review on the tech-spec planted-flaw project; relays the uncovered REQ-004 (#356) |
+| `spec-review-subagent` | orchestration, fold pair | Agent granted → feature-spec-review runs Steps 1–6 in a reviewer subagent dispatched with `_shared/spec-reviewer-prompt.md`; same prompt and outcome graders as `spec-review-planted-flaws`, its inline arm (#356, [Fold pairs](#fold-pairs)) |
+| `tech-spec-review-subagent` | orchestration, fold pair | the same for feature-tech-spec-review; same prompt and outcome graders as `tech-spec-review-planted-flaws`, its inline arm (#356, [Fold pairs](#fold-pairs)) |
 | `feature-spec-auto-review` | orchestration | "get it reviewed before you show it to me" → feature-spec runs feature-spec-review, which dispatches the reviewer; spec.md stays `draft`, since nobody said yes to approval (#356) |
 | `feature-spec-contract` | artifact contract | feature-spec writes spec.md with every section and frontmatter key feature-spec-review checks, plus dependencies.md and a manifest entry |
 | `feature-plan-coverage` | artifact contract | feature-plan (Python fixture) writes implementation-plan.md whose Spec Coverage table maps every REQ ID to a task, including two no AC restates (837f68d), names a test per row in a Test column (#190), plus the Execution Order table feature-implement parses, and closes with the Step 4.6 `## Plan Self-Check` (#188) |
@@ -118,7 +119,7 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 | `feature-implement-restart-state` | orchestration | approved 2-task plan → before Phase 1's first dispatch the plan's Execution Log gets a `Base (Phase 1): <sha>` entry a restarted session can recover (#166) |
 | `feature-implement-probe-gate` | orchestration | both tasks `[x]`, Checkpoint probes not yet run → the Step 4b probe gate dispatches the plugin agent `myspec:probe-executor`, never a general-purpose subagent carrying the executor prompt (#171) |
 
-`nearmiss-personal-preference` is a `capability` case until it has been run across releases, and so are `trigger-feature-spec-scenarios` (added with #264, not yet run), `trigger-visualize-options`, `visual-questions-auto` and `visual-questions-off` (added with the skill) and `trigger-memory-sanitize` (added with #161, not yet run), and `spec-review-subagent`, `tech-spec-review-subagent` and `feature-spec-auto-review` (added with #356, not yet run). So are two of the three feature-plan and feature-implement cases (Sonnet, 2026-09-29), and `feature-implement-probe-gate`:
+`nearmiss-personal-preference` is a `capability` case until it has been run across releases, and so are `trigger-feature-spec-scenarios` (added with #264, not yet run), `trigger-visualize-options`, `visual-questions-auto` and `visual-questions-off` (added with the skill) and `trigger-memory-sanitize` (added with #161, not yet run), and `spec-review-subagent`, `tech-spec-review-subagent` and `feature-spec-auto-review` (added with #356, not yet run), and `doctor-surface-inline` (added when the skill stopped telling single-surface runs to dispatch; on the branch before that, Sonnet already audited inline in 2 of 2 runs, so the case guards the behaviour rather than proving the change). So are two of the three feature-plan and feature-implement cases (Sonnet, 2026-09-29), and `feature-implement-probe-gate`:
 
 - `feature-plan-coverage` passed 6 of 6.
 - `feature-implement-dispatch` dispatched the implementer in 5 of 6. In the sixth, the controller wrote both tasks itself (#174). `dispatch-before-source-write` also fails when the implementer writes no file at all: in 1 of 3 runs its Bash heredoc was denied and it reported BLOCKED.
@@ -134,6 +135,28 @@ Three feature-implement cases moved to `regression` on 2026-10-09, after at leas
 Two cases started in `capability` and moved to `regression` once a skill fix made them pass:
 - `feature-plan-gate`: feature-plan wrote a plan from draft documents in 4 of 4 runs on v3 (#173). Once its gates refused a draft spec and asked about a draft tech-spec with no recommended option, it stopped in 6 of 6.
 - `trigger-memorize`: Claude Code's built-in auto-memory took "remember this" prompts (0 of 7 runs fired). Once memorize's description claimed project facts over auto-memory, it fired in 10 of 10.
+
+## Fold pairs
+
+A skill that dispatches a subagent pays for the handoff in latency, cost and whatever the summary drops. Keep the subagent only where the inline run scores worse ([When to fold subagents into your main agent loop](https://claude.com/resources/articles/building-agents-when-to-fold-subagents-into-your-main-agent-loop)). A fold pair measures that for one dispatch:
+
+- Two cases tagged `fold-pair:<name>`, one `fold-arm:subagent` (Agent granted, so the skill dispatches) and one `fold-arm:inline` (Agent not granted, so the skill runs its documented inline fallback).
+- Same prompt body and same fixture. Outcome graders are the grader files both cases hold with the same name and content. A grader only one arm has, such as the dispatch grader, is not an outcome.
+- `node scripts/evals/fold-compare.mjs --lint` checks the tags, the prompt bodies and that the arms share a grader. `scripts/tests/eval-fold-compare.test.sh` runs it on this suite in CI.
+
+Run both arms, then compare:
+
+```bash
+scripts/evals/run.sh --mode full --runs 3 --models sonnet --case 'spec-review-*'
+node scripts/evals/fold-compare.mjs .eval-results/<run>/
+```
+
+It prints, per model and pair, each arm's outcome rate (runs in which every shared grader passed), mean cost and time per run, and each shared grader that moved. The verdict is `keep-subagent` when the inline arm's outcome rate is lower, `fold-candidate` when it is not, and `missing-arm` when an arm did not run. Fewer than 3 runs in an arm marks it tentative. A `fold-candidate` is a lead, not a ruling: read the transcripts of the runs that flipped before folding, and check what the graders cannot see. The spec reviewers run in a fresh context so they never read the spec with the author's context, which these fixtures, written by nobody in the session, do not exercise.
+
+| Pair | Subagent arm | Inline arm |
+|---|---|---|
+| `spec-review` | `spec-review-subagent` | `spec-review-planted-flaws` |
+| `tech-spec-review` | `tech-spec-review-subagent` | `tech-spec-review-planted-flaws` |
 
 ## Project instructions
 

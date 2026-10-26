@@ -13,5 +13,48 @@
       "| REQ-004 | 2 | — |",
       "| REQ-004 | 2 | full — nothing is missing |"
     ]
+  },
+  "flags-ignored-reuse": {
+    "pass": [
+      "The reuse audit skips CSV serialisation, but .ai/conventions/backend.md requires app/reporting/tabular_export.py for every tabular download."
+    ],
+    "fail": [
+      "The reuse audit has two rows with valid decisions and reasons."
+    ]
+  },
+  "flags-no-verification-mode": {
+    "pass": [
+      "| Medium | Testability | No verification mode | tech-spec.md | 1 | The export derives CSV rows from invoice data but sets no `verification_mode`; `verification_mode: data` with Real inputs would add a probe per milestone. |",
+      "**Medium** — frontmatter has no verification_mode although the design derives output from invoice data.",
+      "verification_mode is missing on a data-deriving export (Medium, does not block planning)."
+    ],
+    "fail": [
+      "verification_mode is not set, so the verification-surface gate is skipped.",
+      "| Medium | Completeness | Edge cases | tech-spec.md | 40 | No case for an empty customer name. |",
+      "No Test Hooks section; none is required without a verification mode."
+    ]
+  },
+  "verdict-blocks-planning": {
+    "pass": [
+      "| Critical | Spec Alignment | Uncovered requirement | spec.md | 24 | ... |",
+      "### Critical\n- REQ-004 has no step",
+      "1 Critical and 1 High remain, so feature-plan is blocked.",
+      "| **Critical** | Spec Alignment | Uncovered requirement |"
+    ],
+    "fail": [
+      "| High | Pattern Conformance | Hand-rolled CSV | tech-spec.md | 34 | on the critical path |",
+      "No **Critical** findings; 2 High.",
+      "### Critical\nNone.",
+      "### Critical\n\n- none",
+      "0 Critical, 2 High."
+    ]
+  },
+  "verdict-not-passed": {
+    "pass": [
+      "1 Critical and 1 High remain, so the tech-spec stays draft and feature-plan is blocked."
+    ],
+    "fail": [
+      "Review passed — mark tech-spec.md status: approved?"
+    ]
   }
 }
