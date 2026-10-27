@@ -28,19 +28,19 @@ Ranked by how much it costs to do later.
 
 ### 2.1 Hook delivery model — decide before merging #260
 
-**Problem.** Every hook and lib is copied per project (`framework-files/manifest.json`, all `overwrite`). Every consumer on disk runs the v2.9.0 hook copies byte-for-byte, so the fixes already on main for the `2>/dev/null` phantom-session bug (`hooks/mark-code-changed.sh:33-34`) and the inherited-isolation-marker bug (`hooks/guard-worktree-context.sh:359-363`) are live in zero consumers. Consumers hand-patch (image-generation-app ×2 files, translate `guard-git-branch.sh`) or pin executable code (new-sporticos-frontend `lib/memory-files.mjs`), and `update` overwrites the patches. Consumer memory: new-sporticos-frontend P046, lockin `feedback_stop_hook_vitest_warnings` ("fix belongs in myspec hooks/, overwritten by update").
+**Problem.** Every hook and lib is copied per project (`framework-files/manifest.json`, all `overwrite`). Every consumer on disk runs the v2.9.0 hook copies byte-for-byte, so the fixes already on main for the `2>/dev/null` phantom-session bug (`hooks/mark-code-changed.sh:33-34`) and the inherited-isolation-marker bug (`hooks/guard-worktree-context.sh:359-363`) are live in zero consumers. Consumers hand-patch (consumer G ×2 files, translate `guard-git-branch.sh`) or pin executable code (consumer E `lib/memory-files.mjs`), and `update` overwrites the patches. Consumer memory: consumer E P046, consumer F `feedback_stop_hook_vitest_warnings` ("fix belongs in myspec hooks/, overwritten by update").
 
 **Options.**
 - A. Run hooks from the plugin: keep a root `hooks.json` with `${CLAUDE_PLUGIN_ROOT}/hooks/…` commands (the Claude Code plugin hooks contract), declare it in `.claude-plugin/plugin.json`, stop copying `hooks/` and `lib/` into `.claude/`. `update` unwires the eight framework commands from `settings.json`. Hook fixes ship with the plugin version; `frameworkVersion` shrinks to rules + aiDir files. Cost: teammates without the plugin lose the gates (the reason 2.0 kept copies, `docs/myspec-2.0-breaking-changes.md:206-207`); `verification.json` and the `lib/myspec-config.sh` reader path must be re-based on `CLAUDE_PLUGIN_ROOT`.
 - B. Keep copies, but make it a 3.x non-event: the "teammates without the plugin" case already fails for skills, so the gates are partial for them anyway.
 
-**Why now.** #260 deletes the root `hooks.json`. If 3.0 later wants option A, re-adding plugin hooks changes where hooks run — a second major. Option A is also the only thing that fixes friction #4/#10 fleet-wide. Recommendation: A, with `update` leaving project-owned hooks (lockin's `guard-release-branch.sh`, `lint-on-edit.sh`; translate `cleanup-worktrees.sh`) untouched in the same arrays.
+**Why now.** #260 deletes the root `hooks.json`. If 3.0 later wants option A, re-adding plugin hooks changes where hooks run — a second major. Option A is also the only thing that fixes friction #4/#10 fleet-wide. Recommendation: A, with `update` leaving project-owned hooks (consumer F's `guard-release-branch.sh`, `lint-on-edit.sh`; translate `cleanup-worktrees.sh`) untouched in the same arrays.
 
 **Contract facts (verified in PR #272 against the plugin docs).** Hooks are declared in the plugin's `hooks.json` (`.claude-plugin/plugin.json` `"hooks"` key); `${CLAUDE_PLUGIN_ROOT}` is substituted in hook commands and in skill Markdown at load, but is **not exported to the Bash tool** — a rule under `.claude/rules/` or an `${aiDir}` doc cannot name a lib path by variable. Anything that tells the model to run a lib helper must live in a skill (substituted) or print the resolved path (hook block messages do). A plugin hook and a `settings.json` copy of the same handler both run, so a 2.12 consumer on the 3.0 plugin runs every hook twice until `update` unwires the copies — that is why `hook-wired-locally` is an error. Retired copies are moved to `.claude/state/retired-3.0/`, never deleted.
 
 ### 2.2 PostToolUse rescan gates → diff-scoped
 
-`require-reuse-audit.sh` rescans the whole tech-spec on any edit and retro-blocks pre-hook specs; opt-out is repo-global (`hooks/require-reuse-audit.sh:3-5,20,52-57`). `no-absolute-paths.sh` scans the whole new content after the file is already written (`hooks/no-absolute-paths.sh:3-5,139`). Both are the top two hook complaints in lockin and new-sporticos-frontend (`feedback_reuse_audit_hook_retro_blocks_tech_specs`, `feedback_no_absolute_paths_false_positive`, P171, S039). Bash/heredoc writes bypass all three PostToolUse guards and leave no session log (NSF `project_bash_edits_bypass_session_hook`, lockin P100).
+`require-reuse-audit.sh` rescans the whole tech-spec on any edit and retro-blocks pre-hook specs; opt-out is repo-global (`hooks/require-reuse-audit.sh:3-5,20,52-57`). `no-absolute-paths.sh` scans the whole new content after the file is already written (`hooks/no-absolute-paths.sh:3-5,139`). Both are the top two hook complaints in consumer F and consumer E (`feedback_reuse_audit_hook_retro_blocks_tech_specs`, `feedback_no_absolute_paths_false_positive`, P171, S039). Bash/heredoc writes bypass all three PostToolUse guards and leave no session log (NSF `project_bash_edits_bypass_session_hook`, consumer F P100).
 
 Change: guards check the session's own diff (the #254 session-state file already lists it) at Stop, or at PreToolUse on the proposed content, not the file after the fact. Breaking because the gate semantics (what blocks, when) change and `reuseAudit.enabled` moves from a repo-global switch to a per-file marker. Ride on #254/#257, which already touch the same files.
 
@@ -91,7 +91,7 @@ Milestone-less plans (`skills/feature-implement/SKILL.md:139`), plan-less featur
 Taken 2026-10-04:
 
 1. **Hook delivery** (§2.1) — **A: run from the plugin.** #260 must keep the root `hooks.json` (rewritten to `${CLAUDE_PLUGIN_ROOT}/hooks/…`) and declare it in `.claude-plugin/plugin.json`; `update` unwires the eight framework commands and deletes byte-identical `.claude/hooks/*` and `.claude/lib/*` copies, showing a diff for hand-patched ones.
-2. **Upgrade floor 2.11** (#259) — **kept.** The three 1.x consumers (translate ×2 at 1.0.0, image-generation-app at 1.17.0) are stepped by hand through v1.28 → v2.11 → 3.0 as the dogfood run.
+2. **Upgrade floor 2.11** (#259) — **kept.** The three 1.x consumers (consumers J and K at 1.0.0, consumer G at 1.17.0) are stepped by hand through v1.28 → v2.11 → 3.0 as the dogfood run.
 3. **Rescan gates** (§2.2) — **diff-scoped in 3.0**, on top of #254.
 4. **Skill folds** (§2.3) — **`feature-scenario` + `feature-seed-data` fold into `feature-spec`**; `idea-process` stops re-implementing them. Probe-executor ships as `agents/probe-executor.md`.
 
@@ -103,8 +103,8 @@ Still open:
 ## 4. Non-breaking riders worth shipping in 3.0.0
 
 - Flip `quality/release-check.json` `gate: true` — five releases recorded, zero false regressions (RELEASING.md:127). The major becomes the first gated release. Renamed/folded skills break `skill:<name>` tags and per-case hashes, so the 3.0.0 baseline is partial by construction; record it as the new baseline.
-- 2.0 riders still undelivered: commit step at the end of `feature-update` and `cross-spec-validation` (lockin `feedback_commit_spec_edits_early`); plan DAG ordered by data dependency (`skills/feature-plan/SKILL.md:50-58` still file-overlap only).
-- Stop-gate per-check timeout in `verification.json` (lockin P172: a green 285 s suite blocks under the fixed `CHECK_CAP_SECONDS=120`, `hooks/verify-before-stop.sh:542`). 2.0's "already fixed" table misdiagnosed this as vitest warnings.
+- 2.0 riders still undelivered: commit step at the end of `feature-update` and `cross-spec-validation` (consumer F `feedback_commit_spec_edits_early`); plan DAG ordered by data dependency (`skills/feature-plan/SKILL.md:50-58` still file-overlap only).
+- Stop-gate per-check timeout in `verification.json` (consumer F P172: a green 285 s suite blocks under the fixed `CHECK_CAP_SECONDS=120`, `hooks/verify-before-stop.sh:542`). 2.0's "already fixed" table misdiagnosed this as vitest warnings.
 - #185 + #161 bundle (rules at the 1000-token budget; `~/.claude-personal` hard-coded in 16 files) — same rule files, same release.
 - `docs/upgrading-to-2.0.md:108-110` says implementers run no tests; `implementer-prompt.md:66-74` lets them run the task verify command. Fix the doc.
 - Delete `skills/init/SKILL.md:210,228-230` (prose about base agents deleted in 2.0; #259 covers part).
@@ -116,13 +116,13 @@ What `update` 3.0.0 meets in the wild, beyond what #259 assumes:
 
 | Shape | Where | Handling |
 |---|---|---|
-| `frameworkFiles` as 1.x inventory (`version`/`lastUpdated`), no `migrations` | image-generation-app (28 entries), translate ×2 (17) | floor refusal, or the `2.0.0-schema` logic kept behind the 1.x path |
+| `frameworkFiles` as 1.x inventory (`version`/`lastUpdated`), no `migrations` | consumer G (28 entries), consumers J and K (17) | floor refusal, or the `2.0.0-schema` logic kept behind the 1.x path |
 | Retired `guard-git-branch.sh` wired with bare `.claude/hooks/x.sh` commands | 3 repos | unwire + delete (the 2.0 `removed` entry #259 drops) |
 | Hand-patched hooks | image-gen `mark-code-changed.sh`, `validate-frontmatter.sh`; translate `guard-git-branch.sh`; `rules/workflow.md` forked 173 lines | show a diff, never overwrite silently |
-| Project hooks sharing arrays with framework hooks; split matchers; `bash "…"` interpreter form | lockin | unwire by command path, keep neighbours |
+| Project hooks sharing arrays with framework hooks; split matchers; `bash "…"` interpreter form | consumer F | unwire by command path, keep neighbours |
 | Three `features/index.yaml` dialects (2.x `depends-on`; discover `depends_on`/`source`; 1.0.0 `id`/`spec`/`implementation-plan`) | all | status-audit and doctor must normalise or refuse explicitly |
 | Memory trees without `hook:` (`anchors:` instead); unslugged `P001.md` names | image-gen; NSF | `memory-index.mjs --backfill` |
-| 2.0 session residue: `sessions/README.md` and `.gitignore` rules for `active/`, a UUID-named `status: active` log inside `archive/` | lockin | doctor `sessions-unmigrated` misses all three; extend before #259 deletes it, or accept |
+| 2.0 session residue: `sessions/README.md` and `.gitignore` rules for `active/`, a UUID-named `status: active` log inside `archive/` | consumer F | doctor `sessions-unmigrated` misses all three; extend before #259 deletes it, or accept |
 | Paths block in CLAUDE.md only / AGENTS.md only / both / none | one of each | find in any; never create a second |
 | `.claude/` and `.myspec.json` untracked | content-processor-app | fs fallbacks for `git mv`/`git rm` |
 | 36 stale `.claude/worktrees/*` with old hooks and `.myspec.json` | all | exclude from doctor/update greps (every "renamed skill" hit found was inside one) |
