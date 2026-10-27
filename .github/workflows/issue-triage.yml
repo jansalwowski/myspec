@@ -6,10 +6,15 @@ name: Issue triage
 # so no API spend.
 # The judgement (repro on main, duplicates, splits, priority) is the repo-local
 # /triage skill, run by the maintainer.
+# Every new or edited issue and comment is also checked for details of the
+# reporter's own project (scripts/triage/redaction-check.mjs). A hit adds
+# needs-redaction and one comment; the maintainer removes the label once fixed.
 
 on:
   issues:
-    types: [opened, closed]
+    types: [opened, edited, closed]
+  issue_comment:
+    types: [created, edited]
 
 permissions:
   issues: write
@@ -17,7 +22,7 @@ permissions:
 
 jobs:
   label:
-    if: github.event.action == 'opened'
+    if: github.event_name == 'issues' && github.event.action == 'opened'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -37,8 +42,45 @@ jobs:
           echo "labels: ${labels:-<none>}"
           [ -z "$labels" ] || gh issue edit "$NUMBER" --repo "$GITHUB_REPOSITORY" --add-label "$labels"
 
+  redaction:
+    if: github.event.action != 'closed' && !github.event.issue.pull_request
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Check for project details
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REDACTION_DENYLIST: ${{ secrets.REDACTION_DENYLIST }}
+          NUMBER: ${{ github.event.issue.number }}
+          TITLE: ${{ github.event.issue.title }}
+          # A comment event checks the comment; an issue event, title and body.
+          TEXT: ${{ github.event.comment.body || github.event.issue.body }}
+          WHERE: ${{ github.event.comment && 'comment' || 'issue' }}
+          EXISTING: ${{ join(github.event.issue.labels.*.name, ',') }}
+        run: |
+          if [ "$WHERE" = issue ]; then text=$(printf '%s\n%s\n' "$TITLE" "$TEXT"); else text=$TEXT; fi
+          # Actions runs bash -e, and exit 1 means findings, not failure.
+          findings=$(printf '%s\n' "$text" | node scripts/triage/redaction-check.mjs --repo "$GITHUB_REPOSITORY") && status=0 || status=$?
+          [ "$status" -le 1 ] || exit "$status"
+          [ "$status" -eq 1 ] || { echo "clean"; exit 0; }
+          case ",$EXISTING," in *,needs-redaction,*) echo "already labelled"; exit 0 ;; esac
+          gh issue edit "$NUMBER" --repo "$GITHUB_REPOSITORY" --add-label needs-redaction
+          {
+            echo "This $WHERE looks like it names details of the project it came from. The repo is public, so please edit them out:"
+            echo
+            printf '%s\n' "$findings" | sed 's/^/- /'
+            echo
+            echo "Use placeholders (\`<app>\`, \`<service>\`, \`TICKET-1\`) and a fixture repro instead. GitHub keeps edit history, so for a credential, revoke it as well. A maintainer removes the label once it is clean."
+          } > comment.md
+          gh issue comment "$NUMBER" --repo "$GITHUB_REPOSITORY" --body-file comment.md
+
   tracker:
-    if: github.event.action == 'closed'
+    if: github.event_name == 'issues' && github.event.action == 'closed'
     # Repo-wide, not per issue: one PR closing several siblings starts one run
     # each, and they must not both see "all closed, not yet queued".
     concurrency:

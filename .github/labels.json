@@ -2,6 +2,7 @@
   { "name": "type:bug", "renamedFrom": "bug", "color": "d73a4a", "description": "Something shipped does not work as documented" },
   { "name": "type:enhancement", "renamedFrom": "enhancement", "color": "a2eeef", "description": "New skill, capability or convention, or a change to how one works" },
   { "name": "type:docs", "renamedFrom": "documentation", "color": "0075ca", "description": "README, AGENTS.md, RELEASING.md, examples/ or docs/ only" },
+  { "name": "needs-redaction", "color": "fbca04", "description": "Names details of the reporter's project; the issue-triage workflow adds it, a maintainer removes it once edited out" },
   { "name": "breaking", "color": "B60205", "description": "Breaks consumers without a migration; ships only in a major" },
 
   { "name": "area:skills", "color": "5319e7", "description": "skills/ (a shipped skill body, trigger or reference)" },

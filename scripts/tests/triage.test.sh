@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Regression fixture for scripts/triage/: the title classifier the
-# issue-triage workflow runs on every opened issue, the PR labeller the
+# issue-triage workflow runs on every opened issue, the redaction check it runs
+# on every issue and comment, the PR labeller the
 # pr-labels workflow runs on every PR, and the label sync.
 #
 # The classifier labels real issues without review, so a false area label is
@@ -15,6 +16,7 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 REPO_ROOT=$(cd "$HERE/../.." && pwd)
 CLASSIFY="$REPO_ROOT/scripts/triage/area-labels.mjs"
 SYNC="$REPO_ROOT/scripts/triage/sync-labels.sh"
+REDACT="$REPO_ROOT/scripts/triage/redaction-check.mjs"
 
 TMP=$(cd "$(mktemp -d)" && pwd -P)
 trap 'rm -rf "$TMP"' EXIT
@@ -56,6 +58,32 @@ node "$CLASSIFY" --root "$FIX" >/dev/null 2>&1
 expect_eq "$?" "2" "no title is a usage error"
 node "$CLASSIFY" --root "$FIX" a b >/dev/null 2>&1
 expect_eq "$?" "2" "two titles is a usage error"
+
+# ── redaction-check.mjs ──────────────────────────────────────────────────────
+# Each leak shape from the 2026-10 issue audit, paired with the look-alike that
+# myspec's own issues use and must keep passing.
+
+R_OUT=$(printf 'implemented downstream in acme/shop-app#12\n' | node "$REDACT" --repo o/myspec)
+expect_eq "$?" "1" "exit 1 on a finding"
+expect_eq "$R_OUT" "line 1: repo reference: acme/shop-app#12" "another repo's PR reference"
+expect_eq "$(printf 'see o/myspec#5 and O/MySpec#6\n' | node "$REDACT" --repo o/myspec; echo "exit $?")" "exit 0" "this repo's own references pass"
+expect_eq "$(printf 'https://github.com/acme/shop-app/pull/9\n' | node "$REDACT" --repo o/myspec | cut -d: -f2)" " repo reference" "another repo's PR URL"
+expect_eq "$(printf 'worktree at .claude/worktrees/SHOP-1021\n' | node "$REDACT" | cut -d: -f2-)" " ticket ID: SHOP-1021" "a tracker ticket ID"
+expect_eq "$(printf 'REQ-024, AC-3, UTF-8, SHA-256, RFC-2119, L138-150, P1-x\n' | node "$REDACT"; echo "exit $?")" "exit 0" "spec IDs and standards are not tickets"
+expect_eq "$(printf 'https://claude.ai/code/session_01AbC\n' | node "$REDACT" | cut -d: -f2)" " session link" "a claude.ai session link"
+expect_eq "$(printf '/Users/jdoe/src/x\n' | node "$REDACT" | cut -d: -f2-)" " home path: /Users/jdoe" "a real home path"
+expect_eq "$(printf '/Users/alice/x and /Users/<you>/y\n' | node "$REDACT"; echo "exit $?")" "exit 0" "placeholder home paths pass"
+expect_eq "$(printf 'mail jdoe@acme.io\n' | node "$REDACT" | cut -d: -f2)" " email" "an email address"
+expect_eq "$(printf 'Co-Authored-By: C <noreply@anthropic.com>\n' | node "$REDACT"; echo "exit $?")" "exit 0" "the co-author trailer passes"
+expect_eq "$(printf 'token ghp_abcdefghijklmnopqrstuvwxyz0123\n' | node "$REDACT")" "line 1: credential" "a GitHub token, never echoed"
+expect_eq "$(printf 'sk-extractability and sk-worktree\n' | node "$REDACT"; echo "exit $?")" "exit 0" "sk- words are not keys"
+
+DENY_OUT=$(printf 'run in Acme-Shop today\nshopfront is fine\n' | REDACTION_DENYLIST='acme-shop, other' node "$REDACT")
+expect_eq "$DENY_OUT" "line 1: a name on the maintainer's denylist" "denylist matches case-insensitively and never prints the name"
+expect_eq "$(printf 'blocking\n' | REDACTION_DENYLIST='lock' node "$REDACT"; echo "exit $?")" "exit 0" "denylist matches whole words only"
+expect_eq "$(printf 'x\n' | REDACTION_DENYLIST=' , ' node "$REDACT"; echo "exit $?")" "exit 0" "a blank denylist matches nothing"
+node "$REDACT" --bogus </dev/null >/dev/null 2>&1
+expect_eq "$?" "2" "unknown argument is a usage error"
 
 # The real repo: titles of issues that shipped, so the tree lookup keeps working.
 expect_eq "$(node "$CLASSIFY" 'mark-code-changed.sh marks read-only Bash commands' | flat)" "area:hooks status:needs-triage" "real hook"
