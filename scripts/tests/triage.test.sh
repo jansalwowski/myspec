@@ -69,7 +69,7 @@ expect_eq "$R_OUT" "line 1: repo reference: acme/shop-app#12" "another repo's PR
 expect_eq "$(printf 'see o/myspec#5 and O/MySpec#6\n' | node "$REDACT" --repo o/myspec; echo "exit $?")" "exit 0" "this repo's own references pass"
 expect_eq "$(printf 'https://github.com/acme/shop-app/pull/9\n' | node "$REDACT" --repo o/myspec | cut -d: -f2)" " repo reference" "another repo's PR URL"
 expect_eq "$(printf 'worktree at .claude/worktrees/SHOP-1021\n' | node "$REDACT" | cut -d: -f2-)" " ticket ID: SHOP-1021" "a tracker ticket ID"
-expect_eq "$(printf 'REQ-024, AC-3, UTF-8, SHA-256, RFC-2119, L138-150, P1-x\n' | node "$REDACT"; echo "exit $?")" "exit 0" "spec IDs and standards are not tickets"
+expect_eq "$(printf 'REQ-024, AC-3, UTF-8, SHA-256, RFC-2119, PSR-4, L138-150, P1-x\n' | node "$REDACT"; echo "exit $?")" "exit 0" "spec IDs and standards are not tickets"
 expect_eq "$(printf 'https://claude.ai/code/session_01AbC\n' | node "$REDACT" | cut -d: -f2)" " session link" "a claude.ai session link"
 expect_eq "$(printf '/Users/jdoe/src/x\n' | node "$REDACT" | cut -d: -f2-)" " home path: /Users/jdoe" "a real home path"
 expect_eq "$(printf '/Users/alice/x and /Users/<you>/y\n' | node "$REDACT"; echo "exit $?")" "exit 0" "placeholder home paths pass"

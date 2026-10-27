@@ -32,7 +32,7 @@ for (let i = 0; i < args.length; i++) {
 }
 
 // Prefixes that name a myspec spec ID or a public standard, not a team's tracker.
-const TICKET_ALLOW = new Set(['AC', 'CVE', 'FR', 'GHSA', 'ISO', 'NFR', 'REQ', 'RFC', 'SC', 'SHA', 'TC', 'TICKET', 'US', 'UTF']);
+const TICKET_ALLOW = new Set(['AC', 'CVE', 'FR', 'GHSA', 'ISO', 'NFR', 'PSR', 'REQ', 'RFC', 'SC', 'SHA', 'TC', 'TICKET', 'US', 'UTF']);
 // Home directories used as placeholders in examples and hook fixtures.
 const HOME_ALLOW = new Set(['alice', 'bob', 'me', 'runner', 'user', 'you']);
 
