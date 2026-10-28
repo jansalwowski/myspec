@@ -68,8 +68,9 @@ eq "$(budget 301)" 300 "the variable cannot raise the budget"
 eq "$(budget 100000)" 300 "nor raise it by much"
 eq "$(budget -5)" 300 "a negative value is ignored"
 eq "$(budget 0)" 300 "zero is ignored"
-eq "$( (GATE_DEADLINE=$(( $(date +%s) - 10 )); gate_remaining) )" 0 "a spent budget has 0 s left"
-eq "$( (GATE_DEADLINE=$(( $(date +%s) + 60 )); gate_remaining) )" 60 "the seconds left"
+# A fixed clock: two real `date` calls straddle a second boundary now and then.
+eq "$( (date() { echo 1000; }; GATE_DEADLINE=990; gate_remaining) )" 0 "a spent budget has 0 s left"
+eq "$( (date() { echo 1000; }; GATE_DEADLINE=1060; gate_remaining) )" 60 "the seconds left"
 
 # --- container_exec_form (R8a) ----------------------------------------------------------
 for c in "docker exec app make lint" \
