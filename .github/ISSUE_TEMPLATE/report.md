@@ -14,6 +14,15 @@ One problem per issue. Several findings from one session (a doctor run, a
 feature-implement retro) go in separate issues, or triage splits them.
 -->
 
+<!--
+This repo is public. Describe the problem against myspec, not your project:
+leave out org, repo, app, service, package and feature names, ticket IDs,
+PR links, hostnames, internal paths, timings and session links. Use
+placeholders (`<app>`, `<service>`, `<feature>`, `TICKET-1`) and reproduce on
+a fixture repo. The issue-triage workflow labels an issue `needs-redaction`
+when it spots such details. GitHub keeps edit history, so check before posting.
+-->
+
 ## What happens
 
 <!-- Observed behaviour. Paste exact error text. -->

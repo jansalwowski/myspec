@@ -54,7 +54,7 @@ Run `git fetch origin`, then `git worktree add --detach <scratchpad>/triage-main
 
 Record one row per issue. The row holds type, areas, priority, status, the files the fix would touch, one line of evidence, and the proposed actions.
 
-1. **Bundle.** Does the body hold two or more problems that would land as separate PRs, such as numbered findings with disjoint files or unrelated symptoms? If so, draft one child issue per problem. Each child gets a component-prefixed title, and its section of the parent copied verbatim, repro included. Assess each child through items 2 to 6, not the parent. Each item of the bundle ends up in one of three places:
+1. **Bundle.** Does the body hold two or more problems that would land as separate PRs, such as numbered findings with disjoint files or unrelated symptoms? If so, draft one child issue per problem. Each child gets a component-prefixed title, and its section of the parent copied verbatim, repro included, with the reporter's project details replaced by placeholders. Assess each child through items 2 to 6, not the parent. Each item of the bundle ends up in one of three places:
    - a new child issue
    - an existing issue, when the item repeats one (item 2); comment on that issue with the item's evidence
    - the parent's comment, when the item is already fixed (item 3) or needs no change
@@ -105,6 +105,7 @@ For each approved row, check that each command exits 0 and report any that fail:
 - Items folded into an existing issue: comment on that issue with the item's section and evidence.
 - Duplicates: `gh issue close N --duplicate-of M --comment "<evidence>"`.
 - Already fixed: `gh issue close N --reason completed --comment "Fixed by #<pr>; <repro command> no longer reproduces on <origin/main short sha>."`
+- Redaction: every issue in scope that carries `needs-redaction`, or names details of the reporter's project (AGENTS.md "Issues"), gets a corrected title and body through `gh issue edit N --title … --body-file …` with placeholders, then `--remove-label needs-redaction`. Its comments go through `gh api -X PATCH repos/<owner>/<repo>/issues/comments/<id> -F body=@<file>`. Edit history keeps the old text, so report any credential to the user to revoke.
 - Comment only where a label alone does not explain the decision: needs-repro (what was tried), blocked (on what), a folded item, a corrected body, and any close. Put the evidence line in the comment.
 
 ### Step 6: Verify and clean up
@@ -136,6 +137,7 @@ With `prs` as the argument, analyse the open PR queue instead of the issues. It 
 - Never close an issue without a comment carrying the evidence: the PR, the duplicate, or the repro that no longer fails.
 - Never mark `status:ready` on reasoning alone. It needs a repro run or a premise grep on origin/main.
 - Never raise an issue's priority to make it fit a batch, and never merge unrelated issues so that one agent takes them.
+- Never copy a reporter's project details into a split child, a folded comment or a closing comment; restate them with placeholders.
 - Repro runs happen only in the scratch tree, never in the shared checkout or another session's worktree.
 
 ## Integration
