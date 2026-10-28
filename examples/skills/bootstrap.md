@@ -237,7 +237,7 @@ episodic: 8
 
 > **Project context loaded**
 >
-> Sporticos Frontend — Nuxt 3 SSR. Working areas: `server/api/`, `pages/`, `config/cache.js`.
+> Example Frontend — Nuxt 3 SSR. Working areas: `server/api/`, `pages/`, `config/cache.js`.
 >
 > **Memory**: Layer 1 empty | Layer 2 available: 58 procedural, 83 semantic, 8 episodic — not
 > scanned, no task yet. I'll run `/myspec:memory-preflight` once you tell me what we're working on.

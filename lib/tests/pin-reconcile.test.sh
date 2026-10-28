@@ -2,7 +2,7 @@
 # Tests for lib/pin-reconcile.mjs (#160, #265): the three-way verdict per pin
 # that replaced update's `wc -c` size compare.
 #
-# The two new-sporticos-frontend pins #160 reported, as this fixture plays
+# The two consumer E pins #160 reported, as this fixture plays
 # them: a stale pin (rules/ideas.md, pinned "gated with paths" while the
 # upstream copy was ungated; upstream is path-gated now, so the file equals
 # the plugin copy) and a pin whose local fix was upstreamed (the project's
