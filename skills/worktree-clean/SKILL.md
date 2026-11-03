@@ -75,7 +75,7 @@ Any one of these keeps the branch, before proofs are considered:
 ## Constraints
 
 - **Never** pass `--force` to `git worktree remove`, never `rm -rf` a worktree to get past a refusal, and never edit the script to do so. Git's refusal to drop a dirty tree is the last backstop — a refusal means files exist only there, and "just finishing the cleanup" with force destroys them permanently.
-- **Never** delete a branch the script marked KEEP because it "looks merged". If a classification is wrong, fix `classify()` and add a case to `lib/tests/branch-cleanup.test.sh`.
+- **Never** delete a branch the script marked KEEP because it "looks merged". If a classification is wrong, fix `classify()` and add a case to `lib/tests/branch-cleanup.test.sh`. Reported upstream instead, the issue names no project, branch or PR of this repo: use placeholders (`a private repo`, `fix/some-branch`, `PR #123`), because GitHub's edit history keeps the original text.
 - A stash is repo-global and survives worktree removal — it is not a reason to keep a worktree.
 
 ## Verification Checklist
