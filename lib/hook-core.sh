@@ -112,6 +112,51 @@ physical_dir() {
   (cd "$1" 2>/dev/null && pwd -P)
 }
 
+# cd_target <base> <path> <earlier text> -> the directory a literal
+# `cd <path>` from <base> enters, read from a command before it runs. A path
+# that exists resolves physically. One that does not yet (`mkdir -p d && cd d`,
+# `git worktree add d && cd d`, #383) resolves lexically, `.` and `..`
+# normalised as bash's logical cd does, its longest existing prefix physically
+# and the rest appended, so a tmp dir behind a symlink still compares against
+# a checkout root. That holds only when <earlier text>, the command's text
+# before the cd, names the first missing directory: otherwise the cd fails
+# when it runs, and after `;` the next segment runs in <base>, so moving would
+# judge a write that lands there as landing elsewhere. Fails, leaving the
+# caller's directory unchanged, for a word it cannot read: a variable, a
+# substitution, a glob, `-`, `~`.
+cd_target() {
+  local p="$2" out="" c dir rest="" miss="" phys
+  local -a parts
+  (cd "$1" 2>/dev/null && cd "$p" 2>/dev/null && pwd -P) && return 0
+  case "$p" in
+    ''|-*|\~*|*'$'*|*'`'*|*[\*\?\[]*) return 1 ;;
+    /*) ;;
+    *) p="$1/$p" ;;
+  esac
+  IFS=/ read -r -a parts <<< "$p"
+  for c in ${parts[@]+"${parts[@]}"}; do
+    case "$c" in
+      ''|.) ;;
+      ..) out="${out%/*}" ;;
+      *) out="$out/$c" ;;
+    esac
+  done
+  dir="${out:-/}"
+  while [ ! -d "$dir" ]; do
+    [ ! -e "$dir" ] || return 1
+    miss="${dir##*/}"
+    rest="/$miss$rest"
+    dir="${dir%/*}"
+    [ -n "$dir" ] || dir=/
+  done
+  if [ -n "$miss" ]; then
+    [[ "$3" =~ (^|[^A-Za-z0-9._-])"$miss"($|[^A-Za-z0-9._-]) ]] || return 1
+  fi
+  phys=$(cd "$dir" 2>/dev/null && pwd -P) || return 1
+  [ -z "$rest" ] || phys="${phys%/}$rest"
+  printf '%s\n' "$phys"
+}
+
 # file_sha256 <file> -> the file's SHA-256, hex. Fails when the file is not
 # a readable regular file or no hash tool exists (sha256sum on Linux and
 # BusyBox, shasum on macOS, openssl as the last resort).

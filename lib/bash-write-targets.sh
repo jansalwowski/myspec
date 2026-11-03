@@ -152,13 +152,15 @@ segment_matches() {
 # path per line. Every segment is scanned for redirects; a segment's operands
 # count only when a write verb stands at its command position. A literal `cd`
 # moves BASE_DIR for the segments after it, and a subshell restores it on exit,
-# so `cd <worktree> && echo x > a.ts` records the worktree's file.
+# so `cd <worktree> && echo x > a.ts` records the worktree's file. A cd into a
+# directory the command creates first resolves lexically (cd_target in
+# lib/hook-core.sh), given the text of the segments before it.
 # Two scans of the command run in step: the plain one (quoted spans blanked to
 # Q) decides what is a verb, an option or a redirect; the `keep` one supplies
 # the operand's text, so a quoted literal path ("src/a.ts") resolves too. Both
 # split into the same segments and words (lib/command-scan.sh).
 bash_write_targets() {
-  local line kline sep seg kseg verb word skip i last dest next inplace dw
+  local line kline sep seg kseg verb word skip i last dest next inplace dw prior="" earlier
   local -a words kwords ops scopes=()
   while IFS= read -r line && IFS= read -r kline <&3; do
     sep="${line%%$'\t'*}"
@@ -174,6 +176,7 @@ bash_write_targets() {
     strip_command_prefix_to seg "${line#*$'\t'}"
     [ -n "$seg" ] || continue
     strip_command_prefix_to kseg "${kline#*$'\t'}"
+    earlier="$prior" prior="$prior $kseg"
 
     # Split as `read -a` does, without a here-string per segment (a temp
     # file each in bash 3.2) and with no glob expansion.
@@ -207,7 +210,7 @@ bash_write_targets() {
     [ "${#words[@]}" -gt 0 ] || continue
     if [ "${words[0]}" = cd ]; then
       [ "${#words[@]}" -lt 2 ] || decode_word_to dw "${kwords[1]}"
-      if [ "${#words[@]}" -ge 2 ] && next=$(cd "$BASE_DIR" 2>/dev/null && cd "$dw" 2>/dev/null && pwd -P); then
+      if [ "${#words[@]}" -ge 2 ] && next=$(cd_target "$BASE_DIR" "$dw" "$earlier"); then
         BASE_DIR="$next"
         # Not a target: a checkout this command reaches, for the status diff.
         printf 'cd:%s\n' "$next"

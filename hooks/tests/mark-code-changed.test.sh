@@ -274,6 +274,22 @@ ledger_has "$SID-60" code "$REPO" src/r9.ts && ok || fail "the real redirect tar
 bashcmd "$SID-61" "$REPO" 'sed -i "" "s/a/b/" "$F" src/r10.ts'
 ledger_has "$SID-61" code "$REPO" src/r10.ts && ok || fail "a variable operand does not hide the literal one after it"
 
+# --- a cd into a directory the command creates first (#383) -------------------
+# The hook reads the command before it runs, so the directory is not there yet.
+bashcmd "$SID-cd1" "$REPO" "mkdir -p $REPO/src/abs && cd $REPO/src/abs && echo x > a.ts"
+ledger_has "$SID-cd1" code "$REPO" src/abs/a.ts && ok || fail "mkdir -p <abs> && cd <abs> moves the base (got: $(ledger "$SID-cd1"))"
+bashcmd "$SID-cd2" "$REPO" 'mkdir -p src/rel && cd src/rel && echo x > a.ts'
+ledger_has "$SID-cd2" code "$REPO" src/rel/a.ts && ok || fail "a relative mkdir -p d && cd d moves the base (got: $(ledger "$SID-cd2"))"
+bashcmd "$SID-cd3" "$REPO" "git worktree add $REPO/.claude/worktrees/wt-new --detach && cd $REPO/.claude/worktrees/wt-new && echo x > a.ts"
+ledger_has "$SID-cd3" code "$REPO" a.ts && fail "git worktree add d && cd d does not record the main checkout's file" || ok
+bashcmd "$SID-cd4" "$REPO" 'mkdir -p src/e/f && cd src/e/f && cd ../.. && echo x > e.ts'
+ledger_has "$SID-cd4" code "$REPO" src/e.ts && ok || fail "cd .. out of a created directory normalises (got: $(ledger "$SID-cd4"))"
+bashcmd "$SID-cd5" "$REPO" 'cd src/never; echo x > n.ts'
+ledger_has "$SID-cd5" code "$REPO" n.ts && ok || fail "a cd into a directory nothing creates leaves the base (got: $(ledger "$SID-cd5"))"
+# shellcheck disable=SC2016 # literal text, not an expansion
+bashcmd "$SID-cd6" "$REPO" 'mkdir -p src/v && cd $D && echo x > v.ts'
+ledger_has "$SID-cd6" code "$REPO" v.ts && ok || fail "a variable cd target is not guessed (got: $(ledger "$SID-cd6"))"
+
 # --- an edit inside a linked worktree logs in the PRIMARY checkout -----------
 git -C "$REPO" worktree add -q "$REPO/.claude/worktrees/wt-a" -b wt-a
 WT="$REPO/.claude/worktrees/wt-a"

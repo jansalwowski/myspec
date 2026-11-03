@@ -56,8 +56,10 @@
 # commands. So `cd <worktree> && git checkout x` (the sanctioned path both block
 # messages point at) is allowed, while `ls <worktree>; git checkout x` from the
 # main checkout, or `cd <main> && git checkout x` from a worktree, is not.
-# A `cd` target the hook cannot resolve (a variable, a path that does not exist
-# yet) leaves the directory unchanged.
+# A `cd` into a directory the command creates first (`mkdir -p d && cd d`)
+# resolves lexically (cd_target in lib/hook-core.sh); one the hook cannot
+# resolve (a variable, a substitution, a path nothing before it names) leaves
+# the directory unchanged.
 #
 # Escape hatches:
 #   MYSPEC_ALLOW_BRANCH_OPS=1    gate A. Deliberately NOT mentioned in the block
@@ -534,7 +536,9 @@ gate_c() {
   declare -F bash_write_targets >/dev/null && [ -f "$ISO_HOOK" ] && [ -n "$SESSION_ID" ] || return 0
   # The scanner's globals, per command scanned.
   COMMAND="$1" SCAN_PLAIN="" SCAN_KEEP="" SCAN_KEPT=0
-  BASE_DIR=$(physical_dir "$2") || return 0
+  # A directory the command creates before it cds there does not exist yet
+  # (cd_target); its existing prefix is already physical.
+  BASE_DIR=$(physical_dir "$2") || BASE_DIR="$2"
   bash_may_write || return 0
   # develop lets every write through, as the hook would. In worktree mode
   # MYSPEC_ALLOW_MAIN_CHECKOUT=1, gate B's advertised escape, lifts the same
@@ -566,7 +570,7 @@ $verdict"
 walk() {
   local cmd="$1" dir="$2" depth="$3" start="$2"
   local -a seps segs_s segs_r sw rw stack
-  local line k n j c w sub gdir gitdir norm payload
+  local line k n j c w sub gdir gitdir norm payload prior="" earlier
 
   k=0
   while IFS= read -r line; do
@@ -583,6 +587,9 @@ walk() {
 
   stack=()
   for ((k = 0; k < n; k++)); do
+    # The command's text before this segment, for a cd into a directory it
+    # creates.
+    earlier="$prior" prior="$prior ${segs_r[k]:-}"
     case "${seps[k]}" in
       '(') stack+=("$dir") ;;
       ')')
@@ -652,7 +659,11 @@ walk() {
       cd|pushd)
         j=$((j + 1))
         while [ "$j" -lt "${#sw[@]}" ] && [[ "${sw[j]}" == -?* ]]; do j=$((j + 1)); done
-        if sub=$(resolve_dir "$dir" "${rw[j]:-}"); then dir="$sub"; fi
+        if sub=$(resolve_dir "$dir" "${rw[j]:-}"); then
+          dir="$sub"
+        elif sub=$(cd_target "$dir" "$(decode_word "${rw[j]:-}")" "$earlier"); then
+          dir="$sub"
+        fi
         continue ;;
       bash|sh|zsh|dash|ksh)
         j=$((j + 1))

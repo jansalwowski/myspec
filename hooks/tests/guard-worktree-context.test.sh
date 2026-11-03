@@ -520,5 +520,27 @@ check block "feature branch, source"                   'echo x > src/a.js'
 git -C "$REPO" symbolic-ref HEAD refs/heads/main
 rm -f "$STATE/"*.jsonl
 
+# --- a cd into a directory the command creates first (#383) -------------------
+# The hook reads the command before it runs: none of these directories exist.
+NEW="$(dirname "$REPO")/new-383"
+check allow "mkdir -p <outside> && cd <it>, then a branch op" \
+  "mkdir -p $NEW/r && cd $NEW/r && git init -q && git checkout -q -b main"
+check allow "relative mkdir -p d && cd d outside the repo" \
+  'mkdir -p ../r2-383 && cd ../r2-383 && git checkout -q -b main'
+check block "mkdir -p d && cd d inside main stays in main" \
+  'mkdir -p sub && cd sub && git checkout develop'
+check_in "$WT" block "cd .. out of a created directory lands in main" none-sess \
+  "mkdir -p $NEW/a/b && cd $NEW/a/b && cd ../../../checkout && git checkout develop"
+check block "a cd into a directory nothing creates leaves the cwd" \
+  "cd $NEW/never; git checkout develop"
+check block "a variable cd target is not guessed" \
+  "mkdir -p $NEW/v && cd \$V && git checkout develop"
+mark c-wt2 worktree 60
+check_in "$REPO" allow "worktree mode, git worktree add d && cd d, then a write" c-wt2 \
+  "git worktree add $NEW/wt2 --detach && cd $NEW/wt2 && echo x > src.js"
+check_in "$REPO" block "worktree mode, cd .. from a created directory into main" c-wt2 \
+  "mkdir -p $NEW/c/d && cd $NEW/c/d && cd ../../../checkout && echo x > src.js"
+rm -f "$STATE/"*.jsonl
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
