@@ -18,13 +18,11 @@
 #   strip_command_prefix_to VAR "$segment"
 #   find_matching_segment "$cmd" pattern...   # echoes offending segment, if any
 #
-# KNOWN LIMIT: nested command substitution is not parsed. In `--body "$(printf
-# '%s' "cd x && yarn build")"`, the scanner closes the outer double-quoted span
-# at the inner quote, so the inner prose is analysed as command text and can
-# false-positive. Pass long prose via a file (`--body-file`, `-F -`) rather
-# than inline. Parsing this properly needs recursive descent into $( ), which
-# also has to keep `$(git branch -D x)` blocking — not worth the machinery for
-# a guardrail whose workaround is one flag.
+# A double-quoted word is one span however its quoting nests: `"$(printf '%s'
+# "a > b")"`, `"${x:-"y"}"` and backticks in it pair their inner quotes, at any
+# depth (#382). The span is still opaque: a command substitution inside double
+# quotes is not analysed as command text, so `"$(git branch -D x)"` does not
+# match a verb pattern. An unquoted `$( … )` is split open like a subshell.
 
 # Blank out every span whose contents can never be a command: single-quoted
 # spans, double-quoted spans, escaped characters, and heredoc bodies. Each
@@ -64,6 +62,129 @@ sanitize_command() {
       }
       return 0
     }
+    # heredoc_at(i): the `<<` at <i> opens a heredoc. Sets HT to its
+    # terminator and HJ to the index after the marker. A bare `<<` with no
+    # word is a shift operator, not a heredoc; so is `a << b` in arithmetic
+    # when no line ends the body.
+    function heredoc_at(i,    j, d, spaced) {
+      j = i + 2
+      if (substr(buf, j, 1) == "-") { j++ }
+      spaced = 0
+      while (substr(buf, j, 1) == " " || substr(buf, j, 1) == "\t") { j++; spaced = 1 }
+      d = substr(buf, j, 1)
+      HT = ""
+      if (d == "'"'"'" || d == "\"") {
+        j++
+        while (j <= n && substr(buf, j, 1) != d) { HT = HT substr(buf, j, 1); j++ }
+        j++
+      } else {
+        if (d == "\\") { j++ }
+        while (j <= n && substr(buf, j, 1) ~ /[A-Za-z0-9_]/) { HT = HT substr(buf, j, 1); j++ }
+      }
+      HJ = j
+      return !(HT == "" || (spaced && !has_term(buf, j, HT)))
+    }
+    # add(s): appends <s>, encoded, to the keep-mode span. The blanking
+    # mode prints Q for the whole span, so it collects nothing.
+    function add(s,    k, m) {
+      if (keep == "") return
+      m = length(s)
+      for (k = 1; k <= m; k++) span = span enc(substr(s, k, 1))
+    }
+    # The skip_* functions walk one quoted or substituted construct from
+    # just after its opener and return the index after its closer, adding
+    # its text to span. Quoting nests through $( ), ${ } and backticks,
+    # so a `"` inside `"$(… "…" …)"` opens an inner span instead of closing
+    # the outer one, at any depth (#382). <raw> keeps a backslash before
+    # the character it escapes; the outermost double-quoted span drops it.
+    function skip_dq(i, raw,    c) {
+      while (i <= n) {
+        c = substr(buf, i, 1)
+        if (c == "\"") { if (raw) add(c); return i + 1 }
+        if (c == "\\") {
+          if (raw) add(c)
+          add(substr(buf, i + 1, 1)); i += 2; continue
+        }
+        if (c == "$" && substr(buf, i + 1, 1) == "(") { add("$("); i = skip_sub(i + 2, ")", 0); continue }
+        if (c == "$" && substr(buf, i + 1, 1) == "{") { add("${"); i = skip_sub(i + 2, "}", 1); continue }
+        if (c == "`") { add(c); i = skip_bq(i + 1); continue }
+        add(c); i++
+      }
+      return i
+    }
+    # skip_bq(i): a backtick substitution ends at the next unescaped backtick.
+    function skip_bq(i,    c) {
+      while (i <= n) {
+        c = substr(buf, i, 1)
+        if (c == "\\") { add(substr(buf, i, 2)); i += 2; continue }
+        add(c); i++
+        if (c == "`") return i
+      }
+      return i
+    }
+    # skip_sub(i, closer, indq): the body of $( ) (closer ")", which also
+    # covers $(( ))) or ${ } (closer "}"). Inside $( ) the full quoting
+    # applies again: single quotes, comments and heredoc bodies. A ${ }
+    # inside double quotes (<indq>) leaves a single quote literal.
+    function skip_sub(i, closer, indq,    c, open, depth, base, p, k, line, prev) {
+      open = (closer == ")") ? "(" : "{"
+      depth = 0
+      base = hn
+      prev = " "
+      while (i <= n) {
+        c = substr(buf, i, 1)
+        if (c == "\\") { add(substr(buf, i, 2)); i += 2; prev = "x"; continue }
+        if (c == "\"") { add(c); i = skip_dq(i + 1, 1); prev = "x"; continue }
+        if (c == "'"'"'" && !indq) {
+          add(c); i++
+          while (i <= n && substr(buf, i, 1) != "'"'"'") { add(substr(buf, i, 1)); i++ }
+          if (i <= n) { add(c); i++ }
+          prev = "x"
+          continue
+        }
+        if (c == "`") { add(c); i = skip_bq(i + 1); prev = "x"; continue }
+        if (c == "$" && substr(buf, i + 1, 1) == "(") { add("$("); i = skip_sub(i + 2, ")", 0); prev = "x"; continue }
+        if (c == "$" && substr(buf, i + 1, 1) == "{") { add("${"); i = skip_sub(i + 2, "}", 0); prev = "x"; continue }
+        if (closer == ")") {
+          if (c == "#" && index(" \t\n;|&(", prev) > 0) {
+            while (i <= n && substr(buf, i, 1) != "\n") { add(substr(buf, i, 1)); i++ }
+            continue
+          }
+          if (substr(buf, i, 3) == "<<<") { add("<<<"); i += 3; prev = "x"; continue }
+          if (substr(buf, i, 2) == "<<" && heredoc_at(i)) {
+            hp[++hn] = HT
+            add(substr(buf, i, HJ - i)); i = HJ; prev = "x"
+            continue
+          }
+          if (c == "\n" && hn > base) {
+            add(c); i++
+            for (p = base + 1; p <= hn; p++) {
+              while (i <= n) {
+                k = i
+                while (k <= n && substr(buf, k, 1) != "\n") { k++ }
+                line = substr(buf, i, k - i)
+                add(substr(buf, i, k - i + 1))
+                i = k + 1
+                gsub(/^[ \t]+|[ \t]+$/, "", line)
+                if (line == hp[p]) { break }
+              }
+            }
+            hn = base
+            prev = "\n"
+            continue
+          }
+        }
+        if (c == closer) {
+          if (depth == 0) { add(c); hn = base; return i + 1 }
+          depth--
+        } else if (c == open) {
+          depth++
+        }
+        add(c); i++; prev = c
+      }
+      hn = base
+      return i
+    }
     { buf = buf $0 "\n" }
     END {
       n = length(buf)
@@ -84,14 +205,8 @@ sanitize_command() {
         }
 
         if (c == "\"") {
-          i++
           span = ""
-          while (i <= n && substr(buf, i, 1) != "\"") {
-            if (substr(buf, i, 1) == "\\") { i++ }
-            span = span enc(substr(buf, i, 1))
-            i++
-          }
-          i++
+          i = skip_dq(i + 1, 0)
           if (keep != "") { out = out "\035" span } else { out = out "Q" }
           continue
         }
@@ -104,28 +219,10 @@ sanitize_command() {
         # > f`, `cat <<EOF | tee f`) is still seen. The body is skipped at
         # the end of the line, one per pending marker, in order.
         if (substr(buf, i, 2) == "<<") {
-          j = i + 2
-          if (substr(buf, j, 1) == "-") { j++ }
-          spaced = 0
-          while (substr(buf, j, 1) == " " || substr(buf, j, 1) == "\t") { j++; spaced = 1 }
-          delim = substr(buf, j, 1)
-          term = ""
-          if (delim == "'"'"'" || delim == "\"") {
-            j++
-            while (j <= n && substr(buf, j, 1) != delim) { term = term substr(buf, j, 1); j++ }
-            j++
-          } else {
-            if (delim == "\\") { j++ }
-            while (j <= n && substr(buf, j, 1) ~ /[A-Za-z0-9_]/) { term = term substr(buf, j, 1); j++ }
-          }
-
-          # A bare `<<` with no word is a shift operator, not a heredoc; so
-          # is `a << b` in arithmetic when no line ends the body.
-          if (term == "" || (spaced && !has_term(buf, j, term))) { out = out c; i++; continue }
-
-          pend[++npend] = term
+          if (!heredoc_at(i)) { out = out c; i++; continue }
+          pend[++npend] = HT
           out = out " Q "
-          i = j
+          i = HJ
           continue
         }
 
