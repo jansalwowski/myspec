@@ -29,6 +29,13 @@ while [ $# -gt 0 ]; do
 done
 command -v jq >/dev/null || { echo "sync-labels: jq is required" >&2; exit 2; }
 jq -e 'type == "array"' "$FILE" >/dev/null || { echo "sync-labels: $FILE is not a JSON array" >&2; exit 2; }
+# GitHub rejects a label description over 100 characters (HTTP 422), so a
+# long one would fail halfway through a sync; refuse before the first call.
+LONG=$(jq -r '.[] | select((.description // "") | length > 100) | .name' "$FILE")
+if [ -n "$LONG" ]; then
+  echo "sync-labels: description over GitHub's 100-character limit: $(printf '%s' "$LONG" | tr '\n' ' ')" >&2
+  exit 2
+fi
 
 # ${arr[@]+...} keeps an empty array from tripping set -u on bash 3.2.
 if ! CURRENT=$(gh label list ${REPO_ARGS[@]+"${REPO_ARGS[@]}"} --limit 500 --json name --jq '.[].name'); then

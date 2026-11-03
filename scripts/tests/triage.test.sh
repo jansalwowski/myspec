@@ -146,6 +146,10 @@ expect_eq "$?" "2" "non-JSON stdin is a usage error"
 
 # ── sync-labels.sh ───────────────────────────────────────────────────────────
 
+# GitHub caps a label description at 100 characters; sync-labels refuses longer.
+expect_eq "$(jq -r '.[] | select((.description // "") | length > 100) | .name' "$REPO_ROOT/.github/labels.json")" "" \
+  "every labels.json description fits GitHub's 100-character limit"
+
 BIN="$TMP/bin"
 mkdir -p "$BIN"
 cat > "$BIN/gh" <<'SH'
