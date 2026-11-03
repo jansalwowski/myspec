@@ -6,9 +6,9 @@
 # classify(), so classify() needs a fixture that models the ways a branch can
 # look merged without being merged.
 #
-# Builds a synthetic repo with a squash-merge history; no network, no gh, so
-# Proof B (merged PR + tip match) is not exercised here — that path is checked
-# against real PRs. Proof A and every veto are exercised.
+# Builds a synthetic repo with a squash-merge history and no network. Proof B
+# (merged PR whose head contains the tip) runs against a stub `gh` on PATH
+# that answers from JSON files; proofs A and C and every veto are exercised.
 #
 # Usage: branch-cleanup.test.sh [path-to-script]
 
@@ -124,6 +124,16 @@ fi
 PASS=0
 FAIL=0
 
+expect_detail() {  # expect_detail <branch> <substring> <description>
+  local br="$1" want="$2" desc="$3" got
+  got=$(printf '%s' "$RESULT" | jq -r --arg b "$br" '.[] | select(.branch==$b) | "\(.proof)\(.detail)"')
+  case "$got" in
+    *"$want"*) PASS=$((PASS + 1)) ;;
+    *) FAIL=$((FAIL + 1))
+       printf 'FAIL  %-24s %s\n      want text: %s\n      got:       %s\n' "$br" "$desc" "$want" "$got" >&2 ;;
+  esac
+}
+
 expect() {  # expect <branch> <verdict> <description>
   local br="$1" want="$2" desc="$3" got
   got=$(printf '%s' "$RESULT" | jq -r --arg b "$br" '.[] | select(.branch==$b) | .verdict')
@@ -146,6 +156,7 @@ expect unpushed         KEEP   "never pushed, no PR"
 expect wt-clean         DELETE "merged, worktree clean and idle"
 expect wt-dirty         KEEP   "worktree holds an untracked file"
 expect wt-live          KEEP   "worktree touched within the hour"
+expect_detail wt-live "may be a live session (otherwise DELETE: " "the 1h veto names the verdict it holds back"
 expect picked           DELETE "every commit cherry-picked into the base"
 expect picked-plus      KEEP   "one commit still only on the branch"
 expect develop          KEEP   "base and current branch"
@@ -182,6 +193,125 @@ if git rev-parse --verify --quiet wt-clean >/dev/null || [ -d "$ROOT/wt-clean" ]
 else
   PASS=$((PASS + 1))
 fi
+
+# --- Proof B: a merged PR whose head contains the tip ------------------------
+# The stub gh answers `pr list --head <br>` from head-<br>.json and
+# `api .../commits/<sha>/pulls` from commit-<sha>.json; GH_FAIL makes it fail
+# like an offline or unauthenticated gh. Each PR is squash-merged and the base
+# then edits the same file, so proofs A and C both miss and only B can decide.
+# PR heads are built in a second clone and published as refs/pull/<n>/head,
+# so whether the head object is in this repo is up to each case.
+GH_STUB="$ROOT/gh-stub"
+mkdir -p "$GH_STUB/bin"
+cat > "$GH_STUB/bin/gh" <<'STUB'
+#!/usr/bin/env bash
+[ -z "${GH_FAIL:-}" ] || { echo "gh: offline" >&2; exit 1; }
+f="" state=all
+case "$1 $2" in
+  "pr list")
+    while [ "$#" -gt 0 ]; do
+      case "$1" in --head) f="$GH_STUB/head-$2.json" ;; --state) state="$2" ;; esac
+      shift
+    done ;;
+  api\ *)
+    case "$2" in */commits/*/pulls) sha="${2%/pulls}"; f="$GH_STUB/commit-${sha##*/}.json" ;; esac ;;
+esac
+[ -n "$f" ] && [ -f "$f" ] || { echo '[]'; exit 0; }
+jq -c --arg s "$state" '[.[] | select($s == "all" or ((.state // "") | ascii_downcase) == $s)]' "$f"
+STUB
+chmod +x "$GH_STUB/bin/gh"
+export GH_STUB
+gh_head()   { printf '[{"state":"%s","headRefOid":"%s","number":%s}]\n' "$3" "$2" "$4" > "$GH_STUB/head-$1.json"; }
+gh_commit() { printf '[{"state":"closed","merged_at":"2026-01-01T00:00:00Z","number":%s,"head":{"sha":"%s"}}]\n' "$3" "$2" > "$GH_STUB/commit-$1.json"; }
+
+OTHER="$ROOT/other"
+git checkout -q develop; git push -q origin develop
+git clone -q "$ROOT/origin.git" "$OTHER"
+git -C "$OTHER" config user.email t@t; git -C "$OTHER" config user.name t
+oseed() { echo "$2" > "$OTHER/$1"; git -C "$OTHER" add -A; git -C "$OTHER" commit -qm "$3"; }
+# other_merge <ref> <n> <file>: publish <ref> as PR <n>'s head, squash-merge it,
+# then edit <file> on the base so content and patch-ids both drift.
+other_merge() {
+  git -C "$OTHER" push -q -f origin "$1:refs/pull/$2/head"
+  git -C "$OTHER" checkout -q develop
+  git -C "$OTHER" pull -q --ff-only origin develop
+  git -C "$OTHER" merge -q --squash "$1" >/dev/null 2>&1
+  git -C "$OTHER" commit -qm "squash (#$2)"
+  oseed "$3" "$3-later" "later edit to $3"
+  git -C "$OTHER" push -q origin develop
+}
+sync_develop() { git fetch -q --prune origin; git checkout -q develop; git merge -q --ff-only origin/develop; }
+
+# pb-behind, pb-fetch: pushed at the local tip; a review fix was pushed to the
+# PR from elsewhere, so the local tip is behind the merged head. pb-behind has
+# the head object locally; pb-fetch must fetch it.
+for spec in pb-behind:21 pb-fetch:22; do
+  b="${spec%:*}" n="${spec#*:}"
+  mkbranch "$b"; seed "$b.txt" "$b-1" "$b one"; git push -q -u origin "$b"
+  git -C "$OTHER" fetch -q origin
+  git -C "$OTHER" checkout -q -b "$b" "origin/$b"
+  oseed "$b.txt" "$b-2" "$b review fix"
+  gh_head "$b" "$(git -C "$OTHER" rev-parse HEAD)" MERGED "$n"
+  other_merge "$b" "$n" "$b.txt"
+  git -C "$OTHER" push -q origin --delete "$b"
+done
+
+# pr-31: a local name apart from the PR's head branch (`fetch pull/N/head:pr-N`),
+# no upstream, then the PR got one more commit. Only the commit lookup finds it.
+git -C "$OTHER" checkout -q -b feat-31 develop; oseed pr31.txt one "pr31 one"
+git -C "$OTHER" push -q origin "HEAD:refs/pull/31/head"
+git fetch -q origin "refs/pull/31/head:pr-31"
+oseed pr31.txt two "pr31 two"
+gh_commit "$(git rev-parse pr-31)" "$(git -C "$OTHER" rev-parse HEAD)" 31
+other_merge feat-31 31 pr31.txt
+
+# pb-extra, pr-41: the merged head is in the branch, plus one commit that never
+# reached any PR. pb-extra is found by name, pr-41 by commit.
+mkbranch pb-extra; seed pb-extra.txt x "pb-extra"; git push -q -u origin pb-extra
+gh_head pb-extra "$(git rev-parse pb-extra)" MERGED 23
+git -C "$OTHER" fetch -q origin
+other_merge origin/pb-extra 23 pb-extra.txt
+git -C "$OTHER" push -q origin --delete pb-extra
+git -C "$OTHER" checkout -q -b feat-41 develop; oseed pr41.txt one "pr41"
+git -C "$OTHER" push -q origin "HEAD:refs/pull/41/head"
+git fetch -q origin "refs/pull/41/head:pr-41"
+other_merge feat-41 41 pr41.txt
+sync_develop
+git checkout -q pb-extra; seed pb-extra-2.txt y "never in a PR"
+git checkout -q pr-41;    seed pr41-2.txt y "never in a PR"
+gh_commit "$(git rev-parse pr-41)" "$(git rev-parse pr-41~1)" 41
+
+# pb-closed: pushed, its PR closed without merging.
+mkbranch pb-closed; seed pb-closed.txt z "pb-closed"; git push -q -u origin pb-closed
+gh_head pb-closed "$(git rev-parse pb-closed)" CLOSED 51
+git checkout -q develop
+git fetch -q origin refs/pull/21/head
+
+PB="--branch pb-behind --branch pb-fetch --branch pr-31 --branch pb-extra --branch pr-41 --branch pb-closed"
+# shellcheck disable=SC2086 # PB is a word list
+RESULT=$(PATH="$GH_STUB/bin:$PATH" "$SCRIPT" --base develop --no-fetch --json $PB 2>/dev/null)
+expect        pb-behind DELETE "tip behind the merged PR head, head present"
+expect_detail pb-behind "tip contained in merged PR #21 head" "proof names the PR"
+expect        pb-fetch  KEEP   "--no-fetch: head object absent, so no proof"
+expect_detail pb-fetch  "is not available locally" "says the head is missing, not that work was added"
+expect        pr-31     KEEP   "--no-fetch: renamed branch, head object absent"
+expect        pb-extra  KEEP   "a commit after the merged head"
+expect_detail pb-extra  "work added after the merge" "names the unmerged work"
+expect        pr-41     KEEP   "renamed branch with a commit after the merged head"
+expect_detail pr-41     "work added after the merge" "held by the ancestry check"
+expect        pb-closed KEEP   "PR closed unmerged"
+expect_detail pb-closed "PR #51 closed unmerged" "names the closed PR"
+
+# shellcheck disable=SC2086 # PB is a word list
+RESULT=$(PATH="$GH_STUB/bin:$PATH" "$SCRIPT" --base develop --json $PB 2>/dev/null)
+expect        pb-fetch  DELETE "head fetched from refs/pull/22/head"
+expect        pr-31     DELETE "renamed branch found by commit, head fetched"
+expect_detail pr-31     "tip contained in merged PR #31 head" "proof names the PR"
+expect        pb-extra  KEEP   "still KEEP when fetching is allowed"
+expect        pr-41     KEEP   "still KEEP when fetching is allowed"
+
+RESULT=$(GH_FAIL=1 PATH="$GH_STUB/bin:$PATH" "$SCRIPT" --base develop --no-fetch --json --branch pr-31 2>/dev/null)
+expect        pr-31     KEEP   "gh failing (offline, unauthenticated) fails open to KEEP"
 
 # --- --unattended: the vetoes for a caller that removes without asking ------
 # Five merged, pushed branches, each with a clean worktree idle past the 1h
@@ -225,6 +355,7 @@ sleep 1
 
 RESULT=$("$SCRIPT" --base develop --no-fetch --json --unattended 2>/dev/null)
 expect uw-git     KEEP   "--unattended: git activity in the worktree in the last 24h"
+expect_detail uw-git "may be in use: git activity in the last 24h (otherwise DELETE: " "the unattended veto names the verdict it holds back"
 expect uw-session KEEP   "--unattended: a session wrote in the worktree in the last 24h"
 expect uw-proc    KEEP   "--unattended: a process runs inside the worktree"
 expect uw-ignored KEEP   "--unattended: the worktree holds an ignored file"

@@ -71,4 +71,4 @@ The agent runs `housekeep.sh --dry-run`. Every line reads `would remove`, nothin
 branches: removed 2 merged (fix/tz-offset, chore/bump-deps); 1 kept
 ```
 
-The user asks why `feat/pdf-export` is still there. The agent does not delete it: the script found no containment proof. It points at `/myspec:worktree-clean`, whose audit names the hold (`PR #212 merged but local tip … != PR head …`) and asks.
+The user asks why `feat/pdf-export` is still there. The agent does not delete it: the script found no containment proof. It points at `/myspec:worktree-clean`, whose audit names the hold (`PR #212 merged but local tip … is not contained in PR head … — work added after the merge`) and asks.

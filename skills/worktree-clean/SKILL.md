@@ -56,9 +56,9 @@ Either proof is sufficient; both are checked.
 | Proof | Test | Covers |
 |-------|------|--------|
 | A | Every path the branch touched is byte-identical in the base | Squash merges; works offline |
-| B | A merged PR exists **and** the local tip equals its `headRefOid` | Branches whose files the base has since changed |
+| B | A merged PR exists **and** the local tip is its `headRefOid` or an ancestor of it | Branches whose files the base has since changed, including a local tip behind the head |
 
-Proof B without the tip check would delete a branch that was merged and then had new commits added. Proof A alone goes stale as soon as a later PR touches the same files. Neither is redundant.
+Proof B without the ancestry check would delete a branch that was merged and then had new commits added. Proof A alone goes stale as soon as a later PR touches the same files. Neither is redundant. B finds the PR by head branch name, then by the tip commit, so a branch named apart from the PR's head (`pr-<N>`) is found too. A head missing locally is fetched from `refs/pull/<N>/head` unless `--no-fetch`; without it, the branch stays KEEP.
 
 ## Hard vetoes
 
@@ -66,7 +66,7 @@ Any one of these keeps the branch, before proofs are considered:
 
 - it is the current branch, or the base branch
 - its worktree has uncommitted or untracked files
-- its worktree was touched in the last hour (possibly a live session)
+- its worktree was touched in the last hour (possibly a live session); when a local proof holds, the detail ends `(otherwise DELETE: <proof>)`, so waiting is enough
 - it was never pushed and has no merged PR
 - it has commits ahead of its remote-tracking ref
 
