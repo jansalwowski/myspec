@@ -80,6 +80,23 @@ printf '%s' "$OUT" | grep -qF 'brainstorm: would remove 1 session(s)' && ok || f
 git rev-parse --verify -q merged >/dev/null && [ -f "$S/old.jsonl" ] && [ -d "$B/idle" ] && ok || fail "dry run removes nothing"
 [ ! -e "$REPO/.claude/state/housekeep-last-run" ] && ok || fail "dry run writes no stamp"
 
+# --- default flags, under every bash at hand ------------------------------------
+# The skill runs housekeep with no flags, so the fetch path must work too. Bash
+# before 4.4 calls an empty "${a[@]}" unbound under set -u (#378): macOS ships
+# 3.2 as /bin/bash, and a bash/ shim first on PATH makes both scripts'
+# `env bash` resolve to it. Linux CI has no such bash and runs the default only.
+BASHES=("")
+if /bin/bash -c '[ "${BASH_VERSINFO[0]}${BASH_VERSINFO[1]}" -lt 44 ]' 2>/dev/null; then
+  mkdir -p "$ROOT/oldbash"; ln -s /bin/bash "$ROOT/oldbash/bash"; BASHES+=("$ROOT/oldbash")
+fi
+for dir in "${BASHES[@]}"; do
+  label="default flags${dir:+ under /bin/bash}"
+  OUT=$(PATH="${dir:+$dir:}$PATH" "$SCRIPT" --dry-run 2>&1); STATUS=$?
+  [ "$STATUS" -eq 0 ] && ok || fail "$label: dry run exits 0 (got $STATUS): $OUT"
+  printf '%s' "$OUT" | grep -qE '^branches: would remove 1 merged \(merged\)' && ok || fail "$label: the audit runs with the fetch (got: $OUT)"
+  printf '%s' "$OUT" | grep -qF 'unbound variable' && fail "$label: no unbound variable (got: $OUT)" || ok
+done
+
 # --- real run -----------------------------------------------------------------
 OUT=$("$SCRIPT" --no-fetch 2>&1); STATUS=$?
 [ "$STATUS" -eq 0 ] && ok || fail "run exits 0 (got $STATUS): $OUT"

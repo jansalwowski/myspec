@@ -98,7 +98,8 @@ step_branches() {
     echo "branches: skipped (no main checkout to run branch-cleanup.sh from)"
     return
   fi
-  if ! audit=$(cd "$MAIN" && "$LIB/branch-cleanup.sh" --json --unattended "${FETCH_ARG[@]}" 2>/dev/null); then
+  # ${arr[@]+"${arr[@]}"}: an empty array is "unbound" under set -u in bash < 4.4
+  if ! audit=$(cd "$MAIN" && "$LIB/branch-cleanup.sh" --json --unattended ${FETCH_ARG[@]+"${FETCH_ARG[@]}"} 2>/dev/null); then
     echo "branches: FAILED (branch-cleanup.sh audit did not run; try /myspec:worktree-clean)"
     STATUS=1
     return

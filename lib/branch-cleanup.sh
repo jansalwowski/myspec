@@ -419,7 +419,9 @@ fi
 DELETABLE=()
 JSON_ROWS=()
 
-for br in "${CANDIDATES[@]}"; do
+# ${arr[@]+"${arr[@]}"}: an empty array is "unbound" under set -u in bash < 4.4
+# (no local branch at all, a detached HEAD in a fresh clone).
+for br in ${CANDIDATES[@]+"${CANDIDATES[@]}"}; do
   if ! git rev-parse --verify --quiet "$br" >/dev/null; then
     printf 'MISSING  %-50s (no such branch)\n' "$br" >&2
     continue
@@ -446,7 +448,8 @@ for br in "${CANDIDATES[@]}"; do
 done
 
 if [ "$AS_JSON" -eq 1 ]; then
-  printf '%s\n' "${JSON_ROWS[@]}" | jq -s .
+  # No row (every candidate missing) still prints [].
+  printf '%s\n' ${JSON_ROWS[@]+"${JSON_ROWS[@]}"} | jq -s .
 fi
 
 if [ "$APPLY" -eq 0 ]; then
