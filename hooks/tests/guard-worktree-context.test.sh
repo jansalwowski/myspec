@@ -124,6 +124,38 @@ check allow "remote-tracking -Dr"              'git branch -Dr origin/main'
 check allow "remote-tracking -d -r"            'git branch -d -r origin/feat/x'
 check allow "--delete --remotes"               'git branch --delete --remotes origin/wt-a'
 
+# --- gate A, #384: worktree removed earlier in the same && chain ------------
+# The hook runs before the command, so the worktree is still listed. A literal
+# `git worktree remove <path>` linked by && frees that worktree's branch only.
+# wt-b exists for this block alone: other blocks count the linked worktrees.
+WTB="$REPO/.claude/worktrees/wt-b"
+git -C "$REPO" worktree add -q "$WTB" -b wt-b
+check allow "#384 remove X && branch -D bX"        "git worktree remove $WT && git branch -D wt-a"
+check allow "#384 remove --force X && -D bX"       "git worktree remove --force $WT && git branch -D wt-a"
+check allow "#384 remove -f -f X && -d bX"         "git worktree remove -f -f $WT && git branch -d wt-a"
+check allow "#384 relative path from the cwd"      'git worktree remove .claude/worktrees/wt-a && git branch -D wt-a'
+check allow "#384 git -C <dir> worktree remove"    'git -C .claude worktree remove worktrees/wt-a && git branch -D wt-a'
+check allow "#384 && chain through another step"   "git worktree remove $WT && git fetch --prune && git branch -D wt-a"
+check allow "#384 both worktrees removed"          "git worktree remove $WT && git worktree remove $WTB && git branch -D wt-a wt-b"
+check block "#384 remove X ; branch -D bX"         "git worktree remove $WT ; git branch -D wt-a"
+check block "#384 remove X || branch -D bX"        "git worktree remove $WT || git branch -D wt-a"
+check block "#384 remove X | ... && branch -D bX"  "git worktree remove $WT | cat && git branch -D wt-a"
+check block "#384 remove X & branch -D bX"         "git worktree remove $WT & git branch -D wt-a"
+check block "#384 removal broken by a ; earlier"   "git worktree remove $WT ; true && git branch -D wt-a"
+check block "#384 remove X newline branch -D bX"   "git worktree remove $WT
+git branch -D wt-a"
+check block "#384 remove Y && branch -D bX"        "git worktree remove $WTB && git branch -D wt-a"
+check block "#384 branch held by another worktree" "git worktree remove $WT && git branch -D wt-a wt-b"
+check block "#384 main worktree is never freed"    "git worktree remove $REPO && git branch -D main"
+check block "#384 quoted path"                     "git worktree remove \"$WT\" && git branch -D wt-a"
+# The scanner blanks `\;` to a space, so it reads the path as $WT; git gets "$WT;".
+check block "#384 escaped character in the path"   "git worktree remove $WT\\; && git branch -D wt-a"
+check block "#384 unknown remove flag"             "git worktree remove --dry $WT && git branch -D wt-a"
+check block "#384 removal inside bash -c"          "bash -c 'git worktree remove $WT' && git branch -D wt-a"
+check block "#384 delete before the removal"       "git branch -D wt-a && git worktree remove $WT"
+git -C "$REPO" worktree remove --force "$WTB"
+git -C "$REPO" branch -q -D wt-b
+
 # --- gate A, must allow: the verb appears, but never as a command ------------
 check allow "verb in commit message"   'git commit -m "docs: explain that git checkout is blocked"'
 check allow "verb in PR body"          'gh pr create --body "then git merge into develop"'
