@@ -372,6 +372,14 @@
       "issue": ["#231"],
       "description": "Extensions treated as code in addition to the framework's CODE_EXT."
     },
+    "hooks.guardPublicPosts.privateIdentifiers": {
+      "file": "project",
+      "type": ["array"],
+      "default": [],
+      "merge": "extend",
+      "issue": ["#380"],
+      "description": "Names guard-public-posts.sh treats as private to this project, besides the ones it derives (origin owner and repo, branch names, commits): a literal, matched case-insensitively as a whole word, or an extended regex written between slashes (\"/[A-Z]{2,}-[0-9]+/\")."
+    },
     "hooks.markCodeChanged.statusDiff": {
       "file": "project",
       "type": ["boolean"],
@@ -558,6 +566,13 @@
       "issue": ["exists"],
       "loosens": true,
       "description": "A command prefixed with MYSPEC_ALLOW_MAIN_CHECKOUT=1 passes guard-worktree-context.sh gate B."
+    },
+    "MYSPEC_ALLOW_PUBLIC_POST": {
+      "kind": "command-prefix",
+      "type": "flag",
+      "issue": ["#380"],
+      "loosens": true,
+      "description": "A command prefixed with MYSPEC_ALLOW_PUBLIC_POST=1 passes guard-public-posts.sh, for a match that is a public name equal to a private one."
     },
     "MYSPEC_BASE_REF": {
       "kind": "exported",

@@ -70,6 +70,7 @@ Known myspec hook messages:
 | `setup-conformance` | `verify-before-stop.sh` | `setup` |
 | `absolute-paths` | `no-absolute-paths.sh` | `unknown` (usually the model's own write) |
 | `frontmatter` | `validate-frontmatter.sh` | `unknown` (usually the model's own write) |
+| `public-post` | `guard-public-posts.sh` | `unknown` (usually the model's own post text) |
 | `project-verification` | `verify-before-stop.sh` | `project` |
 
 ## Turning it off

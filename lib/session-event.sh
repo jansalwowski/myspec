@@ -22,6 +22,9 @@
 #       mark-code-changed.sh, when a Bash command runs `session-event.sh
 #       implement start|stop` (the model never sees its session id; the
 #       hook's payload carries it)
+#   {"t":"visibility","repo":<host/owner/repo>,"value":"public|private|internal"}
+#       guard-public-posts.sh, the visibility gh reported for a repository a
+#       post went to, so a session asks once per repository
 #   {"t":"notice","what":<key>}
 #       a one-time step was taken: "guard-settings" (guard-worktree-context.sh
 #       denied once because the settings reader failed)
