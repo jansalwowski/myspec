@@ -56,9 +56,9 @@ Either proof is sufficient; both are checked.
 | Proof | Test | Covers |
 |-------|------|--------|
 | A | Every path the branch touched is byte-identical in the base | Squash merges; works offline |
-| B | A merged PR exists **and** the local tip is its `headRefOid` or an ancestor of it | Branches whose files the base has since changed, including a local tip behind the head |
+| B | A PR merged into the base exists **and** the local tip is its `headRefOid` or an ancestor of it | Branches whose files the base has since changed, including a local tip behind the head |
 
-Proof B without the ancestry check would delete a branch that was merged and then had new commits added. Proof A alone goes stale as soon as a later PR touches the same files. Neither is redundant. B finds the PR by head branch name, then by the tip commit, so a branch named apart from the PR's head (`pr-<N>`) is found too. A head missing locally is fetched from `refs/pull/<N>/head` unless `--no-fetch`; without it, the branch stays KEEP.
+Proof B without the ancestry check would delete a branch that was merged and then had new commits added. Proof A alone goes stale as soon as a later PR touches the same files. Neither is redundant. A PR merged into another branch (a stack whose parent never merged) proves nothing. B asks about origin's repository, by head branch name and then by the tip commit, so a branch named apart from the PR's head (`pr-<N>`) is found too. A head missing locally is fetched from `refs/pull/<N>/head` unless `--no-fetch`; without it, the branch stays KEEP.
 
 ## Hard vetoes
 
@@ -75,7 +75,8 @@ Any one of these keeps the branch, before proofs are considered:
 ## Constraints
 
 - **Never** pass `--force` to `git worktree remove`, never `rm -rf` a worktree to get past a refusal, and never edit the script to do so. Git's refusal to drop a dirty tree is the last backstop — a refusal means files exist only there, and "just finishing the cleanup" with force destroys them permanently.
-- **Never** delete a branch the script marked KEEP because it "looks merged". If a classification is wrong, fix `classify()` and add a case to `lib/tests/branch-cleanup.test.sh`. Reported upstream instead, the issue names no project, branch or PR of this repo: use placeholders (`a private repo`, `fix/some-branch`, `PR #123`), because GitHub's edit history keeps the original text.
+- **Never** delete a branch the script marked KEEP because it "looks merged". If a classification is wrong, fix `classify()` and add a case to `lib/tests/branch-cleanup.test.sh`.
+- When reporting a misclassification upstream to the myspec plugin, replace project names, branch names, PR numbers and SHAs with placeholders (`a private repo`, `fix/some-branch`, `PR #123`, `<sha>`): GitHub's edit history keeps the original text.
 - A stash is repo-global and survives worktree removal — it is not a reason to keep a worktree.
 
 ## Verification Checklist
