@@ -15,6 +15,8 @@
 set -uo pipefail
 
 SCRIPT="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../branch-cleanup.sh}"
+# shellcheck source=lib/tests/old-bash.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/old-bash.sh"
 
 if [ ! -x "$SCRIPT" ]; then
   echo "FATAL: script not executable: $SCRIPT" >&2
@@ -240,31 +242,19 @@ expect uw-git     DELETE "without --unattended the 24h vetoes do not apply"
 expect uw-ignored DELETE "without --unattended an ignored file does not hold it"
 
 # --- #378: empty arrays under bash < 4.4 ---------------------------------------
-# Bash before 4.4 calls an empty "${a[@]}" unbound under set -u: macOS ships
-# 3.2 as /bin/bash, and a bash/ shim first on PATH makes the script's
-# `env bash` resolve to it. Linux CI has no such bash and runs the default only.
-E378_BASHES=("")
-if /bin/bash -c '[ "${BASH_VERSINFO[0]}${BASH_VERSINFO[1]}" -lt 44 ]' 2>/dev/null; then
-  mkdir -p "$ROOT/oldbash-378"; ln -s /bin/bash "$ROOT/oldbash-378/bash"; E378_BASHES+=("$ROOT/oldbash-378")
-fi
+# --json with no row to print, under every bash at hand (lib/tests/old-bash.sh).
+old_bash_dirs "$ROOT"
 # No local branch at all: a detached HEAD with the base a tag.
 E378="$ROOT/no-branches-378"
 git init -q -b main "$E378"
 git -C "$E378" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
 git -C "$E378" tag v1; git -C "$E378" checkout -q --detach; git -C "$E378" branch -q -D main
-e378() {  # e378 <description> <output>
-  if [ "$2" = "[]" ]; then
-    PASS=$((PASS + 1))
-  else
-    FAIL=$((FAIL + 1)); printf 'FAIL  #378 %s (got: %s)\n' "$1" "$2" >&2
-  fi
-}
-for dir in "${E378_BASHES[@]}"; do
+for dir in "${TEST_BASH_DIRS[@]}"; do
   on="${dir:+ under /bin/bash}"
-  OUT=$(PATH="${dir:+$dir:}$PATH" "$SCRIPT" --base develop --no-fetch --json --unattended --branch nope 2>&1 | grep -v '^MISSING' | jq -c . 2>&1)
-  e378 "--json with every named branch missing prints []$on" "$OUT"
-  OUT=$(cd "$E378" && PATH="${dir:+$dir:}$PATH" "$SCRIPT" --base v1 --no-fetch --json 2>&1 | jq -c . 2>&1)
-  e378 "--json with no local branch prints []$on" "$OUT"
+  OUT=$(PATH="${dir:+$dir:}$PATH" "$SCRIPT" --base develop --no-fetch --json --unattended --branch nope 2>"$ROOT/err-378" | jq -c . 2>/dev/null)
+  if [ "$OUT" = "[]" ] && ! grep -q 'unbound variable' "$ROOT/err-378"; then PASS=$((PASS + 1)); else FAIL=$((FAIL + 1)); echo "FAIL  --json with every named branch missing prints []$on (got: $OUT; $(cat "$ROOT/err-378"))" >&2; fi
+  OUT=$(cd "$E378" && PATH="${dir:+$dir:}$PATH" "$SCRIPT" --base v1 --no-fetch --json 2>"$ROOT/err-378" | jq -c . 2>/dev/null)
+  if [ "$OUT" = "[]" ] && ! grep -q 'unbound variable' "$ROOT/err-378"; then PASS=$((PASS + 1)); else FAIL=$((FAIL + 1)); echo "FAIL  --json with no local branch prints []$on (got: $OUT; $(cat "$ROOT/err-378"))" >&2; fi
 done
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"

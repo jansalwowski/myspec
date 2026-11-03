@@ -14,6 +14,8 @@ set -uo pipefail
 
 SCRIPT="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../housekeep.sh}"
 [ -x "$SCRIPT" ] || { echo "FATAL: script not executable: $SCRIPT" >&2; exit 1; }
+# shellcheck source=lib/tests/old-bash.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/old-bash.sh"
 
 ROOT=$(cd "$(mktemp -d)" && pwd -P)
 REPO="$ROOT/repo"
@@ -81,15 +83,10 @@ git rev-parse --verify -q merged >/dev/null && [ -f "$S/old.jsonl" ] && [ -d "$B
 [ ! -e "$REPO/.claude/state/housekeep-last-run" ] && ok || fail "dry run writes no stamp"
 
 # --- default flags, under every bash at hand ------------------------------------
-# The skill runs housekeep with no flags, so the fetch path must work too. Bash
-# before 4.4 calls an empty "${a[@]}" unbound under set -u (#378): macOS ships
-# 3.2 as /bin/bash, and a bash/ shim first on PATH makes both scripts'
-# `env bash` resolve to it. Linux CI has no such bash and runs the default only.
-BASHES=("")
-if /bin/bash -c '[ "${BASH_VERSINFO[0]}${BASH_VERSINFO[1]}" -lt 44 ]' 2>/dev/null; then
-  mkdir -p "$ROOT/oldbash"; ln -s /bin/bash "$ROOT/oldbash/bash"; BASHES+=("$ROOT/oldbash")
-fi
-for dir in "${BASHES[@]}"; do
+# The skill runs housekeep with no flags, so the fetch path must work too, and
+# under macOS's bash 3.2 as well (#378, lib/tests/old-bash.sh).
+old_bash_dirs "$ROOT"
+for dir in "${TEST_BASH_DIRS[@]}"; do
   label="default flags${dir:+ under /bin/bash}"
   OUT=$(PATH="${dir:+$dir:}$PATH" "$SCRIPT" --dry-run 2>&1); STATUS=$?
   [ "$STATUS" -eq 0 ] && ok || fail "$label: dry run exits 0 (got $STATUS): $OUT"

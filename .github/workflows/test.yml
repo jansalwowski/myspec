@@ -8,8 +8,20 @@ on:
 
 jobs:
   suites:
-    name: shell test suites
-    runs-on: ubuntu-latest
+    name: shell test suites${{ matrix.os == 'macos-latest' && ' (macOS bash 3.2)' || '' }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            suites: lib/tests/*.test.sh hooks/tests/*.test.sh scripts/tests/*.test.sh
+          # Bash before 4.4 calls an empty "${a[@]}" unbound under set -u, and
+          # Linux runners have no such bash (#378). macOS ships 3.2 as
+          # /bin/bash; these suites run their scripts under it
+          # (lib/tests/old-bash.sh). Only these, not the whole tree.
+          - os: macos-latest
+            suites: lib/tests/housekeep.test.sh lib/tests/branch-cleanup.test.sh
     steps:
       - uses: actions/checkout@v4
         with:
@@ -25,7 +37,7 @@ jobs:
         run: |
           status=0
           shopt -s nullglob
-          for suite in lib/tests/*.test.sh hooks/tests/*.test.sh scripts/tests/*.test.sh; do
+          for suite in ${{ matrix.suites }}; do
             echo "::group::$suite"
             if bash "$suite"; then
               echo "PASS $suite"
