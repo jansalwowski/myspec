@@ -355,37 +355,97 @@ branch_verdict() {
 # A worktree that an earlier segment of the same `&&` chain removes is gone by
 # the time a later `git branch -d/-D` runs: the delete only runs if the removal
 # succeeded (#384). REMOVED_WT holds those worktrees' physical paths, one per
-# line; walk empties it at any link other than `&&` (`;`, `||`, `|`, `&`, a
-# subshell or group boundary, a newline), where the removal may have failed or
-# not finished. Only a literal path counts: a command with a backslash
-# anywhere (the scanner blanks escapes, so the word it sees is not the path
-# git gets), a quoted, variable or glob path, or any flag but -f/--force,
-# records nothing and the delete is judged against the worktree list as is.
+# line. walk keeps it across a segment only when the link in front of that
+# segment is `&&` (a newline right after `&&` continues the line; the `&` of
+# `2>&1` or `&>` is a redirect, not a link), and empties it at any other link
+# (`;`, `||`, `|`, `&`, newline, subshell, group or substitution boundary).
+# A removal is recorded only when it cannot be skipped or have its failure
+# masked: no `|` or `||` link in front of it, no `!`, a literal path (no
+# quote, variable, glob, or backslash in the removal text, since the scanner
+# blanks escapes and the word it sees is not the path git gets), and no flag
+# but -f, --force and --. Any command between the removal and the delete that
+# is not on a short read-only list (wt_chain_safe) empties the list, since it
+# could check the branch out again: `git worktree add`, `checkout`, `switch`,
+# a script.
 REMOVED_WT=$'\n'
-WT_REMOVE_LITERAL=1
-case "$COMMAND" in *\\*) WT_REMOVE_LITERAL=0 ;; esac
+WT_LINK_OK=0   # walk, per segment: may a removal in this segment count?
+WT_GLUE=0      # walk, per segment: 1 for the tail of a redirect (`1` of 2>&1)
 
-# note_worktree_remove <normalized segment> <dir> -> adds the worktree a
-# `git worktree remove [-f|--force]... <path>` segment removes to REMOVED_WT,
-# its path resolved against the directory the segment runs in.
-note_worktree_remove() {
-  local word path=""
+# note_segment <normalized segment> <dir> -> updates REMOVED_WT for one
+# segment: adds the worktree a `git worktree remove` removes, or empties the
+# list for a command that might check a branch out.
+note_segment() {
+  local word path="" wt skip=0 end_opts=0
   local -a words
-  [ "$WT_REMOVE_LITERAL" = 1 ] || return 0
-  [[ "$1" =~ ^git[[:space:]]+worktree[[:space:]]+remove[[:space:]]+(.*)$ ]] || return 0
+  [ "$WT_GLUE" = 0 ] || return 0
+  if [[ "$1" =~ ^git[[:space:]]+worktree[[:space:]]+remove([[:space:]]+(.*))?$ ]]; then
+    [ "$WT_LINK_OK" = 1 ] || return 0
+    read -r -a words <<< "${BASH_REMATCH[2]}"
+    for word in ${words[@]+"${words[@]}"}; do
+      if [ "$skip" = 1 ]; then skip=0; continue; fi
+      case "$word" in
+        *Q*) return 0 ;;     # Q is the scanner placeholder for a quoted span
+        '>'|'>>'|'<'|[0-9]'>'|[0-9]'>>'|[0-9]'<') skip=1; continue ;;
+        '>'*|'<'*|[0-9]'>'*|[0-9]'<'*) continue ;;
+      esac
+      if [ "$end_opts" = 0 ]; then
+        case "$word" in
+          --) end_opts=1; continue ;;
+          --force|-f|-ff) continue ;;
+          -*) return 0 ;;
+        esac
+      fi
+      [ -z "$path" ] || return 0
+      path="$word"
+    done
+    [ -n "$path" ] || return 0
+    wt=$(removed_worktree "$2" "$path") || return 0
+    REMOVED_WT="$REMOVED_WT$wt"$'\n'
+    return 0
+  fi
+  wt_chain_safe "$1" || REMOVED_WT=$'\n'
+}
+
+# removed_worktree <dir> <word> -> the physical path of the worktree that
+# `git worktree remove <word>` run in <dir> removes. Like git: a word that is
+# the trailing path components of exactly one listed worktree names it,
+# otherwise the word is a path relative to <dir>.
+removed_worktree() {
+  local word="$2" line p hit="" count=0
+  while [ "${word%/}" != "$word" ] && [ "$word" != / ]; do word="${word%/}"; done
+  while IFS= read -r line; do
+    case "$line" in 'worktree '*) ;; *) continue ;; esac
+    p="${line#worktree }"
+    if [ "$p" = "$word" ] || [ "${p%/"$word"}" != "$p" ]; then
+      hit="$p" count=$((count + 1))
+    fi
+  done < <(git -C "$1" worktree list --porcelain 2>/dev/null)
+  if [ "$count" = 1 ]; then
+    (cd "$hit" 2>/dev/null && pwd -P)
+    return
+  fi
+  resolve_dir "$1" "$2"
+}
+
+# wt_chain_safe <normalized segment> -> 0 for a command that cannot check a
+# branch out: a few shell builtins, read-only git, or another branch delete.
+wt_chain_safe() {
+  local w del=0
+  local -a words
+  [[ "$1" =~ ^(echo|printf|true|:|pwd|ls|test)([[:space:]]|$) ]] && return 0
+  [[ "$1" =~ ^git[[:space:]]+(fetch|status|log|show|diff|rev-parse|ls-remote|for-each-ref|worktree[[:space:]]+(remove|prune|list))([[:space:]]|$) ]] && return 0
+  [[ "$1" =~ ^git[[:space:]]+branch[[:space:]]+(.*)$ ]] || return 1
   read -r -a words <<< "${BASH_REMATCH[1]}"
-  for word in ${words[@]+"${words[@]}"}; do
-    case "$word" in
-      --force|-f|-ff) ;;
-      -*|*Q*) return 0 ;;     # Q is the scanner placeholder for a quoted span
-      *)
-        [ -z "$path" ] || return 0
-        path="$word" ;;
+  for w in ${words[@]+"${words[@]}"}; do
+    case "$w" in
+      --delete) del=1 ;;
+      --force|--remotes|--quiet|--) ;;
+      -*[!dDrfq]*) return 1 ;;
+      -*[dD]*) del=1 ;;
+      -*) ;;
     esac
   done
-  [ -n "$path" ] || return 0
-  path=$(resolve_dir "$2" "$path") || return 0
-  REMOVED_WT="$REMOVED_WT$path"$'\n'
+  [ "$del" = 1 ]
 }
 
 # held_branches <main root> -> the branches checked out in that repository's
@@ -409,19 +469,43 @@ held_branches() {
 }
 
 # segment_links: reads sanitize_command output and prints, for each line
-# split_segments would print, the separator character in front of that
-# segment: ^ for the first, n for a newline. An `a && b` chain shows as an
-# empty segment between two & links.
+# split_segments (lib/command-scan.sh) prints, the link in front of that
+# segment: ^ for the first, && || | & ; ( ) { } ` as written, n for a
+# newline, r for the `&` of a redirect (2>&1, >&2, &>), and + for a split
+# that is no link of its own: the second character of && || |&, or a newline
+# right after && || |. It scans exactly where split_segments splits, so the
+# two print the same number of lines; keep the separator set and the `>|`
+# exception in step with it (the test fixture checks they stay aligned).
+# split_segments prints `|` for every link, so it cannot tell && from ;.
 segment_links() {
   awk '
     { buf = buf $0 "\n" }
     END {
       n = length(buf)
       print "^"
+      glue = 0
+      last = ""
+      lastpos = 0
       for (i = 1; i <= n; i++) {
         c = substr(buf, i, 1)
         if (c == "|" && i > 1 && substr(buf, i - 1, 1) == ">") continue
-        if (index("|&;(){}`\n", c) > 0) print (c == "\n" ? "n" : c)
+        if (index("|&;(){}`\n", c) == 0) continue
+        p = (i > 1) ? substr(buf, i - 1, 1) : ""
+        q = substr(buf, i + 1, 1)
+        if (glue) { t = "+"; glue = 0 }
+        else if (c == "&" && (p == ">" || p == "<" || q == ">")) t = "r"
+        else if (c == "&" && q == "&") { t = "&&"; glue = 1 }
+        else if (c == "|" && q == "|") { t = "||"; glue = 1 }
+        else if (c == "|" && q == "&") { t = "|"; glue = 1 }
+        else if (c == "\n") {
+          gap = substr(buf, lastpos + 1, i - lastpos - 1)
+          if (lastpos > 0 && gap ~ /^[ \t]*$/ && (last == "&&" || last == "||" || last == "|")) t = "+"
+          else t = "n"
+        }
+        else t = c
+        print t
+        if (t != "+") last = t
+        lastpos = i
       }
     }'
 }
@@ -545,7 +629,7 @@ matches_any() {  # matches_any <segment> <pattern>...
 check_segment() {
   local segment="$1" dir="$2" gitdir="$3" verdict
 
-  note_worktree_remove "$segment" "$dir"
+  note_segment "$segment" "$dir"
 
   if [ "$ALLOW_BRANCH_OPS" = 0 ]; then
     if matches_any "$segment" "${BRANCH_PATTERNS[@]}" \
@@ -655,7 +739,8 @@ note_made() {
 walk() {
   local cmd="$1" dir="$2" depth="$3" start="$2"
   local -a seps segs_s segs_r sw rw stack helds links
-  local line k n j c w sub gdir gitdir norm payload held="" chain=""
+  local line k n j c w sub gdir gitdir norm payload held="" chain="" link esc=0
+  local saved_wt="$REMOVED_WT"
 
   k=0
   while IFS= read -r line; do
@@ -674,12 +759,20 @@ walk() {
     links[k]="$line"
     k=$((k + 1))
   done < <(printf '%s' "$cmd" | sanitize_command | segment_links)
+  # A backslash in a removal's text: the scanner blanked it, so the path it
+  # reads is not the one git gets (note_segment).
+  # shellcheck disable=SC1003 # an ERE: the backslashes are literal
+  if grep -qE 'worktree[[:space:]\\]+remove[^;&|()]*\\' <<< "$cmd"; then esc=1; fi
 
   # A payload (`bash -c`) sees what the command around it creates.
   if [ "$depth" = 0 ]; then CD_MADE=() CD_NEW_WT=(); fi
   stack=() helds=()
   for ((k = 0; k < n; k++)); do
-    chain="$chain${links[k]:-}"
+    link="${links[k]:-}"
+    case "$link" in
+      +|r) ;;
+      *) chain="$chain$link" ;;
+    esac
     case "${seps[k]}" in
       '(') stack+=("$dir") helds+=("$held") ;;
       ')')
@@ -700,9 +793,19 @@ walk() {
     read -r -a sw <<< "${segs_s[k]}" || true
     read -r -a rw <<< "${segs_r[k]:-}" || true
     [ "${#sw[@]}" -gt 0 ] || continue
-    # A worktree removal carries over only through an unbroken && link.
-    [ "$chain" = '&&' ] || REMOVED_WT=$'\n'
-    chain=""
+    # A worktree removal carries over only through an unbroken && link; ^ is
+    # the start of a payload, which runs where its bash -c / eval segment does.
+    WT_GLUE=0
+    if [ "$link" = r ]; then
+      WT_GLUE=1
+    else
+      case "$chain" in '^'|'&&') ;; *) REMOVED_WT=$'\n' ;; esac
+      WT_LINK_OK=1
+      case "$chain" in *'|'*) WT_LINK_OK=0 ;; esac
+      [ "$esc" = 0 ] || WT_LINK_OK=0
+      case " ${segs_s[k]} " in *[[:space:]]'!'[[:space:]]*) WT_LINK_OK=0 ;; esac
+      chain=""
+    fi
     # The two streams split identically by construction; if they ever do not,
     # arguments fall back to their blanked form (unresolvable, never guessed).
     [ "${#rw[@]}" = "${#sw[@]}" ] || rw=("${sw[@]}")
@@ -780,11 +883,15 @@ walk() {
         done
         if [ -n "$payload" ] && [ "$j" -lt "${#sw[@]}" ] && [ "$depth" -lt "$MAX_DEPTH" ]; then
           walk "$(decode_word "${rw[j]}")" "$dir" $((depth + 1))
+        else
+          REMOVED_WT=$'\n'   # a script, or a payload not scanned (#384)
         fi
         continue ;;
       eval)
         if [ "$depth" -lt "$MAX_DEPTH" ]; then
           walk "$(decode_word "$(join_words $((j + 1)) "${rw[@]}")")" "$dir" $((depth + 1))
+        else
+          REMOVED_WT=$'\n'
         fi
         continue ;;
       git)
@@ -823,8 +930,9 @@ walk() {
         ;;
     esac
   done
-  # A removal inside a payload is not known to have finished outside it.
-  [ "$depth" = 0 ] || REMOVED_WT=$'\n'
+  # A payload's own removals stay inside it. One that emptied the list (a
+  # link, or a command that might check a branch out) leaves it empty.
+  if [ "$depth" -gt 0 ] && [ "$REMOVED_WT" != $'\n' ]; then REMOVED_WT="$saved_wt"; fi
   # After gates A and B: a branch or worktree block names the real problem.
   gate_c "$cmd" "$start"
 }

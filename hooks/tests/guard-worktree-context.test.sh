@@ -153,8 +153,53 @@ check block "#384 escaped character in the path"   "git worktree remove $WT\\; &
 check block "#384 unknown remove flag"             "git worktree remove --dry $WT && git branch -D wt-a"
 check block "#384 removal inside bash -c"          "bash -c 'git worktree remove $WT' && git branch -D wt-a"
 check block "#384 delete before the removal"       "git branch -D wt-a && git worktree remove $WT"
+# Review of #387: each case below was allowed (or wrongly blocked) before.
+check block "#384 negated removal"                 "! git worktree remove $WT && git branch -D wt-a"
+check block "#384 removal reached through ||"      "false || git worktree remove $WT && git branch -D wt-a"
+check allow "#384 || before an && removal"         "false || true && git worktree remove $WT && git branch -D wt-a"
+check block "#384 worktree add re-checks it out"   "git worktree add $REPO/x wt-a && git branch -D wt-a"
+check block "#384 worktree add after the removal"  "git worktree remove $WT && git worktree add $REPO/x wt-a && git branch -D wt-a"
+check block "#384 checkout in another worktree"    "git worktree remove $WT && git -C $WTB checkout wt-a && git branch -D wt-a"
+check block "#384 switch in another worktree"      "git worktree remove $WT && git -C $WTB switch wt-a && git branch -D wt-a"
+check block "#384 a script between them"           "git worktree remove $WT && bash ./setup.sh && git branch -D wt-a"
+check block "#384 checkout inside bash -c"         "git worktree remove $WT && bash -c 'git -C $WTB checkout wt-a' && git branch -D wt-a"
+check allow "#384 read-only steps between them"    "git worktree remove $WT && echo done && git status && git branch -D wt-a"
+check allow "#384 remove 2>&1 && delete"           "git worktree remove $WT 2>&1 && git branch -D wt-a"
+check allow "#384 remove >/dev/null 2>&1"          "git worktree remove $WT >/dev/null 2>&1 && git branch -D wt-a"
+check allow "#384 remove &>/dev/null"              "git worktree remove $WT &>/dev/null && git branch -D wt-a"
+check block "#384 remove |& cat"                   "git worktree remove $WT |& cat && git branch -D wt-a"
+check allow "#384 && then newline"                 "git worktree remove $WT &&
+git branch -D wt-a"
+check block "#384 || then newline"                 "git worktree remove $WT ||
+git branch -D wt-a"
+check allow "#384 remove -- <path>"                "git worktree remove -- $WT && git branch -D wt-a"
+check allow "#384 remove by unique suffix"         'git worktree remove wt-a && git branch -D wt-a'
+check block "#384 suffix of another worktree"      'git worktree remove wt-b && git branch -D wt-a'
+check allow "#384 backslash elsewhere"             "echo 'a\\b'; git worktree remove $WT && git branch -D wt-a"
+check allow "#384 payload before the removal"      "bash -c 'true' && git worktree remove $WT && git branch -D wt-a"
+check allow "#384 payload between them"            "git worktree remove $WT && bash -c 'true' && git branch -D wt-a"
+check allow "#384 delete inside a payload"         "git worktree remove $WT && bash -c 'git branch -D wt-a'"
 git -C "$REPO" worktree remove --force "$WTB"
 git -C "$REPO" branch -q -D wt-b
+
+# segment_links in the hook must print one line per split_segments line, or
+# walk reads the wrong link for a segment. Its copy of the split scan is
+# checked against the lib's here.
+# shellcheck source=lib/command-scan.sh
+. "$CLAUDE_PLUGIN_ROOT/lib/command-scan.sh"
+eval "$(sed -n '/^segment_links() {/,/^}/p' "$HOOK")"
+# shellcheck disable=SC2016 # command text, not expansions
+for c in 'a && b' 'a || b; c | d & e' 'a 2>&1 >|f |& b' '(a) && { b; } && `c` $(d)' \
+    "a &&
+b" 'a "x && y" '"'"'p;q'"'"' && b' 'cat <<EOF && b
+x; y
+EOF'; do
+  want=$(printf '%s' "$c" | sanitize_command | split_segments | wc -l)
+  got=$(printf '%s' "$c" | sanitize_command | segment_links | wc -l)
+  if [ "$want" = "$got" ]; then PASS=$((PASS + 1)); else
+    FAIL=$((FAIL + 1)); printf 'FAIL  segment_links %s lines, split_segments %s: %s\n' "$got" "$want" "$c" >&2
+  fi
+done
 
 # --- gate A, must allow: the verb appears, but never as a command ------------
 check allow "verb in commit message"   'git commit -m "docs: explain that git checkout is blocked"'
