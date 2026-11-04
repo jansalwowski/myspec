@@ -11,7 +11,7 @@
 # Public API:
 #   sanitize_command <<< "$cmd"        # blanks quoted spans + heredoc bodies
 #   sanitize_command keep <<< "$cmd"   # same shape, quoted text kept (encoded)
-#   split_segments                     # one "<sep><TAB><segment>" line each
+#   split_segments                     # one "<link><TAB><segment>" line each
 #   decode_word "$word"                # undoes the keep-mode encoding
 #   strip_command_prefix "$segment"    # drops then/do/else, FOO=bar, sudo
 #   decode_word_to VAR "$word"         # the same two, into VAR: no subshell
@@ -250,11 +250,20 @@ sanitize_command() {
 }
 
 # Reads sanitized text on stdin and prints one line per command segment:
-# the separator that opened it, a TAB, then the segment. The separator is `(`
-# or `)` for a subshell boundary (a caller tracking `cd` scopes pushes and pops
-# on them), `^` for the first segment, and `|` for every other separator
-# (`|`, `&`, `;`, `{`, `}`, backtick, newline). Splits exactly where
-# find_matching_segment's `tr` does, so both see the same segments.
+# "<link><TAB><segment>", where <link> is the separator in front of the
+# segment, as written:
+#   ^                 the first segment
+#   && || | & ;       a list or pipeline operator
+#   ( ) { } `         a subshell, group or backtick boundary (a caller
+#                     tracking `cd` scopes pushes and pops on ( and ))
+#   n                 a newline
+#   r                 the & of a redirect (2>&1, >&2, &>, <&0): no link
+#   +                 a split that is no link of its own: the second
+#                     character of && || |&, or a newline right after
+#                     && || | (the command continues on the next line)
+# The segment after a + or r continues the command before it. Splits exactly
+# where find_matching_segment's `tr` does, so both see the same segments, and
+# the keep scan gives the same links as the plain one.
 split_segments() {
   awk '
     { buf = buf $0 "\n" }
@@ -262,6 +271,9 @@ split_segments() {
       n = length(buf)
       sep = "^"
       cur = ""
+      glue = 0
+      last = ""
+      lastpos = 0
       for (i = 1; i <= n; i++) {
         c = substr(buf, i, 1)
         # `>|` (clobber) is a redirect, not a pipe: drop the bar so the
@@ -270,7 +282,21 @@ split_segments() {
         if (index("|&;(){}`\n", c) > 0) {
           print sep "\t" cur
           cur = ""
-          if (c == "(" || c == ")") { sep = c } else { sep = "|" }
+          p = (i > 1) ? substr(buf, i - 1, 1) : ""
+          q = substr(buf, i + 1, 1)
+          if (glue) { sep = "+"; glue = 0 }
+          else if (c == "&" && (p == ">" || p == "<" || q == ">")) sep = "r"
+          else if (c == "&" && q == "&") { sep = "&&"; glue = 1 }
+          else if (c == "|" && q == "|") { sep = "||"; glue = 1 }
+          else if (c == "|" && q == "&") { sep = "|"; glue = 1 }
+          else if (c == "\n") {
+            gap = substr(buf, lastpos + 1, i - lastpos - 1)
+            if (lastpos > 0 && gap ~ /^[ \t]*$/ && (last == "&&" || last == "||" || last == "|")) sep = "+"
+            else sep = "n"
+          }
+          else sep = c
+          if (sep != "+") last = sep
+          lastpos = i
           continue
         }
         cur = cur c

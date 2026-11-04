@@ -60,6 +60,35 @@ roundtrip $'one\ntwo  three' "newline and spaces"
 eq "$(printf '%s' 'echo x >| out.ts' | sanitize_command | split_segments | awk -F'\t' '$2 != ""')" $'^\techo x > out.ts' "split: >| keeps its target"
 eq "$(printf '%s' 'ls | wc' | sanitize_command | split_segments | awk -F'\t' '$2 != ""' | wc -l | tr -d ' ')" "2" "split: a plain pipe still splits"
 
+# split_segments names the link in front of each segment (#387 review).
+# links [keep] <command>: the links of all segments, space-separated, less
+# the two newlines sanitize_command always ends with.
+links() {
+  local k=""
+  if [ "$1" = keep ]; then k=keep; shift; fi
+  # shellcheck disable=SC2086 # an empty $k is no argument
+  printf '%s' "$1" | sanitize_command $k | split_segments \
+    | awk -F'\t' '{ l[NR] = $1 } END { for (i = 1; i <= NR - 2; i++) printf "%s ", l[i] }'
+}
+# shellcheck disable=SC2016 # literal backticks are the point
+{
+eq "$(links 'a && b')" '^ && + ' "links: && and its second character"
+eq "$(links 'a || b')" '^ || + ' "links: ||"
+eq "$(links 'a | b')" '^ | ' "links: a pipe"
+eq "$(links 'a |& b')" '^ | + ' "links: |& is a pipe"
+eq "$(links 'a & b')" '^ & ' "links: background &"
+eq "$(links 'a; b')" '^ ; ' "links: ;"
+eq "$(links $'a\nb')" '^ n ' "links: a newline"
+eq "$(links $'a &&\nb')" '^ && + + ' "links: && then a newline continues the command"
+eq "$(links $'a |  \nb')" '^ | + ' "links: | then blanks and a newline"
+eq "$(links 'a 2>&1 | b')" '^ r | ' "links: 2>&1 is a redirect, not &"
+eq "$(links 'a &> f && b')" '^ r && + ' "links: &> is a redirect"
+eq "$(links 'a >&2; b <&0')" '^ r ; r ' "links: >&2 and <&0 are redirects"
+eq "$(links '(a) { b; } `c`')" '^ ( ) { ; } ` ` ' "links: ( ) { } and backticks"
+eq "$(links 'echo x >| f; y')" '^ ; ' "links: >| is no pipe"
+eq "$(links keep 'cd "a b" && x')" '^ && + ' "links: the keep scan gives the same links"
+}
+
 # Quoting nests through $( ), ${ } and backticks inside a double-quoted
 # word (#382): the inner quotes pair up, so a `>` in the inner string is not
 # a redirect. A substitution inside double quotes is split open like an
@@ -72,15 +101,15 @@ segs() {
 # shellcheck disable=SC2016 # literal $( ) and backticks are the point
 {
 eq "$(segs 'x="$(echo "a > b")"')" '^ x=Q$ / ( echo Q / ) Q' "nest: quotes inside \$( ) in a double-quoted word"
-eq "$(segs 'until [ "$(psql db -Atc "select 1 where t > now()")" = "0" ]; do sleep 5; done')" '^ until [ Q$ / ( psql db -Atc Q / ) Q = Q ] / |  do sleep 5 / |  done' "nest: the polling loop of #382"
+eq "$(segs 'until [ "$(psql db -Atc "select 1 where t > now()")" = "0" ]; do sleep 5; done')" '^ until [ Q$ / ( psql db -Atc Q / ) Q = Q ] / ;  do sleep 5 / ;  done' "nest: the polling loop of #382"
 eq "$(segs 'x="$(a "$(b "$(c "d > e")")")"')" '^ x=Q$ / ( a Q$ / ( b Q$ / ( c Q / ) Q / ) Q / ) Q' "nest: three levels deep"
-eq "$(segs 'x="`echo "a > b"`"')" '^ x=Q / | echo Q / | Q' "nest: quotes inside backticks in a double-quoted word"
+eq "$(segs 'x="`echo "a > b"`"')" '^ x=Q / ` echo Q / ` Q' "nest: quotes inside backticks in a double-quoted word"
 eq "$(segs 'x="${y:-"a > b"}"')" '^ x=Q' "nest: quotes inside \${ } in a double-quoted word"
-eq "$(segs "echo \"\${a:-\${b:-it's}}\"; git checkout main")" '^ echo Q / |  git checkout main' "nest: a quote in a nested \${ } is literal"
-eq "$(segs "x=\"\$(printf \$'a\\'b')\"; git checkout main")" '^ x=Q$ / ( printf $Q / ) Q / |  git checkout main' "nest: \\' inside \$'…' does not end it"
+eq "$(segs "echo \"\${a:-\${b:-it's}}\"; git checkout main")" '^ echo Q / ;  git checkout main' "nest: a quote in a nested \${ } is literal"
+eq "$(segs "x=\"\$(printf \$'a\\'b')\"; git checkout main")" '^ x=Q$ / ( printf $Q / ) Q / ;  git checkout main' "nest: \\' inside \$'…' does not end it"
 eq "$(segs 'echo "$(bash -c "cd x && git checkout main")"')" '^ echo Q$ / ( bash -c Q / ) Q' "nest: a quoted substitution's command is scanned"
 eq "$(segs 'x="$(git branch -D x)"')" '^ x=Q$ / ( git branch -D x / ) Q' "nest: a verb inside a quoted substitution is seen"
-eq "$(segs 'x="$(case $y in a) echo "q";; esac)"')" '^ x=Q$ / ( case $y in a / |  echo Q / |  esac / ) Q' "nest: a case pattern does not close \$( )"
+eq "$(segs 'x="$(case $y in a) echo "q";; esac)"')" '^ x=Q$ / ( case $y in a / ;  echo Q / ;  esac / ) Q' "nest: a case pattern does not close \$( )"
 eq "$(segs 'x="$(( (1) > 0 ))" > o')" '^ x=Q > o' "nest: \$(( )) with inner parens stays in the word"
 eq "$(segs $'m="$(cat <<\'EOF\'\nit\'s "x" ) > y\nEOF\n)" > o')" '^ m=Q$ / ( cat  Q  / ) Q > o' "nest: a heredoc body inside \$( ) in quotes"
 eq "$(segs $'m="$(echo hi # it\'s )\n)" > o')" '^ m=Q$ / ( echo hi  / ) Q > o' "nest: a comment inside \$( ) in quotes"
