@@ -9,13 +9,20 @@
 # not undo the leak; the check has to run before the network call.
 #
 # WHAT IS A POST: at command position (lib/command-scan.sh, so a gh verb inside
-# a quoted body or a heredoc is not one), `gh issue|pr create|comment|edit|
-# review|close`, and `gh api` with a POST, PATCH or PUT (or a field, which makes
-# gh POST) to `repos/<o>/<r>/issues…` or `repos/<o>/<r>/pulls…`. A
-# `gh api graphql` mutation and a gh run inside `bash -c` are not seen.
+# a quoted body or a heredoc is not one), past keywords, assignments and the
+# launchers env, command, exec, sudo, nohup, time, nice and xargs:
+# `gh issue create|comment|edit|close|reopen` and `gh pr create|comment|edit|
+# close|reopen|review|merge`, every subcommand with a text flag, whose flags
+# are read per subcommand (flag_kind), and `gh api` with a POST, PATCH or PUT
+# (or a field, which makes gh POST) to `repos/<o>/<r>/issues…` or
+# `repos/<o>/<r>/pulls…`. Not seen: a `gh api graphql` mutation, a gh run
+# inside `bash -c`, and the words after an `xargs -I{}` (the scanner splits
+# at braces).
 #
 # WHERE IT GOES: the URL operand (`gh issue comment https://<host>/<o>/<r>/
-# issues/1`), else `-R`/`--repo`, else `GH_REPO=`, else the `gh api` endpoint,
+# issues/1`), else `-R`/`--repo`, else the `gh api` endpoint, else GH_REPO (an
+# assignment on the segment, then the last `export GH_REPO=` or bare
+# assignment before it, `unset` clearing it, then the hook's environment),
 # else the repository gh resolves in the directory the segment runs in (after
 # any `cd` before it): the remote `gh repo set-default` recorded, else
 # `upstream`, `github`, `origin`. A post to the project's own `origin` is
@@ -37,20 +44,25 @@
 #     under four characters and single plain words under six
 #   - hex strings of 7 to 40 characters that name a commit in it
 #     (`git cat-file --batch-check`)
+#   - a ticket key such as ABC-123 whose prefix the project's own tracker
+#     uses: one in a branch name, or leading one of its last 300 commit
+#     subjects. A generic ABC-123 shape matches GPL-3, PHP-8 and GH-12 too.
 #   - a Claude Code session link, a home directory path (/Users/<name>,
-#     /home/<name>), an email address, a credential-shaped token, and a ticket
-#     key such as ABC-123 (a public standard's prefix, UTF-8, RFC-9110, is
-#     skipped): the shapes scripts/triage/redaction-check.mjs checks after the
-#     fact on the myspec repo itself
+#     /home/<name>), an email address and a credential-shaped token: shapes
+#     scripts/triage/redaction-check.mjs also checks after the fact on the
+#     myspec repo itself (maintainer tooling, not shipped; nothing is shared)
 #   - each entry of the setting hooks.guardPublicPosts.privateIdentifiers:
 #     a literal (case-insensitive, whole word) or, written `/…/`, an extended
-#     regex (codenames, a ticket prefix the shape above skips)
+#     regex (codenames, another tracker's ticket prefix)
 # When the target is one of the project's own remotes (the project is a fork
 # of it), branch names and commits that remote already has are public there
-# and skipped.
+# and skipped. When the project's own origin is public, its owner and name,
+# the branches origin has and the commits it contains are skipped too; a
+# local-only branch or an unpushed commit still counts.
 #
 # VISIBILITY: asked only when something matched, with one
-# `gh api repos/<o>/<r>` call per target and session, cached as a
+# `gh api repos/<o>/<r>` call per repository and session (each target, then
+# origin when a project-derived name matched), cached as a
 # `visibility` event in the session-state file (lib/session-event.sh; only in
 # a checkout that has one, a myspec project). Private and internal targets are
 # allowed. When gh cannot answer (offline, not logged in, rate-limited), the
@@ -59,10 +71,15 @@
 # check. Infrastructure alone never blocks: a post with no match is allowed
 # whatever gh says, and without gh on PATH the post cannot run at all.
 #
-# Escape hatch: MYSPEC_ALLOW_PUBLIC_POST=1 as a command prefix, the same idiom
-# as guard-worktree-context.sh's MYSPEC_ALLOW_MAIN_CHECKOUT. Advertised in the
-# block message: a match can be a public name that happens to equal a private
-# one, and only the agent reading the text can tell.
+# Escape hatch: MYSPEC_ALLOW_PUBLIC_POST=1 as an assignment prefix of the gh
+# command itself (`MYSPEC_ALLOW_PUBLIC_POST=1 gh …`, `env MYSPEC_…=1 gh …`).
+# Text anywhere else, a body that quotes it or an earlier segment, does not
+# count, and neither does an export: the pass is per post, so a second post
+# in the same command is still checked. Stricter than guard-worktree-
+# context.sh's MYSPEC_ALLOW_MAIN_CHECKOUT, which matches anywhere, because a
+# post body is where a quoted override would sit. Advertised in the block
+# message: a match can be a public name that happens to equal a private one,
+# and only the agent reading the text can tell.
 #
 # COST: the hook runs on every Bash call. The payload is read with a builtin
 # and matched with [[ =~ ]], so a call that is not a gh issue, pr or api
@@ -91,7 +108,16 @@ if [ ! -f "$HOOK_CORE" ]; then
   jq -nc --arg r "$LIB_MISSING" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}}'
   exit 0
 fi
-if [ ! -f "$(dirname "$HOOK_CORE")/command-scan.sh" ] || [ ! -f "$(dirname "$HOOK_CORE")/session-event.sh" ]; then
+# hook-core.sh present but a lib this hook sources missing: name it, as
+# no-absolute-paths.sh does, rather than approve in silence.
+LIB_MISSING=""
+for f in command-scan.sh session-event.sh; do
+  [ -f "$(dirname "$HOOK_CORE")/$f" ] || LIB_MISSING="${LIB_MISSING:+$LIB_MISSING, }$f"
+done
+if [ -n "$LIB_MISSING" ]; then
+  LIB_MISSING="myspec lib missing: $LIB_MISSING not found under \${CLAUDE_PLUGIN_ROOT}/lib (${CLAUDE_PLUGIN_ROOT}), so guard-public-posts.sh checked nothing. The hook runs from the plugin's hooks.json since 3.0; a copy wired in .claude/settings.json is retired by /myspec:update."
+  printf '%s\n' "$LIB_MISSING" >&2
+  jq -nc --arg r "$LIB_MISSING" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}}'
   exit 0
 fi
 # shellcheck source=lib/hook-core.sh
@@ -103,8 +129,6 @@ fi
 
 payload_parse "$PAYLOAD" COMMAND=.tool_input.command SESSION_ID=.session_id CWDS="$HOOK_CWDS"
 [ -n "$COMMAND" ] || exit 0
-OVERRIDE_RE='(^|[[:space:]])MYSPEC_ALLOW_PUBLIC_POST=1[[:space:]]'
-[[ $COMMAND =~ $OVERRIDE_RE ]] && exit 0
 command -v gh >/dev/null 2>&1 || exit 0
 
 START_DIR=$(first_dir "$CWDS") || START_DIR="$PWD"
@@ -152,54 +176,126 @@ dir_target() {
   repo_key "$url"
 }
 
+# flag_kind <group> <verb> <flag> -> FK: text (its value is posted), file
+# (a file whose content is posted), value (takes a value that is not posted)
+# or bool. Per subcommand, from `gh <group> <verb> --help`: `-c` is a comment
+# on close and reopen but a boolean on `pr review`, `-m` a milestone on
+# create but a boolean on `pr merge`.
+flag_kind() {
+  FK=bool
+  case "$3" in -R|--repo) FK=value; return 0 ;; esac
+  case "$1 $2" in
+    "issue create")
+      case "$3" in
+        -t|--title|-b|--body) FK=text ;;
+        -F|--body-file) FK="file" ;;
+        -a|--assignee|--attach|--blocked-by|--blocking|-l|--label|-m|--milestone|--parent|-p|--project|--recover|-T|--template|--type) FK=value ;;
+      esac ;;
+    "issue comment"|"pr comment")
+      case "$3" in -b|--body) FK=text ;; -F|--body-file) FK="file" ;; --attach) FK=value ;; esac ;;
+    "issue edit"|"pr edit")
+      case "$3" in
+        -t|--title|-b|--body) FK=text ;;
+        -F|--body-file) FK="file" ;;
+        --add-*|--remove-*|--attach|-m|--milestone|--parent|--type|-B|--base) FK=value ;;
+      esac ;;
+    "issue close")
+      case "$3" in -c|--comment) FK=text ;; --duplicate-of|-r|--reason) FK=value ;; esac ;;
+    "issue reopen"|"pr close"|"pr reopen")
+      case "$3" in -c|--comment) FK=text ;; esac ;;
+    "pr create")
+      case "$3" in
+        -t|--title|-b|--body) FK=text ;;
+        -F|--body-file) FK="file" ;;
+        -a|--assignee|--attach|-B|--base|-H|--head|-l|--label|-m|--milestone|-p|--project|--recover|-r|--reviewer|-T|--template) FK=value ;;
+      esac ;;
+    "pr review")
+      case "$3" in -b|--body) FK=text ;; -F|--body-file) FK="file" ;; esac ;;
+    "pr merge")
+      case "$3" in
+        -b|--body|-t|--subject|-A|--author-email) FK=text ;;
+        -F|--body-file) FK="file" ;;
+        --match-head-commit) FK=value ;;
+      esac ;;
+    "api "*)
+      case "$3" in
+        -X|--method) FK=method ;;
+        -f|--raw-field) FK=rawfield ;;
+        -F|--field) FK=field ;;
+        --input) FK="file" ;;
+        --hostname) FK=hostname ;;
+        -H|--header|-q|--jq|-t|--template|-p|--preview|--cache) FK=value ;;
+      esac ;;
+  esac
+}
+
 # parse_gh <word>... (keep-mode words after `gh`) -> G_POST=1 for a post,
 # G_REPO (where it says it goes, if it does), G_TEXT (its inline text) and
-# G_FILES (the files it sends, one per line).
+# G_FILES (the files it sends, one per line). A flag's value may follow it,
+# be attached with `=` (`--body=x`), or be glued to a short flag (`-bx`,
+# `-fbody=x`, `-XPOST`).
 parse_gh() {
-  local n=$# i=0 w v group="" verb="" method="" endpoint="" fields=0 host="" url_repo="" re
+  local n=$# i=0 w v name group="" verb="" method="" endpoint="" fields=0 host="" url_repo="" re attached
   local -a a=("$@")
   G_POST=0 G_REPO="" G_TEXT="" G_FILES=""
+  [ "$n" -gt 0 ] || return 0
+  decode_word_to group "${a[0]}"
+  case "$group" in issue|pr) ;; api) verb=api ;; *) return 0 ;; esac
+  i=1
+  # The verb: the first operand, past any -R before it.
+  while [ -z "$verb" ] && [ "$i" -lt "$n" ]; do
+    decode_word_to w "${a[i]}"
+    case "$w" in
+      -R|--repo) [ $((i + 1)) -ge "$n" ] || decode_word_to G_REPO "${a[i + 1]}"; i=$((i + 2)) ;;
+      --repo=*) G_REPO="${w#*=}"; i=$((i + 1)) ;;
+      -*) i=$((i + 1)) ;;
+      *) verb="$w"; i=$((i + 1)) ;;
+    esac
+  done
   while [ "$i" -lt "$n" ]; do
     decode_word_to w "${a[i]}"
-    v=""
-    [ $((i + 1)) -ge "$n" ] || decode_word_to v "${a[i + 1]}"
-    if [ -z "$group" ]; then
-      case "$w" in issue|pr|api) group="$w"; i=$((i + 1)); continue ;; *) return 0 ;; esac
-    fi
-    case "$group:$w" in
-      *:-R|*:--repo) G_REPO="$v"; i=$((i + 2)); continue ;;
-      *:--repo=*) G_REPO="${w#*=}" ;;
-      api:-X|api:--method) method="$v"; i=$((i + 2)); continue ;;
-      api:--method=*) method="${w#*=}" ;;
-      api:-X*) method="${w#-X}" ;;
-      api:-f|api:--raw-field) fields=1; G_TEXT="$G_TEXT${v#*=}"$'\n'; i=$((i + 2)); continue ;;
-      api:-F|api:--field)
-        fields=1
-        case "${v#*=}" in
-          @*) v="${v#*=}"; G_FILES="$G_FILES${v#@}"$'\n' ;;
-          *) G_TEXT="$G_TEXT${v#*=}"$'\n' ;;
-        esac
-        i=$((i + 2)); continue ;;
-      api:--input) fields=1; G_FILES="$G_FILES$v"$'\n'; i=$((i + 2)); continue ;;
-      api:--hostname) host="$v"; i=$((i + 2)); continue ;;
-      api:-H|api:--header|api:-q|api:--jq|api:-t|api:--template|api:-p|api:--preview|api:--cache)
-        i=$((i + 2)); continue ;;
-      api:-*) ;;
-      api:*) [ -n "$endpoint" ] || endpoint="$w" ;;
-      *:-t|*:--title|*:-b|*:--body|*:-c|*:--comment) G_TEXT="$G_TEXT$v"$'\n'; i=$((i + 2)); continue ;;
-      *:--title=*|*:--body=*|*:--comment=*) G_TEXT="$G_TEXT${w#*=}"$'\n' ;;
-      *:-F|*:--body-file) G_FILES="$G_FILES$v"$'\n'; i=$((i + 2)); continue ;;
-      *:--body-file=*) G_FILES="$G_FILES${w#*=}"$'\n' ;;
-      *:-*) ;;
+    attached=0 name="$w" v=""
+    case "$w" in
+      --*=*) name="${w%%=*}"; v="${w#*=}"; attached=1 ;;
+      --*) ;;
+      -?)  ;;
+      -*)
+        flag_kind "$group" "$verb" "${w:0:2}"
+        if [ "$FK" != bool ]; then name="${w:0:2}"; v="${w:2}"; attached=1; fi ;;
+    esac
+    case "$name" in
+      -*) flag_kind "$group" "$verb" "$name" ;;
       *)
-        if [ -z "$verb" ]; then
-          verb="$w"
+        if [ "$group" = api ]; then
+          [ -n "$endpoint" ] || endpoint="$w"
         else
           re='^https?://[^/]+/[^/]+/[^/]+/(issues|pull)/[0-9]+'
           [[ $w =~ $re ]] && url_repo="$w"
-        fi ;;
+        fi
+        i=$((i + 1)); continue ;;
     esac
-    i=$((i + 1))
+    if [ "$FK" = bool ]; then i=$((i + 1)); continue; fi
+    if [ "$attached" = 0 ]; then
+      [ $((i + 1)) -ge "$n" ] || decode_word_to v "${a[i + 1]}"
+      i=$((i + 2))
+    else
+      i=$((i + 1))
+    fi
+    case "$name:$FK" in
+      -R:*|--repo:*) G_REPO="$v" ;;
+      *:text) G_TEXT="$G_TEXT$v"$'\n' ;;
+      *:file) fields=1; G_FILES="$G_FILES$v"$'\n' ;;
+      *:method) method="$v" ;;
+      *:hostname) host="$v" ;;
+      *:rawfield) fields=1; G_TEXT="$G_TEXT${v#*=}"$'\n' ;;
+      *:field)
+        fields=1
+        v="${v#*=}"
+        case "$v" in
+          @*) G_FILES="$G_FILES${v#@}"$'\n' ;;
+          *) G_TEXT="$G_TEXT$v"$'\n' ;;
+        esac ;;
+    esac
   done
   if [ "$group" = api ]; then
     method=$(printf '%s' "$method" | tr '[:lower:]' '[:upper:]')
@@ -214,7 +310,7 @@ parse_gh() {
     esac
     return 0
   fi
-  case "$verb" in create|comment|edit|review|close) G_POST=1 ;; *) return 0 ;; esac
+  case "$verb" in create|comment|edit|review|close|reopen|merge) G_POST=1 ;; *) return 0 ;; esac
   [ -z "$url_repo" ] || G_REPO="$url_repo"
 }
 
@@ -223,43 +319,86 @@ if [ -n "$P_ROOT" ]; then
   ORIGIN_KEY=$(repo_key "$(git -C "$P_ROOT" remote get-url origin 2>/dev/null || true)" 2>/dev/null || true)
 fi
 
-# Walk the segments: track `cd`, collect each post that leaves this project.
+# Walk the segments: track `cd` and GH_REPO, collect each post that leaves
+# this project. Before a command name come keywords, assignments (a
+# GH_REPO=, or the override MYSPEC_ALLOW_PUBLIC_POST=1, which counts only
+# here, on the post's own segment) and launchers (env, command, exec, sudo,
+# nohup, time, nice, xargs) with their options.
 TARGETS=""
 TEXT=""
 FILES=""
 DIR="$START_DIR"
-w0="" w1=""
-GH_REPO_RE='(^|[[:space:]])GH_REPO=([^[:space:]]+)'
+SHELL_GH_REPO="${GH_REPO:-}"
+w="" w1=""
+CAT_RE='\$\((cat[[:space:]]+|<[[:space:]]*)([^)[:space:]]+)\)'
 SEGMENTS=$(printf '%s\n' "$COMMAND" | sanitize_command keep | split_segments)
 while IFS=$'\t' read -r _sep seg; do
-  gh_repo_env=""
-  if [[ $seg =~ $GH_REPO_RE ]]; then
-    decode_word_to gh_repo_env "${BASH_REMATCH[2]}"
-  fi
-  strip_command_prefix_to seg "$seg"
   W=()
   read -r -a W <<< "$seg" || true
-  [ "${#W[@]}" -gt 0 ] || continue
-  decode_word_to w0 "${W[0]}"
-  case "$w0" in
+  n=${#W[@]}
+  i=0 launcher="" seg_repo="" seg_override=0 seg_assign_repo=""
+  while [ "$i" -lt "$n" ]; do
+    decode_word_to w "${W[i]}"
+    case "$w" in
+      then|do|else|'!'|'{') i=$((i + 1)); continue ;;
+      env|command|exec|sudo|nohup|time|nice|xargs) launcher="$w"; i=$((i + 1)); continue ;;
+    esac
+    if [ -n "$launcher" ]; then
+      case "$launcher:$w" in
+        env:-u|env:-C|env:-S|nice:-n|xargs:-I|xargs:-n|xargs:-P|xargs:-L|xargs:-d|xargs:-s|xargs:-E|sudo:-u|sudo:-g)
+          i=$((i + 2)); continue ;;
+        *:-*) i=$((i + 1)); continue ;;
+      esac
+    fi
+    if [[ $w =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then
+      case "$w" in
+        GH_REPO=*) seg_assign_repo="${w#GH_REPO=}" ;;
+        MYSPEC_ALLOW_PUBLIC_POST=1) seg_override=1 ;;
+      esac
+      i=$((i + 1)); continue
+    fi
+    break
+  done
+  if [ "$i" -ge "$n" ]; then
+    # Assignments alone set a shell variable; gh sees it once exported, and
+    # a bare one may already be. Count it.
+    [ -z "$seg_assign_repo" ] || SHELL_GH_REPO="$seg_assign_repo"
+    continue
+  fi
+  seg_repo="$seg_assign_repo"
+  case "$w" in
     cd)
-      if [ "${#W[@]}" -gt 1 ]; then
-        decode_word_to w1 "${W[1]}"
+      if [ $((i + 1)) -lt "$n" ]; then
+        decode_word_to w1 "${W[i + 1]}"
         case "$w1" in /*) cand="$w1" ;; *) cand="$DIR/$w1" ;; esac
         [ ! -d "$cand" ] || DIR="$cand"
       fi
       continue ;;
+    export|unset)
+      j=$((i + 1))
+      while [ "$j" -lt "$n" ]; do
+        decode_word_to w1 "${W[j]}"
+        case "$w:$w1" in
+          export:GH_REPO=*) SHELL_GH_REPO="${w1#GH_REPO=}" ;;
+          unset:GH_REPO) SHELL_GH_REPO="" ;;
+        esac
+        j=$((j + 1))
+      done
+      continue ;;
     gh|*/gh) ;;
     *) continue ;;
   esac
-  [ "${#W[@]}" -gt 1 ] || continue
-  parse_gh "${W[@]:1}"
+  [ "$seg_override" = 0 ] || continue
+  [ $((i + 1)) -lt "$n" ] || continue
+  parse_gh "${W[@]:$((i + 1))}"
   [ "$G_POST" = 1 ] || continue
   target=""
   if [ -n "$G_REPO" ]; then
     target=$(repo_key "$G_REPO" 2>/dev/null || true)
-  elif [ -n "$gh_repo_env" ]; then
-    target=$(repo_key "$gh_repo_env" 2>/dev/null || true)
+  elif [ -n "$seg_repo" ]; then
+    target=$(repo_key "$seg_repo" 2>/dev/null || true)
+  elif [ -n "$SHELL_GH_REPO" ]; then
+    target=$(repo_key "$SHELL_GH_REPO" 2>/dev/null || true)
   else
     target=$(dir_target "$DIR" 2>/dev/null || true)
   fi
@@ -267,6 +406,15 @@ while IFS=$'\t' read -r _sep seg; do
   [ "$target" != "$ORIGIN_KEY" ] || continue
   case $'\n'"$TARGETS" in *$'\n'"$target"$'\n'*) ;; *) TARGETS="$TARGETS$target"$'\n' ;; esac
   TEXT="$TEXT$G_TEXT"
+  # `$(cat <file>)` / `$(< <file>)` inside an inline body, read from the
+  # directory this segment runs in.
+  rest="$G_TEXT"
+  while [[ $rest =~ $CAT_RE ]]; do
+    f="${BASH_REMATCH[2]}"
+    rest="${rest#*"${BASH_REMATCH[0]}"}"
+    f="${f#[\'\"]}"; f="${f%[\'\"]}"
+    G_FILES="$G_FILES$f"$'\n'
+  done
   while IFS= read -r f; do
     if [ -z "$f" ] || [ "$f" = - ]; then continue; fi
     case "$f" in /*) ;; *) f="$DIR/$f" ;; esac
@@ -274,17 +422,6 @@ while IFS=$'\t' read -r _sep seg; do
   done <<< "$G_FILES"
 done <<< "$SEGMENTS"
 [ -n "$TARGETS" ] || exit 0
-
-# `$(cat <file>)` / `$(< <file>)` inside an inline body.
-CAT_RE='\$\((cat[[:space:]]+|<[[:space:]]*)([^)[:space:]]+)\)'
-rest="$TEXT"
-while [[ $rest =~ $CAT_RE ]]; do
-  f="${BASH_REMATCH[2]}"
-  f="${f#[\'\"]}"; f="${f%[\'\"]}"
-  case "$f" in /*) ;; *) f="$DIR/$f" ;; esac
-  FILES="$FILES$f"$'\n'
-  rest="${rest#*"${BASH_REMATCH[0]}"}"
-done
 
 SCAN=$(mktemp "${TMPDIR:-/tmp}/.myspec-post.XXXXXX") || exit 0
 WORK=$(mktemp -d "${TMPDIR:-/tmp}/.myspec-post-d.XXXXXX") || { rm -f "$SCAN"; exit 0; }
@@ -345,15 +482,9 @@ while IFS= read -r m; do
 done < <(grep -oE '[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}' "$SCAN" 2>/dev/null | sort -u || true)
 while IFS= read -r m; do [ -n "$m" ] && hit credential "$m"; done \
   < <(grep -oE 'ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|xox[abp]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16}' "$SCAN" 2>/dev/null | sort -u || true)
-while IFS= read -r m; do
-  [ -n "$m" ] || continue
-  case "${m%%-*}" in
-    AC|AES|ANSI|CVE|CWE|ECMA|ES|FR|GHSA|GPT|HTTP|IEEE|IPV|ISO|MD|NFR|PEP|POSIX|PSR|REQ|RFC|RSA|SC|SHA|TC|TICKET|TLS|US|UTF|WCAG|X) continue ;;
-  esac
-  hit ticket "$m"
-done < <(grep -owE '[A-Z][A-Z0-9]{1,9}-[0-9]{1,6}' "$SCAN" 2>/dev/null | sort -u || true)
 
 # --- the project's own identifiers --------------------------------------------
+REFS=""
 if [ -n "$P_ROOT" ]; then
   # A target that is one of this project's remotes (it is a fork): what that
   # remote already has is public there.
@@ -423,6 +554,24 @@ if [ -n "$P_ROOT" ]; then
     printf '%s\n' "$b" >> "$BR"
   done <<< "$REFS"
 
+  # Ticket keys: only a prefix this project's tracker uses, read from its
+  # branch names (`feat/ABC-123-x`, `abc-123-x`) and from commit subjects that
+  # lead with a key (`ABC-123: …`, `[ABC-123] …`, `fix(ABC-123): …`). A
+  # built-in ABC-123 shape also matches GPL-3, PHP-8 and GH-12, and a list of
+  # public prefixes to skip is never complete; a prefix the project itself
+  # uses is its tracker's. Other trackers' keys go in privateIdentifiers.
+  PREFIXES=$( { printf '%s\n' "$REFS" | sed -E 's#^refs/(heads|remotes/[^/]+)/##' | tr '/' '\n' \
+        | grep -oE '^[A-Za-z][A-Za-z0-9]{1,9}-[0-9]+' || true
+      git -C "$P_ROOT" log -n 300 --all --format=%s 2>/dev/null \
+        | grep -oE '^[[(]?[A-Z][A-Z0-9]{1,9}-[0-9]+|^[a-z]+\([A-Z][A-Z0-9]{1,9}-[0-9]+\)' || true
+    } | sed -E 's/^[[(]//; s/^[a-z]+\(//; s/-[0-9]+.*$//' | tr '[:lower:]' '[:upper:]' | sort -u)
+  if [ -n "$PREFIXES" ]; then
+    while IFS= read -r m; do
+      [ -n "$m" ] || continue
+      grep -qxF -- "${m%%-*}" <<< "$PREFIXES" && hit ticket "$m"
+    done < <(grep -owE '[A-Z][A-Z0-9]{1,9}-[0-9]{1,6}' "$SCAN" 2>/dev/null | sort -u || true)
+  fi
+
   if [ -s "$LIT" ]; then
     cut -f2 "$LIT" > "$WORK/lit-values"
     grep -oiwF -f "$WORK/lit-values" "$SCAN" 2>/dev/null | sort -u \
@@ -487,6 +636,30 @@ while IFS= read -r t; do
 done <<< "$TARGETS"
 [ -n "$EXPOSED" ] || exit 0
 
+# A public project: its owner, name, pushed branches and pushed commits are
+# public already. Only what origin does not have (a local-only branch, an
+# unpushed commit) stays a leak; ticket keys and configured names stay too,
+# since the tracker can be private when the code is not. An origin gh cannot
+# tell about counts as private.
+if [ -n "$ORIGIN_KEY" ] && grep -qE '^(repo|owner|branch|commit)'$'\t' "$HITS" \
+    && [ "$(visibility "$ORIGIN_KEY")" = public ]; then
+  ORIGIN_BRANCHES=$(sed -n 's#^refs/remotes/origin/##p' <<< "$REFS")
+  : > "$WORK/kept"
+  while IFS=$'\t' read -r kind m; do
+    case "$kind" in
+      repo|owner) continue ;;
+      branch) if grep -qxF -- "$m" <<< "$ORIGIN_BRANCHES"; then continue; fi ;;
+      commit)
+        if [ -n "$(git -C "$P_ROOT" branch -r --contains "$m" --list 'origin/*' 2>/dev/null || true)" ]; then
+          continue
+        fi ;;
+    esac
+    printf '%s\t%s\n' "$kind" "$m" >> "$WORK/kept"
+  done < "$HITS"
+  mv -f "$WORK/kept" "$HITS"
+  [ -s "$HITS" ] || exit 0
+fi
+
 describe_hits() {
   local kind m
   sort -u "$HITS" | while IFS=$'\t' read -r kind m; do
@@ -510,4 +683,4 @@ pretool_deny "guard-public-posts.sh: this gh command would post identifiers from
 $(printf '%s' "$EXPOSED" | sed 's/^/  /')
 GitHub keeps edit history, so a scrub after posting does not undo a leak. Describe the problem against a placeholder or a fixture instead, replacing each match:
 $LIST
-Then re-run the command. If a match is not private (a public name that happens to equal one of this project's), re-run it prefixed with MYSPEC_ALLOW_PUBLIC_POST=1."
+Then re-run the command. If a match is not private (a public name that happens to equal one of this project's), re-run that gh command prefixed with MYSPEC_ALLOW_PUBLIC_POST=1 (on the gh command itself; elsewhere it does not count)."

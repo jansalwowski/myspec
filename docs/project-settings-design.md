@@ -103,7 +103,7 @@ Removing a default extension is deliberately not offered. A project that wants a
 
 | Key | Type | Default | Issue | Effect |
 |---|---|---|---|---|
-| `privateIdentifiers` | list of literal or `/regex/` | `[]` | #380 | Names `guard-public-posts.sh` denies in a `gh` issue, PR or comment posted to a different, public repository, besides the ones it derives from the project (origin owner and repo name, branch names, commit SHAs) and the shapes it always checks (session links, home paths, emails, credentials, ticket keys). A literal matches case-insensitively as a whole word; an entry between slashes is an extended regex, for a codename family or a ticket prefix (`"/[A-Z]{2,}-[0-9]+/"`). A project's entries extend the default. A false positive is passed per command with the `MYSPEC_ALLOW_PUBLIC_POST=1` prefix. |
+| `privateIdentifiers` | list of literal or `/regex/` | `[]` | #380 | Names `guard-public-posts.sh` denies in a `gh` issue, PR or comment posted to a different, public repository, besides the ones it derives from the project (origin owner and repo name, branch names, commit SHAs, ticket keys whose prefix the project's branch names or commit subjects use) and the shapes it always checks (session links, home paths, emails, credentials). A literal matches case-insensitively as a whole word; an entry between slashes is an extended regex, for a codename family or another tracker's ticket prefix (`"/OPS-[0-9]+/"`). A project's entries extend the default. A false positive is passed per command with the `MYSPEC_ALLOW_PUBLIC_POST=1` prefix. |
 
 ### Checks: `.claude/verification.json`
 

@@ -572,7 +572,7 @@
       "type": "flag",
       "issue": ["#380"],
       "loosens": true,
-      "description": "A command prefixed with MYSPEC_ALLOW_PUBLIC_POST=1 passes guard-public-posts.sh, for a match that is a public name equal to a private one."
+      "description": "A gh command prefixed with MYSPEC_ALLOW_PUBLIC_POST=1 (its own assignment prefix) passes guard-public-posts.sh, for a match that is a public name equal to a private one."
     },
     "MYSPEC_BASE_REF": {
       "kind": "exported",

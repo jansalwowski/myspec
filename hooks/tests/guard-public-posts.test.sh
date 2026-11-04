@@ -48,6 +48,7 @@ export PATH="$FX/bin:$PATH"
 printf 'public\n' > "$FX/vis/pub_tool"
 printf 'public\n' > "$FX/vis/pub_forked"
 printf 'private\n' > "$FX/vis/other_tool"
+printf 'private\n' > "$FX/vis/acme-corp_secret-billing"
 
 P="$FX/secret-billing"
 git init -q -b main "$P"
@@ -67,6 +68,29 @@ git -C "$P" branch dev
 git -C "$P" branch ab
 git -C "$P" update-ref refs/remotes/origin/release/2026-q3-cutover "$WORK_SHA"
 printf 'Steps: rebase feat/invoice-rounding onto main.\n' > "$P/body.md"
+# Ticket keys come from the project: a branch and a commit subject that lead
+# with one.
+git -C "$P" branch feat/BILL-42-rounding
+git -C "$P" checkout -q -b pay-work
+git -C "$P" commit -q --allow-empty -m "PAY-3: settle rounding"
+git -C "$P" checkout -q main
+mkdir -p "$FX/sub"
+printf 'see feat/invoice-rounding\n' > "$FX/sub/note.md"
+
+# A public project: what its origin has is public already.
+printf 'public\n' > "$FX/vis/pubown_openproj"
+Q="$FX/openproj"
+git init -q -b main "$Q"
+git -C "$Q" config user.email t@t
+git -C "$Q" config user.name t
+git -C "$Q" remote add origin https://github.com/pubown/openproj.git
+git -C "$Q" commit -q --allow-empty -m init
+PUSHED=$(git -C "$Q" rev-parse HEAD)
+git -C "$Q" update-ref refs/remotes/origin/pushed-topic "$PUSHED"
+git -C "$Q" checkout -q -b local-wip-branch
+git -C "$Q" commit -q --allow-empty -m local
+UNPUSHED=$(git -C "$Q" rev-parse HEAD)
+git -C "$Q" checkout -q main
 
 # A fork: origin is private, upstream is the public repo it came from.
 F="$FX/fork"
@@ -214,6 +238,84 @@ expect_quiet "branches and commits the upstream has are public there"
 run_in "$F" "gh pr create --title x --body 'from private-topic at ${WORK_SHA:0:10}'"
 expect_deny "a fork's own branch and commit are denied when posting upstream"
 expect_reason 'github.com/pub/forked' "without -R a fork posts to upstream"
+
+# --- review of #388 ---------------------------------------------------------------
+# 1. every subcommand that publishes text
+run 'gh pr merge 5 -R pub/tool --squash --subject "Merge feat/invoice-rounding"'
+expect_deny "pr merge --subject is scanned"
+run 'gh pr merge 5 -R pub/tool -b "from feat/invoice-rounding"'
+expect_deny "pr merge --body is scanned"
+run 'gh issue reopen 5 -R pub/tool --comment "regressed on feat/invoice-rounding"'
+expect_deny "issue reopen --comment is scanned"
+run 'gh pr reopen 5 -R pub/tool -c "feat/invoice-rounding"'
+expect_deny "pr reopen -c is scanned"
+# 2. flags parsed per subcommand
+run 'gh pr review 5 -R pub/tool -c -b "see feat/invoice-rounding"'
+expect_deny "pr review -c is a boolean; the -b after it is scanned"
+run 'gh pr merge 5 -R pub/tool -m -b "feat/invoice-rounding"'
+expect_deny "pr merge -m is a boolean; the -b after it is scanned"
+# 3. the override counts only on the gh segment itself
+run 'gh issue create -R pub/tool --title x --body "MYSPEC_ALLOW_PUBLIC_POST=1 feat/invoice-rounding"'
+expect_deny "the override inside the body text does not pass"
+run 'MYSPEC_ALLOW_PUBLIC_POST=1 true; gh issue create -R pub/tool --title x --body "feat/invoice-rounding"'
+expect_deny "the override on an earlier segment does not pass"
+run 'gh issue list; MYSPEC_ALLOW_PUBLIC_POST=1 gh issue create -R pub/tool --title x --body "feat/invoice-rounding"'
+expect_quiet "the override as the gh segment's own prefix passes"
+run 'env MYSPEC_ALLOW_PUBLIC_POST=1 gh issue create -R pub/tool --title x --body "feat/invoice-rounding"'
+expect_quiet "the override through env passes"
+# 4. GH_REPO from earlier segments and from the environment
+run 'export GH_REPO=pub/tool && gh issue create --title x --body "feat/invoice-rounding"'
+expect_deny "export GH_REPO in an earlier segment names the target"
+OUT=$(jq -nc --arg d "$P" '{tool_input: {command: "gh issue create --title x --body feat/invoice-rounding"}, cwd: $d}' | GH_REPO=pub/tool bash "$HOOK" 2>/dev/null)
+expect_deny "GH_REPO in the environment names the target"
+run 'export GH_REPO=pub/tool; unset GH_REPO; gh issue create --title x --body "feat/invoice-rounding"'
+expect_quiet "unset GH_REPO drops it"
+# 5. gh api attached forms
+run 'gh api repos/pub/tool/issues -fbody="feat/invoice-rounding"'
+expect_deny "gh api -fk=v is a field"
+run 'gh api repos/pub/tool/issues --raw-field=body="feat/invoice-rounding"'
+expect_deny "gh api --raw-field=k=v is a field"
+run 'gh api repos/pub/tool/issues --field=body=@body.md'
+expect_deny "gh api --field=k=@file is read"
+run 'gh api repos/pub/tool/issues -Fbody=@body.md'
+expect_deny "gh api -Fk=@file is read"
+run 'gh api repos/pub/tool/issues --input=body.md'
+expect_deny "gh api --input=file is read"
+# 6. launchers
+run 'env gh issue create -R pub/tool --title x --body "feat/invoice-rounding"'
+expect_deny "env gh is a post"
+run 'command gh issue create -R pub/tool --title x --body "feat/invoice-rounding"'
+expect_deny "command gh is a post"
+run 'exec gh issue create -R pub/tool --title x --body "feat/invoice-rounding"'
+expect_deny "exec gh is a post"
+run 'echo 5 | xargs -n 1 gh issue comment -R pub/tool --body "feat/invoice-rounding"'
+expect_deny "xargs gh is a post"
+# 7. $(cat file) resolved in the post segment's directory
+run "cd $FX/sub && gh issue create -R pub/tool --title x --body \"\$(cat note.md)\"; cd $P"
+expect_deny "a relative \$(cat file) is read where the post runs"
+# 8. ticket keys: the project's own prefixes only
+run 'gh issue create -R pub/tool --title x --body "GPL-3 and PHP-8, see GH-12 and UTF-8"'
+expect_quiet "ticket-shaped public names are not flagged"
+run 'gh issue create -R pub/tool --title x --body "tracked as BILL-77"'
+expect_deny "a ticket key whose prefix a branch carries is denied"
+expect_reason 'ticket key "BILL-77"' "the reason names the ticket key"
+run 'gh issue create -R pub/tool --title x --body "tracked as PAY-10"'
+expect_deny "a ticket key whose prefix leads a commit subject is denied"
+# 9. a public project's own pushed identifiers are public
+run_in "$Q" "gh issue create -R pub/tool --title x --body 'pubown/openproj on pushed-topic at ${PUSHED:0:10}'"
+expect_quiet "a public origin's owner, name, pushed branch and commit are allowed"
+run_in "$Q" "gh issue create -R pub/tool --title x --body 'see local-wip-branch'"
+expect_deny "a local-only branch of a public project is denied"
+run_in "$Q" "gh issue create -R pub/tool --title x --body 'see ${UNPUSHED:0:10}'"
+expect_deny "an unpushed commit of a public project is denied"
+# 10. a missing lib denies a post and names it
+mkdir -p "$FX/partial/lib"
+cp "$CLAUDE_PLUGIN_ROOT/lib/hook-core.sh" "$CLAUDE_PLUGIN_ROOT/lib/glob-regex.sh" "$FX/partial/lib/"
+OUT=$(jq -nc --arg d "$P" '{tool_input: {command: "gh issue create -R pub/tool --title x"}, cwd: $d}' | CLAUDE_PLUGIN_ROOT="$FX/partial" bash "$HOOK" 2>/dev/null)
+expect_deny "a missing command-scan.sh or session-event.sh denies a post"
+expect_reason 'command-scan.sh, session-event.sh' "the reason names each missing file"
+OUT=$(jq -nc --arg d "$P" '{tool_input: {command: "ls"}, cwd: $d}' | CLAUDE_PLUGIN_ROOT="$FX/partial" bash "$HOOK" 2>/dev/null)
+expect_quiet "a missing lib costs no other command"
 
 printf 'guard-public-posts: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
