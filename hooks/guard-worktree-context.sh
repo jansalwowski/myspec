@@ -468,48 +468,6 @@ held_branches() {
   done < <(git -C "$1" worktree list --porcelain 2>/dev/null)
 }
 
-# segment_links: reads sanitize_command output and prints, for each line
-# split_segments (lib/command-scan.sh) prints, the link in front of that
-# segment: ^ for the first, && || | & ; ( ) { } ` as written, n for a
-# newline, r for the `&` of a redirect (2>&1, >&2, &>), and + for a split
-# that is no link of its own: the second character of && || |&, or a newline
-# right after && || |. It scans exactly where split_segments splits, so the
-# two print the same number of lines; keep the separator set and the `>|`
-# exception in step with it (the test fixture checks they stay aligned).
-# split_segments prints `|` for every link, so it cannot tell && from ;.
-segment_links() {
-  awk '
-    { buf = buf $0 "\n" }
-    END {
-      n = length(buf)
-      print "^"
-      glue = 0
-      last = ""
-      lastpos = 0
-      for (i = 1; i <= n; i++) {
-        c = substr(buf, i, 1)
-        if (c == "|" && i > 1 && substr(buf, i - 1, 1) == ">") continue
-        if (index("|&;(){}`\n", c) == 0) continue
-        p = (i > 1) ? substr(buf, i - 1, 1) : ""
-        q = substr(buf, i + 1, 1)
-        if (glue) { t = "+"; glue = 0 }
-        else if (c == "&" && (p == ">" || p == "<" || q == ">")) t = "r"
-        else if (c == "&" && q == "&") { t = "&&"; glue = 1 }
-        else if (c == "|" && q == "|") { t = "||"; glue = 1 }
-        else if (c == "|" && q == "&") { t = "|"; glue = 1 }
-        else if (c == "\n") {
-          gap = substr(buf, lastpos + 1, i - lastpos - 1)
-          if (lastpos > 0 && gap ~ /^[ \t]*$/ && (last == "&&" || last == "||" || last == "|")) t = "+"
-          else t = "n"
-        }
-        else t = c
-        print t
-        if (t != "+") last = t
-        lastpos = i
-      }
-    }'
-}
-
 # --- gate B: the session's isolation mode --------------------------------------
 
 # session_mode <main root> -> sets ISO_MODE and ISO_PATH for that checkout:
@@ -738,7 +696,7 @@ note_made() {
 # Blocks (and exits) on the first offending segment; returns when clean.
 walk() {
   local cmd="$1" dir="$2" depth="$3" start="$2"
-  local -a seps segs_s segs_r sw rw stack helds links
+  local -a seps segs_s segs_r sw rw stack helds
   local line k n j c w sub gdir gitdir norm payload held="" chain="" link esc=0
   local saved_wt="$REMOVED_WT"
 
@@ -754,11 +712,6 @@ walk() {
     segs_r[k]="${line#*$'\t'}"
     k=$((k + 1))
   done < <(printf '%s' "$cmd" | sanitize_command keep | split_segments)
-  k=0
-  while IFS= read -r line; do
-    links[k]="$line"
-    k=$((k + 1))
-  done < <(printf '%s' "$cmd" | sanitize_command | segment_links)
   # A backslash in a removal's text: the scanner blanked it, so the path it
   # reads is not the one git gets (note_segment).
   # shellcheck disable=SC1003 # an ERE: the backslashes are literal
@@ -768,7 +721,7 @@ walk() {
   if [ "$depth" = 0 ]; then CD_MADE=() CD_NEW_WT=(); fi
   stack=() helds=()
   for ((k = 0; k < n; k++)); do
-    link="${links[k]:-}"
+    link="${seps[k]}"
     case "$link" in
       +|r) ;;
       *) chain="$chain$link" ;;

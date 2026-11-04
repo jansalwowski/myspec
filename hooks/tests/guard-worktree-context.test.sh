@@ -182,25 +182,6 @@ check allow "#384 delete inside a payload"         "git worktree remove $WT && b
 git -C "$REPO" worktree remove --force "$WTB"
 git -C "$REPO" branch -q -D wt-b
 
-# segment_links in the hook must print one line per split_segments line, or
-# walk reads the wrong link for a segment. Its copy of the split scan is
-# checked against the lib's here.
-# shellcheck source=lib/command-scan.sh
-. "$CLAUDE_PLUGIN_ROOT/lib/command-scan.sh"
-eval "$(sed -n '/^segment_links() {/,/^}/p' "$HOOK")"
-# shellcheck disable=SC2016 # command text, not expansions
-for c in 'a && b' 'a || b; c | d & e' 'a 2>&1 >|f |& b' '(a) && { b; } && `c` $(d)' \
-    "a &&
-b" 'a "x && y" '"'"'p;q'"'"' && b' 'cat <<EOF && b
-x; y
-EOF'; do
-  want=$(printf '%s' "$c" | sanitize_command | split_segments | wc -l)
-  got=$(printf '%s' "$c" | sanitize_command | segment_links | wc -l)
-  if [ "$want" = "$got" ]; then PASS=$((PASS + 1)); else
-    FAIL=$((FAIL + 1)); printf 'FAIL  segment_links %s lines, split_segments %s: %s\n' "$got" "$want" "$c" >&2
-  fi
-done
-
 # --- gate A, must allow: the verb appears, but never as a command ------------
 check allow "verb in commit message"   'git commit -m "docs: explain that git checkout is blocked"'
 check allow "verb in PR body"          'gh pr create --body "then git merge into develop"'
