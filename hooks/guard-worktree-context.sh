@@ -57,8 +57,9 @@
 # messages point at) is allowed, while `ls <worktree>; git checkout x` from the
 # main checkout, or `cd <main> && git checkout x` from a worktree, is not.
 # A `cd` into a directory the command creates first (`mkdir -p d && cd d`)
-# resolves lexically (cd_target in lib/hook-core.sh); one the hook cannot
-# resolve (a variable, a substitution, a path nothing before it names) leaves
+# is followed too (cd_target_to in lib/hook-core.sh), and one `git worktree
+# add` creates counts as a linked worktree; one the hook cannot resolve (a
+# variable, a substitution, a missing path nothing before it creates) leaves
 # the directory unchanged.
 #
 # Escape hatches:
@@ -164,18 +165,10 @@ HEAVY_CARVE_OUT='^git[[:space:]]+worktree[[:space:]]+prune([[:space:]]+[^[:space
 # resolve_dir <base> <encoded word> -> physical directory, or failure when the
 # word is not a literal path that exists now.
 resolve_dir() {
-  local base="$1" word
-  word=$(decode_word "$2")
-  case "$word" in
-    '') word="${HOME:-}" ;;
-    -|*'$'*|*'`'*|*'*'*|*'?'*) return 1 ;;
-    # \~ matches a literal ~ in the command text, expanded here by hand.
-    \~) word="${HOME:-}" ;;
-    \~/*) word="${HOME:-}/${word#\~/}" ;;
-    /*) ;;
-    *) word="$base/$word" ;;
-  esac
-  [ -n "$word" ] || return 1
+  local word
+  decode_word_to word "$2"
+  # `~` and `~/` are expanded by hand (cd_word_to in lib/hook-core.sh).
+  cd_word_to word "$1" "$word" || return 1
   (cd "$word" 2>/dev/null && pwd -P)
 }
 
@@ -258,6 +251,11 @@ classify() {
   [ "$key" = "$CLS_KEY" ] && return 0
   CLS_KEY="$key"
   CLS_ROOT=""
+  # A worktree `git worktree add` creates earlier in the command (cd_target_to)
+  # is linked, wherever it sits.
+  for abs in ${CD_NEW_WT[@]+"${CD_NEW_WT[@]}"}; do
+    case "$1/" in "$abs/"*) [ -z "$2" ] && return 0 ;; esac
+  done
   if [ -n "$2" ]; then
     # HEAD lives in the git dir, so it alone decides which checkout moves.
     abs=$(cd "$1" 2>/dev/null && git --git-dir="$2" rev-parse --absolute-git-dir 2>/dev/null) || return 0
@@ -537,7 +535,7 @@ gate_c() {
   # The scanner's globals, per command scanned.
   COMMAND="$1" SCAN_PLAIN="" SCAN_KEEP="" SCAN_KEPT=0
   # A directory the command creates before it cds there does not exist yet
-  # (cd_target); its existing prefix is already physical.
+  # (cd_target_to); its existing prefix is already physical.
   BASE_DIR=$(physical_dir "$2") || BASE_DIR="$2"
   bash_may_write || return 0
   # develop lets every write through, as the hook would. In worktree mode
@@ -565,12 +563,24 @@ $verdict"
   done < <(bash_write_targets)
 }
 
+# note_made <dir> <encoded word>... -> cd_note_made over the decoded words.
+note_made() {
+  local dir="$1" w
+  local -a d=()
+  shift
+  for w in "$@"; do
+    decode_word_to w "$w"
+    d+=("$w")
+  done
+  cd_note_made "$dir" ${d[@]+"${d[@]}"}
+}
+
 # walk <command> <start dir> <depth> — checks every segment of <command>.
 # Blocks (and exits) on the first offending segment; returns when clean.
 walk() {
   local cmd="$1" dir="$2" depth="$3" start="$2"
   local -a seps segs_s segs_r sw rw stack
-  local line k n j c w sub gdir gitdir norm payload prior="" earlier
+  local line k n j c w sub gdir gitdir norm payload
 
   k=0
   while IFS= read -r line; do
@@ -585,11 +595,10 @@ walk() {
     k=$((k + 1))
   done < <(printf '%s' "$cmd" | sanitize_command keep | split_segments)
 
+  # A payload (`bash -c`) sees what the command around it creates.
+  if [ "$depth" = 0 ]; then CD_MADE=() CD_NEW_WT=(); fi
   stack=()
   for ((k = 0; k < n; k++)); do
-    # The command's text before this segment, for a cd into a directory it
-    # creates.
-    earlier="$prior" prior="$prior ${segs_r[k]:-}"
     case "${seps[k]}" in
       '(') stack+=("$dir") ;;
       ')')
@@ -655,15 +664,17 @@ walk() {
     [ "$j" -lt "${#sw[@]}" ] || continue
 
     c="${sw[j]##*/}"
+    # What the segment creates, for a later cd into it.
+    if [ "$c" = mkdir ] || { [ "$c" = git ] && [ "${sw[j+1]:-}" = worktree ]; }; then
+      note_made "$dir" "${rw[@]:j}"
+    fi
     case "$c" in
       cd|pushd)
         j=$((j + 1))
         while [ "$j" -lt "${#sw[@]}" ] && [[ "${sw[j]}" == -?* ]]; do j=$((j + 1)); done
-        if sub=$(resolve_dir "$dir" "${rw[j]:-}"); then
-          dir="$sub"
-        elif sub=$(cd_target "$dir" "$(decode_word "${rw[j]:-}")" "$earlier"); then
-          dir="$sub"
-        fi
+        decode_word_to sub "${rw[j]:-}"
+        # `pushd +N` rotates the stack: no literal directory.
+        if [[ "$sub" != +* ]] && cd_target_to sub "$dir" "$sub"; then dir="$sub"; fi
         continue ;;
       bash|sh|zsh|dash|ksh)
         j=$((j + 1))

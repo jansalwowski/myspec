@@ -153,15 +153,18 @@ segment_matches() {
 # count only when a write verb stands at its command position. A literal `cd`
 # moves BASE_DIR for the segments after it, and a subshell restores it on exit,
 # so `cd <worktree> && echo x > a.ts` records the worktree's file. A cd into a
-# directory the command creates first resolves lexically (cd_target in
-# lib/hook-core.sh), given the text of the segments before it.
+# directory an earlier segment creates (`mkdir -p d && cd d`) follows it too
+# (cd_target_to in lib/hook-core.sh), and so does `pushd <dir>`.
 # Two scans of the command run in step: the plain one (quoted spans blanked to
 # Q) decides what is a verb, an option or a redirect; the `keep` one supplies
 # the operand's text, so a quoted literal path ("src/a.ts") resolves too. Both
 # split into the same segments and words (lib/command-scan.sh).
 bash_write_targets() {
-  local line kline sep seg kseg verb word skip i last dest next inplace dw prior="" earlier
-  local -a words kwords ops scopes=()
+  local line kline sep seg kseg verb word skip i last dest next inplace dw
+  local -a words kwords ops dws scopes=()
+  # Per command scanned: what its segments create (cd_note_made).
+  # shellcheck disable=SC2034 # read by cd_target_to in lib/hook-core.sh
+  local -a CD_MADE=() CD_NEW_WT=()
   while IFS= read -r line && IFS= read -r kline <&3; do
     sep="${line%%$'\t'*}"
     case "$sep" in
@@ -176,7 +179,6 @@ bash_write_targets() {
     strip_command_prefix_to seg "${line#*$'\t'}"
     [ -n "$seg" ] || continue
     strip_command_prefix_to kseg "${kline#*$'\t'}"
-    earlier="$prior" prior="$prior $kseg"
 
     # Split as `read -a` does, without a here-string per segment (a temp
     # file each in bash 3.2) and with no glob expansion.
@@ -208,15 +210,30 @@ bash_write_targets() {
       fi
     done
     [ "${#words[@]}" -gt 0 ] || continue
-    if [ "${words[0]}" = cd ]; then
-      [ "${#words[@]}" -lt 2 ] || decode_word_to dw "${kwords[1]}"
-      if [ "${#words[@]}" -ge 2 ] && next=$(cd_target "$BASE_DIR" "$dw" "$earlier"); then
-        BASE_DIR="$next"
-        # Not a target: a checkout this command reaches, for the status diff.
-        printf 'cd:%s\n' "$next"
-      fi
-      continue
-    fi
+    case "${words[0]}" in
+      cd|pushd)
+        i=1
+        while [ "$i" -lt "${#words[@]}" ] && [[ "${words[$i]}" == -?* ]]; do i=$((i + 1)); done
+        if [ "$i" -lt "${#words[@]}" ]; then
+          decode_word_to dw "${kwords[$i]}"
+          # `pushd +N` rotates the stack: no literal directory.
+          if [[ "$dw" != +* ]] && cd_target_to next "$BASE_DIR" "$dw"; then
+            BASE_DIR="$next"
+            # Not a target: a checkout this command reaches, for the status diff.
+            printf 'cd:%s\n' "$next"
+          fi
+        fi
+        continue ;;
+      mkdir|git)
+        if [ "${words[0]}" = mkdir ] || [ "${words[1]:-}" = worktree ]; then
+          dws=()
+          for ((i = 0; i < ${#kwords[@]}; i++)); do
+            decode_word_to dw "${kwords[$i]}"
+            dws+=("$dw")
+          done
+          cd_note_made "$BASE_DIR" "${dws[@]}"
+        fi ;;
+    esac
 
     verb="${words[0]##*/}"
     ops=()

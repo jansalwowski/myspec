@@ -535,6 +535,16 @@ check block "a cd into a directory nothing creates leaves the cwd" \
   "cd $NEW/never; git checkout develop"
 check block "a variable cd target is not guessed" \
   "mkdir -p $NEW/v && cd \$V && git checkout develop"
+check block "a missing directory only named earlier is not created" \
+  "ls $NEW/out; cd $NEW/out; git checkout develop"
+check allow "a quoted created directory is followed" \
+  "mkdir -p '$(dirname "$REPO")/my r383' && cd '$(dirname "$REPO")/my r383' && git checkout -q -b main"
+check allow "a worktree created inside the repo is linked" \
+  'git worktree add .claude/worktrees/w3 -b w3 && cd .claude/worktrees/w3 && git checkout -b w3b'
+check block "a plain directory created inside the repo is still main" \
+  'mkdir -p .claude/worktrees/w4 && cd .claude/worktrees/w4 && git checkout -b w4b'
+HOME="$(dirname "$REPO")" check allow "a ~/ cd into a created directory" \
+  'mkdir -p ~/h383 && cd ~/h383 && git checkout -q -b main'
 mark c-wt2 worktree 60
 check_in "$REPO" allow "worktree mode, git worktree add d && cd d, then a write" c-wt2 \
   "git worktree add $NEW/wt2 --detach && cd $NEW/wt2 && echo x > src.js"

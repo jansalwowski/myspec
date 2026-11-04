@@ -112,49 +112,145 @@ physical_dir() {
   (cd "$1" 2>/dev/null && pwd -P)
 }
 
-# cd_target <base> <path> <earlier text> -> the directory a literal
-# `cd <path>` from <base> enters, read from a command before it runs. A path
-# that exists resolves physically. One that does not yet (`mkdir -p d && cd d`,
-# `git worktree add d && cd d`, #383) resolves lexically, `.` and `..`
-# normalised as bash's logical cd does, its longest existing prefix physically
-# and the rest appended, so a tmp dir behind a symlink still compares against
-# a checkout root. That holds only when <earlier text>, the command's text
-# before the cd, names the first missing directory: otherwise the cd fails
-# when it runs, and after `;` the next segment runs in <base>, so moving would
-# judge a write that lands there as landing elsewhere. Fails, leaving the
-# caller's directory unchanged, for a word it cannot read: a variable, a
-# substitution, a glob, `-`, `~`.
-cd_target() {
-  local p="$2" out="" c dir rest="" miss="" phys
-  local -a parts
-  (cd "$1" 2>/dev/null && cd "$p" 2>/dev/null && pwd -P) && return 0
-  case "$p" in
-    ''|-*|\~*|*'$'*|*'`'*|*[\*\?\[]*) return 1 ;;
+# A literal `cd` into a directory the command creates first (#383). The hooks
+# read a command before it runs, so `mkdir -p d && cd d` and
+# `git worktree add d && cd d` name a directory that is not there yet.
+# cd_note_made records what each segment creates, cd_target_to follows a cd
+# into it. A cd into a missing directory nothing earlier creates fails when it
+# runs, and the segments after a `;` then run where the command started, so
+# that one leaves the caller's directory unchanged: moving would judge a write
+# into the main checkout as landing elsewhere.
+#
+# CD_MADE: "<flag>:<path>" per directory an earlier segment creates, the path
+# absolute and normalised (norm_path_to), with flag p when its parents are
+# created too (`mkdir -p`), w for `git worktree add` (parents too, and a
+# linked worktree), d for a plain `mkdir`. CD_NEW_WT: the directories a cd
+# entered that `git worktree add` creates, as cd_target_to printed them. A
+# caller resets both once per command it scans.
+CD_MADE=()
+CD_NEW_WT=()
+
+# cd_word_to <var> <base> <word> -> the absolute path a literal directory word
+# names from <base>: `~` and `~/` expanded, nothing (`cd` alone) is $HOME.
+# Fails for a word it cannot read: `-`, a variable, a substitution, a glob.
+cd_word_to() {
+  local _cw_w="$3"
+  case "$_cw_w" in
+    '') _cw_w="${HOME:-}" ;;
+    -|*'$'*|*'`'*|*[\*\?\[]*) return 1 ;;
+    \~) _cw_w="${HOME:-}" ;;
+    \~/*) _cw_w="${HOME:-}/${_cw_w#\~/}" ;;
     /*) ;;
-    *) p="$1/$p" ;;
+    *) _cw_w="$2/$_cw_w" ;;
   esac
-  IFS=/ read -r -a parts <<< "$p"
-  for c in ${parts[@]+"${parts[@]}"}; do
-    case "$c" in
+  [ -n "$_cw_w" ] || return 1
+  printf -v "$1" '%s' "$_cw_w"
+}
+
+# norm_path_to <var> <absolute path> -> <path> with `.`, `..` and repeated
+# slashes resolved lexically, as bash's logical cd does.
+norm_path_to() {
+  local _np_in="$2/" _np_out="" _np_c
+  while [ -n "$_np_in" ]; do
+    _np_c="${_np_in%%/*}"
+    _np_in="${_np_in#*/}"
+    case "$_np_c" in
       ''|.) ;;
-      ..) out="${out%/*}" ;;
-      *) out="$out/$c" ;;
+      ..) _np_out="${_np_out%/*}" ;;
+      *) _np_out="$_np_out/$_np_c" ;;
     esac
   done
-  dir="${out:-/}"
-  while [ ! -d "$dir" ]; do
-    [ ! -e "$dir" ] || return 1
-    miss="${dir##*/}"
-    rest="/$miss$rest"
-    dir="${dir%/*}"
-    [ -n "$dir" ] || dir=/
+  printf -v "$1" '%s' "${_np_out:-/}"
+}
+
+# cd_note_made <base> <word>... -> adds to CD_MADE the directories a segment
+# (its decoded words, launchers stripped) creates: the operands of `mkdir`
+# and the path of `git worktree add`. Anything else adds nothing.
+cd_note_made() {
+  local base="$1" flag="" w p skip=0 opts=1
+  local -a ops=()
+  shift
+  case "${1##*/}" in
+    mkdir)
+      flag=d
+      shift
+      for w in "$@"; do
+        if [ "$skip" = 1 ]; then skip=0; continue; fi
+        if [ "$opts" = 1 ]; then
+          case "$w" in
+            --) opts=0; continue ;;
+            --parents) flag=p; continue ;;
+            --mode) skip=1; continue ;;
+            --*) continue ;;
+            -?*)
+              case "$w" in *p*) flag=p ;; esac
+              case "$w" in *m) skip=1 ;; esac
+              continue ;;
+          esac
+        fi
+        ops+=("$w")
+      done ;;
+    git)
+      [ "${2:-}" = worktree ] && [ "${3:-}" = add ] || return 0
+      flag=w
+      shift 3
+      for w in "$@"; do
+        if [ "$skip" = 1 ]; then skip=0; continue; fi
+        case "$w" in
+          -b|-B|--reason) skip=1 ;;
+          -*) ;;
+          *) ops+=("$w"); break ;;
+        esac
+      done ;;
+    *) return 0 ;;
+  esac
+  for w in ${ops[@]+"${ops[@]}"}; do
+    cd_word_to p "$base" "$w" || continue
+    norm_path_to p "$p"
+    CD_MADE+=("$flag:$p")
   done
-  if [ -n "$miss" ]; then
-    [[ "$3" =~ (^|[^A-Za-z0-9._-])"$miss"($|[^A-Za-z0-9._-]) ]] || return 1
+}
+
+# cd_made <dir> -> 0 when CD_MADE creates <dir> (normalised): named itself,
+# or below it by an entry whose parents are created too.
+cd_made() {
+  local e
+  for e in ${CD_MADE[@]+"${CD_MADE[@]}"}; do
+    case "$e" in
+      ?:"$1") return 0 ;;
+      [pw]:"$1"/*) return 0 ;;
+    esac
+  done
+  return 1
+}
+
+# cd_target_to <var> <base> <word> -> the directory a literal `cd <word>` from
+# <base> enters. A directory that exists resolves physically; a missing one
+# only when CD_MADE creates every missing directory on its path, and then
+# with its longest existing prefix resolved physically (physical_path), so a
+# tmp dir behind a symlink still compares against a checkout root. One that
+# `git worktree add` creates is added to CD_NEW_WT.
+cd_target_to() {
+  local _ct_p _ct_d _ct_e
+  cd_word_to _ct_p "$2" "$3" || return 1
+  if _ct_d=$(cd "$_ct_p" 2>/dev/null && pwd -P); then
+    printf -v "$1" '%s' "$_ct_d"
+    return 0
   fi
-  phys=$(cd "$dir" 2>/dev/null && pwd -P) || return 1
-  [ -z "$rest" ] || phys="${phys%/}$rest"
-  printf '%s\n' "$phys"
+  norm_path_to _ct_p "$_ct_p"
+  _ct_d="$_ct_p"
+  while [ ! -d "$_ct_d" ]; do
+    [ ! -e "$_ct_d" ] && cd_made "$_ct_d" || return 1
+    _ct_d="${_ct_d%/*}"
+    [ -n "$_ct_d" ] || _ct_d=/
+  done
+  _ct_d=$(physical_path "$_ct_p") || return 1
+  # The worktree itself, or a directory inside it the same command makes.
+  for _ct_e in ${CD_MADE[@]+"${CD_MADE[@]}"}; do
+    case "$_ct_e" in w:*) ;; *) continue ;; esac
+    case "$_ct_p/" in "${_ct_e#w:}/"*) CD_NEW_WT+=("$_ct_d"); break ;; esac
+  done
+  printf -v "$1" '%s' "$_ct_d"
 }
 
 # file_sha256 <file> -> the file's SHA-256, hex. Fails when the file is not

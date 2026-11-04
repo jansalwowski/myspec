@@ -282,6 +282,7 @@ bashcmd "$SID-cd2" "$REPO" 'mkdir -p src/rel && cd src/rel && echo x > a.ts'
 ledger_has "$SID-cd2" code "$REPO" src/rel/a.ts && ok || fail "a relative mkdir -p d && cd d moves the base (got: $(ledger "$SID-cd2"))"
 bashcmd "$SID-cd3" "$REPO" "git worktree add $REPO/.claude/worktrees/wt-new --detach && cd $REPO/.claude/worktrees/wt-new && echo x > a.ts"
 ledger_has "$SID-cd3" code "$REPO" a.ts && fail "git worktree add d && cd d does not record the main checkout's file" || ok
+grep -q '/wt-new/a\.ts$\|	\.claude/worktrees/wt-new/a\.ts$' <(ledger "$SID-cd3") && ok || fail "git worktree add d && cd d records d's file (got: $(ledger "$SID-cd3"))"
 bashcmd "$SID-cd4" "$REPO" 'mkdir -p src/e/f && cd src/e/f && cd ../.. && echo x > e.ts'
 ledger_has "$SID-cd4" code "$REPO" src/e.ts && ok || fail "cd .. out of a created directory normalises (got: $(ledger "$SID-cd4"))"
 bashcmd "$SID-cd5" "$REPO" 'cd src/never; echo x > n.ts'
@@ -289,6 +290,14 @@ ledger_has "$SID-cd5" code "$REPO" n.ts && ok || fail "a cd into a directory not
 # shellcheck disable=SC2016 # literal text, not an expansion
 bashcmd "$SID-cd6" "$REPO" 'mkdir -p src/v && cd $D && echo x > v.ts'
 ledger_has "$SID-cd6" code "$REPO" v.ts && ok || fail "a variable cd target is not guessed (got: $(ledger "$SID-cd6"))"
+bashcmd "$SID-cd7" "$REPO" 'ls out; cd out; echo x > o.ts'
+ledger_has "$SID-cd7" code "$REPO" o.ts && ok || fail "a missing directory only named earlier is not created (got: $(ledger "$SID-cd7"))"
+bashcmd "$SID-cd8" "$REPO" 'mkdir -p src/d2 && cd src/d2 && cd e; echo x > a.ts'
+ledger_has "$SID-cd8" code "$REPO" src/d2/a.ts && ok || fail "every missing directory must be created (got: $(ledger "$SID-cd8"))"
+bashcmd "$SID-cd9" "$REPO" "mkdir -p 'src/my dir' && cd 'src/my dir' && echo x > a.ts"
+ledger_has "$SID-cd9" code "$REPO" 'src/my dir/a.ts' && ok || fail "a quoted created directory is followed (got: $(ledger "$SID-cd9"))"
+bashcmd "$SID-cd10" "$REPO" 'pushd src && echo x > p.ts'
+ledger_has "$SID-cd10" code "$REPO" src/p.ts && ok || fail "pushd moves the base (got: $(ledger "$SID-cd10"))"
 
 # --- an edit inside a linked worktree logs in the PRIMARY checkout -----------
 git -C "$REPO" worktree add -q "$REPO/.claude/worktrees/wt-a" -b wt-a
