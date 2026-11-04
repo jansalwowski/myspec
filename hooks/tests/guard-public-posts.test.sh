@@ -293,6 +293,15 @@ expect_deny "xargs gh is a post"
 # 7. $(cat file) resolved in the post segment's directory
 run "cd $FX/sub && gh issue create -R pub/tool --title x --body \"\$(cat note.md)\"; cd $P"
 expect_deny "a relative \$(cat file) is read where the post runs"
+# 7b. a substitution splits the post (#385): flags after it still count
+run "gh issue create --title x --body \"see \$(cat $P/body.md) here\" -R pub/tool"
+expect_deny "-R after a \$(...) in --body names the target"
+# shellcheck disable=SC2016 # the command text is the payload; the hook expands nothing
+run 'gh issue create -R pub/tool --title x --body "$(printf "%s" "on feat/invoice-rounding")"'
+expect_deny "the text a substitution prints is scanned"
+# shellcheck disable=SC2016 # the command text is the payload; the hook expands nothing
+run 'gh issue create -R pub/tool --title "a (b) c" --body "$(date)"'
+expect_quiet "parentheses in a title and a clean substitution are allowed"
 # 8. ticket keys: the project's own prefixes only
 run 'gh issue create -R pub/tool --title x --body "GPL-3 and PHP-8, see GH-12 and UTF-8"'
 expect_quiet "ticket-shaped public names are not flagged"

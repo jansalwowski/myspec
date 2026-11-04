@@ -324,15 +324,51 @@ fi
 # GH_REPO=, or the override MYSPEC_ALLOW_PUBLIC_POST=1, which counts only
 # here, on the post's own segment) and launchers (env, command, exec, sudo,
 # nohup, time, nice, xargs) with their options.
+#
+# A `$( … )` in the post's arguments, quoted or not, is split open by
+# lib/command-scan.sh: split_segments links its commands with `(` and
+# resumes the word after it with `)`. The post is the gh segment plus every
+# segment back at its own depth, joined as written; the segments deeper down
+# are what the substitutions run, whose words count as posted text and whose
+# `cat <file>` / `< <file>` files are read from the post's directory.
 TARGETS=""
 TEXT=""
 FILES=""
 DIR="$START_DIR"
 SHELL_GH_REPO="${GH_REPO:-}"
 w="" w1=""
-CAT_RE='\$\((cat[[:space:]]+|<[[:space:]]*)([^)[:space:]]+)\)'
+# subst_words <segment> -> appends what a substitution segment shows: its
+# words to SUB_TEXT, its `cat` operands and `<` redirect sources to SUB_FILES.
+subst_words() {
+  local -a sw=()
+  local x c0="" prev="" j=0
+  read -r -a sw <<< "$1" || true
+  while [ "$j" -lt "${#sw[@]}" ]; do
+    decode_word_to x "${sw[j]}"
+    SUB_TEXT="$SUB_TEXT$x "
+    if [ "$prev" = "<" ]; then
+      SUB_FILES="$SUB_FILES$x"$'\n'
+    elif [ "$j" -gt 0 ] && [ "$c0" = cat ]; then
+      case "$x" in -*|'<') ;; *) SUB_FILES="$SUB_FILES$x"$'\n' ;; esac
+    fi
+    case "$x" in '<'?*) SUB_FILES="$SUB_FILES${x#<}"$'\n' ;; esac
+    [ "$j" -gt 0 ] || c0="$x"
+    prev="$x"
+    j=$((j + 1))
+  done
+  SUB_TEXT="$SUB_TEXT"$'\n'
+}
+
 SEGMENTS=$(printf '%s\n' "$COMMAND" | sanitize_command keep | split_segments)
-while IFS=$'\t' read -r _sep seg; do
+LINKS=() SEGS=()
+while IFS=$'\t' read -r l s; do
+  LINKS+=("$l")
+  SEGS+=("$s")
+done <<< "$SEGMENTS"
+NSEG=${#SEGS[@]}
+k=-1
+while k=$((k + 1)); [ "$k" -lt "$NSEG" ]; do
+  seg="${SEGS[k]}"
   W=()
   read -r -a W <<< "$seg" || true
   n=${#W[@]}
@@ -388,6 +424,29 @@ while IFS=$'\t' read -r _sep seg; do
     gh|*/gh) ;;
     *) continue ;;
   esac
+  # Gather the rest of the post across its substitutions.
+  SUB_TEXT="" SUB_FILES=""
+  depth=0
+  j=$((k + 1))
+  while [ "$j" -lt "$NSEG" ]; do
+    case "${LINKS[j]}" in
+      '(') depth=$((depth + 1)) ;;
+      ')') depth=$((depth - 1)) ;;
+      *) [ "$depth" -gt 0 ] || break ;;
+    esac
+    # A `)` below the post's depth closes a subshell the post sits in.
+    [ "$depth" -ge 0 ] || break
+    if [ "$depth" = 0 ]; then
+      seg="$seg${SEGS[j]}"
+    else
+      subst_words "${SEGS[j]}"
+    fi
+    j=$((j + 1))
+  done
+  k=$((j - 1))
+  W=()
+  read -r -a W <<< "$seg" || true
+  n=${#W[@]}
   [ "$seg_override" = 0 ] || continue
   [ $((i + 1)) -lt "$n" ] || continue
   parse_gh "${W[@]:$((i + 1))}"
@@ -405,22 +464,14 @@ while IFS=$'\t' read -r _sep seg; do
   [ -n "$target" ] || continue
   [ "$target" != "$ORIGIN_KEY" ] || continue
   case $'\n'"$TARGETS" in *$'\n'"$target"$'\n'*) ;; *) TARGETS="$TARGETS$target"$'\n' ;; esac
-  TEXT="$TEXT$G_TEXT"
-  # `$(cat <file>)` / `$(< <file>)` inside an inline body, read from the
-  # directory this segment runs in.
-  rest="$G_TEXT"
-  while [[ $rest =~ $CAT_RE ]]; do
-    f="${BASH_REMATCH[2]}"
-    rest="${rest#*"${BASH_REMATCH[0]}"}"
-    f="${f#[\'\"]}"; f="${f%[\'\"]}"
-    G_FILES="$G_FILES$f"$'\n'
-  done
+  TEXT="$TEXT$G_TEXT$SUB_TEXT"
+  G_FILES="$G_FILES$SUB_FILES"
   while IFS= read -r f; do
     if [ -z "$f" ] || [ "$f" = - ]; then continue; fi
     case "$f" in /*) ;; *) f="$DIR/$f" ;; esac
     FILES="$FILES$f"$'\n'
   done <<< "$G_FILES"
-done <<< "$SEGMENTS"
+done
 [ -n "$TARGETS" ] || exit 0
 
 SCAN=$(mktemp "${TMPDIR:-/tmp}/.myspec-post.XXXXXX") || exit 0
