@@ -116,10 +116,10 @@ physical_dir() {
 # read a command before it runs, so `mkdir -p d && cd d` and
 # `git worktree add d && cd d` name a directory that is not there yet.
 # cd_note_made records what each segment creates, cd_target_to follows a cd
-# into it. A cd into a missing directory nothing earlier creates fails when it
-# runs, and the segments after a `;` then run where the command started, so
-# that one leaves the caller's directory unchanged: moving would judge a write
-# into the main checkout as landing elsewhere.
+# into it, and cd_link keeps both inside one `&&` chain. A cd into a missing
+# directory nothing creates, or one a `;` separates from its creation, fails
+# when it runs, and what follows then runs where the command started: moving
+# would judge a write into the main checkout as landing elsewhere.
 #
 # CD_MADE: "<flag>:<path>" per directory an earlier segment creates, the path
 # absolute and normalised (norm_path_to), with flag p when its parents are
@@ -129,6 +129,22 @@ physical_dir() {
 # caller resets both once per command it scans.
 CD_MADE=()
 CD_NEW_WT=()
+# CD_LEXICAL: 1 when the last cd_target_to followed a created directory.
+CD_LEXICAL=0
+
+# cd_link <link> -> 0 while a segment's link (split_segments' first column in
+# lib/command-scan.sh) continues the `&&` chain a creation and a cd into it
+# run in: `&&`, the start, a continuation, a redirect's &, a subshell or group
+# boundary. Any other link (`;`, a newline, `||`, `|`, `&`) ends the chain:
+# CD_MADE is emptied and it returns 1, and the caller drops a directory a cd
+# into a created one set, as that cd ran only if the creation did.
+cd_link() {
+  case "$1" in
+    '^'|'&&'|+|r|'('|')'|'{'|'}') return 0 ;;
+  esac
+  CD_MADE=()
+  return 1
+}
 
 # cd_word_to <var> <base> <word> -> the absolute path a literal directory word
 # names from <base>: `~` and `~/` expanded, nothing (`cd` alone) is $HOME.
@@ -233,6 +249,7 @@ cd_made() {
 cd_target_to() {
   local _ct_p _ct_d _ct_e
   cd_word_to _ct_p "$2" "$3" || return 1
+  CD_LEXICAL=0
   if _ct_d=$(cd "$_ct_p" 2>/dev/null && pwd -P); then
     printf -v "$1" '%s' "$_ct_d"
     return 0
@@ -250,6 +267,7 @@ cd_target_to() {
     case "$_ct_e" in w:*) ;; *) continue ;; esac
     case "$_ct_p/" in "${_ct_e#w:}/"*) CD_NEW_WT+=("$_ct_d"); break ;; esac
   done
+  CD_LEXICAL=1
   printf -v "$1" '%s' "$_ct_d"
 }
 

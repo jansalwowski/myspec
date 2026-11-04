@@ -160,22 +160,26 @@ segment_matches() {
 # the operand's text, so a quoted literal path ("src/a.ts") resolves too. Both
 # split into the same segments and words (lib/command-scan.sh).
 bash_write_targets() {
-  local line kline sep seg kseg verb word skip i last dest next inplace dw
-  local -a words kwords ops dws scopes=()
+  local line kline sep seg kseg verb word skip i last dest next inplace dw held=""
+  # held: BASE_DIR before a cd into a created directory, until the chain ends.
+  local -a words kwords ops dws scopes=() helds=()
   # Per command scanned: what its segments create (cd_note_made).
   # shellcheck disable=SC2034 # read by cd_target_to in lib/hook-core.sh
   local -a CD_MADE=() CD_NEW_WT=()
   while IFS= read -r line && IFS= read -r kline <&3; do
     sep="${line%%$'\t'*}"
     case "$sep" in
-      '(') scopes+=("$BASE_DIR") ;;
+      '(') scopes+=("$BASE_DIR") helds+=("$held") ;;
       ')')
         if [ "${#scopes[@]}" -gt 0 ]; then
-          BASE_DIR="${scopes[${#scopes[@]}-1]}"
-          unset "scopes[${#scopes[@]}-1]"
+          BASE_DIR="${scopes[${#scopes[@]}-1]}" held="${helds[${#helds[@]}-1]}"
+          unset "scopes[${#scopes[@]}-1]" "helds[${#helds[@]}-1]"
         fi
         ;;
     esac
+    if ! cd_link "$sep" && [ -n "$held" ]; then
+      BASE_DIR="$held" held=""
+    fi
     strip_command_prefix_to seg "${line#*$'\t'}"
     [ -n "$seg" ] || continue
     strip_command_prefix_to kseg "${kline#*$'\t'}"
@@ -218,6 +222,7 @@ bash_write_targets() {
           decode_word_to dw "${kwords[$i]}"
           # `pushd +N` rotates the stack: no literal directory.
           if [[ "$dw" != +* ]] && cd_target_to next "$BASE_DIR" "$dw"; then
+            [ "$CD_LEXICAL" = 0 ] || [ -n "$held" ] || held="$BASE_DIR"
             BASE_DIR="$next"
             # Not a target: a checkout this command reaches, for the status diff.
             printf 'cd:%s\n' "$next"

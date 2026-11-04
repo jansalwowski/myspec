@@ -545,6 +545,10 @@ check block "a plain directory created inside the repo is still main" \
   'mkdir -p .claude/worktrees/w4 && cd .claude/worktrees/w4 && git checkout -b w4b'
 HOME="$(dirname "$REPO")" check allow "a ~/ cd into a created directory" \
   'mkdir -p ~/h383 && cd ~/h383 && git checkout -q -b main'
+check block "a creation a ; separates from the cd is not followed" \
+  "mkdir -p $NEW/s1; cd $NEW/s1 && git checkout develop"
+check block "a ; after a cd into a created directory drops it" \
+  "mkdir -p $NEW/s2 && cd $NEW/s2; git checkout develop"
 mark c-wt2 worktree 60
 check_in "$REPO" allow "worktree mode, git worktree add d && cd d, then a write" c-wt2 \
   "git worktree add $NEW/wt2 --detach && cd $NEW/wt2 && echo x > src.js"

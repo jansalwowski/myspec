@@ -579,8 +579,8 @@ note_made() {
 # Blocks (and exits) on the first offending segment; returns when clean.
 walk() {
   local cmd="$1" dir="$2" depth="$3" start="$2"
-  local -a seps segs_s segs_r sw rw stack
-  local line k n j c w sub gdir gitdir norm payload
+  local -a seps segs_s segs_r sw rw stack helds
+  local line k n j c w sub gdir gitdir norm payload held=""
 
   k=0
   while IFS= read -r line; do
@@ -597,17 +597,22 @@ walk() {
 
   # A payload (`bash -c`) sees what the command around it creates.
   if [ "$depth" = 0 ]; then CD_MADE=() CD_NEW_WT=(); fi
-  stack=()
+  stack=() helds=()
   for ((k = 0; k < n; k++)); do
     case "${seps[k]}" in
-      '(') stack+=("$dir") ;;
+      '(') stack+=("$dir") helds+=("$held") ;;
       ')')
         if [ "${#stack[@]}" -gt 0 ]; then
-          dir="${stack[${#stack[@]}-1]}"
-          unset "stack[${#stack[@]}-1]"
+          dir="${stack[${#stack[@]}-1]}" held="${helds[${#helds[@]}-1]}"
+          unset "stack[${#stack[@]}-1]" "helds[${#helds[@]}-1]"
         fi
         ;;
     esac
+    # held: the directory before a cd into a created one, until the `&&`
+    # chain ends (cd_link).
+    if ! cd_link "${seps[k]}" && [ -n "$held" ]; then
+      dir="$held" held=""
+    fi
 
     sw=()
     rw=()
@@ -674,7 +679,10 @@ walk() {
         while [ "$j" -lt "${#sw[@]}" ] && [[ "${sw[j]}" == -?* ]]; do j=$((j + 1)); done
         decode_word_to sub "${rw[j]:-}"
         # `pushd +N` rotates the stack: no literal directory.
-        if [[ "$sub" != +* ]] && cd_target_to sub "$dir" "$sub"; then dir="$sub"; fi
+        if [[ "$sub" != +* ]] && cd_target_to sub "$dir" "$sub"; then
+          [ "$CD_LEXICAL" = 0 ] || [ -n "$held" ] || held="$dir"
+          dir="$sub"
+        fi
         continue ;;
       bash|sh|zsh|dash|ksh)
         j=$((j + 1))

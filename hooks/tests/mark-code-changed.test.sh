@@ -293,9 +293,15 @@ ledger_has "$SID-cd6" code "$REPO" v.ts && ok || fail "a variable cd target is n
 bashcmd "$SID-cd7" "$REPO" 'ls out; cd out; echo x > o.ts'
 ledger_has "$SID-cd7" code "$REPO" o.ts && ok || fail "a missing directory only named earlier is not created (got: $(ledger "$SID-cd7"))"
 bashcmd "$SID-cd8" "$REPO" 'mkdir -p src/d2 && cd src/d2 && cd e; echo x > a.ts'
-ledger_has "$SID-cd8" code "$REPO" src/d2/a.ts && ok || fail "every missing directory must be created (got: $(ledger "$SID-cd8"))"
+ledger_has "$SID-cd8" code "$REPO" src/d2/e/a.ts && fail "every missing directory must be created (got: $(ledger "$SID-cd8"))" || ok
 bashcmd "$SID-cd9" "$REPO" "mkdir -p 'src/my dir' && cd 'src/my dir' && echo x > a.ts"
 ledger_has "$SID-cd9" code "$REPO" 'src/my dir/a.ts' && ok || fail "a quoted created directory is followed (got: $(ledger "$SID-cd9"))"
+bashcmd "$SID-cd11" "$REPO" 'mkdir -p src/s1; cd src/s1 && echo x > s.ts'
+ledger_has "$SID-cd11" code "$REPO" s.ts && ok || fail "a creation a ; separates from the cd is not followed (got: $(ledger "$SID-cd11"))"
+bashcmd "$SID-cd12" "$REPO" 'mkdir -p src/s2 && cd src/s2; echo x > t.ts'
+ledger_has "$SID-cd12" code "$REPO" t.ts && ok || fail "a ; after a cd into a created directory drops it (got: $(ledger "$SID-cd12"))"
+bashcmd "$SID-cd13" "$REPO" $'mkdir -p src/s3 &&\n  cd src/s3 && echo x > u.ts'
+ledger_has "$SID-cd13" code "$REPO" src/s3/u.ts && ok || fail "an && continued on the next line keeps the chain (got: $(ledger "$SID-cd13"))"
 bashcmd "$SID-cd10" "$REPO" 'pushd src && echo x > p.ts'
 ledger_has "$SID-cd10" code "$REPO" src/p.ts && ok || fail "pushd moves the base (got: $(ledger "$SID-cd10"))"
 
