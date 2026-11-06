@@ -257,6 +257,11 @@ classify() {
   for abs in ${CD_NEW_WT[@]+"${CD_NEW_WT[@]}"} ${C_NEW_WT[@]+"${C_NEW_WT[@]}"}; do
     case "$1/" in "$abs/"*) [ -z "$2" ] && return 0 ;; esac
   done
+  # A path an earlier segment removes is not what is on disk now (#404):
+  # judge it by the directory that holds it, where a later mkdir would land.
+  for abs in ${GONE[@]+"${GONE[@]}"}; do
+    case "$1/" in "$abs/"*) set -- "${abs%/*}" "$2"; break ;; esac
+  done
   if [ -n "$2" ]; then
     # HEAD lives in the git dir, so it alone decides which checkout moves.
     # A `git -C` into a directory the command creates (#372) is read from
@@ -751,6 +756,99 @@ $verdict"
   done < <(bash_write_targets)
 }
 
+# GONE: the paths earlier segments remove (#404): the operands of `rm`,
+# `rmdir`, a `mv` source, the path of `git worktree remove` and the source of
+# `git worktree move`, absolute and physical. They count for the whole
+# command, whatever the links: a removal that runs makes the path something
+# the hook did not see. A worktree or directory a removed path held stops
+# counting as created or linked; a `git worktree add` of the same path counts
+# again. A variable or substituted operand is not followed, and neither is a
+# path whose parent is in no checkout (note_gone).
+GONE=()
+
+# note_gone <dir> <decoded word>... -> adds each literal path word to GONE.
+note_gone() {
+  local dir="$1" w p e
+  local -a keep
+  shift
+  for w in "$@"; do
+    [ -n "$w" ] || continue
+    cd_word_to p "$dir" "$w" || continue
+    if [ -d "$p" ]; then p=$(cd "$p" 2>/dev/null && pwd -P) || continue
+    else norm_path_to p "$p"; p=$(physical_path "$p") || continue; fi
+    # Judged by its parent only where that is no laxer: the parent lies in a
+    # checkout. A main checkout root, or a directory holding one, is skipped,
+    # so a removal that fails (`rm` without -r, then `;`) cannot free it.
+    checkout_facts "${p%/*}" || continue
+    GONE+=("$p")
+    keep=()
+    for e in ${CD_NEW_WT[@]+"${CD_NEW_WT[@]}"}; do
+      case "$e/" in "$p/"*) ;; *) keep+=("$e") ;; esac
+    done
+    CD_NEW_WT=(${keep[@]+"${keep[@]}"})
+    keep=()
+    for e in ${C_NEW_WT[@]+"${C_NEW_WT[@]}"}; do
+      case "$e/" in "$p/"*) ;; *) keep+=("$e") ;; esac
+    done
+    C_NEW_WT=(${keep[@]+"${keep[@]}"})
+    # A removed worktree path stays creatable (cd follows it) but not linked.
+    keep=()
+    for e in ${CD_MADE[@]+"${CD_MADE[@]}"}; do
+      case "${e#w:}/" in "$p/"*) keep+=("p:${e#?:}") ;; *) keep+=("$e") ;; esac
+    done
+    CD_MADE=(${keep[@]+"${keep[@]}"})
+    keep=()
+    for e in ${C_MADE[@]+"${C_MADE[@]}"}; do
+      case "${e#w:}/" in "$p/"*) keep+=("p:${e#?:}") ;; *) keep+=("$e") ;; esac
+    done
+    C_MADE=(${keep[@]+"${keep[@]}"})
+  done
+  CLS_KEY=""
+}
+
+# note_removal <dir> <encoded word>... -> note_gone over the paths a segment
+# (its words from the command on) removes.
+note_removal() {
+  local dir="$1" w opts=1 sub=""
+  local -a ops=()
+  shift
+  for w in "$@"; do
+    decode_word_to w "$w"
+    case "$w" in [0-9]'>'*|'>'*|'<'*|[0-9]'<'*|'&>'*) continue ;; esac
+    if [ "$opts" = 1 ]; then
+      case "$w" in --) opts=0; continue ;; -*) continue ;; esac
+    fi
+    ops+=("$w")
+  done
+  [ "${#ops[@]}" -gt 0 ] || return 0
+  case "${ops[0]##*/}" in
+    rm|rmdir) [ "${#ops[@]}" -lt 2 ] || note_gone "$dir" "${ops[@]:1}" ;;
+    mv) [ "${#ops[@]}" -gt 2 ] && note_gone "$dir" "${ops[@]:1:${#ops[@]}-2}" ;;
+    git)
+      case "${ops[1]:-} ${ops[2]:-}" in
+        'worktree remove'|'worktree move') [ -n "${ops[3]:-}" ] && note_gone "$dir" "${ops[3]}" ;;
+      esac ;;
+  esac
+  return 0
+}
+
+# note_readded <dir> <encoded word>... -> drops from GONE the path a
+# `git worktree add` (its words from git on) creates again.
+note_readded() {
+  local n="${#CD_MADE[@]}" e p
+  local -a keep=()
+  note_made "$@"
+  [ "${#CD_MADE[@]}" -gt "$n" ] || return 0
+  e="${CD_MADE[n]}"
+  p=$(physical_path "${e#?:}") || return 0
+  for e in ${GONE[@]+"${GONE[@]}"}; do
+    [ "$e" = "$p" ] || keep+=("$e")
+  done
+  GONE=(${keep[@]+"${keep[@]}"})
+  CD_MADE=("${CD_MADE[@]:0:n}")
+  CLS_KEY=""
+}
+
 # note_made <dir> <encoded word>... -> cd_note_made over the decoded words.
 note_made() {
   local dir="$1" w
@@ -803,7 +901,7 @@ walk() {
   if grep -qE 'worktree[[:space:]\\]+remove[^;&|()]*\\' <<< "$cmd"; then esc=1; fi
 
   # A payload (`bash -c`) sees what the command around it creates.
-  if [ "$depth" = 0 ]; then CD_MADE=() CD_NEW_WT=() C_MADE=() C_NEW_WT=(); fi
+  if [ "$depth" = 0 ]; then CD_MADE=() CD_NEW_WT=() C_MADE=() C_NEW_WT=() GONE=(); fi
   stack=() helds=()
   for ((k = 0; k < n; k++)); do
     link="${seps[k]}"
@@ -902,6 +1000,7 @@ walk() {
       note_made "$dir" "${rw[@]:j}"
       c_note_made "$made"
     fi
+    case "$c" in rm|rmdir|mv) note_removal "$dir" "${rw[@]:j}" ;; esac
     case "$c" in
       cd|pushd)
         j=$((j + 1))
@@ -973,9 +1072,12 @@ walk() {
         if [ "${sw[j]:-}" = worktree ]; then
           C_KEEP=0
           if [ "${sw[j+1]:-}" = add ]; then
+            [ "${#GONE[@]}" = 0 ] || note_readded "$gdir" git "${rw[@]:j}"
             made="${#CD_MADE[@]}"
             note_made "$gdir" git "${rw[@]:j}"
             c_note_made "$made"
+          else
+            note_removal "$gdir" git "${rw[@]:j}"
           fi
         fi
         check_segment "$norm" "$gdir" "$gitdir"
