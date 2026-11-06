@@ -60,7 +60,8 @@
 # is followed too (cd_target_to in lib/hook-core.sh), and one `git worktree
 # add` creates counts as a linked worktree; one the hook cannot resolve (a
 # variable, a substitution, a missing path nothing before it creates) leaves
-# the directory unchanged.
+# the directory unchanged. A `git -C` into a created directory is followed
+# under stricter rules (C_MADE).
 #
 # Escape hatches:
 #   MYSPEC_ALLOW_BRANCH_OPS=1    gate A. Deliberately NOT mentioned in the block
@@ -253,12 +254,14 @@ classify() {
   CLS_ROOT=""
   # A worktree `git worktree add` creates earlier in the command (cd_target_to)
   # is linked, wherever it sits.
-  for abs in ${CD_NEW_WT[@]+"${CD_NEW_WT[@]}"}; do
+  for abs in ${CD_NEW_WT[@]+"${CD_NEW_WT[@]}"} ${C_NEW_WT[@]+"${C_NEW_WT[@]}"}; do
     case "$1/" in "$abs/"*) [ -z "$2" ] && return 0 ;; esac
   done
   if [ -n "$2" ]; then
     # HEAD lives in the git dir, so it alone decides which checkout moves.
-    abs=$(cd "$1" 2>/dev/null && git --git-dir="$2" rev-parse --absolute-git-dir 2>/dev/null) || return 0
+    # A `git -C` into a directory the command creates (#372) is read from
+    # its longest existing prefix.
+    abs=$(cd "$(existing_dir "$1")" 2>/dev/null && git --git-dir="$2" rev-parse --absolute-git-dir 2>/dev/null) || return 0
     case "$abs" in
       */worktrees/*) return 0 ;;
       */.git) CLS_ROOT="${abs%/.git}" ;;
@@ -427,13 +430,21 @@ removed_worktree() {
   resolve_dir "$1" "$2"
 }
 
+# read_only_cmd <normalized segment> -> 0 for a few shell builtins and
+# read-only git: what wt_chain_safe and c_read_only both let through.
+read_only_cmd() {
+  [[ "$1" =~ ^(echo|printf|true|:|pwd|ls|test)([[:space:]]|$) ]] && return 0
+  [[ "$1" =~ ^git[[:space:]]+(fetch|status|log|show|diff|rev-parse|ls-remote|for-each-ref|worktree[[:space:]]+list)([[:space:]]|$) ]]
+}
+
 # wt_chain_safe <normalized segment> -> 0 for a command that cannot check a
-# branch out: a few shell builtins, read-only git, or another branch delete.
+# branch out: read_only_cmd, a worktree removal or prune, or another branch
+# delete.
 wt_chain_safe() {
   local w del=0
   local -a words
-  [[ "$1" =~ ^(echo|printf|true|:|pwd|ls|test)([[:space:]]|$) ]] && return 0
-  [[ "$1" =~ ^git[[:space:]]+(fetch|status|log|show|diff|rev-parse|ls-remote|for-each-ref|worktree[[:space:]]+(remove|prune|list))([[:space:]]|$) ]] && return 0
+  read_only_cmd "$1" && return 0
+  [[ "$1" =~ ^git[[:space:]]+worktree[[:space:]]+(remove|prune)([[:space:]]|$) ]] && return 0
   [[ "$1" =~ ^git[[:space:]]+branch[[:space:]]+(.*)$ ]] || return 1
   read -r -a words <<< "${BASH_REMATCH[1]}"
   for w in ${words[@]+"${words[@]}"}; do
@@ -583,11 +594,92 @@ matches_any() {  # matches_any <segment> <pattern>...
   return 1
 }
 
+# A `git -C <dir>` into a directory an earlier segment creates (#372). `cd`
+# needs only the `&&` chain (cd_link), because a cd that fails stops it. A
+# `git -C` names its directory afresh, so what runs between the creation and
+# the use could turn a new worktree back into a plain directory of the main
+# checkout. C_MADE holds the CD_MADE entries a `git -C` may follow: those of a
+# creation with no `|` or `||` link in front of it and no `!` (WT_LINK_OK).
+# It is emptied with CD_MADE at the end of the chain, and by any segment in
+# between that is not a creation, a cd, a git command whose final -C is a
+# created directory (`git worktree` excepted), a redirect's tail, or
+# read-only (c_read_only). A variable or substituted path is never followed.
+# C_NEW_WT is the -C counterpart of CD_NEW_WT, kept apart so that forgetting
+# what a -C entered never drops what a cd entered.
+C_MADE=()
+C_NEW_WT=()    # the created worktrees a `git -C` entered
+C_KEEP=0       # walk, per segment: 1 when the segment cannot empty C_MADE
+
+# c_forget -> empties C_MADE and C_NEW_WT, so a later classify reads a
+# directory a -C names as it is.
+c_forget() {
+  C_MADE=() C_NEW_WT=() CLS_KEY=""
+}
+
+# c_read_only <normalized segment> -> 0 for read_only_cmd with no output
+# redirect but to /dev/null (`echo … > new/.git` rewrites a worktree). A
+# trailing `>` is the first half of `2>&1`.
+c_read_only() {
+  c_no_write "$1" && read_only_cmd "$1"
+}
+
+# c_no_write <segment> -> 0 when it redirects output nowhere but /dev/null.
+# Also run on a redirect's tail segment (the `> f` of `&> f`), which is
+# never a command of its own but still writes.
+c_no_write() {
+  local s="${1%>}"
+  s="${s//>>\/dev\/null/}"
+  s="${s//>\/dev\/null/}"
+  case "$s" in *'>'*) return 1 ;; esac
+}
+
+# c_glue_no_write <tail segment> -> c_no_write, and the tail's first word is
+# a descriptor (`1` of 2>&1, `-`), not the file `>& f` writes to.
+c_glue_no_write() {
+  local first="${1%%[[:space:]]*}"
+  case "$first" in
+    [0-9]|[0-9][0-9]|[0-9]-|-|/dev/null|">"*) ;;
+    *) return 1 ;;
+  esac
+  c_no_write "$1"
+}
+
+# git_c_target_to <var> <base> <word> -> the directory `git -C <word>` from
+# <base> enters: an existing one physically, else cd_target_to with C_MADE as
+# the record of created directories and C_NEW_WT for the worktrees it enters.
+git_c_target_to() {
+  local _gc_p _gc_rc=0
+  local -a _gc_made _gc_wt
+  CD_LEXICAL=0
+  cd_word_to _gc_p "$2" "$3" || return 1
+  if _gc_p=$(cd "$_gc_p" 2>/dev/null && pwd -P); then
+    printf -v "$1" '%s' "$_gc_p"
+    return 0
+  fi
+  [ "${#C_MADE[@]}" -gt 0 ] || return 1
+  _gc_made=(${CD_MADE[@]+"${CD_MADE[@]}"})
+  _gc_wt=(${CD_NEW_WT[@]+"${CD_NEW_WT[@]}"})
+  CD_MADE=("${C_MADE[@]}")
+  CD_NEW_WT=(${C_NEW_WT[@]+"${C_NEW_WT[@]}"})
+  cd_target_to "$1" "$2" "$3" || _gc_rc=1
+  # `new/..` lands where a directory exists: not a created one.
+  [ "$_gc_rc" = 1 ] || [ ! -d "${!1}" ] || CD_LEXICAL=0
+  C_NEW_WT=(${CD_NEW_WT[@]+"${CD_NEW_WT[@]}"})
+  CD_MADE=(${_gc_made[@]+"${_gc_made[@]}"})
+  CD_NEW_WT=(${_gc_wt[@]+"${_gc_wt[@]}"})
+  return "$_gc_rc"
+}
+
 # check_segment <normalized segment> <dir> <git-dir> — applies both gates.
 check_segment() {
   local segment="$1" dir="$2" gitdir="$3" verdict
 
   note_segment "$segment" "$dir"
+  if [ "$WT_GLUE" = 1 ]; then
+    c_glue_no_write "$segment" || c_forget
+  elif [ "$C_KEEP" = 0 ]; then
+    c_read_only "$segment" || c_forget
+  fi
 
   if [ "$ALLOW_BRANCH_OPS" = 0 ]; then
     if matches_any "$segment" "${BRANCH_PATTERNS[@]}" \
@@ -692,12 +784,26 @@ note_made() {
   cd_note_made "$dir" ${d[@]+"${d[@]}"}
 }
 
+# c_note_made <count before> -> copies the CD_MADE entries the segment just
+# added to C_MADE when its links allow (WT_LINK_OK), and keeps C_MADE through
+# the segment: a creation does not change what another directory is.
+c_note_made() {
+  local i="$1"
+  C_KEEP=1
+  [ "$WT_LINK_OK" = 1 ] || return 0
+  while [ "$i" -lt "${#CD_MADE[@]}" ]; do
+    C_MADE+=("${CD_MADE[i]}")
+    i=$((i + 1))
+  done
+}
+
 # walk <command> <start dir> <depth> — checks every segment of <command>.
 # Blocks (and exits) on the first offending segment; returns when clean.
 walk() {
   local cmd="$1" dir="$2" depth="$3" start="$2"
   local -a seps segs_s segs_r sw rw stack helds
   local line k n j c w sub gdir gitdir norm payload held="" chain="" link esc=0
+  local made clex
   local saved_wt="$REMOVED_WT"
 
   k=0
@@ -718,7 +824,7 @@ walk() {
   if grep -qE 'worktree[[:space:]\\]+remove[^;&|()]*\\' <<< "$cmd"; then esc=1; fi
 
   # A payload (`bash -c`) sees what the command around it creates.
-  if [ "$depth" = 0 ]; then CD_MADE=() CD_NEW_WT=(); fi
+  if [ "$depth" = 0 ]; then CD_MADE=() CD_NEW_WT=() C_MADE=() C_NEW_WT=(); fi
   stack=() helds=()
   for ((k = 0; k < n; k++)); do
     link="${seps[k]}"
@@ -737,8 +843,9 @@ walk() {
     esac
     # held: the directory before a cd into a created one, until the `&&`
     # chain ends (cd_link).
-    if ! cd_link "${seps[k]}" && [ -n "$held" ]; then
-      dir="$held" held=""
+    if ! cd_link "${seps[k]}"; then
+      c_forget
+      if [ -n "$held" ]; then dir="$held" held=""; fi
     fi
 
     sw=()
@@ -810,8 +917,11 @@ walk() {
 
     c="${sw[j]##*/}"
     # What the segment creates, for a later cd into it.
-    if [ "$c" = mkdir ] || { [ "$c" = git ] && [ "${sw[j+1]:-}" = worktree ]; }; then
+    C_KEEP=0
+    if [ "$c" = mkdir ]; then
+      made="${#CD_MADE[@]}"
       note_made "$dir" "${rw[@]:j}"
+      c_note_made "$made"
     fi
     case "$c" in
       cd|pushd)
@@ -837,24 +947,33 @@ walk() {
         if [ -n "$payload" ] && [ "$j" -lt "${#sw[@]}" ] && [ "$depth" -lt "$MAX_DEPTH" ]; then
           walk "$(decode_word "${rw[j]}")" "$dir" $((depth + 1))
         else
-          REMOVED_WT=$'\n'   # a script, or a payload not scanned (#384)
+          REMOVED_WT=$'\n'; c_forget   # a script, or a payload not scanned (#384)
         fi
         continue ;;
       eval)
         if [ "$depth" -lt "$MAX_DEPTH" ]; then
           walk "$(decode_word "$(join_words $((j + 1)) "${rw[@]}")")" "$dir" $((depth + 1))
         else
-          REMOVED_WT=$'\n'
+          REMOVED_WT=$'\n'; c_forget
         fi
         continue ;;
       git)
         gdir="$dir"
         gitdir=""
+        clex=0   # 1 while the last -C entered a created directory
         j=$((j + 1))
         while [ "$j" -lt "${#sw[@]}" ]; do
           case "${sw[j]}" in
             -C)
-              if sub=$(resolve_dir "$gdir" "${rw[j+1]:-}"); then gdir="$sub"; fi
+              decode_word_to sub "${rw[j+1]:-}"
+              # git ignores an empty -C; cd_word_to would read it as $HOME.
+              if [ -z "$sub" ]; then
+                :
+              elif git_c_target_to sub "$gdir" "$sub"; then
+                gdir="$sub" clex="$CD_LEXICAL"
+              else
+                clex=0
+              fi
               j=$((j + 2)) ;;
             -c|--namespace|--config-env|--work-tree|--attr-source)
               j=$((j + 2)) ;;
@@ -870,6 +989,16 @@ walk() {
         done
         norm="git $(join_words "$j" "${sw[@]}")"
         norm="${norm% }"
+        C_KEEP="$clex"
+        # `git worktree` other than add can remove a created worktree.
+        if [ "${sw[j]:-}" = worktree ]; then
+          C_KEEP=0
+          if [ "${sw[j+1]:-}" = add ]; then
+            made="${#CD_MADE[@]}"
+            note_made "$gdir" git "${rw[@]:j}"
+            c_note_made "$made"
+          fi
+        fi
         check_segment "$norm" "$gdir" "$gitdir"
         ;;
       make|mvn|mvnw|gradle|gradlew)
