@@ -248,6 +248,13 @@ printf '{"checks":[{"name":"Lint","command":"false","required":true}]}\n' > "$DE
 mkdir -p "$DEPS/node_modules/dep"
 R=$(stop_reason 94 "$DEPS")
 case "$R" in *"Dependencies not installed"*) fail "installed dependencies get no note" ;; *) ok ;; esac
+# Only a tool's dot-prefixed cache, as a test run before any install leaves
+# (#375): still not installed.
+rm -r "$DEPS/node_modules/dep"
+mkdir -p "$DEPS/node_modules/.vite" "$DEPS/node_modules/.vitest-cache"
+R=$(stop_reason 95 "$DEPS")
+expect_in "Dependencies not installed in this tree: $DEPS/node_modules holds node_modules/.gitkeep (tracked by git) and dot-prefixed entries only (node_modules/.vite, node_modules/.vitest-cache)" "$R" \
+  "a failing check over a cache-only node_modules names it first"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

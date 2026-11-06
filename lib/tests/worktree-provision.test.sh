@@ -393,7 +393,7 @@ printf '#!/bin/sh\nfor a in "$@"; do case "$a" in -c|--reflink*) echo "cp: illeg
 chmod +x "$SHIMDIR/cp"
 sed "s#/bin/cp #$SHIMDIR/cp #g" "$SCRIPT" > "$SHIMDIR/lib/worktree-provision.sh"
 cp "$(dirname "$SCRIPT")/myspec-config.sh" "$(dirname "$SCRIPT")/myspec-config.schema.json" "$(dirname "$SCRIPT")/glob-regex.sh" \
-  "$(dirname "$SCRIPT")/hook-core.sh" "$SHIMDIR/lib/"
+  "$(dirname "$SCRIPT")/hook-core.sh" "$(dirname "$SCRIPT")/dep-dir.sh" "$SHIMDIR/lib/"
 W=$(wt_for "$M" copydir-fallback)
 out=$(bash "$SHIMDIR/lib/worktree-provision.sh" "$W" --base main 2>&1)
 [ -f "$W/vendor/acme/lib/a.php" ] && printf '%s' "$out" | grep -qF "no copy-on-write clone on this filesystem — copied vendor" && ok \
@@ -574,6 +574,45 @@ mkdir -p "$W/node_modules/own"
 out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
 [ "$st" -eq 0 ] && printf '%s' "$out" | grep -qF "node_modules already exists in the worktree — not linking node_modules" && ok \
   || fail "exists: an untracked directory in the worktree is skipped by name (got $st: $out)"
+# A dependency directory holding only dot-prefixed entries (a test run's cache
+# before provisioning, #373) has nothing installed: it is moved aside, never
+# deleted, and the link is made. Any dependency directory, not only node_modules.
+M=$(new_main cacheonly '{"isolation":{"provision":{"symlink":["node_modules","vendor","shared"]}}}')
+mkdir -p "$M/node_modules/dep" "$M/vendor/pkg" "$M/shared/x"
+printf 'shared\n' >> "$M/.gitignore"; commit_all "$M" init
+W=$(wt_for "$M" cacheonly-wt)
+mkdir -p "$W/node_modules/.vite/deps" "$W/node_modules/.vitest-cache" "$W/vendor/.cache" "$W/shared/.cache"
+printf 'kept\n' > "$W/node_modules/.vite/deps/a.js"
+out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
+[ "$st" -eq 0 ] && [ -L "$W/node_modules" ] && [ -L "$W/vendor" ] && ok \
+  || fail "cache-only: a dependency directory holding only dot-prefixed entries is linked (got $st: $out)"
+printf '%s' "$out" | grep -qF "node_modules held only dot-prefixed entries (.vite, .vitest-cache), nothing installed — moved it to .claude/state/provision-displaced/node_modules and linked node_modules" && ok \
+  || fail "cache-only: the output says what was moved where (got: $out)"
+[ "$(cat "$W/.claude/state/provision-displaced/node_modules/.vite/deps/a.js" 2>/dev/null)" = kept ] && [ -d "$W/.claude/state/provision-displaced/vendor/.cache" ] && ok \
+  || fail "cache-only: the moved entries are kept, not deleted"
+[ ! -L "$W/shared" ] && [ -d "$W/shared/.cache" ] && printf '%s' "$out" | grep -qF "shared already exists in the worktree — not linking shared" && ok \
+  || fail "cache-only: an entry that is not a dependency directory is left alone (got: $out)"
+[ -z "$(git -C "$W" status --porcelain -- .claude)" ] && ok \
+  || fail "cache-only: the moved directory is excluded from git (got: $(git -C "$W" status --porcelain))"
+# A second cache-only directory at the same path does not overwrite the first move.
+rm "$W/node_modules"; mkdir -p "$W/node_modules/.vite"
+out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
+[ "$st" -eq 0 ] && [ -L "$W/node_modules" ] && [ -f "$W/.claude/state/provision-displaced/node_modules/.vite/deps/a.js" ] \
+  && [ -d "$W/.claude/state/provision-displaced/node_modules.2/.vite" ] && ok \
+  || fail "cache-only: a later move takes a fresh name (got $st: $out)"
+# A real entry beside the cache is an install: skipped by name, as before.
+W=$(wt_for "$M" cacheown-wt)
+mkdir -p "$W/node_modules/.vite" "$W/node_modules/own"
+out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
+[ "$st" -eq 0 ] && [ -d "$W/node_modules/own" ] && [ ! -L "$W/node_modules" ] \
+  && printf '%s' "$out" | grep -qF "node_modules already exists in the worktree — not linking node_modules" && ok \
+  || fail "cache-only: a directory with a non-dot entry beside the cache is not moved (got $st: $out)"
+# A lockfile that differs keeps the cache where it is: nothing moves for a link not made.
+W=$(wt_for "$M" cachelock-wt)
+mkdir -p "$W/node_modules/.vite"; printf 'v2\n' > "$W/package-lock.json"
+out=$(bash "$SCRIPT" "$W" 2>&1); st=$?
+[ -d "$W/node_modules/.vite" ] && [ ! -e "$W/.claude/state/provision-displaced" ] && ok \
+  || fail "cache-only: nothing is moved when the link is not made (got $st: $out)"
 
 # --- a glob symlink entry expands against the main checkout (R8) -------------
 # vendor-bin/*/vendor, the Composer bin-plugin layout: each match is its own

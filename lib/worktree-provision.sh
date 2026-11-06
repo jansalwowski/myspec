@@ -35,7 +35,12 @@
 #      - when it is a dependency tree (DEP_DIRS) and `install` is set: the
 #        install builds that tree in the worktree, and through a link it
 #        would write into the main checkout;
-#      - when something already exists at that path in the worktree.
+#      - when something already exists at that path in the worktree. A
+#        dependency directory (DEP_DIRS) there that holds only dot-prefixed
+#        entries (a test run's .vite or .cache before provisioning, #373) has
+#        nothing installed (lib/dep-dir.sh, the rule the Stop hook's note
+#        shares): it is moved to .claude/state/provision-displaced/<path>,
+#        never deleted, and linked, and the line says so.
 #      A directory the branch tracks files in (a .gitkeep placeholder,
 #      #239) cannot be replaced by a link: that is an error naming the file
 #      and the fix, and provisioning stops with exit 1.
@@ -98,6 +103,10 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=lib/hook-core.sh
 . "$HERE/hook-core.sh"
 declare -F glob_regex >/dev/null || { echo "worktree-provision: lib/glob-regex.sh missing" >&2; exit 1; }
+# dep_dir_uninstalled: what counts as nothing installed in a dependency
+# directory, shared with the Stop hook (lib/stop-gate/provision.sh).
+# shellcheck source=lib/dep-dir.sh
+. "$HERE/dep-dir.sh"
 
 # --- the dependency-directory map ----------------------------------------------
 # Which dependency directories this script may link, and which lockfiles pin
@@ -477,6 +486,7 @@ while IFS= read -r line; do
   entry="${line%%$'\t'*}"
   LOCKS=()
   SPECS=()
+  DISPLACE=""
   if [ "$line" != "$entry" ]; then
     IFS=$'\t' read -ra LOCKS <<< "${line#*$'\t'}"
     # :(glob) keeps a * inside one directory, as the shell glob in lock_paths_for does.
@@ -533,10 +543,16 @@ while IFS= read -r line; do
     if [ -n "$tracked" ]; then
       PLACEHOLDERS+=("${tracked%%$'\n'*}")
       echo "worktree-provision: $entry holds a tracked file (${tracked%%$'\n'*}) — cannot link $entry; untrack it (git rm --cached ${tracked%%$'\n'*}, keeping $entry ignored), or move $entry from isolation.provision.symlink to isolation.provision.copy" >&2
+      continue
+    fi
+    # Only dot-prefixed caches, nothing installed (#373): moved aside below,
+    # once the checks that may still skip this link have passed.
+    if is_dep_dir "$entry" && held=$(dep_dir_uninstalled "$WORKTREE" "$entry") && [ -n "$held" ]; then
+      DISPLACE=$(printf '%s\n' "$held" | cut -f2 | sed 's|.*/||' | paste -sd, - | sed 's/,/, /g')
     else
       echo "worktree-provision: $entry already exists in the worktree — not linking $entry"
+      continue
     fi
-    continue
   fi
   LOCK_JSON='{}'
   if [ "$ALLOW_LINKED" != "true" ] && [ "${#LOCKS[@]}" -gt 0 ]; then
@@ -569,6 +585,18 @@ while IFS= read -r line; do
     if [ "${#ABSENT[@]}" -gt 0 ]; then
       LOCK_JSON=$(jq -c --args 'reduce $ARGS.positional[] as $k (.; if has($k) then . else . + {($k): null} end)' "${ABSENT[@]}" <<< "$LOCK_JSON")
     fi
+  fi
+  if [ -n "$DISPLACE" ]; then
+    moved=".claude/state/provision-displaced/$entry"
+    n=1
+    while [ -e "$WORKTREE/$moved" ] || [ -L "$WORKTREE/$moved" ]; do
+      n=$(( n + 1 ))
+      moved=".claude/state/provision-displaced/$entry.$n"
+    done
+    mkdir -p "$(dirname "$WORKTREE/$moved")"
+    mv "$WORKTREE/$entry" "$WORKTREE/$moved"
+    exclude ".claude/state/provision-displaced/"
+    echo "worktree-provision: $entry held only dot-prefixed entries ($DISPLACE), nothing installed — moved it to $moved and linked $entry"
   fi
   mkdir -p "$(dirname "$WORKTREE/$entry")"
   ln -s "$MAIN/$entry" "$WORKTREE/$entry"

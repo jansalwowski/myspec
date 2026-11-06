@@ -20,7 +20,11 @@
 # lockfile that is gone on either side blocks as removed. Tests:
 # lib/tests/stop-gate-arm.test.sh (provision_stale) and
 # hooks/tests/verify-before-stop.test.sh. Below: a dependency directory
-# with nothing installed (deps_note, #239).
+# with nothing installed (deps_note, #239, #375).
+
+# dep_dir_uninstalled: what counts as nothing installed (lib/dep-dir.sh).
+# shellcheck source=lib/dep-dir.sh
+. "$HOOK_LIB/dep-dir.sh"
 
 # provision_stale <root> -> one "path (reason)" per stale recorded link.
 # Fails, printing the reason, when the record cannot be read.
@@ -107,10 +111,11 @@ provision_check() {
 #   <directory>|<manifests, comma-separated>|<install-state markers in the
 #   directory, space-separated>
 # The directory counts only beside one of its manifests. It holds nothing
-# installed when none of its markers exists and every entry directly in it
-# is a file git tracks (or there is none): the tracked-only rule covers an
+# installed when none of its markers exists and dep_dir_uninstalled
+# (lib/dep-dir.sh, the rule worktree-provision.sh shares) finds only files git
+# tracks and dot-prefixed caches in it (or nothing): the rule covers an
 # installer whose marker is not listed here, as any package it installs is
-# an untracked entry.
+# an entry of another kind.
 DEPENDENCY_DIRS=(
   'node_modules|package.json|.package-lock.json .yarn-state.yml .modules.yaml .yarn-integrity'
   'vendor|composer.json|autoload.php composer/installed.json'
@@ -122,11 +127,12 @@ DEPENDENCY_DIRS=(
 )
 
 # deps_not_installed <dir> -> one `<dependency dir>\t<tracked entries,
-# comma-separated, or "nothing">\t<markers looked for>` line per
-# DEPENDENCY_DIRS directory in <dir> that holds nothing installed. A link
-# (provision's, checked by provision_check) is not one.
+# comma-separated, or "nothing">\t<markers looked for>\t<dot-prefixed
+# entries, comma-separated, or empty>` line per DEPENDENCY_DIRS directory in
+# <dir> that holds nothing installed. A link (provision's, checked by
+# provision_check) is not one.
 deps_not_installed() {
-  local dir="$1" entry dep manifests markers m found tracked e name names
+  local dir="$1" entry dep manifests markers m found held kind name names dots
   local -a ms
   for entry in "${DEPENDENCY_DIRS[@]}"; do
     IFS='|' read -r dep manifests markers <<< "$entry"
@@ -144,20 +150,16 @@ deps_not_installed() {
       [ ! -e "$dir/$dep/$m" ] || { found=1; break; }
     done
     [ "$found" = 0 ] || continue
-    tracked=$'\n'$(git -C "$dir" ls-files -- "$dep" 2>/dev/null || true)$'\n'
+    held=$(dep_dir_uninstalled "$dir" "$dep") || continue
     names=""
-    for e in "$dir/$dep"/* "$dir/$dep"/.[!.]* "$dir/$dep"/..?*; do
-      [ -e "$e" ] || [ -L "$e" ] || continue
-      name="${e#"$dir"/}"
-      # A directory, a link or an untracked file: something was installed.
-      if [ -d "$e" ] || [ -L "$e" ]; then found=1; break; fi
-      case "$tracked" in
-        *$'\n'"$name"$'\n'*) names="${names:+$names, }$name" ;;
-        *) found=1; break ;;
+    dots=""
+    while IFS=$'\t' read -r kind name; do
+      case "$kind" in
+        tracked) names="${names:+$names, }$name" ;;
+        dot) dots="${dots:+$dots, }$name" ;;
       esac
-    done
-    [ "$found" = 0 ] || continue
-    printf '%s\t%s\t%s\n' "$dep" "${names:-nothing}" "${markers:-none}"
+    done <<< "$held"
+    printf '%s\t%s\t%s\t%s\n' "$dep" "${names:-nothing}" "${markers:-none}" "$dots"
   done
 }
 
@@ -166,7 +168,7 @@ deps_not_installed() {
 # the root, or in a failed check's cwd, that holds nothing installed.
 DEPS_NOTES=()
 deps_note() {
-  local root="$1" from="$2" i d dirs=$'\n' dep held markers line
+  local root="$1" from="$2" i d dirs=$'\n' dep held markers dots line
   [ "${#FAILED_CWDS[@]}" -gt "$from" ] || return 0
   for ((i = from; i < ${#FAILED_CWDS[@]}; i++)); do
     d="$root${FAILED_CWDS[$i]:+/${FAILED_CWDS[$i]}}"
@@ -175,10 +177,17 @@ deps_note() {
   case "$dirs" in *$'\n'"$root"$'\n'*) ;; *) dirs=$'\n'"$root$dirs" ;; esac
   while IFS= read -r d; do
     [ -n "$d" ] || continue
-    while IFS=$'\t' read -r dep held markers; do
+    while IFS=$'\t' read -r dep held markers dots; do
       [ -n "$dep" ] || continue
       line="Dependencies not installed in this tree: $d/$dep holds $held"
       [ "$held" = nothing ] || line="$line (tracked by git)"
+      if [ -n "$dots" ]; then
+        if [ "$held" = nothing ]; then
+          line="Dependencies not installed in this tree: $d/$dep holds dot-prefixed entries only ($dots)"
+        else
+          line="$line and dot-prefixed entries only ($dots)"
+        fi
+      fi
       line="$line and no install state (${markers// /, }), so the failures below may be the package manager's, not the code's. Install the dependencies in $d with the project's install command, then stop again."
       DEPS_NOTES+=("$line")
     done < <(deps_not_installed "$d")

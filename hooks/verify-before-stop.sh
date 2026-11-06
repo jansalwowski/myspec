@@ -46,7 +46,7 @@ HOOK_CORE="${CLAUDE_PLUGIN_ROOT:-/nonexistent}/lib/hook-core.sh"
 LIB_DIR=$(dirname "$HOOK_CORE")
 MISSING=""
 for f in hook-core.sh session-event.sh glob-regex.sh myspec-config.sh myspec-config.schema.json \
-    markdown-section-check.sh content-checks.sh stop-gate/arm.sh stop-gate/provision.sh stop-gate/run.sh \
+    markdown-section-check.sh content-checks.sh dep-dir.sh stop-gate/arm.sh stop-gate/provision.sh stop-gate/run.sh \
     stop-gate/attribute.sh stop-gate/report.sh stop-gate/content.sh; do
   [ -f "$LIB_DIR/$f" ] || MISSING="${MISSING:+$MISSING, }$f"
 done
