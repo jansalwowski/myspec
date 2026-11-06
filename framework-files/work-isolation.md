@@ -50,7 +50,7 @@ set-isolation.sh <session_id> worktree --worktree-path <abs worktree path>
 
 The worktree block message prints both commands with their paths resolved (a skill reads them from `_shared/worktree-provisioning.md`).
 
-Provisioning links each `isolation.provision.symlink` entry (default `node_modules`) except one pinned by a lockfile the branch changed or that differs from the main checkout's, which needs a real install instead; it copies the lint cache and keeps both out of git; `.myspec.json` `isolation.provision` extends the lists. Never symlink a build output directory. Recipe and rationale: `_shared/worktree-provisioning.md` in the plugin.
+Provisioning links each `isolation.provision.symlink` entry (default `node_modules`) except one pinned by a lockfile the branch changed or that differs from the main checkout's, which needs a real install instead, as does a worktree that will build or serve the app, since anything written into a linked directory lands in the main checkout (`--no-symlink`, then install); it copies the lint cache and keeps both out of git; `.myspec.json` `isolation.provision` extends the lists. Never symlink a build output directory. Recipe and rationale: `_shared/worktree-provisioning.md` in the plugin.
 
 Absolute paths and `git -C <worktree>` for every git call. Write files with the Write tool. Provisioning records what it linked; the Stop hook blocks when a recorded lockfile changed since, or a recorded link moved, and says to rerun provision. Link dependency directories only through provision: a hand-made link is not compared, and doctor reports it.
 
