@@ -81,8 +81,17 @@ For each approved extraction:
 
 ### 6. Archive Session
 
-Move `TARGET_FILE` to:
-`${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md`
+Move `TARGET_FILE` to `<main>/${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md`, where `<main>` is the main checkout, never a linked worktree: `git worktree remove` deletes an ignored or uncommitted archive with the worktree. Resolve it from wherever you are:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/lib/main-checkout.sh"
+```
+
+| Exit | `<main>` |
+|------|----------|
+| 0 | The path it printed |
+| 1 (not in git) | The project root |
+| 3 (bare clone or separate git dir: no main checkout) | This checkout. `git add` the archive and tell the user it survives `git worktree remove` only once committed |
 
 Where slug is derived from the (refined) topic — never archive with `auto:` in the slug.
 
@@ -144,7 +153,7 @@ Report to user:
 
 - [ ] `TARGET_FILE` no longer exists under `.claude/state/sessions/`
 - [ ] Sibling active sessions (other agents) were NOT touched
-- [ ] Archive file exists at `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md` with `status: completed`
+- [ ] Archive file exists at `<main>/${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md` with `status: completed`, `<main>` being what `main-checkout.sh` printed (`ls` that absolute path; from a linked worktree it is not under the cwd)
 - [ ] Outcome section is filled (what worked, root cause, key insights)
 - [ ] Approved memories were created via `/myspec:memory-create` (check respective index files)
 - [ ] User was presented extraction list and confirmed selections

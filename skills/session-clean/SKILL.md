@@ -92,7 +92,7 @@ For ambiguous rows, ask per file: `delete / archive / skip`.
 For orphaned `archive/` rows marked ASK→DELETE, ask per file: `delete / skip`.
 
 For ARCHIVE of a live log whose `status:` is already terminal: leave `status:` alone (it finished properly; only its location is wrong), then `mv` and `git add` as below.
-For ARCHIVE: edit frontmatter `status: active` → `status: abandoned` (the session was swept, not completed — `/myspec:session-complete` owns `completed`), then `mv` to `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md` and `git add` it. Slug: kebab-case of `topic`; if topic is empty or still `auto:*`, use `orphaned-{first 8 of session_id}`. Date: from `started:` if parseable, else today.
+For ARCHIVE: edit frontmatter `status: active` → `status: abandoned` (the session was swept, not completed — `/myspec:session-complete` owns `completed`), then `mv` to `<main>/${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md` and `git add` it. `<main>` is the main checkout `"${CLAUDE_PLUGIN_ROOT}/lib/main-checkout.sh"` prints, never a linked worktree, where `git worktree remove` would delete the archive; on exit 1 (not in git) or 3 (no main checkout) use this checkout. Slug: kebab-case of `topic`; if topic is empty or still `auto:*`, use `orphaned-{first 8 of session_id}`. Date: from `started:` if parseable, else today.
 For DELETE of a live log: `rm`.
 For DELETE in `archive/` (orphan): `rm` only — never run `git rm` here (in-scope archive files are always untracked by construction).
 

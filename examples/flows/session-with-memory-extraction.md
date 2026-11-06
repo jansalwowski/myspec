@@ -125,7 +125,7 @@ User: `all`.
 
 **Step 5**: For each, asks one clarifying question, drafts the file (with `source_session: 2026-04-30-1404-flakywebhook` in the frontmatter), shows it, gets approval, writes.
 
-**Step 6**: Archives the session — moves the file from `.claude/state/sessions/` to `archive/2026-04/`. Appends a one-line summary to `ai/memory/sessions/index.md`.
+**Step 6**: Archives the session — moves the file from `.claude/state/sessions/` to `ai/memory/sessions/archive/` in the main checkout (`lib/main-checkout.sh`), never in a linked worktree that `git worktree remove` would delete. Appends a one-line summary to `ai/memory/sessions/index.md`.
 
 Final tally:
 

@@ -119,6 +119,9 @@ For each file, compare its mtime to the current epoch.
 
 ```bash
 NOW=$(date +%s)
+# Archives go under the main checkout, never a linked worktree (git worktree
+# remove would delete them); exit 1 (no git) or 3 (no main checkout) -> here.
+MAIN=$("${CLAUDE_PLUGIN_ROOT}/lib/main-checkout.sh" 2>/dev/null) || MAIN=.
 # Use find, not a bare glob: an unmatched `*.md` glob is a hard error under zsh
 # ("no matches found") and aborts the sweep before the loop body ever runs.
 find .claude/state/sessions -maxdepth 1 -type f -name '*.md' -print0 2>/dev/null |
@@ -128,9 +131,9 @@ while IFS= read -r -d '' f; do
   if [ "$AGE" -gt 21600 ]; then
     SLUG=$(basename "$f" .md | head -c 8)
     DATE=$(date '+%Y-%m-%d')
-    mkdir -p "${aiDir}/memory/sessions/archive"
+    mkdir -p "$MAIN/${aiDir}/memory/sessions/archive"
     sed -i.bak 's/^status: active/status: abandoned/' "$f" && rm "$f.bak"
-    mv "$f" "${aiDir}/memory/sessions/archive/${DATE}-orphaned-${SLUG}.md"
+    mv "$f" "$MAIN/${aiDir}/memory/sessions/archive/${DATE}-orphaned-${SLUG}.md"
   fi
 done
 ```

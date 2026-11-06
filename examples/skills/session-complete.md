@@ -109,7 +109,9 @@ After both are written, the skill edits each file's `related:` field — `P020.r
 
 #### 7. Archive
 
-Moves `.claude/state/sessions/2026-04-30-1400-oauthcallback.md` → `ai/memory/sessions/archive/2026-04/2026-04-30-1400-oauthcallback.md`. Appends a one-line summary to `ai/memory/sessions/index.md`:
+The session ran in a linked worktree, `<repo_root>/.claude/worktrees/oauth-fix`, so the archive must not land there: `git worktree remove` would delete it with the worktree. The skill runs `"${CLAUDE_PLUGIN_ROOT}/lib/main-checkout.sh"`, which exits 0 and prints `<repo_root>`, the main checkout.
+
+Moves `<repo_root>/.claude/state/sessions/2026-04-30-1400-oauthcallback.md` → `<repo_root>/ai/memory/sessions/archive/2026-04-30-oauth-callback-401.md`, then `ls`es that path for the checklist. Appends a one-line summary to `ai/memory/sessions/index.md`:
 
 ```markdown
 | 2026-04-30 | OAuth callback 401 | OAuth state cookie SameSite mismatch | P020, S009 |
