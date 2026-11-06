@@ -169,7 +169,8 @@ step_brainstorm() {
   for d in "$root"/*/; do
     [ -d "$d" ] || continue
     d="${d%/}"
-    pid=$(tr -cd '0-9' < "$d/state/server.pid" 2>/dev/null || printf '')
+    pid=""
+    [ -f "$d/state/server.pid" ] && pid=$(tr -cd '0-9' < "$d/state/server.pid" 2>/dev/null)
     if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
       kept=$((kept + 1))
       continue
