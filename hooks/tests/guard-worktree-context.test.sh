@@ -701,6 +701,42 @@ check block "#403 a quoted removed path still counts as quoted" \
 check block "#403 a partly quoted removed path"       \
   "git worktree remove $REPO/.claude/worktrees/\"wt-Q\" && git branch -D wt-q"
 git -C "$REPO" worktree remove --force "$WTQ"
+# --- a removed worktree path is not the worktree any more (#404) ------------
+# The hook reads the disk before the command runs: $WT is still a worktree.
+check block "#404 cd into a removed and re-made worktree" \
+  "cd $WT && cd $REPO && git worktree remove --force $WT && mkdir -p $WT && cd $WT && git switch -c zz"
+check block "#404 git -C a removed and re-made worktree" \
+  "git worktree remove --force $WT && mkdir -p $WT && git -C $WT switch -c zz"
+check block "#404 a ; does not undo the removal" \
+  "git worktree remove --force $WT; mkdir -p $WT; cd $WT && git switch -c zz"
+check block "#404 rm -rf counts as a removal" \
+  "rm -rf $WT && mkdir -p $WT && cd $WT && git switch -c zz"
+check block "#404 a moved-away worktree" \
+  "git worktree move $WT $REPO/elsewhere && mkdir -p $WT && cd $WT && git switch -c zz"
+check block "#404 a created worktree removed and re-made" \
+  'git worktree add .claude/worktrees/q1 -b q1 && cd .claude/worktrees/q1 && cd ../../.. && git worktree remove --force .claude/worktrees/q1 && mkdir -p .claude/worktrees/q1 && cd .claude/worktrees/q1 && git switch -c q1b'
+check allow "#404 an existing worktree is still one"  "cd $WT && git switch -c ok1"
+check allow "#404 removing a directory inside it"     "rm -rf $WT/build && cd $WT && git switch -c ok2"
+check allow "#404 removed and added again"            \
+  "git worktree remove --force $WT && git worktree add $WT wt-a && cd $WT && git switch -c ok3"
+check allow "#404 a variable removal is not followed" \
+  "rm -rf \$X && cd $WT && git switch -c ok4"
+check block "#404 a failed rm of the main checkout does not free it" \
+  "rm $REPO; git switch develop"
+# Review of #405: a nested main checkout, and a symlink to it.
+git init -q "$WT/inner"
+ln -s "$WT/inner" "$WT/lnk"
+check block "#404 a failed rm of a nested main checkout does not free it" \
+  "rm $WT/inner; cd $WT/inner && git switch -c zz1"
+check block "#404 a failed rmdir, then git -C the nested checkout" \
+  "rmdir $WT/inner; git -C $WT/inner switch -c zz2"
+check block "#404 removing a symlink does not remove its target" \
+  "rm -f $WT/lnk && cd $WT/inner && git switch -c zz3"
+check block "#404 a symlink with a trailing slash" \
+  "rm -rf $WT/lnk/ && cd $WT/inner && git switch -c zz4"
+rm -rf "$WT/inner" "$WT/lnk"
+check allow "#404 a worktree added beneath a removed directory" \
+  "rm -rf $REPO/.claude/worktrees && git worktree add $WT -b ok5 && cd $WT && git switch -c ok6"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
