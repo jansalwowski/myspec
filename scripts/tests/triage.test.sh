@@ -157,6 +157,22 @@ SH
 chmod +x "$BIN/gh"
 sync() { : > "$TMP/gh.log"; PATH="$BIN:$PATH" GH_LOG="$TMP/gh.log" bash "$SYNC" "$@" >/dev/null 2>&1; STATUS=$?; }
 
+# The repo's own labels.json is within GitHub's limits (a 422 otherwise, as
+# needs-redaction's 115-character description once was).
+FAKE_LABELS="" sync --dry-run
+expect_eq "$STATUS" "0" "labels.json is within GitHub's label limits"
+
+# An entry outside the limits stops the sync before any gh call.
+long=$(printf 'x%.0s' $(seq 101))
+for bad in "{\"name\":\"ok\",\"color\":\"ededed\",\"description\":\"$long\"}" \
+           "{\"name\":\"$long\",\"color\":\"ededed\",\"description\":\"d\"}" \
+           '{"name":"ok","color":"#ededed","description":"d"}'; do
+  printf '[{"name":"fine","color":"ededed","description":"d"},%s]' "$bad" > "$TMP/bad-labels.json"
+  FAKE_LABELS="" sync --file "$TMP/bad-labels.json"
+  expect_eq "$STATUS" "2" "an entry outside GitHub's limits exits 2 (${bad:0:40})"
+  expect_eq "$(cat "$TMP/gh.log")" "" "an entry outside GitHub's limits makes no gh call (${bad:0:40})"
+done
+
 FAKE_LABELS="bug breaking wontfix area:skills" sync --prune
 LOG=$(cat "$TMP/gh.log")
 grep -q '^label edit bug --name type:bug ' <<<"$LOG" && ok || fail "renamedFrom renames the old label in place"

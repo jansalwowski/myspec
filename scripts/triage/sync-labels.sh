@@ -6,10 +6,12 @@
 # and PRs that carry it keep it under the new name. The release skill's
 # breaking gate reads the `breaking` label by name; keep that entry as is.
 #
-# Usage: scripts/triage/sync-labels.sh [--dry-run] [--prune] [--repo owner/name]
+# Usage: scripts/triage/sync-labels.sh [--dry-run] [--prune] [--repo owner/name] [--file path]
 #   --dry-run  print the gh commands instead of running them
 #   --prune    also delete labels that are not in labels.json
-# Exit: 0 in sync, 1 a gh call failed, 2 usage error.
+#   --file     read the labels from this file instead of .github/labels.json
+# Exit: 0 in sync, 1 a gh call failed, 2 usage error or an entry GitHub would
+# reject (name over 50 characters, description over 100, colour not 6 hex).
 
 set -uo pipefail
 
@@ -23,12 +25,26 @@ while [ $# -gt 0 ]; do
     --dry-run) DRY=1 ;;
     --prune) PRUNE=1 ;;
     --repo) [ $# -ge 2 ] || { echo "sync-labels: --repo needs a value" >&2; exit 2; }; REPO_ARGS=(--repo "$2"); shift ;;
+    --file) [ $# -ge 2 ] || { echo "sync-labels: --file needs a value" >&2; exit 2; }; FILE="$2"; shift ;;
     *) echo "sync-labels: unknown argument: $1" >&2; exit 2 ;;
   esac
   shift
 done
 command -v jq >/dev/null || { echo "sync-labels: jq is required" >&2; exit 2; }
 jq -e 'type == "array"' "$FILE" >/dev/null || { echo "sync-labels: $FILE is not a JSON array" >&2; exit 2; }
+# GitHub answers HTTP 422 for an entry outside its label limits, and run()
+# would only log that and carry on, leaving the repo half-synced with the bad
+# label missing. Check every entry before the first call, so a sync applies
+# all of labels.json or nothing.
+BAD=$(jq -r '.[] | select(
+    ((.name // "") | length) == 0 or ((.name // "") | length) > 50
+    or ((.description // "") | length) > 100
+    or ((.color // "") | test("^[0-9A-Fa-f]{6}$") | not))
+  | .name // "(no name)"' "$FILE")
+if [ -n "$BAD" ]; then
+  echo "sync-labels: outside GitHub's label limits (name 1-50 characters, description up to 100, colour 6 hex digits): $(printf '%s' "$BAD" | tr '\n' ' ')" >&2
+  exit 2
+fi
 
 # ${arr[@]+...} keeps an empty array from tripping set -u on bash 3.2.
 if ! CURRENT=$(gh label list ${REPO_ARGS[@]+"${REPO_ARGS[@]}"} --limit 500 --json name --jq '.[].name'); then
