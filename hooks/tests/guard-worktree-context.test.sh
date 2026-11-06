@@ -702,6 +702,20 @@ check allow "#404 a variable removal is not followed" \
   "rm -rf \$X && cd $WT && git switch -c ok4"
 check block "#404 a failed rm of the main checkout does not free it" \
   "rm $REPO; git switch develop"
+# Review of #405: a nested main checkout, and a symlink to it.
+git init -q "$WT/inner"
+ln -s "$WT/inner" "$WT/lnk"
+check block "#404 a failed rm of a nested main checkout does not free it" \
+  "rm $WT/inner; cd $WT/inner && git switch -c zz1"
+check block "#404 a failed rmdir, then git -C the nested checkout" \
+  "rmdir $WT/inner; git -C $WT/inner switch -c zz2"
+check block "#404 removing a symlink does not remove its target" \
+  "rm -f $WT/lnk && cd $WT/inner && git switch -c zz3"
+check block "#404 a symlink with a trailing slash" \
+  "rm -rf $WT/lnk/ && cd $WT/inner && git switch -c zz4"
+rm -rf "$WT/inner" "$WT/lnk"
+check allow "#404 a worktree added beneath a removed directory" \
+  "rm -rf $REPO/.claude/worktrees && git worktree add $WT -b ok5 && cd $WT && git switch -c ok6"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

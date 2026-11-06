@@ -257,11 +257,25 @@ classify() {
   for abs in ${CD_NEW_WT[@]+"${CD_NEW_WT[@]}"} ${C_NEW_WT[@]+"${C_NEW_WT[@]}"}; do
     case "$1/" in "$abs/"*) [ -z "$2" ] && return 0 ;; esac
   done
-  # A path an earlier segment removes is not what is on disk now (#404):
-  # judge it by the directory that holds it, where a later mkdir would land.
-  for abs in ${GONE[@]+"${GONE[@]}"}; do
-    case "$1/" in "$abs/"*) set -- "${abs%/*}" "$2"; break ;; esac
+  classify_at "$1" "$2"
+  [ -z "$CLS_ROOT" ] || return 0
+  # A path an earlier segment removes may not be what is on disk now (#404):
+  # also judge it by the directory that holds it, where a later mkdir would
+  # land. Either verdict naming a main checkout stands, since the removal
+  # may fail. A worktree added again beneath a removed path is exempt.
+  for abs in ${READDED[@]+"${READDED[@]}"}; do
+    case "$1/" in "$abs/"*) return 0 ;; esac
   done
+  for abs in ${GONE[@]+"${GONE[@]}"}; do
+    case "$1/" in "$abs/"*) classify_at "${abs%/*}" "$2"; break ;; esac
+  done
+  return 0
+}
+
+# classify_at <dir> <git-dir> -> sets CLS_ROOT for that directory as on disk.
+classify_at() {
+  local abs
+  CLS_ROOT=""
   if [ -n "$2" ]; then
     # HEAD lives in the git dir, so it alone decides which checkout moves.
     # A `git -C` into a directory the command creates (#372) is read from
@@ -765,6 +779,9 @@ $verdict"
 # again. A variable or substituted operand is not followed, and neither is a
 # path whose parent is in no checkout (note_gone).
 GONE=()
+# READDED: paths a `git worktree add` creates after an earlier segment removed
+# them or a directory above them (note_readded).
+READDED=()
 
 # note_gone <dir> <decoded word>... -> adds each literal path word to GONE.
 note_gone() {
@@ -774,13 +791,19 @@ note_gone() {
   for w in "$@"; do
     [ -n "$w" ] || continue
     cd_word_to p "$dir" "$w" || continue
-    if [ -d "$p" ]; then p=$(cd "$p" 2>/dev/null && pwd -P) || continue
-    else norm_path_to p "$p"; p=$(physical_path "$p") || continue; fi
+    # rm and mv act on a symlink itself, not its target.
+    if [ -d "$p" ] && [ ! -L "${p%/}" ]; then p=$(cd "$p" 2>/dev/null && pwd -P) || continue
+    else norm_path_to p "${p%/}"; p=$(physical_path "$p") || continue; fi
     # Judged by its parent only where that is no laxer: the parent lies in a
     # checkout. A main checkout root, or a directory holding one, is skipped,
     # so a removal that fails (`rm` without -r, then `;`) cannot free it.
     checkout_facts "${p%/*}" || continue
     GONE+=("$p")
+    keep=()
+    for e in ${READDED[@]+"${READDED[@]}"}; do
+      case "$e/" in "$p/"*) ;; *) keep+=("$e") ;; esac
+    done
+    READDED=(${keep[@]+"${keep[@]}"})
     keep=()
     for e in ${CD_NEW_WT[@]+"${CD_NEW_WT[@]}"}; do
       case "$e/" in "$p/"*) ;; *) keep+=("$e") ;; esac
@@ -845,6 +868,7 @@ note_readded() {
     [ "$e" = "$p" ] || keep+=("$e")
   done
   GONE=(${keep[@]+"${keep[@]}"})
+  READDED+=("$p")
   CD_MADE=("${CD_MADE[@]:0:n}")
   CLS_KEY=""
 }
@@ -901,7 +925,7 @@ walk() {
   if grep -qE 'worktree[[:space:]\\]+remove[^;&|()]*\\' <<< "$cmd"; then esc=1; fi
 
   # A payload (`bash -c`) sees what the command around it creates.
-  if [ "$depth" = 0 ]; then CD_MADE=() CD_NEW_WT=() C_MADE=() C_NEW_WT=() GONE=(); fi
+  if [ "$depth" = 0 ]; then CD_MADE=() CD_NEW_WT=() C_MADE=() C_NEW_WT=() GONE=() READDED=(); fi
   stack=() helds=()
   for ((k = 0; k < n; k++)); do
     link="${seps[k]}"
