@@ -15,6 +15,8 @@
 set -uo pipefail
 
 SCRIPT="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/../branch-cleanup.sh}"
+# shellcheck source=lib/tests/old-bash.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/old-bash.sh"
 
 if [ ! -x "$SCRIPT" ]; then
   echo "FATAL: script not executable: $SCRIPT" >&2
@@ -238,6 +240,22 @@ kill "$PROC" 2>/dev/null; wait "$PROC" 2>/dev/null
 RESULT=$("$SCRIPT" --base develop --no-fetch --json 2>/dev/null)
 expect uw-git     DELETE "without --unattended the 24h vetoes do not apply"
 expect uw-ignored DELETE "without --unattended an ignored file does not hold it"
+
+# --- #378: empty arrays under bash < 4.4 ---------------------------------------
+# --json with no row to print, under every bash at hand (lib/tests/old-bash.sh).
+old_bash_dirs "$ROOT"
+# No local branch at all: a detached HEAD with the base a tag.
+E378="$ROOT/no-branches-378"
+git init -q -b main "$E378"
+git -C "$E378" -c user.email=t@t -c user.name=t commit -q --allow-empty -m init
+git -C "$E378" tag v1; git -C "$E378" checkout -q --detach; git -C "$E378" branch -q -D main
+for dir in "${TEST_BASH_DIRS[@]}"; do
+  on="${dir:+ under /bin/bash}"
+  OUT=$(PATH="${dir:+$dir:}$PATH" "$SCRIPT" --base develop --no-fetch --json --unattended --branch nope 2>"$ROOT/err-378" | jq -c . 2>/dev/null)
+  if [ "$OUT" = "[]" ] && ! grep -q 'unbound variable' "$ROOT/err-378"; then PASS=$((PASS + 1)); else FAIL=$((FAIL + 1)); echo "FAIL  --json with every named branch missing prints []$on (got: $OUT; $(cat "$ROOT/err-378"))" >&2; fi
+  OUT=$(cd "$E378" && PATH="${dir:+$dir:}$PATH" "$SCRIPT" --base v1 --no-fetch --json 2>"$ROOT/err-378" | jq -c . 2>/dev/null)
+  if [ "$OUT" = "[]" ] && ! grep -q 'unbound variable' "$ROOT/err-378"; then PASS=$((PASS + 1)); else FAIL=$((FAIL + 1)); echo "FAIL  --json with no local branch prints []$on (got: $OUT; $(cat "$ROOT/err-378"))" >&2; fi
+done
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
