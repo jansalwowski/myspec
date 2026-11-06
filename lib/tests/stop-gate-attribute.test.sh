@@ -57,6 +57,14 @@ names_cwd() { printf '%s\n' "$3" > "$ROOT/log"; names_in "$1" "$ROOT/paths" "$RO
 eq "$(names_cwd full pkg 'app.ts:3 error')" pkg/app.ts "full: a path relative to the check's cwd (#255 review)"
 eq "$(names_cwd full pkg 'other.ts:3 error')" other.ts "full: a repo-relative path still matches with a cwd"
 eq "$(names_cwd full '' 'app.ts:3 error')" "" "full: without a cwd, no prefix is tried"
+printf 'web/[id].test.tsx\nroutes/+page.test.ts\nmy test.py\napi/src/[x].php\n' > "$ROOT/odd"
+odd() { printf '%s\n' "$3" > "$ROOT/log"; names_in "$1" "$ROOT/odd" "$ROOT/log" "${2:-}" | paste -sd' ' -; }
+eq "$(odd base '' 'error in web/[id].test.tsx:3')" "web/[id].test.tsx" "base: a basename outside the path characters is found as a substring (PR #400 review)"
+eq "$(odd base '' 'FAIL routes/+page.test.ts')" "routes/+page.test.ts" "base: a leading + is found"
+eq "$(odd base '' 'FAILED my test.py::t')" "my test.py" "base: a space is found"
+eq "$(odd full '' 'x web/[id].test.tsx:3')" "web/[id].test.tsx" "full: a path outside the path characters is found"
+eq "$(odd full api 'src/[x].php:3')" "api/src/[x].php" "full: such a path relative to the check's cwd is found"
+eq "$(odd full '' 'other/[id].test.tsx:3')" "" "full: another file with that basename is not the listed one"
 eq "$(printf 'a\nb\nc\n' | join_lines 2)" "a, b" "join_lines: the first N, comma-joined"
 seq 1 2000 > "$ROOT/many"
 eq "$(short_list "$ROOT/many" 3)" "1, 2, 3 and 1997 more" "short_list: the rest counted"
@@ -193,8 +201,9 @@ has "$out" "names files this session wrote: app.ts" "R4: the block carries the p
 # --- knownFailures (R15, #394) ----------------------------------------------------
 # A suite red on the default branch: its failing file is listed, with a reason.
 mkdir -p "$REPO/tests/legacy" "$REPO/tests/unit"
-for x in tests/legacy/old_test.py tests/legacy/older_test.py tests/unit/new_test.py src.py; do printf 'ok\n' > "$REPO/$x"; done
-git -C "$REPO" add tests src.py
+mkdir -p "$REPO/web" "$REPO/routes"
+for x in tests/legacy/old_test.py tests/legacy/older_test.py tests/unit/new_test.py src.py 'web/[id].test.tsx' 'routes/+page.test.ts' 'my test.py'; do printf 'ok\n' > "$REPO/$x"; done
+git -C "$REPO" add tests src.py web routes 'my test.py'
 git -C "$REPO" -c user.email=t@t -c user.name=t commit -q -m tests
 git -C "$REPO" checkout -q -- other.ts
 known() {  # known <glob> <reason> -> one entry line, as run.sh stores it
@@ -236,6 +245,19 @@ has "$out" "it also names files no entry matches: src.py" "R15: the stack-trace 
 out=$(RESULT_KNOWN="$KNOWN_LEGACY" kdecide tests='FAILED legacy/new_test.py')
 eq "${out%%|*}" 1 "R15: a file named by a basename outside the entries blocks"
 has "$out" "it also names files no entry matches: legacy/new_test.py" "R15: the basename-matched file is named"
+# A failing file whose path holds characters outside the path runs (PR #400
+# review): found as a substring, so it is a file outside the entries.
+for odd in 'web/[id].test.tsx' 'routes/+page.test.ts' 'my test.py'; do
+  out=$(RESULT_KNOWN="$KNOWN_LEGACY" kdecide tests="FAILED tests/legacy/old_test.py"$'\n'"FAIL $odd")
+  eq "${out%%|*}" 1 "R15: a failing $odd beside a listed file blocks"
+  has "$out" "it also names files no entry matches: $odd" "R15: and names $odd"
+done
+# A runner that names a test by its dotted module or class (PR #400 review).
+out=$(RESULT_KNOWN="$KNOWN_LEGACY" kdecide tests='FAIL: test_x (tests.legacy.old_test.OldTest.test_x)')
+eq "${out%%|*}" 0 "R15: a dotted name that maps to a listed file is known"
+out=$(RESULT_KNOWN="$KNOWN_LEGACY" kdecide tests='FAIL: test_x (tests.legacy.old_test.OldTest.test_x)'$'\n''FAIL: test_y (tests.unit.new_test.NewTest.test_y)')
+eq "${out%%|*}" 1 "R15: a dotted name that maps to an unlisted file blocks"
+has "$out" "it also names files no entry matches: tests/unit/new_test.py" "R15: and names the file it maps to"
 out=$(RESULT_KNOWN="$KNOWN_LEGACY" kdecide tests='Segmentation fault')
 eq "${out%%|*}" 1 "R15: a failure that names no listed file blocks"
 has "$out" "it names no file an entry matches" "R15: and says so"
@@ -264,6 +286,13 @@ git -C "$REPO" checkout -q -- other.ts
 out=$(attribute_init; IMPLEMENT_ACTIVE=0; RESULT_KNOWN="$KNOWN_LEGACY" results tests='FAILED tests/legacy/old_test.py'; RAN_CHECKS=(tests); SCOPE_NOTES=(); ROOT_LABEL=""; attribute_root; report_decision)
 eq "$(printf '%s' "$out" | jq -r .decision)" approve "R15 report: a known failure approves"
 has "$(printf '%s' "$out" | jq -r .systemMessage)" "tests fails only on its knownFailures" "R15 report: the systemMessage names it"
+
+# Last: the session now wrote a listed file. A dotted name for it is the
+# session's, not a known failure.
+wrote tests/legacy/old_test.py
+out=$(RESULT_KNOWN="$KNOWN_LEGACY" kdecide tests='FAIL: test_x (tests.legacy.old_test.OldTest.test_x)')
+eq "${out%%|*}" 1 "R15: a dotted name for a file this session wrote blocks"
+has "$out" "it names files this session wrote: tests/legacy/old_test.py" "R15: and names it"
 
 printf '\nstop-gate-attribute: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

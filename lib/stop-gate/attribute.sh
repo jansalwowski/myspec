@@ -39,47 +39,112 @@ attribute_begin() {
   KNOWN_OK=()
 }
 
-# names_in <base|full> <paths file> <output file> [cwd] -> the listed paths the
-# output names. The output is split into runs of path characters, and each run
-# is looked up: by basename in base mode; in full mode as a repo-relative path,
-# once a leading ./ or this checkout's root (ROOT_KEY) is dropped, and, for a
-# check run from a cwd, also as <cwd>/<run>: a tool there prints paths
-# relative to it (src/Foo.php for api/src/Foo.php). A lookup,
-# not a substring scan per path, keeps a multi-megabyte test log under a
-# second. Every awk here runs under LC_ALL=C: a check's log can hold bytes
-# that are not valid in the locale's encoding, and macOS awk then exits 2
-# ("towc: multibyte conversion failure"), which under set -e ended the hook
-# before it decided. Bytes are all the matching needs.
+# names_in <base|full|file> <paths file> <output file> [cwd] -> the listed
+# paths the output names. The one tokenizer for R4 and R15: the output is
+# split into runs of path characters, and each run is looked up: by basename
+# in base mode; in full mode as a repo-relative path, once a leading ./ or
+# this checkout's root (ROOT_KEY) is dropped, and, for a check run from a
+# cwd, also as <cwd>/<run>: a tool there prints paths relative to it
+# (src/Foo.php for api/src/Foo.php). A lookup, not a substring scan per path,
+# keeps a multi-megabyte test log under a second.
+#
+# A listed path with a character outside the runs ([id].test.tsx,
+# +page.test.ts, a space, a non-ASCII byte) never forms one run, so it is
+# found as a substring instead: its basename (base and file mode) or its
+# path, less the cwd (full mode), in the output line. Only lines holding a
+# run equal to its tail, the part after its last such character, are
+# searched, so the scan stays a lookup per run.
+#
+# File mode (R15) lists every file of the checkout and prints what the output
+# names, for attribute.sh to match against knownFailures: each run whose
+# basename is a listed file's, made repo-relative as in full mode; each
+# listed path found as a substring; and each listed path a dotted name maps
+# to (tests.legacy.test_old.OldTest, com.acme.FooTest: its leading parts
+# joined with / are a file's path, less its extension, or the end of one, at
+# least two parts), the way Python, JVM and other runners name a test.
+#
+# Every awk here runs under LC_ALL=C: a check's log can hold bytes that are
+# not valid in the locale's encoding, and macOS awk then exits 2 ("towc:
+# multibyte conversion failure"), which under set -e ended the hook before
+# it decided. Bytes are all the matching needs.
 names_in() {
   LC_ALL=C MODE="$1" ROOT="$ROOT_KEY/" CWD="${4:-}" awk '
+    BEGIN { mode = ENVIRON["MODE"] }
+    function emit(key) {
+      if (key in hit) return
+      hit[key] = 1
+      print want[key]
+    }
     FILENAME == ARGV[1] {
       key = $0
-      if (ENVIRON["MODE"] == "base") sub(/.*\//, "", key)
+      if (mode != "full") sub(/.*\//, "", key)
       if (key == "") next
       if (key in want) want[key] = want[key] "\n" $0
       else want[key] = $0
+      if (key ~ /[^A-Za-z0-9_.@\/-]/ && !(key in needle)) {
+        nd = key
+        c = ENVIRON["CWD"]
+        if (mode == "full" && c != "" && substr(nd, 1, length(c) + 1) == c "/") nd = substr(nd, length(c) + 2)
+        needle[key] = nd
+        tl = nd
+        sub(/.*[^A-Za-z0-9_.@\/-]/, "", tl)
+        if (tl == "") always[key] = 1
+        else bytail[tl] = (tl in bytail) ? bytail[tl] SUBSEP key : key
+      }
+      if (mode == "file") {
+        stem = $0
+        if (sub(/\.[^.\/]*$/, "", stem)) {
+          ns = split(stem, seg, "/")
+          s = seg[ns]
+          for (j = ns - 1; j >= 1; j--) {
+            s = seg[j] "/" s
+            suf[s] = (s in suf) ? suf[s] "\n" $0 : $0
+          }
+        }
+      }
       next
     }
     {
+      line = $0
+      for (k in always) if (!(k in hit) && index(line, needle[k])) emit(k)
       gsub(/[^A-Za-z0-9_.@\/-]+/, " ")
       n = split($0, tok, " ")
       for (i = 1; i <= n; i++) {
         t = tok[i]
+        if (t in bytail) {
+          m = split(bytail[t], ks, SUBSEP)
+          for (j = 1; j <= m; j++) if (!(ks[j] in hit) && index(line, needle[ks[j]])) emit(ks[j])
+        }
         if (t in seen) continue
         seen[t] = 1
         sub(/\.+$/, "", t)
-        if (ENVIRON["MODE"] == "base") {
+        if (mode == "base") {
           sub(/.*\//, "", t)
         } else {
           r = ENVIRON["ROOT"]
           if (substr(t, 1, length(r)) == r) t = substr(t, length(r) + 1)
           while (substr(t, 1, 2) == "./") t = substr(t, 3)
-          if (!(t in want) && ENVIRON["CWD"] != "" && ((ENVIRON["CWD"] "/" t) in want)) t = ENVIRON["CWD"] "/" t
         }
-        if ((t in want) && !(t in hit)) {
-          hit[t] = 1
-          print want[t]
+        if (mode == "file") {
+          b = t
+          sub(/.*\//, "", b)
+          if (b in want) {
+            if (!(("=" t) in hit)) { hit["=" t] = 1; print t }
+          } else if (t ~ /^[^\/]*\.[^\/]*$/) {
+            np = split(t, part, ".")
+            for (j = np; j >= 2; j--) {
+              s = part[1]
+              for (q = 2; q <= j; q++) s = s "/" part[q]
+              if (s in suf) {
+                if (!(("~" s) in hit)) { hit["~" s] = 1; print suf[s] }
+                break
+              }
+            }
+          }
+          continue
         }
+        if (mode != "base" && !(t in want) && ENVIRON["CWD"] != "" && ((ENVIRON["CWD"] "/" t) in want)) t = ENVIRON["CWD"] "/" t
+        if (t in want) emit(t)
       }
     }' "$2" "$3"
 }
@@ -105,64 +170,42 @@ short_list() {
 # Known failures (R15, #394). A failed check with knownFailures entries (run.sh
 # known_failures_verdict) warns instead of blocking when its output
 #   1. names a file an entry matches,
-#   2. names no file this session wrote (T, by basename, as in rule 2), and
+#   2. names no file this session wrote (T: by basename, as in rule 2, and
+#      by path), and
 #   3. names no other file.
-# A token names a file when its last segment is the basename of a file git
-# tracks in the checkout, or of an untracked one it does not ignore: a passing
-# test file a runner lists, a source file in a stack trace and a basename
-# alone all count, so condition 3 errs toward blocking. A token is matched to
-# the entries as a repo-relative path, as rule 3 matches F: this checkout's
-# root and a leading ./ dropped, and for a check with a cwd also as
-# <cwd>/<token>.
+# What names a file is names_in's file mode over the checkout's files
+# (run.sh checkout_files, listed once per checkout): a run whose last segment
+# is a file's basename, a file found as a substring, a dotted name that maps
+# to a file. A passing test file a runner lists, a source file in a stack
+# trace and a basename alone all count, so condition 3 errs toward blocking.
+# What it names is matched to the entries as a repo-relative path, as rule 3
+# matches F, and for a check with a cwd also as <cwd>/<path>.
 
 # known_failure <failed index> <T file> -> 0 when the check's failure is a
 # known one. Sets KNOWN_NOTE to why it applied or did not ("" when the check
 # has no entries).
 known_failure() {
   local i="$1" tfile="$2" entries="${FAILED_KNOWN[$1]:-}" cwd="${FAILED_CWDS[$1]:-}"
-  local name="${FAILED_CHECKS[$1]}" files tokens tok re glob reason hit hits="" outside="" own="" nout=0
+  local name="${FAILED_CHECKS[$1]}" named tok re glob reason hit hits="" outside="" own="" nout=0
   KNOWN_NOTE=""
   [ -n "$entries" ] || return 1
   if [ -s "$tfile" ]; then
     own=$(names_in base "$tfile" "${FAILED_LOGS[$i]}" | join_lines 5)
   fi
+  checkout_files
+  named=$(mktemp "${TMPDIR:-/tmp}/.myspec-known.XXXXXX")
+  names_in file "$CHECKOUT_FILES" "${FAILED_LOGS[$i]}" "$cwd" > "$named"
+  # A file of T named by its path or a dotted name, not its basename.
+  if [ -z "$own" ] && [ -s "$tfile" ]; then
+    own=$(LC_ALL=C awk -v cwd="$cwd" 'FILENAME == ARGV[1] { t[$0] = 1; next } ($0 in t) || (cwd != "" && ((cwd "/" $0) in t)) { print }' "$tfile" "$named" | join_lines 5)
+  fi
   if [ -n "$own" ]; then
+    rm -f "$named"
     KNOWN_NOTE="$name: knownFailures not applied, it names files this session wrote: $own."
     return 1
   fi
-  files=$(mktemp "${TMPDIR:-/tmp}/.myspec-known.XXXXXX")
-  tokens=$(mktemp "${TMPDIR:-/tmp}/.myspec-known.XXXXXX")
-  git -C "$REPO_ROOT" ls-files -co --exclude-standard 2>/dev/null > "$files" || true
-  # The tokens that name a file, each once, made repo-relative as names_in
-  # full does. LC_ALL=C for the reason names_in gives.
-  LC_ALL=C ROOT="$ROOT_KEY/" awk '
-    FILENAME == ARGV[1] {
-      b = $0
-      sub(/.*\//, "", b)
-      if (b != "") base[b] = 1
-      next
-    }
-    {
-      gsub(/[^A-Za-z0-9_.@\/-]+/, " ")
-      n = split($0, tok, " ")
-      for (k = 1; k <= n; k++) {
-        t = tok[k]
-        if (t in seen) continue
-        seen[t] = 1
-        sub(/\.+$/, "", t)
-        b = t
-        sub(/.*\//, "", b)
-        if (!(b in base)) continue
-        r = ENVIRON["ROOT"]
-        if (substr(t, 1, length(r)) == r) t = substr(t, length(r) + 1)
-        while (substr(t, 1, 2) == "./") t = substr(t, 3)
-        if (!(t in out)) {
-          out[t] = 1
-          print t
-        }
-      }
-    }' "$files" "${FAILED_LOGS[$i]}" > "$tokens"
   while IFS= read -r tok; do
+    [ -n "$tok" ] || continue
     hit=0
     while IFS=$'\t' read -r re glob reason; do
       if [[ "$tok" =~ $re ]] || { [ -n "$cwd" ] && [[ "$cwd/$tok" =~ $re ]]; }; then
@@ -174,13 +217,16 @@ known_failure() {
       fi
     done <<< "$entries"
     if [ "$hit" -eq 0 ]; then
+      case ", $outside, " in
+        *", $tok, "*) continue ;;
+      esac
       outside="${outside:+$outside, }$tok"
       nout=$((nout + 1))
       # One file outside the entries decides it; five name it well enough.
       [ "$nout" -lt 5 ] || break
     fi
-  done < "$tokens"
-  rm -f "$files" "$tokens"
+  done < "$named"
+  rm -f "$named"
   if [ -n "$outside" ]; then
     KNOWN_NOTE="$name: knownFailures not applied, it also names files no entry matches: $outside."
     return 1
@@ -263,6 +309,9 @@ attribute_root() {
     # left changes here.
     tfile=$(mktemp "${TMPDIR:-/tmp}/.myspec-attr.XXXXXX")
     [ -z "${MYSPEC_SESSION_FILES:-}" ] || printf '%s\n' "$MYSPEC_SESSION_FILES" > "$tfile"
+    # List the checkout's files again, once for this checkout: its checks
+    # may have added some since run.sh listed them.
+    CHECKOUT_FILES_ROOT=""
     for ((i = ROOT_FAILED_START; i < ${#FAILED_CHECKS[@]}; i++)); do
       if known_failure "$i" "$tfile"; then
         KNOWN_OK[i]=1

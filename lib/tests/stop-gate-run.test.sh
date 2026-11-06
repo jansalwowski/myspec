@@ -277,7 +277,18 @@ out=$(gate "$REPO" "{\"checks\":[$(check K 'exit 1' '{"knownFailures":[{"path":"
 has "$(f "$out" .scope)" 'K: its knownFailures setting was ignored, so a failure blocks as usual' "knownFailures unusable: the message names it"
 has "$(f "$out" .scope)" '(got [{"path":"a/**"}])' "knownFailures unusable: and shows the value"
 out=$(gate "$REPO" "{\"checks\":[$(check K true '{"knownFailures":[{"path":"a/**","reason":"r"}]}')]}" code:a.ts)
-has "$(f "$out" .scope)" "K: passed, so its knownFailures entries (a/**) no longer fail and can be removed" "knownFailures on a pass: the entries are stale"
+has "$(f "$out" .scope)" "K: passed this run with knownFailures set (a/**). If those files ran, they did not fail here: check whether they still fail on the default branch before removing the entries" "knownFailures on a pass: the entries may be stale, checked on the default branch first (PR #400 review)"
+lacks "$(f "$out" .scope)" "no longer fail" "knownFailures on a pass: a flaky entry is not called fixed"
+# A timeout whose cleanup succeeds is not a pass (PR #400 review).
+out=$(MYSPEC_CHECK_CAP_SECONDS=1 gate "$REPO" "{\"checks\":[$(check K 'sleep 5' '{"cleanup":"true","knownFailures":[{"path":"a/**","reason":"r"}]}')]}" code:a.ts)
+eq "$(f "$out" '.timed | length')" 1 "knownFailures on a timeout: the check timed out"
+lacks "$(f "$out" .scope)" "K: passed" "knownFailures on a timeout with a cleanup: not called passed"
+# A catch-all entry would list every failure as known (PR #400 review).
+for wide in '**' '**/*'; do
+  out=$(gate "$REPO" "{\"checks\":[$(check K 'exit 1' "$(jq -nc --arg g "$wide" '{knownFailures: [{path: $g, reason: "r"}]}')")]}" code:a.ts)
+  has "$(f "$out" .scope)" "K: its knownFailures setting was ignored, so a failure blocks as usual: the entry $wide matches" "knownFailures $wide: a catch-all is ignored"
+done
+eq "$(REPO_ROOT="$REPO"; kv '[{"path":"a/**","reason":"r"}]')" "list|a/**" "knownFailures: a narrow entry is kept"
 out=$(gate "$REPO" "{\"checks\":[$(check K 'exit 1' '{"knownFailures":[{"path":"a/**","reason":"r"}]}')]}" code:a.ts)
 lacks "$(f "$out" .scope)" "no longer fail" "knownFailures on a failure: not called stale"
 out=$(gate "$REPO" "{\"checks\":[$(check K true '{"paths":["nowhere/**"],"knownFailures":[{"path":"a/**","reason":"r"}]}')]}" code:a.ts)
