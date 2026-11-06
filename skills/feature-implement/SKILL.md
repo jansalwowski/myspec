@@ -130,7 +130,10 @@ options:
   if EnterWorktree isn't available in this session). Then provision it —
   `"${CLAUDE_PLUGIN_ROOT}/lib/worktree-provision.sh" <path> --base origin/<default-branch>` —
   a bare worktree has no dependency directories (`node_modules`, `vendor`, `.venv`, …) or lint cache, and the recipe in
-  `_shared/worktree-provisioning.md` says when a real install is required.
+  `_shared/worktree-provisioning.md` says when a real install is required. This
+  worktree is where barrier checks, milestone checkpoints and their probes build
+  or serve the app, so when they do, provision it with `--no-symlink` and run the
+  project's install there.
 - **New branch:** `git checkout -b feat/{name}`. If branch exists, offer
   checkout vs. numeric suffix (`feat/{name}-2`).
 - **Current branch:** no-op.
@@ -230,7 +233,7 @@ Dispatch implementer (./implementer-prompt.md)
   → BLOCKED: assess (more context / better model / break down / escalate to user)
 ```
 
-**Parallel tasks** — dispatch ALL group tasks simultaneously in ONE message. Harness `isolation: "worktree"` forks from the default branch, not the feature HEAD, so create each task's worktree yourself (`"${CLAUDE_PLUGIN_ROOT}/lib/task-worktree.sh" create <feature>-t<N>`; recipe in `_shared/worktree-provisioning.md`) and pass its path as the implementer's working directory. Create the worktrees before marking the tasks `[~]`, so the uncommitted plan edit does not trip `create`'s dirty-tree warning — a warning that fires every time trains you to ignore the one that matters. When a task regenerates output into a dependency directory (codegen into `node_modules`, `vendor`, `.venv`, …) or builds or serves a production bundle, pass `--no-symlink` and run the project's install in that worktree yourself before dispatch — implementers never install:
+**Parallel tasks** — dispatch ALL group tasks simultaneously in ONE message. Harness `isolation: "worktree"` forks from the default branch, not the feature HEAD, so create each task's worktree yourself (`"${CLAUDE_PLUGIN_ROOT}/lib/task-worktree.sh" create <feature>-t<N>`; recipe in `_shared/worktree-provisioning.md`) and pass its path as the implementer's working directory. Create the worktrees before marking the tasks `[~]`, so the uncommitted plan edit does not trip `create`'s dirty-tree warning — a warning that fires every time trains you to ignore the one that matters. When a task regenerates output into a dependency directory (codegen into `node_modules`, `vendor`, `.venv`, …), pass `--no-symlink` and run the project's install in that worktree yourself before dispatch — implementers never install:
 
 ```
 Validate file disjointness → task-worktree.sh create per task → mark [~] → dispatch Task N,
