@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Fixture for the stop gate's session scope (docs/stop-gate.md, R1, R2, R4).
+# Fixture for the stop gate's session scope (docs/stop-gate.md, R1, R2, R4,
+# R15).
 #
 # Arming goes through the real mark-code-changed.sh, so the session-state
 # contract between the two hooks (lib/session-event.sh) is under test, not a
@@ -325,6 +326,64 @@ rm -f "$RAN"
 OUT=$(jq -n --arg s "$SID-42" --arg d "$REPO" '{session_id: $s, cwd: $d}' | TMPDIR="$ROOT/tmpdir-b" bash "$HOOK" 2>/dev/null)
 expect_decision block "$OUT" "a write under one TMPDIR arms a stop under another"
 [ -f "$REPO/.claude/state/sessions/$SID-42.jsonl" ] && ok || fail "the state file is in the main checkout"
+reset_tree
+
+# --- knownFailures: a check red on the default branch (R15, #394) -----------------
+# set_known <knownFailures json>: one required check over the tracked files,
+# committed with the given knownFailures.
+KLINT='! grep -H BROKEN app.ts other.ts legacy/old.check'
+set_known() {
+  jq -n --arg c "touch $RAN; $KLINT" --argjson k "$1" '{checks: [{name: "lint", command: $c, required: true, knownFailures: $k}]}' > "$REPO/.claude/verification.json"
+  git -C "$REPO" add .claude/verification.json
+  git -C "$REPO" commit -q -m known >/dev/null || true
+}
+mkdir -p "$REPO/legacy"
+printf 'BROKEN\n' > "$REPO/legacy/old.check"
+git -C "$REPO" add legacy
+git -C "$REPO" commit -q -m 'red on main'
+KNOWN='[{"path":"legacy/**","reason":"red on main, TICKET-1"}]'
+set_known "$KNOWN"
+
+printf 'export const a = 5;\n' > "$REPO/app.ts"
+mark_write 50 "$REPO/app.ts"
+OUT=$(stop 50)
+expect_decision approve "$OUT" "R15: a failure only in a listed file approves"
+expect_text "$OUT" "lint fails only on its knownFailures: legacy/** (red on main, TICKET-1)" "R15: the systemMessage names the check, the entry and its reason"
+reset_tree
+
+printf 'BROKEN\n' >> "$REPO/app.ts"
+mark_write 51 "$REPO/app.ts"
+OUT=$(stop 51)
+expect_decision block "$OUT" "R15: a failure that also names this session's file blocks"
+expect_text "$OUT" "knownFailures not applied, it names files this session wrote: app.ts" "R15: the block says why the entries did not apply"
+reset_tree
+
+printf 'BROKEN\n' >> "$REPO/other.ts"
+git -C "$REPO" commit -qam 'also red'
+printf 'export const a = 6;\n' > "$REPO/app.ts"
+mark_write 52 "$REPO/app.ts"
+OUT=$(stop 52)
+expect_decision block "$OUT" "R15: a failure that also names an unlisted file blocks"
+expect_text "$OUT" "it also names files no entry matches: other.ts" "R15: the block names the unlisted file"
+reset_tree
+git -C "$REPO" revert --no-edit HEAD >/dev/null
+
+set_known '[{"path":"legacy/**"}]'
+printf 'export const a = 7;\n' > "$REPO/app.ts"
+mark_write 53 "$REPO/app.ts"
+OUT=$(stop 53)
+expect_decision block "$OUT" "R15: an invalid knownFailures is ignored, so the failure blocks"
+expect_text "$OUT" "lint: its knownFailures setting was ignored, so a failure blocks as usual" "R15: the stop message names the ignored setting"
+reset_tree
+
+set_known "$KNOWN"
+printf 'fixed\n' > "$REPO/legacy/old.check"
+git -C "$REPO" commit -qam 'legacy fixed'
+printf 'export const a = 8;\n' > "$REPO/app.ts"
+mark_write 54 "$REPO/app.ts"
+OUT=$(stop 54)
+expect_decision approve "$OUT" "R15: a check with knownFailures that passes approves"
+expect_text "$OUT" "lint: passed this run with knownFailures set (legacy/**). If those files ran, they did not fail here: check whether they still fail on the default branch" "R15: the approve says to check the entries on the default branch"
 reset_tree
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"

@@ -130,7 +130,10 @@ options:
   if EnterWorktree isn't available in this session). Then provision it —
   `"${CLAUDE_PLUGIN_ROOT}/lib/worktree-provision.sh" <path> --base origin/<default-branch>` —
   a bare worktree has no dependency directories (`node_modules`, `vendor`, `.venv`, …) or lint cache, and the recipe in
-  `_shared/worktree-provisioning.md` says when a real install is required.
+  `_shared/worktree-provisioning.md` says when a real install is required. This
+  worktree is where barrier checks, milestone checkpoints and their probes build
+  or serve the app, so when they do, provision it with `--no-symlink` and run the
+  project's install there.
 - **New branch:** `git checkout -b feat/{name}`. If branch exists, offer
   checkout vs. numeric suffix (`feat/{name}-2`).
 - **Current branch:** no-op.

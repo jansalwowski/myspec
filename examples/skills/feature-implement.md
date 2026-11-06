@@ -161,7 +161,7 @@ Git state: on `main`, clean, no existing worktree, **plan has `[parallel:*]` gro
 > - **Current branch main** → continue on main
 > - **Main branch** → not recommended
 
-User picks **Worktree**. The skill creates `.claude/worktrees/feat-scheduled-reports` on branch `feat/scheduled-reports` (via the EnterWorktree tool, or `git worktree add .claude/worktrees/feat-scheduled-reports -b feat/scheduled-reports`), provisions it with `"${CLAUDE_PLUGIN_ROOT}/lib/worktree-provision.sh" <path> --base origin/main`, and records `BASE_SHA`.
+User picks **Worktree**. The skill creates `.claude/worktrees/feat-scheduled-reports` on branch `feat/scheduled-reports` (via the EnterWorktree tool, or `git worktree add .claude/worktrees/feat-scheduled-reports -b feat/scheduled-reports`), provisions it with `"${CLAUDE_PLUGIN_ROOT}/lib/worktree-provision.sh" <path> --base origin/main`, and records `BASE_SHA`. Had the milestone probes needed a production build in this worktree, it would have provisioned with `--no-symlink` and run the install there instead, since a build writing into a linked dependency directory writes into the main checkout.
 
 #### Milestone 1 — parallel dispatch and barrier
 

@@ -3,15 +3,16 @@
 # lint: sourced under set -euo pipefail
 # Sourced by hooks/verify-before-stop.sh, after lib/hook-core.sh and
 # stop-gate/arm.sh; never run. Loads a checkout's checks, decides per check
-# whether it runs (`paths`, `cwd`, `runIn`, the container-exec refusal) and
-# runs it under the capped runner. Requirements: docs/stop-gate.md (R5, R7,
-# R8a, R11, R12) and docs/verify-check-escapes.md in the plugin repository.
+# whether it runs (`paths`, `cwd`, `runIn`, the container-exec refusal),
+# reads its `knownFailures`, and runs it under the capped runner.
+# Requirements: docs/stop-gate.md (R5, R7, R8a, R11, R12, R15) and
+# docs/verify-check-escapes.md in the plugin repository.
 # Tests: lib/tests/stop-gate-run.test.sh.
 #
 # Results go to the arrays run_init sets up: FAILED_CHECKS with FAILED_LOGS
-# (kept for attribution, removed on exit), FAILED_CWDS and FAILED_OUTPUT,
-# TIMED_OUT_CHECKS, UNVERIFIABLE_CHECKS, NOT_RUN_CHECKS, RAN_CHECKS,
-# SCOPE_NOTES, and CHECKS_RAN.
+# (kept for attribution, removed on exit), FAILED_CWDS, FAILED_KNOWN and
+# FAILED_OUTPUT, TIMED_OUT_CHECKS, UNVERIFIABLE_CHECKS, NOT_RUN_CHECKS,
+# RAN_CHECKS, SCOPE_NOTES, and CHECKS_RAN.
 # shellcheck disable=SC2034
 
 # Per-check time cap (R7). A check that outlives it is killed and reported as
@@ -76,6 +77,10 @@ run_init() {
   # Each failed check's cwd, beside its log: attribution reads the paths a
   # tool printed relative to it.
   FAILED_CWDS=()
+  # Each failed check's usable knownFailures entries, beside its log, one
+  # "<regex>\t<glob>\t<reason>" line each ("" for none): attribution
+  # reads them (R15).
+  FAILED_KNOWN=()
   FAILED_OUTPUT=()
   TIMED_OUT_CHECKS=()
   # Checks refused without running: their result would describe another tree.
@@ -92,7 +97,7 @@ run_init() {
 # run_cleanup_files -> removes the sentinel and every log still on disk.
 # shellcheck disable=SC2317 # called from the hook's EXIT trap
 run_cleanup_files() {
-  rm -f "$CAP_SENTINEL" ${CHECK_LOG:+"$CHECK_LOG"} ${CHECK_RUN_LOG:+"$CHECK_RUN_LOG"} ${FAILED_LOGS[@]+"${FAILED_LOGS[@]}"}
+  rm -f "$CAP_SENTINEL" ${CHECK_LOG:+"$CHECK_LOG"} ${CHECK_RUN_LOG:+"$CHECK_RUN_LOG"} ${CHECKOUT_FILES:+"$CHECKOUT_FILES"} ${FAILED_LOGS[@]+"${FAILED_LOGS[@]}"}
 }
 
 # run_with_cap <seconds> <command>: runs it under the cap and kills the whole
@@ -340,6 +345,82 @@ paths_verdict() {
   PATHS_VERDICT=skip
 }
 
+# Known failures (R15, #394). A check's `knownFailures` lists the files that
+# already fail on the default branch, each a repo-relative glob (`path`,
+# compiled like `paths`) with a reason that is not blank. Attribution
+# (stop-gate/attribute.sh) may then turn the check's failure into a warning.
+# A value that is not a non-empty list of such entries, or that has an entry
+# whose glob matches more than half the checkout's files (`**`, `**/*.py`:
+# a catch-all would turn the gate off), is ignored, whole, and named in the
+# stop message: the failure then blocks as before (fail closed).
+
+# checkout_files -> sets CHECKOUT_FILES to a file listing the files of
+# REPO_ROOT, tracked and untracked but not ignored, one per line. Listed once
+# per checkout and kept until exit (run_cleanup_files). Call it directly, not
+# in $( ): the cache lives in the caller's shell.
+checkout_files() {
+  if [ "${CHECKOUT_FILES_ROOT:-}" != "$REPO_ROOT" ] || [ ! -f "${CHECKOUT_FILES:-}" ]; then
+    [ -z "${CHECKOUT_FILES:-}" ] || rm -f "$CHECKOUT_FILES"
+    CHECKOUT_FILES=$(mktemp "${TMPDIR:-/tmp}/.myspec-files.XXXXXX")
+    git -C "$REPO_ROOT" ls-files -co --exclude-standard 2>/dev/null > "$CHECKOUT_FILES" || true
+    CHECKOUT_FILES_ROOT=$REPO_ROOT
+  fi
+}
+
+# known_failures_verdict <check json> -> sets KNOWN_STATE to absent, list or
+# ignored, KNOWN_ENTRIES to one "<regex>\t<glob>\t<reason>" line per entry
+# (empty unless list), KNOWN_GLOBS to the globs joined with ", ", and
+# KNOWN_GOT to the raw value (cut at 200 bytes) and KNOWN_WHY to the reason
+# when ignored. One jq call: the state, then each entry's path and reason on
+# a line each (a tab or newline in a path makes it bad, one in a reason
+# becomes a space).
+known_failures_verdict() {
+  local state glob reason re total matched k
+  local -a lines=()
+  KNOWN_STATE=absent KNOWN_ENTRIES="" KNOWN_GLOBS="" KNOWN_GOT="" KNOWN_WHY=""
+  while IFS= read -r glob; do
+    lines+=("$glob")
+  done < <(printf '%s' "$1" | jq -r '.knownFailures
+    | if . == null then "absent"
+      elif type == "array" and length > 0
+        and all(.[]; type == "object" and (.path | type) == "string"
+          and (.path | test("[\t\n]") | not)
+          and (.reason | type) == "string" and (.reason | test("[^[:space:]]")))
+      then "list", (.[] | .path, (.reason | gsub("[\t\n]"; " ")))
+      else "bad", (tojson | .[0:200]) end')
+  state=${lines[0]:-absent}
+  [ "$state" != absent ] || return 0
+  if [ "$state" = bad ]; then
+    KNOWN_STATE=ignored KNOWN_GOT=${lines[1]:-}
+    KNOWN_WHY="knownFailures must be a non-empty list of {path, reason}: path a repo-relative glob as in paths, none absolute or with a .. segment, and reason a string that is not blank"
+    return 0
+  fi
+  checkout_files
+  total=$(LC_ALL=C awk 'END { print NR }' "$CHECKOUT_FILES")
+  for ((k = 1; k < ${#lines[@]}; k += 2)); do
+    glob=${lines[$k]}
+    reason=${lines[$((k + 1))]:-}
+    if ! re=$(glob_regex "$glob"); then
+      KNOWN_STATE=ignored KNOWN_ENTRIES="" KNOWN_GLOBS=""
+      KNOWN_GOT=$(printf '%s' "$1" | jq -c '.knownFailures' | LC_ALL=C cut -c1-200)
+      KNOWN_WHY="knownFailures must be a non-empty list of {path, reason}: path a repo-relative glob as in paths, none absolute or with a .. segment, and reason a string that is not blank"
+      return 0
+    fi
+    # A catch-all lists every failure as known. More than half the files
+    # is no list of known failures.
+    matched=$(LC_ALL=C grep -cE -- "$re" "$CHECKOUT_FILES" || true)
+    if [ "$total" -gt 0 ] && [ $((matched * 2)) -gt "$total" ]; then
+      KNOWN_STATE=ignored KNOWN_ENTRIES="" KNOWN_GLOBS=""
+      KNOWN_GOT=$(printf '%s' "$1" | jq -c '.knownFailures' | LC_ALL=C cut -c1-200)
+      KNOWN_WHY="the entry $glob matches $matched of the checkout's $total files, and an entry may match at most half of them: list the failing files, not the suite"
+      return 0
+    fi
+    KNOWN_ENTRIES="${KNOWN_ENTRIES:+$KNOWN_ENTRIES$'\n'}$re"$'\t'"$glob"$'\t'"$reason"
+    KNOWN_GLOBS="${KNOWN_GLOBS:+$KNOWN_GLOBS, }$glob"
+  done
+  KNOWN_STATE=list
+}
+
 # unseen_files -> sets UNSEEN_FILES, once per checkout (arm_root resets it):
 # the paths git reports changed there, uncommitted or untracked
 # (changed_files) and, when a base ref resolved, against MYSPEC_BASE_REF,
@@ -476,7 +557,7 @@ load_checks_failed() {
 # then cwd, then runIn or the R8a refusal, then the run.
 run_checks() {
   local count i check name command diff_command cleanup run_in run_id truncated cleanup_note
-  local remaining cap cut cleanup_cap
+  local remaining cap cut cleanup_cap check_exit
   load_checks "$1"
   count=$(printf '%s' "$CHECKS_JSON" | jq 'if type == "array" then length else 0 end')
   for ((i = 0; i < count; i++)); do
@@ -502,6 +583,8 @@ run_checks() {
         SCOPE_NOTES+=("$name: its paths setting was ignored, so the check ran. paths must be a non-empty list of repo-relative globs, none absolute or with a .. segment${PATHS_GLOBS:+ (got $PATHS_GLOBS)}.") ;;
     esac
     [ -z "$CWD_IGNORED" ] || SCOPE_NOTES+=("$name: its cwd setting was ignored, so the check ran from the checkout root. cwd must be a repo-relative directory, not absolute and without a .. segment (got $CWD_IGNORED).")
+    known_failures_verdict "$check"
+    [ "$KNOWN_STATE" != ignored ] || SCOPE_NOTES+=("$name: its knownFailures setting was ignored, so a failure blocks as usual: $KNOWN_WHY (got $KNOWN_GOT).")
     # A cwd missing in this checkout (a worktree made from a base that did
     # not have it yet) is a check that could not start, not one that failed.
     if [ -n "$CHECK_CWD" ] && [ ! -d "$REPO_ROOT/$CHECK_CWD" ]; then
@@ -552,6 +635,8 @@ run_checks() {
     run_id="myspec-$(date +%s)-$$-$i"
     run_capped "$cap" "$command" "$run_id" keep
     CHECK_RUN_LOG=$RUN_LOG
+    # The check's own exit: a cleanup run below overwrites RUN_EXIT.
+    check_exit=$RUN_EXIT
 
     if [ "$RUN_EXIT" -ne 0 ]; then
       # Keep the end of the output: it names the result (a summary line, the
@@ -582,9 +667,16 @@ run_checks() {
         FAILED_CHECKS+=("$name")
         FAILED_LOGS+=("$CHECK_RUN_LOG")
         FAILED_CWDS+=("$CHECK_CWD")
+        FAILED_KNOWN+=("$KNOWN_ENTRIES")
         CHECK_RUN_LOG=""
         FAILED_OUTPUT+=("[$name] $command failed:"$'\n'"$truncated")
       fi
+    fi
+    # A pass with knownFailures set: the entries may be stale, or the files
+    # flaky or left out of this run (R15). Said on every outcome, an approve
+    # included.
+    if [ "$check_exit" -eq 0 ] && [ "$KNOWN_STATE" = list ]; then
+      SCOPE_NOTES+=("$name: passed this run with knownFailures set ($KNOWN_GLOBS). If those files ran, they did not fail here: check whether they still fail on the default branch before removing the entries from .claude/verification.json.")
     fi
     # A passed or timed-out check's log is not needed any more.
     if [ -n "$CHECK_RUN_LOG" ]; then

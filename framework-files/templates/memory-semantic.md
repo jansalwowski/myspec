@@ -1,15 +1,19 @@
 ---
 id: S{NNN}
 type: semantic
-topic: ""           # domain keyword (e.g., google-maps, prisma, auth)
-feature: ""         # feature name or empty for global
+# hook: keywords or a topic summary, never the solution
+hook: ""
+# topic: domain keyword (e.g., google-maps, prisma, auth)
+topic: ""
+# feature: feature name or empty for global
+feature: ""
 created: YYYY-MM-DD
 verified: YYYY-MM-DD
-anchor:             # {file: "path", pattern: "grep -E regex, one line"}
-  file: ""
-  pattern: ""
-source_session: ""  # archive slug of originating session (e.g., "2024-01-15-streetview-fix")
-related: []         # IDs of related memories (e.g., ["P009", "E001"])
+# anchors: [{file: "path", pattern: "grep -E regex, one line"}]: add the key only for a code-specific memory
+# source_session: archive slug of originating session (e.g., "2024-01-15-streetview-fix")
+source_session: ""
+# related: IDs of related memories (e.g., ["P009", "E001"])
+related: []
 ---
 
 # [Descriptive Title]

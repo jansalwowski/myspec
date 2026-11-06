@@ -272,10 +272,11 @@ in its chain. Add a test that asserts a 401 on an unsigned POST.
 ---
 id: S008
 type: semantic
+hook: "stripe, webhook, signing secret, environment — one secret per environment"
 topic: stripe
-anchor:
-  file: infra/secrets/stripe.yaml
-  pattern: "STRIPE_WEBHOOK_SECRET_"
+anchors:
+  - file: infra/secrets/stripe.yaml
+    pattern: "STRIPE_WEBHOOK_SECRET_"
 related: [P017, E010]
 verified: 2026-04-30
 ---
@@ -307,6 +308,7 @@ cause. Treat secret rotations as paired changes.
 ---
 id: E010
 type: episodic
+hook: "webhook, raw body, retention — raw webhook bodies kept 90 days"
 date: 2026-04-30
 outcome: success
 persistent: false
