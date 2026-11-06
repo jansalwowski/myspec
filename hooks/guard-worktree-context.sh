@@ -49,8 +49,8 @@
 #
 # WHERE a segment runs is decided per segment, not once per command: the
 # payload's cwd, then every `cd <dir>` before it (scoped to its subshell), then
-# `git -C <dir>` / `--git-dir`, and a build tool's own directory flag
-# (`make -C`, `mvn -f <pom>`, `gradle -p`). Launchers are looked through — `env`, `command`,
+# `git -C <dir>` / `--git-dir` / a `GIT_DIR=` assignment, and a build tool's
+# own directory flag (`make -C`, `mvn -f <pom>`, `gradle -p`). Launchers are looked through — `env`, `command`,
 # `sudo`, `exec`, `nohup`, `time`, `nice`, git's global options (`-c k=v`,
 # `--no-pager`, ...) — and `bash -c '...'` / `eval` payloads are scanned as
 # commands. So `cd <worktree> && git checkout x` (the sanctioned path both block
@@ -276,6 +276,14 @@ classify() {
 classify_at() {
   local abs
   CLS_ROOT=""
+  if [ "$2" = "$GD_UNKNOWN" ]; then
+    # A git dir the hook cannot read (#407) may be any repository's: judge
+    # it as the main checkout of the directory's repository, else of the
+    # command's starting one.
+    { checkout_facts "$1" && [ -n "$CF_MAIN" ]; } || checkout_facts "$START_DIR" || return 0
+    CLS_ROOT="$CF_MAIN"
+    return 0
+  fi
   if [ -n "$2" ]; then
     # HEAD lives in the git dir, so it alone decides which checkout moves.
     # A `git -C` into a directory the command creates (#372) is read from
@@ -297,6 +305,26 @@ classify_at() {
 # messages cite it so the full procedure is read only when a block fires.
 procedure_doc() {
   printf '%s/work-isolation.md' "$(ai_dir "$1")"
+}
+
+# The git dir a `GIT_DIR=` assignment or `--git-dir` names (#407). One the
+# hook cannot read (a variable, a substitution, a glob) is GD_UNKNOWN, which
+# classify_at judges as a main checkout. GIT_DIR_INH is the one a command
+# inherits: an `export GIT_DIR=` earlier in it (kept to its end, subshells
+# included), or the assignment in front of the `bash -c` / `eval` running it.
+GD_UNKNOWN=$'\001'
+GIT_DIR_INH=""
+
+# git_dir_word_to <var> <encoded word> <assignment: 1|0> -> the decoded git
+# dir, or GD_UNKNOWN. The shell expands a leading `~` only in an assignment.
+git_dir_word_to() {
+  local _gd_w
+  decode_word_to _gd_w "$2"
+  case "$_gd_w" in
+    *'$'*|*'`'*|*[\*\?\[]*) _gd_w="$GD_UNKNOWN" ;;
+    \~|\~/*) [ "$3" = 0 ] || cd_word_to _gd_w / "$_gd_w" || _gd_w="$GD_UNKNOWN" ;;
+  esac
+  printf -v "$1" '%s' "$_gd_w"
 }
 
 # --- gate A: `git branch` delete / force ---------------------------------------
@@ -803,8 +831,9 @@ $verdict"
 
 # GONE: the paths earlier segments remove (#404): the operands of `rm`,
 # `rmdir`, a `mv` source, the path of `git worktree remove` and the source of
-# `git worktree move`, absolute and physical. They count for the whole
-# command, whatever the links: a removal that runs makes the path something
+# `git worktree move`, absolute and physical; for a removed `.git`, the
+# directory holding it (#408). They count for the whole command, whatever
+# the links: a removal that runs makes the path something
 # the hook did not see. A worktree or directory a removed path held stops
 # counting as created or linked; a `git worktree add` of the same path counts
 # again. A variable or substituted operand is not followed, and neither is a
@@ -829,6 +858,8 @@ note_gone() {
     # checkout. A main checkout root, or a directory holding one, is skipped,
     # so a removal that fails (`rm` without -r, then `;`) cannot free it.
     checkout_facts "${p%/*}" || continue
+    # Without its .git a worktree is a plain directory of what holds it (#408).
+    case "$p" in */.git) p="${p%/.git}" ;; esac
     GONE+=("$p")
     keep=()
     for e in ${READDED[@]+"${READDED[@]}"}; do
@@ -934,8 +965,8 @@ c_note_made() {
 walk() {
   local cmd="$1" dir="$2" depth="$3" start="$2"
   local -a seps segs_s segs_r sw rw stack helds
-  local line k n j c w sub gdir gitdir norm payload held="" chain="" link esc=0
-  local made clex
+  local line i k n j c w sub gdir gitdir norm payload held="" chain="" link esc=0
+  local made clex envgd inh
   local saved_wt="$REMOVED_WT"
 
   k=0
@@ -954,9 +985,35 @@ walk() {
   # reads is not the one git gets (note_segment).
   # shellcheck disable=SC1003 # an ERE: the backslashes are literal
   if grep -qE 'worktree[[:space:]\\]+remove[^;&|()]*\\' <<< "$cmd"; then esc=1; fi
+  # A git dir substituted into a word (`GIT_DIR=$(...)/.git git switch`,
+  # `git --git-dir=`...` switch`) splits that word across segments: the git
+  # before the substitution is seen with no command, the one after it with no
+  # git dir, or not as git at all. Glue the word's head onto the segment
+  # after the closing link, with a `$` that keeps the value unresolvable
+  # (#407).
+  for ((k = 0; k + 1 < n; k++)); do
+    case "${seps[k+1]}" in
+      '(') [[ "${segs_s[k]}" == *'$' ]] || continue ;;
+      '`') ;;
+      *) continue ;;
+    esac
+    [[ "${segs_s[k]}" =~ (^|[[:space:]])(GIT_DIR=|--git-dir=|--git-dir[[:space:]]+)[^[:space:]]*$ ]] || continue
+    c=0
+    for ((j = k + 1; j < n; j++)); do
+      case "${seps[k+1]}${seps[j]}" in
+        '((') c=$((c + 1)) ;;
+        '()') c=$((c - 1)) ;;
+        '``') [ "$j" = $((k + 1)) ] && c=1 || c=0 ;;
+      esac
+      [ "$c" = 0 ] || continue
+      segs_s[j]="${segs_s[k]}\$${segs_s[j]}"
+      segs_r[j]="${segs_r[k]:-}\$${segs_r[j]:-}"
+      break
+    done
+  done
 
   # A payload (`bash -c`) sees what the command around it creates.
-  if [ "$depth" = 0 ]; then CD_MADE=() CD_NEW_WT=() C_MADE=() C_NEW_WT=() GONE=() READDED=(); fi
+  if [ "$depth" = 0 ]; then CD_MADE=() CD_NEW_WT=() C_MADE=() C_NEW_WT=() GONE=() READDED=() GIT_DIR_INH=""; fi
   stack=() helds=()
   for ((k = 0; k < n; k++)); do
     link="${seps[k]}"
@@ -1005,6 +1062,7 @@ walk() {
 
     # Launchers and prefixes that do not change which command runs.
     j=0
+    envgd=""
     while [ "$j" -lt "${#sw[@]}" ]; do
       w="${sw[j]}"
       case "$w" in
@@ -1040,6 +1098,7 @@ walk() {
           esac ;;
         *)
           if [[ "$w" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then
+            case "$w" in GIT_DIR=?*) git_dir_word_to envgd "${rw[j]#GIT_DIR=}" 1 ;; esac
             j=$((j + 1))
           else
             break
@@ -1049,6 +1108,16 @@ walk() {
     [ "$j" -lt "${#sw[@]}" ] || continue
 
     c="${sw[j]##*/}"
+    # `export GIT_DIR=<dir>` (or a bare `export GIT_DIR`) reaches every git
+    # after it.
+    if [ "$c" = export ]; then
+      for ((i = j + 1; i < ${#sw[@]}; i++)); do
+        case "${sw[i]}" in
+          GIT_DIR=?*) git_dir_word_to GIT_DIR_INH "${rw[i]#GIT_DIR=}" 1 ;;
+          GIT_DIR) GIT_DIR_INH="$GD_UNKNOWN" ;;
+        esac
+      done
+    fi
     # What the segment creates, for a later cd into it.
     C_KEEP=0
     if [ "$c" = mkdir ]; then
@@ -1079,21 +1148,29 @@ walk() {
           j=$((j + 1))
         done
         if [ -n "$payload" ] && [ "$j" -lt "${#sw[@]}" ] && [ "$depth" -lt "$MAX_DEPTH" ]; then
+          # A child shell: what it exports stays in it.
+          inh="$GIT_DIR_INH"
+          GIT_DIR_INH="${envgd:-$GIT_DIR_INH}"
           walk "$(decode_word "${rw[j]}")" "$dir" $((depth + 1))
+          GIT_DIR_INH="$inh"
         else
           REMOVED_WT=$'\n'; c_forget   # a script, or a payload not scanned (#384)
         fi
         continue ;;
       eval)
         if [ "$depth" -lt "$MAX_DEPTH" ]; then
+          inh="$GIT_DIR_INH"
+          GIT_DIR_INH="${envgd:-$GIT_DIR_INH}"
           walk "$(decode_word "$(join_words $((j + 1)) "${rw[@]}")")" "$dir" $((depth + 1))
+          # Only what the payload exports outlives it; the prefix does not.
+          [ -z "$envgd" ] || [ "$GIT_DIR_INH" != "$envgd" ] || GIT_DIR_INH="$inh"
         else
           REMOVED_WT=$'\n'; c_forget
         fi
         continue ;;
       git)
         gdir="$dir"
-        gitdir=""
+        gitdir="${envgd:-$GIT_DIR_INH}"
         clex=0   # 1 while the last -C entered a created directory
         j=$((j + 1))
         while [ "$j" -lt "${#sw[@]}" ]; do
@@ -1112,10 +1189,10 @@ walk() {
             -c|--namespace|--config-env|--work-tree|--attr-source)
               j=$((j + 2)) ;;
             --git-dir)
-              gitdir=$(decode_word "${rw[j+1]:-}")
+              git_dir_word_to gitdir "${rw[j+1]:-}" 1
               j=$((j + 2)) ;;
             --git-dir=*)
-              gitdir=$(decode_word "${rw[j]#--git-dir=}")
+              git_dir_word_to gitdir "${rw[j]#--git-dir=}" 0
               j=$((j + 1)) ;;
             -*) j=$((j + 1)) ;;
             *) break ;;

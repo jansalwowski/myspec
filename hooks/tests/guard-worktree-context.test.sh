@@ -738,5 +738,84 @@ rm -rf "$WT/inner" "$WT/lnk"
 check allow "#404 a worktree added beneath a removed directory" \
   "rm -rf $REPO/.claude/worktrees && git worktree add $WT -b ok5 && cd $WT && git switch -c ok6"
 
+# --- a GIT_DIR= prefix names the repository, like --git-dir (#407) ----------
+check block "#407 --git-dir of main with git -C a worktree" \
+  "git --git-dir=$REPO/.git -C $WT switch -c zz"
+check block "#407 GIT_DIR= of main with git -C a worktree" \
+  "GIT_DIR=$REPO/.git git -C $WT switch develop"
+check block "#407 GIT_DIR= of main after cd into a worktree" \
+  "cd $WT && GIT_DIR=$REPO/.git git switch -c zz"
+check block "#407 env GIT_DIR= of main"                  \
+  "env GIT_DIR=$REPO/.git git -C $WT switch -c zz"
+check block "#407 env with flags and other assignments"  \
+  "env -u FOO A=1 GIT_DIR=$REPO/.git B=2 git -C $WT switch -c zz"
+check block "#407 a quoted GIT_DIR= value"               \
+  "GIT_DIR=\"$REPO/.git\" git -C $WT switch -c zz"
+check block "#407 a variable GIT_DIR= is not guessed"    \
+  "GIT_DIR=\$X git -C $WT switch -c zz"
+check block "#407 a substituted GIT_DIR= is not guessed" \
+  "GIT_DIR=\$(git -C $REPO rev-parse --absolute-git-dir) git -C $WT switch -c zz"
+check block "#407 a substitution inside the GIT_DIR= word" \
+  "GIT_DIR=\$(pwd)/.git git -C $WT switch -c zz"
+check block "#407 a nested substitution inside it"       \
+  "GIT_DIR=\$(dirname \$(pwd))/.git git -C $WT switch -c zz"
+check block "#407 a backtick substitution inside it"     \
+  "GIT_DIR=\`pwd\`/.git git -C $WT switch -c zz"
+check block "#407 a variable --git-dir is not guessed"   \
+  "git --git-dir=\$X -C $WT switch -c zz"
+check block "#407 a substituted --git-dir= word"         \
+  "git --git-dir=\$(pwd)/.git -C $WT switch -c zz"
+check block "#407 a substituted --git-dir value word"    \
+  "git -C $WT --git-dir \`pwd\`/.git switch -c zz"
+check block "#407 an exported GIT_DIR="                  \
+  "export GIT_DIR=$REPO/.git; cd $WT && git switch -c zz"
+check block "#407 GIT_DIR= then a bare export"           \
+  "GIT_DIR=$REPO/.git; export GIT_DIR; cd $WT && git switch -c zz"
+check block "#407 GIT_DIR= in front of bash -c"          \
+  "GIT_DIR=$REPO/.git bash -c 'cd $WT && git switch -c zz'"
+check block "#407 GIT_DIR= in front of eval"             \
+  "GIT_DIR=$REPO/.git eval 'cd $WT && git switch -c zz'"
+check_in "$WT" block "#407 a variable GIT_DIR= from a worktree cwd" none-sess \
+  "GIT_DIR=\$X git switch -c zz"
+check allow "#407 GIT_DIR= of the worktree itself"       \
+  "GIT_DIR=$WT/.git git -C $WT switch -c ok"
+check allow "#407 GIT_DIR= of main on a read-only git"   \
+  "GIT_DIR=$REPO/.git git -C $WT status"
+check allow "#407 GIT_DIR= outside a git command"        \
+  "GIT_DIR=\$X make build && cd $WT && git switch -c ok"
+check allow "#407 a GIT_DIR= prefix ends with its command" \
+  "GIT_DIR=$REPO/.git git log -1 && cd $WT && git switch -c ok"
+check allow "#407 a bash -c prefix does not outlive it"  \
+  "GIT_DIR=$REPO/.git bash -c 'true' && cd $WT && git switch -c ok"
+check allow "#407 a substitution elsewhere is not a git dir" \
+  "X=\$(pwd) && cd $WT && git switch -c ok"
+
+# --- removing a worktree's .git leaves a plain directory (#408) --------------
+check block "#408 rm -rf the worktree's .git"            \
+  "rm -rf $WT/.git && cd $WT && git switch -c zz"
+check block "#408 with a trailing slash"                 \
+  "rm -rf $WT/.git/ && cd $WT && git switch -c zz"
+check block "#408 rm -f, then ; and git -C"              \
+  "rm -f $WT/.git; git -C $WT switch -c zz"
+check block "#408 the .git moved away"                   \
+  "mv $WT/.git $WT/.git.bak && cd $WT && git switch -c zz"
+check block "#408 a path through .."                     \
+  "rm -rf $WT/sub/../.git && cd $WT && git switch -c zz"
+check_in "$WT" block "#408 a relative .git from the worktree" none-sess \
+  "rm -rf .git && git switch -c zz"
+# develop: gate C lets the rm through, so gate A alone decides.
+mark q8-dev develop 60
+check_in "$REPO" block "#408 a created worktree's .git" q8-dev \
+  'git worktree add .claude/worktrees/q8 -b q8 && rm .claude/worktrees/q8/.git && cd .claude/worktrees/q8 && git switch -c q8b'
+check_in "$REPO" allow "#408 ... but not another file in it" q8-dev \
+  'git worktree add .claude/worktrees/q9 -b q9 && rm .claude/worktrees/q9/x && cd .claude/worktrees/q9 && git switch -c q9b'
+rm -f "$STATE/"*.jsonl
+check allow "#408 a sibling name is not .git"            \
+  "rm -rf $WT/.github && cd $WT && git switch -c ok"
+check allow "#408 a variable removal is not followed"    \
+  "rm -rf \$X/.git && cd $WT && git switch -c ok"
+check allow "#408 the worktree added again"              \
+  "rm -rf $WT/.git && git worktree add --force $WT wt-a && cd $WT && git switch -c ok"
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
