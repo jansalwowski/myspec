@@ -663,6 +663,22 @@ check block "#372 an rm between"                        \
   'git worktree add .claude/worktrees/r3 -b r3 && rm -rf .claude/worktrees/r3 && mkdir .claude/worktrees/r3 && git -C .claude/worktrees/r3 switch -c r3b'
 check block "#372 a script between"                     \
   'git worktree add .claude/worktrees/r4 -b r4 && bash ./setup.sh && git -C .claude/worktrees/r4 switch -c r4b'
+# Review of #402.
+check allow "#372 a redirect's & does not end the creation" \
+  'git worktree add .claude/worktrees/g1 -b g1 2>&1 && git -C .claude/worktrees/g1 switch -c g1b'
+check allow "#372 a read-only git -C . keeps what a cd entered" \
+  'git worktree add .claude/worktrees/g2 -b g2 && cd .claude/worktrees/g2 && git -C . status && sleep 0 && git switch -c g2b'
+check block "#372 only the last -C decides the segment's directory" \
+  'git worktree add .claude/worktrees/g3 -b g3 && git -C .claude/worktrees/g3 -C ../../.. clean -ffdx && mkdir -p .claude/worktrees/g3 && git -C .claude/worktrees/g3 switch -c g3b'
+# develop: gate C lets the write through, so gate A alone decides.
+mark f4-dev develop 60
+check_in "$REPO" block "#372 a builtin with an output redirect is not read-only" f4-dev \
+  "git worktree add .claude/worktrees/g4 -b g4 && echo gitdir: $REPO/.git > .claude/worktrees/g4/.git && git -C .claude/worktrees/g4 switch -c g4b"
+rm -f "$STATE/"*.jsonl
+check allow "#372 a redirect to /dev/null stays read-only" \
+  'git worktree add .claude/worktrees/g5 -b g5 && git status >/dev/null 2>&1 && git -C .claude/worktrees/g5 switch -c g5b'
+HOME="$(dirname "$REPO")" check block "#372 an empty -C leaves the directory unchanged" \
+  'git -C "" switch develop'
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
