@@ -78,7 +78,7 @@ Use the type-appropriate template from `${aiDir}/.templates/memory-{type}.md`:
 - Extract: the factual statement, source, implication
 - Keep concise -- 1-3 sentences for the fact
 - Set `topic`: domain keyword (e.g., google-maps, prisma, auth)
-- Set `anchor`: file + pattern to check staleness
+- Set `anchors`: file + pattern to check staleness
 - Set `related`: IDs of related procedural/episodic memories (e.g., ["P009", "E001"])
 
 **If episodic:**

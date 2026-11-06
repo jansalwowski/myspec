@@ -157,6 +157,7 @@ Drafts:
 ---
 id: P019
 type: procedural
+hook: "background job, connection pool, starvation — long jobs starving the main pool"
 polarity: positive
 triggers: [background-job, cron, connection-pool, postgres, starvation, healthcheck, deploy]
 not_for:
