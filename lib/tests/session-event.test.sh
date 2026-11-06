@@ -119,6 +119,12 @@ git_ -C "$SEP" commit -q --allow-empty -m init
 git_ -C "$SEP" worktree add -q -b sw "$ROOT/sep-wt" >/dev/null 2>&1
 eq "$(session_file "$(session_home "$ROOT/sep-wt")" s1)" "$(session_file "$(session_home "$SEP")" s1)" "file: a --separate-git-dir checkout and its worktree share one"
 eq "$(session_file "$SEP" s1)" "$(session_file "$(session_home "$SEP")" s1)" "file: a reader given the checkout itself finds the same file"
+# CLI dir: where skills list live logs from (#392), the main checkout's even
+# from a linked worktree; needs no jq.
+eq "$(cd "$WT" && bash "$LIB" dir)" "$REPO/.claude/state/sessions" "cli dir: a linked worktree lists the main checkout's logs"
+eq "$(bash "$LIB" --root "$REPO" dir)" "$REPO/.claude/state/sessions" "cli dir: the main checkout"
+eq "$(bash "$LIB" --root "$ROOT/bare-a" dir)" "$BARE_P/myspec-state/sessions" "cli dir: a bare repository's worktree, its common dir"
+bash "$LIB" --root "$ROOT/legacy" dir >/dev/null 2>&1 && fail "cli dir: no checkout and no .myspec.json fails" || ok
 session_tracked "$MOD" && fail "tracked: a repository with neither .myspec.json nor a stop gate is not" || ok
 
 # --- arming and attribution queries ------------------------------------------------------

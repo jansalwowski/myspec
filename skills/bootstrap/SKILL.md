@@ -111,7 +111,7 @@ report `setup health: not checked — node not found`.
 
 ### 4. Check for Active Sessions
 
-List `.claude/state/sessions/*.md` — the primary checkout's, gitignored. Your own session, if one exists yet, is the file whose `## Files touched` lists a path you edited. These files belong to every session in the checkout, so never take a session id from one for `"${CLAUDE_PLUGIN_ROOT}/lib/set-isolation.sh"`: that id comes only from the isolation hook's block message.
+List `"$SESSIONS"/*.md`, where `SESSIONS=$("${CLAUDE_PLUGIN_ROOT}/lib/session-event.sh" dir)`: the main checkout's gitignored `.claude/state/sessions/`, also from a linked worktree. Your own session, if one exists yet, is the file whose `## Files touched` lists a path you edited. These files belong to every session in the checkout, so never take a session id from one for `"${CLAUDE_PLUGIN_ROOT}/lib/set-isolation.sh"`: that id comes only from the isolation hook's block message.
 
 For each file, compare its mtime to the current epoch.
 
@@ -119,29 +119,36 @@ For each file, compare its mtime to the current epoch.
 
 ```bash
 NOW=$(date +%s)
+SESSIONS=$("${CLAUDE_PLUGIN_ROOT}/lib/session-event.sh" dir)
 # Archives go under the main checkout, never a linked worktree (git worktree
-# remove would delete them); exit 1 (no git) or 3 (no main checkout) -> here.
-MAIN=$("${CLAUDE_PLUGIN_ROOT}/lib/main-checkout.sh" 2>/dev/null) || MAIN=.
+# remove would delete them), unstaged there. Exit 3 (no main checkout): this
+# checkout, staged. Exit 1: MAIN is empty and the sweep is skipped.
+MAIN=$("${CLAUDE_PLUGIN_ROOT}/lib/main-checkout.sh"); RC=$?
+STAGE=0
+[ "$RC" = 3 ] && MAIN=$(git rev-parse --show-toplevel) && STAGE=1
 # Use find, not a bare glob: an unmatched `*.md` glob is a hard error under zsh
 # ("no matches found") and aborts the sweep before the loop body ever runs.
-find .claude/state/sessions -maxdepth 1 -type f -name '*.md' -print0 2>/dev/null |
+[ -n "$MAIN" ] && [ -n "$SESSIONS" ] &&
+find "$SESSIONS" -maxdepth 1 -type f -name '*.md' -print0 2>/dev/null |
 while IFS= read -r -d '' f; do
   MTIME=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f")
   AGE=$(( NOW - MTIME ))
   if [ "$AGE" -gt 21600 ]; then
     SLUG=$(basename "$f" .md | head -c 8)
     DATE=$(date '+%Y-%m-%d')
-    mkdir -p "$MAIN/${aiDir}/memory/sessions/archive"
+    DEST="$MAIN/${aiDir}/memory/sessions/archive/${DATE}-orphaned-${SLUG}.md"
+    mkdir -p "$(dirname "$DEST")"
     sed -i.bak 's/^status: active/status: abandoned/' "$f" && rm "$f.bak"
-    mv "$f" "$MAIN/${aiDir}/memory/sessions/archive/${DATE}-orphaned-${SLUG}.md"
+    mv "$f" "$DEST"
+    [ "$STAGE" = 0 ] || git -C "$MAIN" add "$DEST"
   fi
 done
-```
+``````
 
 After cleanup, count remaining active sessions and report in summary:
 - `Active sessions: 0` → no active work
 - `Active sessions: N` → list each as `{session_id_first8} — {topic}`
-- If sessions were auto-archived: `Auto-archived M orphaned sessions`
+- If sessions were auto-archived: `Auto-archived M orphaned sessions`, plus, when `main-checkout.sh` exited 3, `staged in this checkout: commit them before git worktree remove`; when it exited 1, `Auto-archive skipped:` and its stderr
 - If sessions are 1–6h stale: `M sessions possibly dangling — run /myspec:session-clean to triage`
 
 Sessions are auto-created by `mark-code-changed.sh` (PostToolUse hook) on first code edit, so manual `/myspec:session-start` is rarely needed for code-editing work.

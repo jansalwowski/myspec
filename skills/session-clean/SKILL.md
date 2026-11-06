@@ -20,13 +20,22 @@ Sweep abandoned session files in `.claude/state/sessions/` (live logs — gitign
 
 ### Step 1: Inventory
 
-List `.claude/state/sessions/*.md` and `${aiDir}/memory/sessions/archive/*.md`. For each file capture: `session_id` (from filename and frontmatter), `mtime`, location (`active` | `archive`), for archive files the tracked-by-git flag (`git ls-files --error-unmatch <path>` exits 0 if tracked; live logs are never tracked — the state directory is gitignored), frontmatter fields (`status`, `worktree`, `auto_created`, `topic`, `feature`, `started`), and the `## Files touched` list.
+Resolve both directories first, so a run from a linked worktree sees the main checkout's files:
+
+```bash
+SESSIONS=$("${CLAUDE_PLUGIN_ROOT}/lib/session-event.sh" dir)   # live logs
+MAIN=$("${CLAUDE_PLUGIN_ROOT}/lib/main-checkout.sh")           # archives go under "$MAIN/${aiDir}"
+```
+
+`main-checkout.sh` exit 3 (bare clone or separate git dir: no main checkout): `MAIN` is this checkout. Exit 1: stop and show its stderr.
+
+List `"$SESSIONS"/*.md` and `"$MAIN/${aiDir}"/memory/sessions/archive/*.md`. For each file capture: `session_id` (from filename and frontmatter), `mtime`, location (`active` | `archive`), for archive files the tracked-by-git flag (`git -C "$MAIN" ls-files --error-unmatch <path>` exits 0 if tracked; live logs are never tracked — the state directory is gitignored), frontmatter fields (`status`, `worktree`, `auto_created`, `topic`, `feature`, `started`), and the `## Files touched` list.
 
 **Drop from consideration immediately**:
 - Tracked files under `archive/` (committed history — out of scope).
 - Your own session: the live log whose `## Files touched` lists a path you edited this session. The harness never exposes the session id to the model; if no file lists your edits, treat the most recently mtime-bumped live log as potentially yours and route it to ambiguous in Step 3.
 
-**State files.** `.claude/state/sessions/*.jsonl` are hook state (the stop gate's write ledger, isolation decisions, the feature-implement marker), not logs: never classify or archive one. Those with `mtime` more than 24h ago go in the audit table as one DELETE row and are removed with `rm` on confirmation, each with its `<id>.blobs/` and `<id>.bash/` directories when they exist (the stop gate's file snapshots under a read-only object store, and the Bash status captures); a younger one may belong to a session that is still running, and deleting it loses that session's record of what it wrote. `bash-calls.log` (and `.old`) is the sessions' shared Bash call log, not one session's file: leave it, it rotates itself.
+**State files.** `"$SESSIONS"/*.jsonl` are hook state (the stop gate's write ledger, isolation decisions, the feature-implement marker), not logs: never classify or archive one. Those with `mtime` more than 24h ago go in the audit table as one DELETE row and are removed with `rm` on confirmation, each with its `<id>.blobs/` and `<id>.bash/` directories when they exist (the stop gate's file snapshots under a read-only object store, and the Bash status captures); a younger one may belong to a session that is still running, and deleting it loses that session's record of what it wrote. `bash-calls.log` (and `.old`) is the sessions' shared Bash call log, not one session's file: leave it, it rotates itself.
 
 ### Step 2: Classify Content
 
@@ -91,8 +100,8 @@ Ask: "Proceed? (yes / no / selective)"
 For ambiguous rows, ask per file: `delete / archive / skip`.
 For orphaned `archive/` rows marked ASK→DELETE, ask per file: `delete / skip`.
 
-For ARCHIVE of a live log whose `status:` is already terminal: leave `status:` alone (it finished properly; only its location is wrong), then `mv` and `git add` as below.
-For ARCHIVE: edit frontmatter `status: active` → `status: abandoned` (the session was swept, not completed — `/myspec:session-complete` owns `completed`), then `mv` to `<main>/${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md` and `git add` it. `<main>` is the main checkout `"${CLAUDE_PLUGIN_ROOT}/lib/main-checkout.sh"` prints, never a linked worktree, where `git worktree remove` would delete the archive; on exit 1 (not in git) or 3 (no main checkout) use this checkout. Slug: kebab-case of `topic`; if topic is empty or still `auto:*`, use `orphaned-{first 8 of session_id}`. Date: from `started:` if parseable, else today.
+For ARCHIVE of a live log whose `status:` is already terminal: leave `status:` alone (it finished properly; only its location is wrong), then `mv` as below.
+For ARCHIVE: edit frontmatter `status: active` → `status: abandoned` (the session was swept, not completed — `/myspec:session-complete` owns `completed`), then `mv` to `"$MAIN/${aiDir}"/memory/sessions/archive/YYYY-MM-DD-{slug}.md`, never into a linked worktree, where `git worktree remove` would delete it. Leave it unstaged (the user commits it); only on exit 3, where it sits in this checkout, `git add` it and tell the user it survives `git worktree remove` only once committed. Slug: kebab-case of `topic`; if topic is empty or still `auto:*`, use `orphaned-{first 8 of session_id}`. Date: from `started:` if parseable, else today.
 For DELETE of a live log: `rm`.
 For DELETE in `archive/` (orphan): `rm` only — never run `git rm` here (in-scope archive files are always untracked by construction).
 
@@ -100,7 +109,7 @@ Print one-line summary on completion.
 
 ## Verification Checklist
 
-- [ ] Listed all `.claude/state/sessions/*.md` and `${aiDir}/memory/sessions/archive/*.md` files
+- [ ] Listed all `"$SESSIONS"/*.md` and `"$MAIN/${aiDir}"/memory/sessions/archive/*.md` files, both resolved by the helpers above
 - [ ] Filtered out tracked files in `archive/`
 - [ ] Skipped current agent's own session (matched by `## Files touched`, or marked ambiguous)
 - [ ] Each file classified empty/no-value or substantive (boilerplate-only logs counted as empty)

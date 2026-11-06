@@ -364,6 +364,19 @@ checkout_facts() {
   return 0
 }
 
+# outer_checkout_facts <path> -> checkout_facts for the outermost checkout
+# holding <path>: a submodule climbs into its superproject, repeatedly, so
+# the CF_* globals describe the checkout that owns the project's state.
+# Fails, like checkout_facts, outside a work tree, and also when a
+# superproject on the way cannot be read (CF_* are cleared then).
+outer_checkout_facts() {
+  checkout_facts "$1" || return 1
+  while [ "$CF_SUBMODULE" = 1 ] && [ -n "$CF_SUPER" ]; do
+    checkout_facts "$CF_SUPER" || return 1
+  done
+  return 0
+}
+
 # hook_repo_root <cwd candidates> [myspec] -> the checkout the hook runs for:
 # the toplevel of the first candidate inside a work tree (with `myspec`, a
 # candidate holding .myspec.json counts too, for a project without git), else

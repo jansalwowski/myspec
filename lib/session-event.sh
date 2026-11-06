@@ -41,9 +41,13 @@
 #   session-event.sh [--root <dir>] append <session_id> <json object>
 #   session-event.sh [--root <dir>] events <session_id>
 #   session-event.sh implement start|stop
+#   session-event.sh [--root <dir>] dir
 # --root names a directory in the checkout (default: the cwd's); the file
 # lives in that checkout's main checkout. `implement` prints a note and
 # records nothing itself: mark-code-changed.sh records it with the session id.
+# `dir` prints the directory holding the sessions' files, live logs included
+# (session_dir of session_home), so a skill run from a linked worktree lists
+# the main checkout's logs; it needs no jq.
 #
 # bash 3.2 compatible (macOS /bin/bash).
 # SC2034: the globals (ISO_*) are read by the sourcing scripts. SC2016: the
@@ -73,8 +77,7 @@ SESSION_EVENTS_JQ='inputs | try fromjson catch empty | select(type == "object" a
 # (session_dir). Without git, the nearest directory holding a .myspec.json.
 session_home() {
   local dir
-  if checkout_facts "$1"; then
-    while [ "$CF_SUBMODULE" = 1 ] && [ -n "$CF_SUPER" ] && checkout_facts "$CF_SUPER"; do :; done
+  if outer_checkout_facts "$1"; then
     if [ -n "$CF_MAIN" ] && [ "$CF_COMMON_DIR" = "$CF_MAIN/.git" ]; then
       printf '%s\n' "$CF_MAIN"
     else
@@ -381,12 +384,17 @@ session_implement_active() {
 # Run as a script: the CLI above.
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   set -euo pipefail
-  command -v jq >/dev/null 2>&1 || { echo "session-event: jq is required" >&2; exit 1; }
   SE_ROOT="$PWD"
   if [ "${1:-}" = "--root" ]; then
     SE_ROOT="${2:-}"
     shift 2 || { echo "session-event: --root needs a directory" >&2; exit 1; }
   fi
+  if [ "${1:-}" = dir ]; then
+    SE_HOME=$(session_home "$SE_ROOT") || { echo "session-event: $SE_ROOT is in no checkout" >&2; exit 1; }
+    session_dir "$SE_HOME"
+    exit 0
+  fi
+  command -v jq >/dev/null 2>&1 || { echo "session-event: jq is required" >&2; exit 1; }
   case "${1:-}" in
     implement)
       case "${2:-}" in
@@ -407,7 +415,7 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
       fi
       ;;
     *)
-      echo "usage: session-event.sh [--root <dir>] append|events <session_id> [json] | implement start|stop" >&2
+      echo "usage: session-event.sh [--root <dir>] append|events <session_id> [json] | dir | implement start|stop" >&2
       exit 1
       ;;
   esac

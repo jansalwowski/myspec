@@ -137,7 +137,7 @@ Detected stale active session (4 days old, no activity). Auto-archiving:
               running session-complete. Outcome section may be empty."
 ```
 
-The archive goes under the main checkout that `lib/main-checkout.sh` prints, even when bootstrap runs in a linked worktree, so removing that worktree cannot delete it. The session is moved without losing its log table — a future agent investigating that period can still read what was tried.
+The sweep reads the live logs from `session-event.sh dir` and writes the archive under the main checkout that `lib/main-checkout.sh` prints, also when bootstrap runs in a linked worktree, so removing that worktree cannot delete it. The archive is left unstaged. The session is moved without losing its log table — a future agent investigating that period can still read what was tried.
 
 #### 5. Bootstrap continues
 
