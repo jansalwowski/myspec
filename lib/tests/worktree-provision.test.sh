@@ -574,7 +574,7 @@ mkdir -p "$W/node_modules/own"
 out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
 [ "$st" -eq 0 ] && printf '%s' "$out" | grep -qF "node_modules already exists in the worktree — not linking node_modules" && ok \
   || fail "exists: an untracked directory in the worktree is skipped by name (got $st: $out)"
-# A dependency directory holding only dot-prefixed entries (a test run's cache
+# A dependency directory holding only tool caches (a test run's cache
 # before provisioning, #373) has nothing installed: it is moved aside, never
 # deleted, and the link is made. Any dependency directory, not only node_modules.
 M=$(new_main cacheonly '{"isolation":{"provision":{"symlink":["node_modules","vendor","shared"]}}}')
@@ -586,7 +586,7 @@ printf 'kept\n' > "$W/node_modules/.vite/deps/a.js"
 out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
 [ "$st" -eq 0 ] && [ -L "$W/node_modules" ] && [ -L "$W/vendor" ] && ok \
   || fail "cache-only: a dependency directory holding only dot-prefixed entries is linked (got $st: $out)"
-printf '%s' "$out" | grep -qF "node_modules held only dot-prefixed entries (.vite, .vitest-cache), nothing installed — moved it to .claude/state/provision-displaced/node_modules and linked node_modules" && ok \
+printf '%s' "$out" | grep -qF "node_modules held only tool caches (.vite, .vitest-cache), nothing installed — moved it to .claude/state/provision-displaced/node_modules and linked node_modules" && ok \
   || fail "cache-only: the output says what was moved where (got: $out)"
 [ "$(cat "$W/.claude/state/provision-displaced/node_modules/.vite/deps/a.js" 2>/dev/null)" = kept ] && [ -d "$W/.claude/state/provision-displaced/vendor/.cache" ] && ok \
   || fail "cache-only: the moved entries are kept, not deleted"
@@ -613,6 +613,46 @@ mkdir -p "$W/node_modules/.vite"; printf 'v2\n' > "$W/package-lock.json"
 out=$(bash "$SCRIPT" "$W" 2>&1); st=$?
 [ -d "$W/node_modules/.vite" ] && [ ! -e "$W/.claude/state/provision-displaced" ] && ok \
   || fail "cache-only: nothing is moved when the link is not made (got $st: $out)"
+# A real install that keeps its packages in dot directories (pnpm: .pnpm/,
+# .bin/, .modules.yaml, no direct dependency at the top) is never moved, nor
+# is an unlisted installer's dot directory without a marker.
+W=$(wt_for "$M" cachepnpm-wt)
+mkdir -p "$W/node_modules/.pnpm/x@1/node_modules/x" "$W/node_modules/.bin"; : > "$W/node_modules/.modules.yaml"
+mkdir -p "$W/vendor/.bun/x"
+out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
+[ "$st" -eq 0 ] && [ -d "$W/node_modules/.pnpm/x@1" ] && [ ! -L "$W/node_modules" ] && [ -d "$W/vendor/.bun/x" ] && [ ! -L "$W/vendor" ] \
+  && [ ! -e "$W/.claude/state/provision-displaced" ] && ok \
+  || fail "cache-only: a pnpm install or an unlisted dot directory is kept, not moved (got $st: $out)"
+# An empty dependency directory has nothing to keep: removed and linked.
+W=$(wt_for "$M" cacheempty-wt)
+mkdir -p "$W/node_modules"
+out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
+[ "$st" -eq 0 ] && [ -L "$W/node_modules" ] && printf '%s' "$out" | grep -qF "node_modules was empty, nothing installed — removed it and linked node_modules" && ok \
+  || fail "cache-only: an empty dependency directory is replaced by the link (got $st: $out)"
+# A move that fails skips that entry by name; earlier links stay recorded.
+M2=$(new_main cachemvfail '{"isolation":{"provision":{"symlink":["vendor","node_modules"]}}}')
+mkdir -p "$M2/node_modules/dep" "$M2/vendor/pkg"; commit_all "$M2" init
+W=$(wt_for "$M2" cachemvfail-wt)
+mkdir -p "$W/node_modules/.cache" "$W/.claude/state"; : > "$W/.claude/state/provision-displaced"
+out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
+[ "$st" -eq 0 ] && [ -d "$W/node_modules/.cache" ] && [ ! -L "$W/node_modules" ] \
+  && printf '%s' "$out" | grep -qF "cannot move node_modules aside" \
+  && [ "$(jq -r '[.links[].path] | join(",")' "$W/.claude/state/provision.json" 2>/dev/null)" = vendor ] && ok \
+  || fail "cache-only: a failed move names the entry and the record keeps the other links (got $st: $out)"
+# Copy mode applies the same rule: a placeholder plus a tool cache is filled,
+# anything else already there is skipped by name, not silently.
+M2=$(new_main cachecopy '{"isolation":{"provision":{"symlink":[],"copy":["node_modules"]}}}')
+mkdir -p "$M2/node_modules/dep"; : > "$M2/node_modules/.gitkeep"; git -C "$M2" add -f node_modules/.gitkeep; commit_all "$M2" init
+W=$(wt_for "$M2" cachecopy-wt)
+mkdir -p "$W/node_modules/.vite"; : > "$W/node_modules/.vite/deps.json"
+out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
+[ "$st" -eq 0 ] && [ -d "$W/node_modules/dep" ] && printf '%s' "$out" | grep -qF "filled node_modules" && ok \
+  || fail "cache-only: copy fills a placeholder directory that also holds a tool cache (got $st: $out)"
+W=$(wt_for "$M2" cachecopyown-wt)
+mkdir -p "$W/node_modules/own"; : > "$W/node_modules/own/index"
+out=$(bash "$SCRIPT" "$W" --base main 2>&1); st=$?
+[ "$st" -eq 0 ] && [ ! -e "$W/node_modules/dep" ] && printf '%s' "$out" | grep -qF "node_modules already exists in the worktree — not copying node_modules" && ok \
+  || fail "cache-only: copy names a directory it keeps (got $st: $out)"
 
 # --- a glob symlink entry expands against the main checkout (R8) -------------
 # vendor-bin/*/vendor, the Composer bin-plugin layout: each match is its own

@@ -253,7 +253,7 @@ case "$R" in *"Dependencies not installed"*) fail "installed dependencies get no
 rm -r "$DEPS/node_modules/dep"
 mkdir -p "$DEPS/node_modules/.vite" "$DEPS/node_modules/.vitest-cache"
 R=$(stop_reason 95 "$DEPS")
-expect_in "Dependencies not installed in this tree: $DEPS/node_modules holds node_modules/.gitkeep (tracked by git) and dot-prefixed entries only (node_modules/.vite, node_modules/.vitest-cache)" "$R" \
+expect_in "Dependencies not installed in this tree: $DEPS/node_modules holds node_modules/.gitkeep (tracked by git) and tool caches only (node_modules/.vite, node_modules/.vitest-cache)" "$R" \
   "a failing check over a cache-only node_modules names it first"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"

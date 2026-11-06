@@ -224,7 +224,7 @@ printf 'x\n' > "$D/requirements.txt"
 : > "$D/node_modules/.gitkeep"
 : > "$D/apps/web/node_modules/.keep"
 git_ -C "$D" add -A && git_ -C "$D" commit -q -m init
-eq "$(deps_not_installed "$D" | cut -f1,2 | tr '\t\n' ':|')" "node_modules:node_modules/.gitkeep|vendor:nothing|.venv:nothing|" \
+eq "$(deps_not_installed "$D" | cut -f1,2 | tr '\t\n' ':|')" "node_modules:node_modules/.gitkeep|vendor:|.venv:|" \
   "placeholder-only and empty dependency directories beside their manifests"
 : > "$D/node_modules/.package-lock.json"
 : > "$D/vendor/autoload.php"
@@ -236,13 +236,13 @@ mkdir -p "$D/node_modules/dep"
 mkdir -p "$D/.venv/bin"
 eq "$(deps_not_installed "$D")" "" "an installed package (a directory or an untracked file) means installed, marker or not"
 rm -r "$D/node_modules/dep" "$D/vendor/untracked.php" "$D/.venv/bin"
-# A tool's dot-prefixed cache (a test run before any install, #373/#375) is
-# not an install: the directory is still reported, the cache named.
+# A tool's cache (a test run before any install, #373/#375) is not an
+# install: the directory is still reported, the cache named.
 mkdir -p "$D/node_modules/.vite" "$D/node_modules/.vitest-cache" "$D/vendor/.cache"
-: > "$D/.venv/.lock"
-eq "$(deps_not_installed "$D" | cut -f1,2,4 | tr '\t\n' ':|')" \
-  "node_modules:node_modules/.gitkeep:node_modules/.vite, node_modules/.vitest-cache|vendor:nothing:vendor/.cache|.venv:nothing:.venv/.lock|" \
-  "a directory holding only dot-prefixed entries beside its manifest is not installed"
+: > "$D/.venv/.DS_Store"
+eq "$(deps_not_installed "$D" | tr '\t\n' ':|')" \
+  "node_modules:node_modules/.gitkeep:node_modules/.vite, node_modules/.vitest-cache|vendor::vendor/.cache|.venv::.venv/.DS_Store|" \
+  "a directory holding only tool caches beside its manifest is not installed"
 mkdir -p "$D/node_modules/dep"
 eq "$(deps_not_installed "$D" | cut -f1)" "vendor
 .venv" "a package beside the cache means installed"
@@ -250,10 +250,30 @@ FAILED_CWDS=("")
 DEPS_NOTES=()
 deps_note "$D" 0
 case "${DEPS_NOTES[0]:-}" in
-  "Dependencies not installed in this tree: $D/vendor holds dot-prefixed entries only (vendor/.cache) and no install state"*) ok ;;
-  *) fail "deps_note names the dot-prefixed entries of a cache-only directory (got: ${DEPS_NOTES[0]:-})" ;;
+  "Dependencies not installed in this tree: $D/vendor holds tool caches only (vendor/.cache) and no install-state marker"*"Install the dependencies in $D with the project's install command"*) ok ;;
+  *) fail "deps_note names the caches of a cache-only directory and, in a main checkout, the install command (got: ${DEPS_NOTES[0]:-})" ;;
 esac
-rm -r "$D/node_modules/dep" "$D/node_modules/.vite" "$D/node_modules/.vitest-cache" "$D/vendor/.cache" "$D/.venv/.lock"
+rm -r "$D/node_modules/dep"
+# An installer's own dot directory is an install, listed marker or not (pnpm,
+# Bun): only named caches are not.
+mkdir -p "$D/node_modules/.pnpm/x@1" "$D/node_modules/.bin"
+: > "$D/node_modules/.modules.yaml"
+mkdir -p "$D/vendor/.bun/x"
+eq "$(deps_not_installed "$D" | cut -f1)" ".venv" "a pnpm store with its marker, or an unlisted dot directory, means installed"
+rm "$D/node_modules/.modules.yaml"
+eq "$(deps_not_installed "$D" | cut -f1)" ".venv" "a pnpm store without its marker still means installed"
+rm -r "$D/node_modules/.pnpm" "$D/node_modules/.bin" "$D/vendor/.bun"
+# In a linked worktree the note points at provisioning (#375).
+git_ -C "$D" worktree add -q --detach "$ROOT/deps-wt" main
+mkdir -p "$ROOT/deps-wt/vendor/.cache"
+DEPS_NOTES=()
+deps_note "$ROOT/deps-wt" 0
+case "${DEPS_NOTES[0]:-}" in
+  *"Provision this worktree"*"worktree-provision.sh \"$ROOT/deps-wt\""*) ok ;;
+  *) fail "deps_note in a linked worktree names worktree-provision.sh (got: ${DEPS_NOTES[0]:-})" ;;
+esac
+git_ -C "$D" worktree remove --force "$ROOT/deps-wt"
+rm -r "$D/node_modules/.vite" "$D/node_modules/.vitest-cache" "$D/vendor/.cache" "$D/.venv/.DS_Store"
 rm "$D/composer.json" "$D/requirements.txt"
 eq "$(deps_not_installed "$D" | cut -f1)" "node_modules" "a directory without its manifest is not a dependency directory"
 mv "$D/node_modules" "$D/nm-real" && ln -s "$D/nm-real" "$D/node_modules"
