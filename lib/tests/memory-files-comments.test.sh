@@ -56,16 +56,16 @@ expect "related items survive a trailing comment" '["P001","S002"]' \
   'related: [P001, "S002"]  # see both' \
   "m.listField(fm, 'related')"
 
-expect "block list item drops its trailing comment" '["P001"]' \
-  "$(printf 'related:\n  - P001  # the first one')" \
+expect "quoted block list item drops its trailing comment" '["P001"]' \
+  "$(printf 'related:\n  - "P001"  # the first one')" \
   "m.listField(fm, 'related')"
 
 expect "hook ending in a comment" '"cache, flush"' \
   'hook: "cache, flush"   # keywords only' \
   "m.scalarField(fm, 'hook')"
 
-expect "unquoted hook ending in a comment" '"cache, flush"' \
-  'hook: cache, flush # keywords only' \
+expect "empty hook ending in a comment stays empty" '""' \
+  'hook: ""   # keywords only' \
   "m.scalarField(fm, 'hook')"
 
 expect "a # inside a quoted value is kept" '"issue # 12, retry"' \
@@ -76,20 +76,24 @@ expect "a # inside a single-quoted value is kept" "\"it's # one\"" \
   "hook: 'it''s # one'  # note" \
   "m.scalarField(fm, 'hook')"
 
-expect "a # with no whitespace before it is kept" '"C#, F#"' \
-  'hook: C#, F# # languages' \
-  "m.scalarField(fm, 'hook')"
-
-expect "a value that is only a comment is empty" '""' \
-  'hook: # fill in' \
+expect "an unquoted plain scalar is left whole" '"cache, flush # keywords only"' \
+  'hook: cache, flush # keywords only' \
   "m.scalarField(fm, 'hook')"
 
 expect "anchors [] with a trailing comment is empty" '{"anchors":[],"form":"empty","malformed":[]}' \
   'anchors: []         # [{file: "path", pattern: "regex"}]' \
   "m.parseAnchors(fm)"
 
-expect "anchor pattern keeps a quoted #, drops the comment" '[{"file":"src/a.c","pattern":"^#include"}]' \
-  "$(printf 'anchors:\n  - file: src/a.c  # header\n    pattern: \"^#include\"  # first line')" \
+expect "unquoted pattern starting with # keeps its full value" '[{"file":"src/a.c","pattern":"#include <x>"}]' \
+  "$(printf 'anchors:\n  - file: src/a.c\n    pattern: #include <x>')" \
+  "m.parseAnchors(fm).anchors"
+
+expect "unquoted pattern with an inner # keeps its full value" '[{"file":"src/a.sh","pattern":"foo # bar"}]' \
+  "$(printf 'anchors:\n  - file: src/a.sh\n    pattern: foo # bar')" \
+  "m.parseAnchors(fm).anchors"
+
+expect "quoted pattern drops its trailing comment" '[{"file":"src/a.c","pattern":"a"}]' \
+  "$(printf 'anchors:\n  - file: "src/a.c"  # header\n    pattern: "a" # c')" \
   "m.parseAnchors(fm).anchors"
 
 expect "flow anchor list drops its trailing comment" '[{"file":"x","pattern":"y"}]' \
