@@ -124,6 +124,8 @@ is left is judgment:
 
 Present: per-surface findings with evidence, token table (now → target), the Phase 0 `settings` listing with each `loosens` entry called out, the fix grouping below, the field-metrics lines that led anywhere (when Phase 0 step 5 ran), and a needs-user-decision list. Wait for the user before editing anything. Always needs a user decision: feature status transitions (`/myspec:feature-complete`'s job), orphan-feature promotion, anything in `settings.local.json` or `## Read-only` files.
 
+An upstream issue for a `myspec:*` finding goes to the public myspec repo: describe it against myspec and a fixture, with placeholders (`<app>`, `fix/some-branch`, `TICKET-1`, `<sha>`) for this project's repo, branch, ticket and commit names. GitHub keeps edit history, so scrubbing after posting does not undo a leak; `guard-public-posts.sh` denies a `gh` post that still names them.
+
 ### Phase 4 — Apply as grouped PRs
 
 One worktree + branch per group, created from the fresh default branch (`git worktree add .claude/worktrees/<name> -b <branch> origin/<default>`). Standard grouping — if a group has fewer than 3 findings, merge it into a neighbor:
