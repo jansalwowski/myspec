@@ -63,15 +63,19 @@ echo log > "$S/stale.md"
 old "$S/old.jsonl" 2; old "$S/stale.md" 2
 
 B="$REPO/.myspec/brainstorm"
-mkdir -p "$B/idle/state" "$B/recent/state" "$B/served/state" "$B/nopid"
+mkdir -p "$B/idle/state" "$B/recent/state" "$B/served/state" "$B/nopid" "$B/zeropid/state" "$B/unreadable/state"
 echo x > "$B/idle/content.html"; echo x > "$B/recent/content.html"; echo x > "$B/served/content.html"
-# nopid: idle, and no state/server.pid at all (#395)
+# Idle sessions housekeep must read silently and remove (#395): no
+# state/server.pid at all, a pid of 0 (kill -0 0 always succeeds), and a pid
+# file it cannot read (readable anyway when the suite runs as root).
 echo x > "$B/nopid/content.html"
+echo 0 > "$B/zeropid/state/server.pid"
+echo 999999 > "$B/unreadable/state/server.pid"; chmod 000 "$B/unreadable/state/server.pid"
 sleep 300 & SLEEPER=$!
 disown "$SLEEPER" 2>/dev/null
 echo "$SLEEPER" > "$B/served/state/server.pid"
 echo 999999 > "$B/idle/state/server.pid"
-old "$B/idle" 10; old "$B/served" 10; old "$B/nopid" 10
+old "$B/idle" 10; old "$B/served" 10; old "$B/nopid" 10; old "$B/zeropid" 10; old "$B/unreadable" 10
 echo '*' > "$B/.gitignore"
 
 # --- dry run ------------------------------------------------------------------
@@ -80,8 +84,8 @@ OUT=$("$SCRIPT" --dry-run --no-fetch 2>&1); STATUS=$?
 printf '%s' "$OUT" | grep -qE '^branches: would remove 1 merged \(merged\)' && ok || fail "dry run names the merged branch (got: $OUT)"
 printf '%s' "$OUT" | grep -qF 'sessions: would remove 1 state file' && ok || fail "dry run counts the old state file"
 printf '%s' "$OUT" | grep -qF '1 live log(s) older than 6h' && ok || fail "dry run counts the stale live log"
-printf '%s' "$OUT" | grep -qF 'brainstorm: would remove 2 session(s)' && ok || fail "dry run counts the idle brainstorm sessions"
-git rev-parse --verify -q merged >/dev/null && [ -f "$S/old.jsonl" ] && [ -d "$B/idle" ] && ok || fail "dry run removes nothing"
+printf '%s' "$OUT" | grep -qF 'brainstorm: would remove 4 session(s)' && ok || fail "dry run counts the idle brainstorm sessions"
+git rev-parse --verify -q merged >/dev/null && [ -f "$S/old.jsonl" ] && [ -d "$B/idle" ] && [ -d "$B/nopid" ] && ok || fail "dry run removes nothing"
 [ ! -e "$REPO/.claude/state/housekeep-last-run" ] && ok || fail "dry run writes no stamp"
 
 # --- default flags, under every bash at hand ------------------------------------
@@ -90,13 +94,13 @@ git rev-parse --verify -q merged >/dev/null && [ -f "$S/old.jsonl" ] && [ -d "$B
 old_bash_dirs "$ROOT"
 for dir in "${TEST_BASH_DIRS[@]}"; do
   label="default flags${dir:+ under /bin/bash}"
-  OUT=$(PATH="${dir:+$dir:}$PATH" "$SCRIPT" --dry-run 2>&1); STATUS=$?
-  [ "$STATUS" -eq 0 ] && ok || fail "$label: dry run exits 0 (got $STATUS): $OUT"
+  OUT=$(PATH="${dir:+$dir:}$PATH" "$SCRIPT" --dry-run 2>"$ROOT/stderr"); STATUS=$?
+  ERR=$(cat "$ROOT/stderr")
+  [ "$STATUS" -eq 0 ] && ok || fail "$label: dry run exits 0 (got $STATUS): $OUT $ERR"
   printf '%s' "$OUT" | grep -qE '^branches: would remove 1 merged \(merged\)' && ok || fail "$label: the audit runs with the fetch (got: $OUT)"
-  printf '%s' "$OUT" | grep -qF 'unbound variable' && fail "$label: no unbound variable (got: $OUT)" || ok
-  # A session with no server.pid is read silently (#395).
-  ERR=$(PATH="${dir:+$dir:}$PATH" "$SCRIPT" --dry-run --no-fetch 2>&1 >/dev/null)
-  printf '%s' "$ERR" | grep -qF 'server.pid' && fail "$label: a missing server.pid prints nothing (got: $ERR)" || ok
+  # Nothing on stderr: no unbound variable (#378), no unreadable or missing
+  # server.pid (#395).
+  [ -z "$ERR" ] && ok || fail "$label: stderr is empty (got: $ERR)"
 done
 
 # --- real run -----------------------------------------------------------------
@@ -109,6 +113,8 @@ git rev-parse --verify -q local-only >/dev/null && ok || fail "the never-pushed 
 [ -f "$S/stale.md" ] && ok || fail "live logs are only counted, never removed"
 [ ! -e "$B/idle" ] && ok || fail "the idle brainstorm session is removed"
 [ ! -e "$B/nopid" ] && ok || fail "the idle brainstorm session with no server.pid is removed"
+[ ! -e "$B/zeropid" ] && ok || fail "the idle brainstorm session with pid 0 is removed"
+[ ! -e "$B/unreadable" ] && ok || fail "the idle brainstorm session with an unreadable server.pid is removed"
 [ -d "$B/recent" ] && ok || fail "the recent brainstorm session is kept"
 [ -d "$B/served" ] && ok || fail "the served brainstorm session is kept"
 [ -f "$B/.gitignore" ] && ok || fail "the brainstorm .gitignore is kept"

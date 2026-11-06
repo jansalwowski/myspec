@@ -169,9 +169,13 @@ step_brainstorm() {
   for d in "$root"/*/; do
     [ -d "$d" ] || continue
     d="${d%/}"
-    pid=""
-    [ -f "$d/state/server.pid" ] && pid=$(tr -cd '0-9' < "$d/state/server.pid" 2>/dev/null)
-    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+    # stderr first: the input redirect fails loudly on a missing or
+    # unreadable file, or one stop-server.sh removes meanwhile (#395).
+    pid=$(tr -cd '0-9' 2>/dev/null < "$d/state/server.pid")
+    # Leading zeros dropped. `kill -0 0` signals our own process group, and
+    # pid 1 is init: neither is a server.
+    pid="${pid#"${pid%%[!0]*}"}"
+    if [ -n "$pid" ] && [ "$pid" != 1 ] && kill -0 "$pid" 2>/dev/null; then
       kept=$((kept + 1))
       continue
     fi
