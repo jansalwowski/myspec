@@ -220,7 +220,6 @@ triggers: [export, backfill, batch-job, transaction, BEGIN, long-running]
 not_for:
   - short atomic batches under ~1000 rows
   - jobs with strict all-or-nothing correctness requirements
-anchors: []
 validated: 2026-04-30
 ---
 

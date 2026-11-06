@@ -17,11 +17,11 @@ set -uo pipefail
 
 REPO_ROOT="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 SCRIPT="$REPO_ROOT/lib/memory-index.mjs"
-FILES="$REPO_ROOT/lib/memory-files.mjs"
+DOCTOR="$REPO_ROOT/lib/memory-doctor.mjs"
 TEMPLATES="$REPO_ROOT/framework-files/templates"
 SCAFFOLD="$REPO_ROOT/scaffolding/memory"
 
-for path in "$SCRIPT" "$FILES" "$TEMPLATES" "$SCAFFOLD"; do
+for path in "$SCRIPT" "$DOCTOR" "$TEMPLATES" "$SCAFFOLD"; do
   if [ ! -e "$path" ]; then
     echo "FATAL: not found: $path" >&2
     exit 1
@@ -68,15 +68,13 @@ for kind in procedural semantic episodic; do
   name="${prefix}001-template-check.md"
 
   if grep -q '^hook:' "$template"; then ok; else fail "$kind template has a hook: field"; fi
-  if grep -q '^anchors:' "$template"; then ok; else fail "$kind template has an anchors: field"; fi
-  if grep -q '^anchor:' "$template"; then fail "$kind template uses anchors:, not anchor:"; else ok; fi
-
-  form=$(node --input-type=module -e "
-    import { readFileSync } from 'node:fs';
-    import { frontmatterOf, parseAnchors } from '$FILES';
-    console.log(parseAnchors(frontmatterOf(readFileSync('$template', 'utf8'))).form);
-  " 2>&1)
-  if [ "$form" = empty ]; then ok; else fail "$kind template anchors parse as empty" "form=$form"; fi
+  # anchors: is documented, not set: an empty key is the doctor's
+  # empty-anchors warning, and memory-create adds it only when code-specific.
+  if grep -q '^# anchors:' "$template"; then ok; else fail "$kind template documents anchors:"; fi
+  if grep -qE '^anchors?:' "$template"; then fail "$kind template sets no anchors key"; else ok; fi
+  if grep -qE '^[a-z_]+:.*[[:space:]]#' "$template"; then
+    fail "$kind template keeps comments off value lines" "$(grep -E '^[a-z_]+:.*[[:space:]]#' "$template")"
+  else ok; fi
 
   # Filled: accepted, and the hook reaches the index row unchanged.
   fixture "filled-$kind"
@@ -91,6 +89,15 @@ for kind in procedural semantic episodic; do
   if grep -qF -- "| $HOOK |" "$repo/.ai/memory/$kind/index.md"; then ok; else
     fail "filled $kind hook reaches the index row" "$(grep -F "${prefix}001" "$repo/.ai/memory/$kind/index.md")"
   fi
+  # The doctor has nothing to say about a memory drafted from the template.
+  found=$(node "$DOCTOR" --root "$repo" --json 2>&1 | node -e "
+    let t = ''; process.stdin.on('data', (d) => { t += d; }).on('end', () => {
+      try {
+        const r = JSON.parse(t);
+        console.log([...r.errors, ...r.warnings].filter((f) => (f.path || '').includes('$name')).map((f) => f.id).join(' '));
+      } catch { console.log('unparseable: ' + t); }
+    });")
+  if [ -z "$found" ]; then ok; else fail "doctor reports nothing on the filled $kind template" "$found"; fi
 
   # Hook left empty: refused.
   fixture "empty-$kind"

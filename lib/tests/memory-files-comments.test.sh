@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 # Regression fixture for YAML comments in memory frontmatter (#393).
+# The rule: a `#` at the start of a value or after whitespace, outside a
+# string, starts a comment, in every field but an anchor's `file` and
+# `pattern`; those drop a comment only after a closed quoted or flow value,
+# so unquoted regexes such as `#include` keep their `#`.
 #
 # memory-files.mjs read the rest of a field's line as its value, comment and
 # all: `related: [] # (e.g., ["P009"])` gave three junk IDs, a trailing
@@ -76,9 +80,37 @@ expect "a # inside a single-quoted value is kept" "\"it's # one\"" \
   "hook: 'it''s # one'  # note" \
   "m.scalarField(fm, 'hook')"
 
-expect "an unquoted plain scalar is left whole" '"cache, flush # keywords only"' \
+expect "unquoted hook ending in a comment" '"cache, flush"' \
   'hook: cache, flush # keywords only' \
   "m.scalarField(fm, 'hook')"
+
+expect "a # with no whitespace before it is kept" '"C#, F#"' \
+  'hook: C#, F# # languages' \
+  "m.scalarField(fm, 'hook')"
+
+expect "a value that is only a comment is empty" '""' \
+  'hook: # keywords only' \
+  "m.scalarField(fm, 'hook')"
+
+expect "status drops its trailing comment" '"superseded"' \
+  'status: superseded  # by P010' \
+  "m.scalarField(fm, 'status')"
+
+expect "id drops its trailing comment" '"P001"' \
+  'id: P001  # claimed' \
+  "m.scalarField(fm, 'id')"
+
+expect "an apostrophe inside a flow item is a letter" '["don'"'"'t-cache","x"]' \
+  "related: [don't-cache, x] # e.g. [y]" \
+  "m.listField(fm, 'related')"
+
+expect "a quote opening a flow item still protects its #" '["a # b","x"]' \
+  "related: ['a # b', x] # e.g. [y]" \
+  "m.listField(fm, 'related')"
+
+expect "anchors that are only a comment hold no anchor" '{"anchors":[],"form":"empty","malformed":[]}' \
+  'anchors: # none yet' \
+  "m.parseAnchors(fm)"
 
 expect "anchors [] with a trailing comment is empty" '{"anchors":[],"form":"empty","malformed":[]}' \
   'anchors: []         # [{file: "path", pattern: "regex"}]' \

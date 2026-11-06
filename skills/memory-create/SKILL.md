@@ -71,14 +71,14 @@ Use the type-appropriate template from `${aiDir}/.templates/memory-{type}.md`:
 - Set `polarity`: positive (pattern to follow) or negative (anti-pattern)
 - Set `triggers`: keywords from the problem space (error messages, component names, symptoms)
 - Set `not_for`: 2-3 specific exclusions
-- Set `anchors`: file + pattern if code-specific
+- Add `anchors:` (file + pattern) only if code-specific; otherwise leave the key out, since the doctor warns on an empty one
 - Set `related`: IDs of related semantic/episodic memories (e.g., ["S001", "E003"])
 
 **If semantic:**
 - Extract: the factual statement, source, implication
 - Keep concise -- 1-3 sentences for the fact
 - Set `topic`: domain keyword (e.g., google-maps, prisma, auth)
-- Set `anchors`: file + pattern to check staleness
+- Add `anchors:` (file + pattern) only if code-specific; otherwise leave the key out, since the doctor warns on an empty one
 - Set `related`: IDs of related procedural/episodic memories (e.g., ["P009", "E001"])
 
 **If episodic:**
@@ -86,6 +86,7 @@ Use the type-appropriate template from `${aiDir}/.templates/memory-{type}.md`:
 - Set `outcome`: success | failure | partial | abandoned
 - Set `persistent: true` only if this has indefinite relevance
 - Default `persistent: false` -- will auto-archive after 30 days
+- Add `anchors:` (file + pattern) only if code-specific; otherwise leave the key out, since the doctor warns on an empty one
 - Set `related`: IDs of related procedural/semantic memories (e.g., ["P009", "S001"])
 
 **Anchor patterns.** A pattern is a POSIX extended regex (`grep -E`), case-sensitive, matched one line at a time: `^` and `$` mean line start and end, and nothing matches across a line break. Write alternation as `|`; `\|`, `\+`, `\(` are literal characters, and so is a backslash inside brackets. Matching is by Unicode character, so `.` and `[[:alpha:]]` cover non-ASCII text. A pattern that appears literally on a line also counts, so `$this->load(` needs no escaping. Pick a line that names the thing (`^composer:`, `function resolveSkillName`), not one that spans lines. Check it before writing: `node "${CLAUDE_PLUGIN_ROOT}/lib/memory-anchor.mjs" <file> "<pattern>"` must exit 0 — the doctor and `memory-optimize` run the same check.
