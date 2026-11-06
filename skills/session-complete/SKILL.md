@@ -7,13 +7,17 @@ description: "Use when a tracked session is finished and ready to archive. Keywo
 
 ## Prerequisites
 
-Requires at least one file in `.claude/state/sessions/` (the primary checkout's, gitignored).
+Requires at least one live log in `SESSIONS`, the main checkout's gitignored `.claude/state/sessions/` (a git common dir's `myspec-state/sessions/` when there is no main checkout). Resolve it from wherever you are, a linked worktree included:
+
+```bash
+SESSIONS=$("${CLAUDE_PLUGIN_ROOT}/lib/session-event.sh" dir)
+```
 
 ## Workflow
 
 ### 1. Identify Target Session
 
-List `.claude/state/sessions/*.md`.
+List `"$SESSIONS"/*.md`.
 
 - **Zero files**: Abort. Tell user: "No active sessions found. Either no code was edited this session (the hook only auto-creates on code edits) or all sessions were already archived. Use `/myspec:session-start` to create one manually."
 - **Exactly one file**: Use it.
@@ -81,8 +85,17 @@ For each approved extraction:
 
 ### 6. Archive Session
 
-Move `TARGET_FILE` to:
-`${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md`
+Move `TARGET_FILE` to `<main>/${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md`, where `<main>` is the main checkout, never a linked worktree: `git worktree remove` deletes an ignored or uncommitted archive with the worktree. Resolve it from wherever you are:
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/lib/main-checkout.sh"
+```
+
+| Exit | `<main>` |
+|------|----------|
+| 0 | The path it printed: the main checkout, or the project root without git. Leave the archive unstaged there (the user commits it) |
+| 3 (bare clone or separate git dir: no main checkout) | This checkout. `git add` the archive and tell the user it survives `git worktree remove` only once committed |
+| 1 | None: stop, show its stderr, and leave `TARGET_FILE` where it is |
 
 Where slug is derived from the (refined) topic — never archive with `auto:` in the slug.
 
@@ -90,7 +103,7 @@ Where slug is derived from the (refined) topic — never archive with `auto:` in
 - "Fix StreetView not updating" → `YYYY-MM-DD-fix-streetview-updating.md`
 - "Implement marker clustering" → `YYYY-MM-DD-implement-marker-clustering.md`
 
-If the slug would collide with an existing archive file, append a short session_id prefix: `YYYY-MM-DD-{slug}-{session_id_first8}.md`.
+If the slug would collide with an existing file in `<main>/${aiDir}/memory/sessions/archive/`, append a short session_id prefix: `YYYY-MM-DD-{slug}-{session_id_first8}.md`.
 
 ### 7. Friction Report
 
@@ -142,9 +155,9 @@ Report to user:
 
 ## Verification Checklist
 
-- [ ] `TARGET_FILE` no longer exists under `.claude/state/sessions/`
+- [ ] `TARGET_FILE` no longer exists under `SESSIONS`
 - [ ] Sibling active sessions (other agents) were NOT touched
-- [ ] Archive file exists at `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md` with `status: completed`
+- [ ] Archive file exists at `<main>/${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md` with `status: completed`, `<main>` being what `main-checkout.sh` printed (`ls` that absolute path; from a linked worktree it is not under the cwd)
 - [ ] Outcome section is filled (what worked, root cause, key insights)
 - [ ] Approved memories were created via `/myspec:memory-create` (check respective index files)
 - [ ] User was presented extraction list and confirmed selections

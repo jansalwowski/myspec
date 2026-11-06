@@ -87,7 +87,7 @@ User: `yes`.
 
 #### 5. Execute
 
-For row 2 (archive): edits frontmatter `status: active` → `status: abandoned`, then `mv .claude/state/sessions/2026-04-24-0900-autocalibration.md ai/memory/sessions/archive/2026-04-24-0900-autocalibration.md`.
+For row 2 (archive): edits frontmatter `status: active` → `status: abandoned`, then `mv "$SESSIONS"/2026-04-24-0900-autocalibration.md "$MAIN"/ai/memory/sessions/archive/2026-04-24-0900-autocalibration.md`. `$SESSIONS` (from `session-event.sh dir`) and `$MAIN` (from `main-checkout.sh`) both name the main checkout, so the archive is not in a linked worktree that `git worktree remove` could delete. The archive stays unstaged: another session's branch may be checked out in the main checkout.
 
 For rows 1, 3 and 4 (delete): `rm` (untracked auto-created files).
 

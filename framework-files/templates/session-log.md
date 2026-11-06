@@ -9,7 +9,7 @@ auto_created: false
 worktree: ""        # worktree dir basename if session runs in one; empty on main checkout
 ---
 
-<!-- Live logs live in .claude/state/sessions/ (gitignored, primary checkout); archives in ${aiDir}/memory/sessions/archive/ -->
+<!-- Live logs live in .claude/state/sessions/ (gitignored, primary checkout); archives in ${aiDir}/memory/sessions/archive/ of the main checkout too -->
 
 # Session: {topic}
 

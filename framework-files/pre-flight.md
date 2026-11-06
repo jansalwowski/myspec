@@ -72,7 +72,7 @@ Template: "I've made {N} attempts without success. What I've tried: [list]. Shou
 - [ ] Set your session file's status to `completed` (own file in `.claude/state/sessions/`)
 - [ ] Fill `Outcome` section in session log
 - [ ] Ask user: "Should we create a memory from this session?"
-- [ ] Archive session log to `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md` (all of this is what `/myspec:session-complete` does)
+- [ ] Archive session log to `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md` in the main checkout, never a linked worktree (all of this is what `/myspec:session-complete` does)
 
 <!-- myspec:framework-end -->
 

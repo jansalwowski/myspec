@@ -43,7 +43,7 @@ Episodic memories older than 30 days consolidate into semantic facts; `/myspec:m
 |--------|-----------|
 | Live file | `.claude/state/sessions/{session_id}.md` in the edited file's **main checkout** — gitignored, never in a linked worktree (`git worktree remove` would destroy it) |
 | Own session | The live file whose `## Files touched` lists a path you edited untagged, or tags your subagent; several or none → newest mtime, and confirm. You never see your session id; never pass this one to `set-isolation.sh` |
-| Archive file | `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md`; topic-less sweeps use `orphaned-{first 8 of session_id}` |
+| Archive file | `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md` (topic-less: `orphaned-{first 8 of session_id}`) in the main checkout, `lib/main-checkout.sh`; unstaged, as its branch may be another session's. Exit 3: own checkout, staged |
 | Terminal statuses | `completed` (via `/myspec:session-complete`) or `abandoned` (swept). Archive is a location, not a status |
 | Age policy | mtime < 1h: live, never touch. 1–6h: ambiguous, route to `/myspec:session-clean`. > 6h: sweep as `abandoned` |
 | Ownership | Own → `/myspec:session-complete`; others' → `/myspec:session-clean` or bootstrap's > 6h sweep |
