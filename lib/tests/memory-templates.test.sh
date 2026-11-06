@@ -8,8 +8,8 @@
 #
 # Each template is filled the way memory-create fills it (placeholders
 # substituted, the hook set) and must pass `memory-index.mjs --check`. The
-# same copy with the hook left empty must be refused: a comment on the hook
-# line would be read as the hook, and the refusal would never fire.
+# same copy with the hook left empty must be refused, or the refusal could
+# never fire for a memory drafted from the template.
 #
 # Usage: memory-templates.test.sh [path-to-repo-root]
 
@@ -92,7 +92,7 @@ for kind in procedural semantic episodic; do
     fail "filled $kind hook reaches the index row" "$(grep -F "${prefix}001" "$repo/.ai/memory/$kind/index.md")"
   fi
 
-  # Hook left empty: refused, so a comment can't stand in for the hook.
+  # Hook left empty: refused.
   fixture "empty-$kind"
   repo="$ROOT/empty-$kind"
   fill "$template" "" > "$repo/.ai/memory/$kind/$name"

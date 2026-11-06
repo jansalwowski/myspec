@@ -11,7 +11,6 @@ validation_count: 0
 triggers: []        # keywords agents search for
 not_for: []         # explicit exclusions
 # anchors: [{file: "path", pattern: "grep -E regex, one line"}], or delete the line
-# Comments go on their own line: hook and anchors read the rest of theirs as the value
 anchors: []
 related: []         # IDs of related memories (e.g., ["S001", "E003"])
 ---

@@ -9,7 +9,6 @@ outcome: ""         # success | failure | partial | abandoned
 persistent: false   # true = never auto-archive
 source_session: ""  # archive slug of originating session
 # anchors: [{file: "path", pattern: "grep -E regex, one line"}], or delete the line
-# Comments go on their own line: hook and anchors read the rest of theirs as the value
 anchors: []
 related: []         # IDs of related memories (e.g., ["P009", "S001"])
 ---
