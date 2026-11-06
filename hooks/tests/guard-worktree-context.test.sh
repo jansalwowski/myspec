@@ -520,5 +520,41 @@ check block "feature branch, source"                   'echo x > src/a.js'
 git -C "$REPO" symbolic-ref HEAD refs/heads/main
 rm -f "$STATE/"*.jsonl
 
+# --- a cd into a directory the command creates first (#383) -------------------
+# The hook reads the command before it runs: none of these directories exist.
+NEW="$(dirname "$REPO")/new-383"
+check allow "mkdir -p <outside> && cd <it>, then a branch op" \
+  "mkdir -p $NEW/r && cd $NEW/r && git init -q && git checkout -q -b main"
+check allow "relative mkdir -p d && cd d outside the repo" \
+  'mkdir -p ../r2-383 && cd ../r2-383 && git checkout -q -b main'
+check block "mkdir -p d && cd d inside main stays in main" \
+  'mkdir -p sub && cd sub && git checkout develop'
+check_in "$WT" block "cd .. out of a created directory lands in main" none-sess \
+  "mkdir -p $NEW/a/b && cd $NEW/a/b && cd ../../../checkout && git checkout develop"
+check block "a cd into a directory nothing creates leaves the cwd" \
+  "cd $NEW/never; git checkout develop"
+check block "a variable cd target is not guessed" \
+  "mkdir -p $NEW/v && cd \$V && git checkout develop"
+check block "a missing directory only named earlier is not created" \
+  "ls $NEW/out; cd $NEW/out; git checkout develop"
+check allow "a quoted created directory is followed" \
+  "mkdir -p '$(dirname "$REPO")/my r383' && cd '$(dirname "$REPO")/my r383' && git checkout -q -b main"
+check allow "a worktree created inside the repo is linked" \
+  'git worktree add .claude/worktrees/w3 -b w3 && cd .claude/worktrees/w3 && git checkout -b w3b'
+check block "a plain directory created inside the repo is still main" \
+  'mkdir -p .claude/worktrees/w4 && cd .claude/worktrees/w4 && git checkout -b w4b'
+HOME="$(dirname "$REPO")" check allow "a ~/ cd into a created directory" \
+  'mkdir -p ~/h383 && cd ~/h383 && git checkout -q -b main'
+check block "a creation a ; separates from the cd is not followed" \
+  "mkdir -p $NEW/s1; cd $NEW/s1 && git checkout develop"
+check block "a ; after a cd into a created directory drops it" \
+  "mkdir -p $NEW/s2 && cd $NEW/s2; git checkout develop"
+mark c-wt2 worktree 60
+check_in "$REPO" allow "worktree mode, git worktree add d && cd d, then a write" c-wt2 \
+  "git worktree add $NEW/wt2 --detach && cd $NEW/wt2 && echo x > src.js"
+check_in "$REPO" block "worktree mode, cd .. from a created directory into main" c-wt2 \
+  "mkdir -p $NEW/c/d && cd $NEW/c/d && cd ../../../checkout && echo x > src.js"
+rm -f "$STATE/"*.jsonl
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
