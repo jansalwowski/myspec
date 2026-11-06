@@ -339,10 +339,17 @@ branch_verdict() {
 
   checked_out=$(held_branches "$root")
 
+  # A quoted span anywhere in the segment may sit inside a name (wt-"a" scans
+  # as wt-Q), so the name cannot be read back. WT_QUOTED comes from the
+  # keep-mode marker, not the Q placeholder, which a real name can hold (#403).
+  if [ "$WT_QUOTED" = 1 ]; then
+    printf 'BLOCKED: git branch delete names a branch the guard cannot resolve: a quoted name. Write the branch name literally so the guard can confirm no worktree has it checked out. Blocked: %s' "${segment:0:200}"
+    return 0
+  fi
+
   for word in ${names[@]+"${names[@]}"}; do
-    # Q is the scanner placeholder for a quoted span.
-    if [ "$word" = Q ] || [ "$word" = - ] || [[ "$word" == *[\$@*?[]* ]]; then
-      printf 'BLOCKED: git branch delete names a branch the guard cannot resolve (%s): a quoted name, variable, glob or @{-N}. Write the branch name literally so the guard can confirm no worktree has it checked out. Blocked: %s' "$word" "${segment:0:200}"
+    if [ "$word" = - ] || [[ "$word" == *[\$@*?[]* ]]; then
+      printf 'BLOCKED: git branch delete names a branch the guard cannot resolve (%s): a variable, glob or @{-N}. Write the branch name literally so the guard can confirm no worktree has it checked out. Blocked: %s' "$word" "${segment:0:200}"
       return 0
     fi
     # -i: on a case-insensitive filesystem (macOS default) git resolves
@@ -373,6 +380,10 @@ branch_verdict() {
 REMOVED_WT=$'\n'
 WT_LINK_OK=0   # walk, per segment: may a removal in this segment count?
 WT_GLUE=0      # walk, per segment: 1 for the tail of a redirect (`1` of 2>&1)
+# walk, per segment: 1 when it holds a quoted span. The keep-mode scan marks
+# each with \035, which no command text holds; the plain scan's placeholder
+# Q is also a letter a path can hold (#403).
+WT_QUOTED=0
 
 # note_segment <normalized segment> <dir> -> updates REMOVED_WT for one
 # segment: adds the worktree a `git worktree remove` removes, or empties the
@@ -382,12 +393,11 @@ note_segment() {
   local -a words
   [ "$WT_GLUE" = 0 ] || return 0
   if [[ "$1" =~ ^git[[:space:]]+worktree[[:space:]]+remove([[:space:]]+(.*))?$ ]]; then
-    [ "$WT_LINK_OK" = 1 ] || return 0
+    [ "$WT_LINK_OK" = 1 ] && [ "$WT_QUOTED" = 0 ] || return 0
     read -r -a words <<< "${BASH_REMATCH[2]}"
     for word in ${words[@]+"${words[@]}"}; do
       if [ "$skip" = 1 ]; then skip=0; continue; fi
       case "$word" in
-        *Q*) return 0 ;;     # Q is the scanner placeholder for a quoted span
         '>'|'>>'|'<'|[0-9]'>'|[0-9]'>>'|[0-9]'<') skip=1; continue ;;
         '>'*|'<'*|[0-9]'>'*|[0-9]'<'*) continue ;;
       esac
@@ -855,7 +865,8 @@ walk() {
     [ "${#sw[@]}" -gt 0 ] || continue
     # A worktree removal carries over only through an unbroken && link; ^ is
     # the start of a payload, which runs where its bash -c / eval segment does.
-    WT_GLUE=0
+    WT_GLUE=0 WT_QUOTED=0
+    case "${segs_r[k]:-}" in *$'\035'*) WT_QUOTED=1 ;; esac
     if [ "$link" = r ]; then
       WT_GLUE=1
     else

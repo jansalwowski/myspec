@@ -114,6 +114,9 @@ check block "case variant of checked-out name" 'git branch -D WT-A'
 check block "names after --"                   'git branch -D -- wt-a'
 check block "delete ok, then rename"           'git branch -D feat/x && git branch -m a b'
 check block "quoted name cannot be resolved"   'git branch -D "wt-a"'
+check block "#403 partly quoted name"           'git branch -D wt-"a"'
+check block "#403 partly quoted, single"       "git branch -D wt-'a'"
+check allow "#403 branch literally named Q"    'git branch -D Q'
 # shellcheck disable=SC2016 # literal text, not an expansion
 check block "variable name cannot be resolved" 'git branch -D $BR'
 check block "@{-1} cannot be resolved"         'git branch -d @{-1}'
@@ -685,6 +688,19 @@ check allow "#372 a redirect to /dev/null stays read-only" \
   'git worktree add .claude/worktrees/g5 -b g5 && git status >/dev/null 2>&1 && git -C .claude/worktrees/g5 switch -c g5b'
 HOME="$(dirname "$REPO")" check block "#372 an empty -C leaves the directory unchanged" \
   'git -C "" switch develop'
+
+# --- a capital Q in a removed worktree's path (#403) -------------------------
+# Q is the plain scan's quoted-span placeholder, and also a letter a path can
+# hold: a mktemp name with one made the #384 cases flake.
+WTQ="$REPO/.claude/worktrees/wt-Q"
+git -C "$REPO" worktree add -q "$WTQ" -b wt-q
+check allow "#403 a Q in the removed path"            "git worktree remove $WTQ && git branch -D wt-q"
+check allow "#403 a Q in a relative removed path"     'git worktree remove .claude/worktrees/wt-Q && git branch -D wt-q'
+check block "#403 a quoted removed path still counts as quoted" \
+  "git worktree remove \"$WTQ\" && git branch -D wt-q"
+check block "#403 a partly quoted removed path"       \
+  "git worktree remove $REPO/.claude/worktrees/\"wt-Q\" && git branch -D wt-q"
+git -C "$REPO" worktree remove --force "$WTQ"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
