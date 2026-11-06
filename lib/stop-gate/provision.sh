@@ -20,7 +20,11 @@
 # lockfile that is gone on either side blocks as removed. Tests:
 # lib/tests/stop-gate-arm.test.sh (provision_stale) and
 # hooks/tests/verify-before-stop.test.sh. Below: a dependency directory
-# with nothing installed (deps_note, #239).
+# with nothing installed (deps_note, #239, #375).
+
+# dep_dir_uninstalled: what counts as nothing installed (lib/dep-dir.sh).
+# shellcheck source=lib/dep-dir.sh
+. "$HOOK_LIB/dep-dir.sh"
 
 # provision_stale <root> -> one "path (reason)" per stale recorded link.
 # Fails, printing the reason, when the record cannot be read.
@@ -104,83 +108,86 @@ provision_check() {
 # verdict, which dependency directory holds nothing installed.
 #
 # DEPENDENCY_DIRS, one entry per ecosystem, as data:
-#   <directory>|<manifests, comma-separated>|<install-state markers in the
-#   directory, space-separated>
-# The directory counts only beside one of its manifests. It holds nothing
-# installed when none of its markers exists and every entry directly in it
-# is a file git tracks (or there is none): the tracked-only rule covers an
-# installer whose marker is not listed here, as any package it installs is
-# an untracked entry.
+#   <directory>|<manifests, comma-separated>
+# The directory counts only beside one of its manifests. Whether it holds
+# anything installed is dep_dir_uninstalled's call (lib/dep-dir.sh, the rule
+# and the marker and cache lists worktree-provision.sh shares): no
+# install-state marker, and nothing in it but files git tracks and known
+# tool caches. Any other entry is an install, so an installer whose marker
+# is not listed still counts as installed.
 DEPENDENCY_DIRS=(
-  'node_modules|package.json|.package-lock.json .yarn-state.yml .modules.yaml .yarn-integrity'
-  'vendor|composer.json|autoload.php composer/installed.json'
-  'vendor|go.mod|modules.txt'
-  'vendor/bundle|Gemfile|'
-  '.venv|pyproject.toml,requirements.txt,Pipfile,setup.py|pyvenv.cfg'
-  'venv|pyproject.toml,requirements.txt,Pipfile,setup.py|pyvenv.cfg'
-  'Pods|Podfile|Manifest.lock'
+  'node_modules|package.json'
+  'vendor|composer.json'
+  'vendor|go.mod'
+  'vendor/bundle|Gemfile'
+  '.venv|pyproject.toml,requirements.txt,Pipfile,setup.py'
+  'venv|pyproject.toml,requirements.txt,Pipfile,setup.py'
+  'Pods|Podfile'
 )
 
 # deps_not_installed <dir> -> one `<dependency dir>\t<tracked entries,
-# comma-separated, or "nothing">\t<markers looked for>` line per
-# DEPENDENCY_DIRS directory in <dir> that holds nothing installed. A link
-# (provision's, checked by provision_check) is not one.
+# comma-separated, or empty>\t<cache entries, comma-separated, or empty>`
+# line per DEPENDENCY_DIRS directory in <dir> that holds nothing installed.
+# A link (provision's, checked by provision_check) is not one.
 deps_not_installed() {
-  local dir="$1" entry dep manifests markers m found tracked e name names
+  local dir="$1" entry dep manifests m found held kind name names caches
   local -a ms
   for entry in "${DEPENDENCY_DIRS[@]}"; do
-    IFS='|' read -r dep manifests markers <<< "$entry"
-    if [ ! -d "$dir/$dep" ] || [ -L "$dir/$dep" ]; then
-      continue
-    fi
+    IFS='|' read -r dep manifests <<< "$entry"
     found=0
     IFS=',' read -ra ms <<< "$manifests"
     for m in "${ms[@]}"; do
       [ ! -f "$dir/$m" ] || { found=1; break; }
     done
     [ "$found" = 1 ] || continue
-    found=0
-    for m in $markers; do
-      [ ! -e "$dir/$dep/$m" ] || { found=1; break; }
-    done
-    [ "$found" = 0 ] || continue
-    tracked=$'\n'$(git -C "$dir" ls-files -- "$dep" 2>/dev/null || true)$'\n'
+    held=$(dep_dir_uninstalled "$dir" "$dep") || continue
     names=""
-    for e in "$dir/$dep"/* "$dir/$dep"/.[!.]* "$dir/$dep"/..?*; do
-      [ -e "$e" ] || [ -L "$e" ] || continue
-      name="${e#"$dir"/}"
-      # A directory, a link or an untracked file: something was installed.
-      if [ -d "$e" ] || [ -L "$e" ]; then found=1; break; fi
-      case "$tracked" in
-        *$'\n'"$name"$'\n'*) names="${names:+$names, }$name" ;;
-        *) found=1; break ;;
+    caches=""
+    while IFS=$'\t' read -r kind name; do
+      case "$kind" in
+        tracked) names="${names:+$names, }$name" ;;
+        cache) caches="${caches:+$caches, }$name" ;;
       esac
-    done
-    [ "$found" = 0 ] || continue
-    printf '%s\t%s\t%s\n' "$dep" "${names:-nothing}" "${markers:-none}"
+    done <<< "$held"
+    printf '%s\t%s\t%s\n' "$dep" "$names" "$caches"
   done
 }
 
 # deps_note <root> <failed index>: when checks of <root> failed (FAILED_CWDS
 # from <failed index> on), adds to DEPS_NOTES each dependency directory in
-# the root, or in a failed check's cwd, that holds nothing installed.
+# the root, or in a failed check's cwd, that holds nothing installed. In a
+# linked worktree the fix it names is provisioning (worktree-provision.sh
+# links or installs, and moves a cache-only directory aside, #375); in a
+# main checkout, the project's install command.
 DEPS_NOTES=()
 deps_note() {
-  local root="$1" from="$2" i d dirs=$'\n' dep held markers line
+  local root="$1" from="$2" i d dirs=$'\n' line dep names caches held fix linked
   [ "${#FAILED_CWDS[@]}" -gt "$from" ] || return 0
   for ((i = from; i < ${#FAILED_CWDS[@]}; i++)); do
     d="$root${FAILED_CWDS[$i]:+/${FAILED_CWDS[$i]}}"
     case "$dirs" in *$'\n'"$d"$'\n'*) ;; *) dirs="$dirs$d"$'\n' ;; esac
   done
   case "$dirs" in *$'\n'"$root"$'\n'*) ;; *) dirs=$'\n'"$root$dirs" ;; esac
+  # A subshell: checkout_facts sets CF_* globals the caller may still read.
+  linked=$(checkout_facts "$root" && printf '%s' "$CF_LINKED") || linked=0
   while IFS= read -r d; do
     [ -n "$d" ] || continue
-    while IFS=$'\t' read -r dep held markers; do
-      [ -n "$dep" ] || continue
-      line="Dependencies not installed in this tree: $d/$dep holds $held"
-      [ "$held" = nothing ] || line="$line (tracked by git)"
-      line="$line and no install state (${markers// /, }), so the failures below may be the package manager's, not the code's. Install the dependencies in $d with the project's install command, then stop again."
-      DEPS_NOTES+=("$line")
+    # Split by hand: tab is IFS whitespace, so `read` would merge an empty
+    # middle field into the next.
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      dep="${line%%$'\t'*}"
+      line="${line#*$'\t'}"
+      names="${line%%$'\t'*}"
+      caches="${line#*$'\t'}"
+      held="${names:+$names (tracked by git)}"
+      [ -z "$caches" ] || held="${held:+$held and }tool caches only ($caches)"
+      if [ "$linked" = 1 ]; then
+        fix="Provision this worktree, which links or installs its dependencies: $HOOK_LIB/worktree-provision.sh \"$root\" (or install them in $d with the project's install command), then stop again."
+      else
+        fix="Install the dependencies in $d with the project's install command, then stop again."
+      fi
+      DEPS_NOTES+=("Dependencies not installed in this tree: $d/$dep holds ${held:-nothing} and no install-state marker, so the failures below may be the package manager's, not the code's. $fix")
     done < <(deps_not_installed "$d")
   done <<< "$dirs"
 }

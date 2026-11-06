@@ -35,7 +35,13 @@
 #      - when it is a dependency tree (DEP_DIRS) and `install` is set: the
 #        install builds that tree in the worktree, and through a link it
 #        would write into the main checkout;
-#      - when something already exists at that path in the worktree.
+#      - when something already exists at that path in the worktree. A
+#        dependency directory (DEP_DIRS) there with nothing installed
+#        (lib/dep-dir.sh, the rule the Stop hook's note shares) is replaced:
+#        one holding only tool caches (a test run's .vite or .cache before
+#        provisioning, #373) is moved to
+#        .claude/state/provision-displaced/<path>, never deleted, an empty one
+#        is removed, and the line says so.
 #      A directory the branch tracks files in (a .gitkeep placeholder,
 #      #239) cannot be replaced by a link: that is an error naming the file
 #      and the fix, and provisioning stops with exit 1.
@@ -44,7 +50,8 @@
 #      "mode": "clone"} makes a copy-on-write clone where the filesystem
 #      supports one (--reflink=auto on Btrfs/XFS, cp -c on APFS) and falls
 #      back to a plain copy. A directory in the worktree that holds only
-#      tracked files (placeholders) is filled, not skipped.
+#      tracked files (placeholders) and tool caches is filled, not skipped;
+#      anything else already there is skipped, with a line.
 #   3. clean: deletes the untracked files and directories in the worktree
 #      that match a repo-relative glob (#193, lib/glob-regex.sh), e.g.
 #      **/*.tsbuildinfo, so the
@@ -98,6 +105,10 @@ HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck source=lib/hook-core.sh
 . "$HERE/hook-core.sh"
 declare -F glob_regex >/dev/null || { echo "worktree-provision: lib/glob-regex.sh missing" >&2; exit 1; }
+# dep_dir_uninstalled: what counts as nothing installed in a dependency
+# directory, shared with the Stop hook (lib/stop-gate/provision.sh).
+# shellcheck source=lib/dep-dir.sh
+. "$HERE/dep-dir.sh"
 
 # --- the dependency-directory map ----------------------------------------------
 # Which dependency directories this script may link, and which lockfiles pin
@@ -477,6 +488,7 @@ while IFS= read -r line; do
   entry="${line%%$'\t'*}"
   LOCKS=()
   SPECS=()
+  DISPLACE=""
   if [ "$line" != "$entry" ]; then
     IFS=$'\t' read -ra LOCKS <<< "${line#*$'\t'}"
     # :(glob) keeps a * inside one directory, as the shell glob in lock_paths_for does.
@@ -526,17 +538,33 @@ while IFS= read -r line; do
     # A directory the branch tracks files in (#239: node_modules/.gitkeep)
     # cannot become a link, and skipping it quietly leaves an empty tree the
     # checks then fail on.
+    # A dependency directory with nothing installed (lib/dep-dir.sh): only
+    # tool caches is moved aside below, nothing at all is removed, once the
+    # checks that may still skip this link have passed (#373).
     tracked=""
-    if [ -d "$WORKTREE/$entry" ] && [ ! -L "$WORKTREE/$entry" ]; then
+    held=""
+    uninstalled=0
+    if is_dep_dir "$entry" && held=$(dep_dir_uninstalled "$WORKTREE" "$entry"); then
+      uninstalled=1
+      while IFS=$'\t' read -r kind name; do
+        case "$kind" in
+          tracked) [ -n "$tracked" ] || tracked="$name" ;;
+          cache) DISPLACE="${DISPLACE:+$DISPLACE, }${name##*/}" ;;
+        esac
+      done <<< "$held"
+    elif [ -d "$WORKTREE/$entry" ] && [ ! -L "$WORKTREE/$entry" ]; then
       tracked=$(git -C "$WORKTREE" ls-files -- ":(literal)$entry")
     fi
     if [ -n "$tracked" ]; then
       PLACEHOLDERS+=("${tracked%%$'\n'*}")
       echo "worktree-provision: $entry holds a tracked file (${tracked%%$'\n'*}) — cannot link $entry; untrack it (git rm --cached ${tracked%%$'\n'*}, keeping $entry ignored), or move $entry from isolation.provision.symlink to isolation.provision.copy" >&2
-    else
-      echo "worktree-provision: $entry already exists in the worktree — not linking $entry"
+      continue
     fi
-    continue
+    if [ "$uninstalled" -eq 0 ]; then
+      echo "worktree-provision: $entry already exists in the worktree — not linking $entry"
+      continue
+    fi
+    [ -n "$DISPLACE" ] || DISPLACE="-"
   fi
   LOCK_JSON='{}'
   if [ "$ALLOW_LINKED" != "true" ] && [ "${#LOCKS[@]}" -gt 0 ]; then
@@ -570,6 +598,26 @@ while IFS= read -r line; do
       LOCK_JSON=$(jq -c --args 'reduce $ARGS.positional[] as $k (.; if has($k) then . else . + {($k): null} end)' "${ABSENT[@]}" <<< "$LOCK_JSON")
     fi
   fi
+  if [ "$DISPLACE" = "-" ]; then
+    if ! rmdir "$WORKTREE/$entry" 2>/dev/null; then
+      echo "worktree-provision: cannot remove the empty $entry in the worktree — not linking $entry; remove it and rerun" >&2
+      continue
+    fi
+    echo "worktree-provision: $entry was empty, nothing installed — removed it and linked $entry"
+  elif [ -n "$DISPLACE" ]; then
+    moved=".claude/state/provision-displaced/$entry"
+    n=1
+    while [ -e "$WORKTREE/$moved" ] || [ -L "$WORKTREE/$moved" ]; do
+      n=$(( n + 1 ))
+      moved=".claude/state/provision-displaced/$entry.$n"
+    done
+    if ! { mkdir -p "$(dirname "$WORKTREE/$moved")" && mv "$WORKTREE/$entry" "$WORKTREE/$moved"; } 2>/dev/null; then
+      echo "worktree-provision: cannot move $entry aside to $moved — not linking $entry; move it out of the way and rerun" >&2
+      continue
+    fi
+    exclude ".claude/state/provision-displaced/"
+    echo "worktree-provision: $entry held only tool caches ($DISPLACE), nothing installed — moved it to $moved and linked $entry"
+  fi
   mkdir -p "$(dirname "$WORKTREE/$entry")"
   ln -s "$MAIN/$entry" "$WORKTREE/$entry"
   exclude "$entry"
@@ -596,12 +644,16 @@ while IFS=$'\t' read -r entry mode; do
     continue
   fi
   [ -e "$MAIN/$entry" ] || continue
-  # A directory holding only tracked files (a placeholder, #239) is filled.
+  # A directory holding only tracked files (a placeholder, #239), or with
+  # nothing installed beside them but tool caches (lib/dep-dir.sh, #373), is
+  # filled; anything else already there is kept and named.
   fill=0
   if [ -d "$WORKTREE/$entry" ] && [ ! -L "$WORKTREE/$entry" ] && [ -d "$MAIN/$entry" ] \
-      && [ -z "$(git -C "$WORKTREE" ls-files -o -- ":(literal)$entry")" ]; then
+      && { [ -z "$(git -C "$WORKTREE" ls-files -o -- ":(literal)$entry")" ] \
+           || dep_dir_uninstalled "$WORKTREE" "$entry" >/dev/null; }; then
     fill=1
   elif [ -e "$WORKTREE/$entry" ] || [ -L "$WORKTREE/$entry" ]; then
+    echo "worktree-provision: $entry already exists in the worktree — not copying $entry"
     continue
   fi
   mkdir -p "$(dirname "$WORKTREE/$entry")"
