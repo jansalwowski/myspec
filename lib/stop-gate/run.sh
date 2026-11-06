@@ -3,15 +3,16 @@
 # lint: sourced under set -euo pipefail
 # Sourced by hooks/verify-before-stop.sh, after lib/hook-core.sh and
 # stop-gate/arm.sh; never run. Loads a checkout's checks, decides per check
-# whether it runs (`paths`, `cwd`, `runIn`, the container-exec refusal) and
-# runs it under the capped runner. Requirements: docs/stop-gate.md (R5, R7,
-# R8a, R11, R12) and docs/verify-check-escapes.md in the plugin repository.
+# whether it runs (`paths`, `cwd`, `runIn`, the container-exec refusal),
+# reads its `knownFailures`, and runs it under the capped runner.
+# Requirements: docs/stop-gate.md (R5, R7, R8a, R11, R12, R15) and
+# docs/verify-check-escapes.md in the plugin repository.
 # Tests: lib/tests/stop-gate-run.test.sh.
 #
 # Results go to the arrays run_init sets up: FAILED_CHECKS with FAILED_LOGS
-# (kept for attribution, removed on exit), FAILED_CWDS and FAILED_OUTPUT,
-# TIMED_OUT_CHECKS, UNVERIFIABLE_CHECKS, NOT_RUN_CHECKS, RAN_CHECKS,
-# SCOPE_NOTES, and CHECKS_RAN.
+# (kept for attribution, removed on exit), FAILED_CWDS, FAILED_KNOWN and
+# FAILED_OUTPUT, TIMED_OUT_CHECKS, UNVERIFIABLE_CHECKS, NOT_RUN_CHECKS,
+# RAN_CHECKS, SCOPE_NOTES, and CHECKS_RAN.
 # shellcheck disable=SC2034
 
 # Per-check time cap (R7). A check that outlives it is killed and reported as
@@ -76,6 +77,10 @@ run_init() {
   # Each failed check's cwd, beside its log: attribution reads the paths a
   # tool printed relative to it.
   FAILED_CWDS=()
+  # Each failed check's usable knownFailures entries, beside its log, one
+  # "<regex>\t<glob>\t<reason>" line each ("" for none): attribution
+  # reads them (R15).
+  FAILED_KNOWN=()
   FAILED_OUTPUT=()
   TIMED_OUT_CHECKS=()
   # Checks refused without running: their result would describe another tree.
@@ -340,6 +345,50 @@ paths_verdict() {
   PATHS_VERDICT=skip
 }
 
+# Known failures (R15, #394). A check's `knownFailures` lists the files that
+# already fail on the default branch, each a repo-relative glob (`path`,
+# compiled like `paths`) with a non-empty `reason`. Attribution
+# (stop-gate/attribute.sh) may then turn the check's failure into a warning.
+# A value that is not a non-empty list of such entries is ignored, whole, and
+# named in the stop message: the failure then blocks as before (fail closed).
+
+# known_failures_verdict <check json> -> sets KNOWN_STATE to absent, list or
+# ignored, KNOWN_ENTRIES to one "<regex>\t<glob>\t<reason>" line per entry
+# (empty unless list), KNOWN_GLOBS to the globs joined with ", ", and
+# KNOWN_GOT to the raw value (cut at 200 bytes) when ignored.
+known_failures_verdict() {
+  local state n k glob reason re
+  KNOWN_STATE=absent KNOWN_ENTRIES="" KNOWN_GLOBS="" KNOWN_GOT=""
+  state=$(printf '%s' "$1" | jq -r '.knownFailures
+    | if . == null then "absent"
+      elif type == "array" and length > 0
+        and all(.[]; type == "object" and (.path | type) == "string"
+          and (.reason | type) == "string" and (.reason | test("[^[:space:]]")))
+      then "list" else "bad" end')
+  [ "$state" != absent ] || return 0
+  if [ "$state" = list ]; then
+    n=$(printf '%s' "$1" | jq '.knownFailures | length')
+    for ((k = 0; k < n; k++)); do
+      glob=$(printf '%s' "$1" | jq -r ".knownFailures[$k].path")
+      reason=$(printf '%s' "$1" | jq -r ".knownFailures[$k].reason | gsub(\"[\\t\\n]\"; \" \")")
+      # A tab or newline in a glob would break the line format: unusable.
+      case "$glob" in *$'\t'*|*$'\n'*) state=bad; break ;; esac
+      if ! re=$(glob_regex "$glob"); then
+        state=bad
+        break
+      fi
+      KNOWN_ENTRIES="${KNOWN_ENTRIES:+$KNOWN_ENTRIES$'\n'}$re"$'\t'"$glob"$'\t'"$reason"
+      KNOWN_GLOBS="${KNOWN_GLOBS:+$KNOWN_GLOBS, }$glob"
+    done
+  fi
+  if [ "$state" = bad ]; then
+    KNOWN_STATE=ignored KNOWN_ENTRIES="" KNOWN_GLOBS=""
+    KNOWN_GOT=$(printf '%s' "$1" | jq -c '.knownFailures' | LC_ALL=C cut -c1-200)
+    return 0
+  fi
+  KNOWN_STATE=list
+}
+
 # unseen_files -> sets UNSEEN_FILES, once per checkout (arm_root resets it):
 # the paths git reports changed there, uncommitted or untracked
 # (changed_files) and, when a base ref resolved, against MYSPEC_BASE_REF,
@@ -502,6 +551,8 @@ run_checks() {
         SCOPE_NOTES+=("$name: its paths setting was ignored, so the check ran. paths must be a non-empty list of repo-relative globs, none absolute or with a .. segment${PATHS_GLOBS:+ (got $PATHS_GLOBS)}.") ;;
     esac
     [ -z "$CWD_IGNORED" ] || SCOPE_NOTES+=("$name: its cwd setting was ignored, so the check ran from the checkout root. cwd must be a repo-relative directory, not absolute and without a .. segment (got $CWD_IGNORED).")
+    known_failures_verdict "$check"
+    [ "$KNOWN_STATE" != ignored ] || SCOPE_NOTES+=("$name: its knownFailures setting was ignored, so a failure blocks as usual. knownFailures must be a non-empty list of {path, reason}: path a repo-relative glob as in paths, none absolute or with a .. segment, and reason a non-empty string (got $KNOWN_GOT).")
     # A cwd missing in this checkout (a worktree made from a base that did
     # not have it yet) is a check that could not start, not one that failed.
     if [ -n "$CHECK_CWD" ] && [ ! -d "$REPO_ROOT/$CHECK_CWD" ]; then
@@ -582,9 +633,15 @@ run_checks() {
         FAILED_CHECKS+=("$name")
         FAILED_LOGS+=("$CHECK_RUN_LOG")
         FAILED_CWDS+=("$CHECK_CWD")
+        FAILED_KNOWN+=("$KNOWN_ENTRIES")
         CHECK_RUN_LOG=""
         FAILED_OUTPUT+=("[$name] $command failed:"$'\n'"$truncated")
       fi
+    fi
+    # A pass with knownFailures set means those files pass now, so the
+    # entries are stale (R15). Said on every outcome, an approve included.
+    if [ "$RUN_EXIT" -eq 0 ] && [ "$KNOWN_STATE" = list ]; then
+      SCOPE_NOTES+=("$name: passed, so its knownFailures entries ($KNOWN_GLOBS) no longer fail and can be removed from .claude/verification.json, unless this run left those files out (a diffCommand, or a command scoped to \$MYSPEC_SESSION_FILES).")
     fi
     # A passed or timed-out check's log is not needed any more.
     if [ -n "$CHECK_RUN_LOG" ]; then

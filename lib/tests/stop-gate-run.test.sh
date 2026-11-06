@@ -262,6 +262,27 @@ eq "$(f "$out" '.unver | join(",")')" "M [in $NESTED]" "cwd missing: the check i
 has "$(f "$out" .output)" "[M [in $NESTED] not run: cwd missing] missing is not a directory in $NESTED" "cwd missing: the message names the directory"
 has "$(f "$out" .output)" "This is not a test failure." "cwd missing: and says it is not a failure"
 
+# knownFailures (R15, #394): validated like paths, stale once the check passes.
+kv() {  # kv <knownFailures json> -> KNOWN_STATE|KNOWN_GLOBS
+  known_failures_verdict "{\"knownFailures\":$1}"
+  printf '%s|%s' "$KNOWN_STATE" "$KNOWN_GLOBS"
+}
+eq "$(known_failures_verdict '{"name":"x"}'; printf '%s' "$KNOWN_STATE")" absent "knownFailures: absent"
+eq "$(kv '[{"path":"tests/legacy/**","reason":"red on main"},{"path":"b_test.go","reason":"flaky"}]')" "list|tests/legacy/**, b_test.go" "knownFailures: a list of {path, reason}"
+eq "$(known_failures_verdict '{"knownFailures":[{"path":"a/**","reason":"r\tq\nz"}]}'; printf '%s' "$KNOWN_ENTRIES")" "$(glob_regex 'a/**')"$'\t'"a/**"$'\t'"r q z" "knownFailures: entries are regex, glob and reason, a tab or newline in it a space"
+for bad in '"tests/**"' '[]' '["tests/**"]' '[{"path":"a/**"}]' '[{"path":"a/**","reason":""}]' '[{"path":"a/**","reason":"  "}]' '[{"path":"/abs/**","reason":"r"}]' '[{"path":"../x","reason":"r"}]' '[{"path":"a/**","reason":"r"},{"path":"","reason":"r"}]' '[{"path":1,"reason":"r"}]'; do
+  eq "$(kv "$bad")" "ignored|" "knownFailures $bad is ignored"
+done
+out=$(gate "$REPO" "{\"checks\":[$(check K 'exit 1' '{"knownFailures":[{"path":"a/**"}]}')]}" code:a.ts)
+has "$(f "$out" .scope)" 'K: its knownFailures setting was ignored, so a failure blocks as usual' "knownFailures unusable: the message names it"
+has "$(f "$out" .scope)" '(got [{"path":"a/**"}])' "knownFailures unusable: and shows the value"
+out=$(gate "$REPO" "{\"checks\":[$(check K true '{"knownFailures":[{"path":"a/**","reason":"r"}]}')]}" code:a.ts)
+has "$(f "$out" .scope)" "K: passed, so its knownFailures entries (a/**) no longer fail and can be removed" "knownFailures on a pass: the entries are stale"
+out=$(gate "$REPO" "{\"checks\":[$(check K 'exit 1' '{"knownFailures":[{"path":"a/**","reason":"r"}]}')]}" code:a.ts)
+lacks "$(f "$out" .scope)" "no longer fail" "knownFailures on a failure: not called stale"
+out=$(gate "$REPO" "{\"checks\":[$(check K true '{"paths":["nowhere/**"],"knownFailures":[{"path":"a/**","reason":"r"}]}')]}" code:a.ts)
+lacks "$(f "$out" .scope)" "no longer fail" "knownFailures on a skipped check: not called stale"
+
 # diffCommand (R5): used when a base ref resolved, the whole-repo command otherwise.
 DIFF=$(jq -nc --arg r "$RAN" '{name: "L", command: "echo whole > \($r)/L", diffCommand: "echo \"diff $MYSPEC_BASE_REF\" > \($r)/L", required: true}')
 gate "$NESTED" "{\"checks\":[$DIFF]}" code:api/a.php >/dev/null

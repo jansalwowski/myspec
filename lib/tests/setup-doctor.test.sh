@@ -914,13 +914,14 @@ expect_no_line '^SET +[a-zA-Z]+.* = ' "settings: defaults only lists no key"
 
 # A project file plus a session override.
 set_json .myspec.json 'd.isolation={worktreeRoot:"wt", allowLinkedModules:false}; d.hooks={markCodeChanged:{ignorePaths:["gen/**"]}};'
-set_json .claude/verification.json 'd.containers={api:{mountSource:".", mountTarget:"/srv/app"}}; d.checks[0].paths=["api/**"]; d.checks[0].runIn="api";'
+set_json .claude/verification.json 'd.containers={api:{mountSource:".", mountTarget:"/srv/app"}}; d.checks[0].paths=["api/**"]; d.checks[0].runIn="api"; d.checks[0].knownFailures=[{path:"legacy/**", reason:"red on main"}];'
 run_doctor_env MYSPEC_ALLOW_LINKED_MODULES=1 MYSPEC_CHECK_CAP_SECONDS=30 MYSPEC_GATE_BUDGET_SECONDS=120 -- settings
 expect_line '^SET +isolation\.worktreeRoot = "wt" \(\.myspec\.json\)$' "settings: a project value is listed with its file and is not marked"
 expect_line '^SET +isolation\.allowLinkedModules = true \(session: MYSPEC_ALLOW_LINKED_MODULES=1\) — loosens a gate$' "settings: a session override wins over the project file, names its variable, and is marked"
 expect_line '^SET +hooks\.markCodeChanged\.ignorePaths = \["gen/\*\*"\] \(\.myspec\.json\) — loosens a gate$' "settings: ignorePaths is marked as loosening"
 expect_line '^SET +checks\[0\]\.paths = \["api/\*\*"\] \(\.claude/verification\.json\) — loosens a gate$' "settings: a check's paths is marked as loosening"
 expect_line '^SET +checks\[0\]\.runIn = "api" \(\.claude/verification\.json\)$' "settings: runIn is listed, unmarked"
+expect_line '^SET +checks\[0\]\.knownFailures = \[\{"path":"legacy/\*\*","reason":"red on main"\}\] \(\.claude/verification\.json\) — loosens a gate$' "settings: a check's knownFailures is marked as loosening (#394)"
 expect_line '^SET +MYSPEC_CHECK_CAP_SECONDS = "30" \(session\)$' "settings: a standalone session variable is listed"
 expect_line '^SET +MYSPEC_GATE_BUDGET_SECONDS = "120" \(session\)$' "settings: a lowered gate budget is listed"
 expect_no_line '^SET +every setting' "settings: a project with settings does not claim defaults"
@@ -939,7 +940,7 @@ expect_no_line 'setting-' "settings: a defined container, usable globs and known
 build_fixture
 # shellcheck disable=SC2016 # literal text, not an expansion
 set_json .myspec.json 'd["$schema"]="x"; d.isolation={worktreeRot:"wt", allowLinkedModules:"yes", provision:{install:[{run:"true", cwd:"nope"}, {run:"true", cwd:"."}, "make deps"]}}; d.ignorePaths=["gen/**"]; d.zzzUnrelated=1; d.hooks={markCodeChanged:{ignorePaths:["../out/**", "/abs/**", "ok/**"]}};'
-set_json .claude/verification.json 'd.checks[0].pahts=["api/**"]; d.checks[0].required="true"; d.checks[1].runIn="api"; d.checks[2].paths=[""];'
+set_json .claude/verification.json 'd.checks[0].pahts=["api/**"]; d.checks[0].required="true"; d.checks[1].runIn="api"; d.checks[2].paths=[""]; d.checks[2].knownFailures=[{path:"/abs/**", reason:"r"}, {path:"ok/**", reason:1}];'
 run_doctor_env -- schema
 expect_exit 1 "settings: a wrong type or a dangling reference is an error"
 expect_line '^WARN +setting-unknown-key: \.myspec\.json: isolation\.worktreeRot is not a myspec setting \(did you mean isolation\.worktreeRoot\?\)' "settings: a misspelled key gets its near-miss sibling"
@@ -955,6 +956,8 @@ expect_line '^WARN +setting-glob-unusable: \.myspec\.json: hooks\.markCodeChange
 expect_line '^WARN +setting-glob-unusable: \.myspec\.json: hooks\.markCodeChanged\.ignorePaths\[1\] is "/abs/\*\*".*absolute' "settings: an absolute glob is unusable"
 expect_no_line 'ignorePaths\[2\]' "settings: a usable glob beside bad ones is not reported"
 expect_line '^WARN +setting-glob-unusable: \.claude/verification\.json: checks\[2\]\.paths\[0\] is "".*empty' "settings: an empty check path glob is unusable"
+expect_line '^WARN +setting-glob-unusable: \.claude/verification\.json: checks\[2\]\.knownFailures\[0\]\.path is "/abs/\*\*".*absolute' "settings: an unusable knownFailures path is reported (#394)"
+expect_line '^ERROR setting-wrong-type: \.claude/verification\.json: checks\[2\]\.knownFailures\[1\]\.reason is number, expected string' "settings: a knownFailures reason that is not a string is an error (#394)"
 expect_line '^WARN +setting-dir-missing: \.myspec\.json: isolation\.provision\.install\[0\]\.cwd is "nope"' "settings: an install step whose cwd does not exist is reported"
 expect_no_line 'install\[1\]\.cwd|install\[2\]' "settings: an install step in an existing cwd, or a bare command, is not reported"
 

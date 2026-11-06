@@ -475,6 +475,36 @@
       "description": "Run the check only when a file this session wrote in this checkout matches one of these globs: repo-relative, anchored at the root, * and ? within one segment, ** as a whole segment for any depth (docs/stop-gate.md, Per-check settings). An unusable value is ignored and the check runs.",
       "format": "glob"
     },
+    "verification.checks[].knownFailures": {
+      "file": "verification",
+      "type": ["array"],
+      "merge": "replace",
+      "issue": ["#394"],
+      "loosens": true,
+      "description": "Files that already fail this check on the default branch, each {path, reason}: a failure whose output names a file a path glob matches, no file this session wrote and no other file warns instead of blocking (docs/stop-gate.md, Known failures). A value that is not a non-empty list of such entries is ignored and named in the stop message; a passing check's entries are named as stale."
+    },
+    "verification.checks[].knownFailures[]": {
+      "file": "verification",
+      "type": ["object"],
+      "issue": ["#394"],
+      "catalogue": false,
+      "description": "One known failure."
+    },
+    "verification.checks[].knownFailures[].path": {
+      "file": "verification",
+      "type": ["string"],
+      "issue": ["#394"],
+      "catalogue": false,
+      "description": "Repo-relative glob of the failing files, with the semantics of paths.",
+      "format": "glob"
+    },
+    "verification.checks[].knownFailures[].reason": {
+      "file": "verification",
+      "type": ["string"],
+      "issue": ["#394"],
+      "catalogue": false,
+      "description": "Why the files fail and where that is tracked; the warning repeats it. Must not be empty."
+    },
     "verification.containers": {
       "file": "verification",
       "type": ["object"],
