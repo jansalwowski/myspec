@@ -11,20 +11,19 @@
 # Public API:
 #   sanitize_command <<< "$cmd"        # blanks quoted spans + heredoc bodies
 #   sanitize_command keep <<< "$cmd"   # same shape, quoted text kept (encoded)
-#   split_segments                     # one "<sep><TAB><segment>" line each
+#   split_segments                     # one "<link><TAB><segment>" line each
 #   decode_word "$word"                # undoes the keep-mode encoding
 #   strip_command_prefix "$segment"    # drops then/do/else, FOO=bar, sudo
 #   decode_word_to VAR "$word"         # the same two, into VAR: no subshell
 #   strip_command_prefix_to VAR "$segment"
 #   find_matching_segment "$cmd" pattern...   # echoes offending segment, if any
 #
-# KNOWN LIMIT: nested command substitution is not parsed. In `--body "$(printf
-# '%s' "cd x && yarn build")"`, the scanner closes the outer double-quoted span
-# at the inner quote, so the inner prose is analysed as command text and can
-# false-positive. Pass long prose via a file (`--body-file`, `-F -`) rather
-# than inline. Parsing this properly needs recursive descent into $( ), which
-# also has to keep `$(git branch -D x)` blocking — not worth the machinery for
-# a guardrail whose workaround is one flag.
+# Quoting nests through command substitution, as in the shell: in `x="$(echo
+# "a > b")"` the inner quotes pair up inside the `$( … )`, at any depth
+# (#382). A `$( … )` or backtick substitution inside double quotes is split
+# open like an unquoted one, so the command in it is still scanned
+# (`"$(git branch -D x)"`, `"$(bash -c "…")"`), while its own quoted text is
+# blanked. `$(( … ))` and the rest of the double-quoted word stay one span.
 
 # Blank out every span whose contents can never be a command: single-quoted
 # spans, double-quoted spans, escaped characters, and heredoc bodies. Each
@@ -38,6 +37,10 @@
 # into the same segments and the same words, so word N of a segment in one
 # stream is word N in the other; decode_word turns an encoded word back into
 # its text.
+#
+# Past MAXLVL nested quotes and substitutions the scan stops and prints the
+# command with its quote characters blanked, every word exposed: it fails
+# closed instead of recursing until awk crashes with no output.
 # shellcheck disable=SC2120 # the keep argument is optional; the hooks that source this pass it
 sanitize_command() {
   awk -v keep="${1:-}" '
@@ -64,35 +67,116 @@ sanitize_command() {
       }
       return 0
     }
-    { buf = buf $0 "\n" }
-    END {
-      n = length(buf)
-      i = 1
-      out = ""
+    # A quoted span collects its text in span (keep mode only) and ends in
+    # flush, which prints the placeholder: Q, or \035 and the encoded text.
+    function addspan(ch) { if (keep != "") span = span enc(ch) }
+    function flush() {
+      if (keep != "") { out = out "\035" span } else { out = out "Q" }
+      span = ""
+    }
+    # sq(i, esc): a single-quoted span from just after its quote; <esc> for
+    # $'"'"'…'"'"', where a backslash escapes the next character.
+    function sq(i, esc,    c) {
+      span = ""
+      while (i <= n) {
+        c = substr(buf, i, 1)
+        if (c == "'"'"'") { i++; break }
+        if (esc && c == "\\") { addspan(c); i++; c = substr(buf, i, 1) }
+        addspan(c)
+        i++
+      }
+      flush()
+      return i
+    }
+    # dq(i, lvl, nested): a double-quoted span from just after its quote.
+    # A ${ } in it may hold a nested double-quoted span (<nested>: same
+    # span, no placeholder of its own), and a single quote is literal
+    # there. A $( ) or backtick substitution ends the span so far, is
+    # printed and scanned as commands, and a new span starts after it.
+    function dq(i, lvl, nested,    c, bd) {
+      if (lvl > MAXLVL) { ovf = 1; return n + 1 }
+      if (!nested) span = ""
+      bd = 0
+      while (i <= n) {
+        c = substr(buf, i, 1)
+        if (c == "\"") {
+          if (bd == 0) { i++; break }
+          addspan(c)
+          i = dq(i + 1, lvl + 1, 1)
+          if (ovf) return n + 1
+          addspan(c)
+          continue
+        }
+        if (c == "\\") { addspan(substr(buf, i + 1, 1)); i += 2; continue }
+        if (c == "$" && substr(buf, i + 1, 2) == "((") { i = arith(i); continue }
+        if ((c == "$" && substr(buf, i + 1, 1) == "(") || c == "`") {
+          flush()
+          if (c == "`") { out = out c; i = scan(i + 1, c, lvl + 1) }
+          else { out = out "$("; i = scan(i + 2, ")", lvl + 1) }
+          if (ovf) return n + 1
+          out = out substr(buf, i, 1)
+          i++
+          continue
+        }
+        if (c == "$" && substr(buf, i + 1, 1) == "{") { bd++; addspan(c); addspan("{"); i += 2; continue }
+        if (c == "}" && bd > 0) { bd-- }
+        addspan(c)
+        i++
+      }
+      if (!nested) flush()
+      return i
+    }
+    # arith(i): $(( … )) inside double quotes stays in the span: `>` and
+    # `<<` there are operators, not redirects.
+    function arith(i,    c, d) {
+      addspan("$")
+      i++
+      d = 0
+      while (i <= n) {
+        c = substr(buf, i, 1)
+        addspan(c)
+        i++
+        if (c == "(") { d++ } else if (c == ")") { d--; if (d == 0) break }
+      }
+      return i
+    }
+    # scan(i, closer, lvl): command text from <i>, printed to out, up to
+    # <closer> (")" for $( ), a backtick, or "" for the whole command).
+    # Returns the index of the closer, which the caller prints. Inside $( )
+    # a case pattern`s ")" is printed as ";" and a comment is dropped, so
+    # neither closes the substitution early.
+    function scan(i, closer, lvl,    c, depth, incase, b, j, spaced, delim, term, p, line, k) {
+      if (lvl > MAXLVL) { ovf = 1; return n + 1 }
+      depth = 0
+      incase = 0
       while (i <= n) {
         c = substr(buf, i, 1)
 
-        if (c == "\\") { out = out " "; i += 2; continue }
-
-        if (c == "'"'"'") {
-          i++
-          span = ""
-          while (i <= n && substr(buf, i, 1) != "'"'"'") { span = span enc(substr(buf, i, 1)); i++ }
-          i++
-          if (keep != "") { out = out "\035" span } else { out = out "Q" }
-          continue
+        if (closer == "`" && c == "`") return i
+        if (closer == ")") {
+          b = (index(" \t\n;|&()", substr(buf, i - 1, 1)) > 0)
+          if (b && substr(buf, i, 4) == "case" && substr(buf, i + 4, 1) ~ /[ \t\n]/) { incase++ }
+          if (b && incase > 0 && substr(buf, i, 4) == "esac" && substr(buf, i + 4, 1) !~ /[A-Za-z0-9_]/) { incase-- }
+          if (b && c == "#") {
+            while (i <= n && substr(buf, i, 1) != "\n") { i++ }
+            continue
+          }
+          if (c == "(") { depth++ }
+          if (c == ")") {
+            if (depth == 0 && incase == 0) return i
+            if (depth == 0) { out = out ";"; i++; continue }
+            depth--
+          }
         }
 
+        if (c == "\\") { out = out " "; i += 2; continue }
+
+        if (c == "$" && substr(buf, i + 1, 1) == "'"'"'") { out = out c; i = sq(i + 2, 1); continue }
+        if (c == "'"'"'") { i = sq(i + 1, 0); continue }
+
         if (c == "\"") {
-          i++
-          span = ""
-          while (i <= n && substr(buf, i, 1) != "\"") {
-            if (substr(buf, i, 1) == "\\") { i++ }
-            span = span enc(substr(buf, i, 1))
-            i++
-          }
-          i++
-          if (keep != "") { out = out "\035" span } else { out = out "Q" }
+          i = dq(i + 1, lvl + 1, 0)
+          if (ovf) return n + 1
           continue
         }
 
@@ -102,7 +186,8 @@ sanitize_command() {
         # A heredoc marker becomes Q and the rest of its line is scanned like
         # any other text, so a redirect or pipe after the marker (`cat <<EOF
         # > f`, `cat <<EOF | tee f`) is still seen. The body is skipped at
-        # the end of the line, one per pending marker, in order.
+        # the end of the line, one per pending marker, in order, at any
+        # substitution depth.
         if (substr(buf, i, 2) == "<<") {
           j = i + 2
           if (substr(buf, j, 1) == "-") { j++ }
@@ -150,17 +235,35 @@ sanitize_command() {
         out = out c
         i++
       }
+      return i
+    }
+    { buf = buf $0 "\n" }
+    END {
+      n = length(buf)
+      MAXLVL = 100
+      out = ""
+      scan(1, "", 0)
+      if (ovf) { out = buf; gsub(/["'"'"']/, " ", out) }
       print out
     }
   '
 }
 
 # Reads sanitized text on stdin and prints one line per command segment:
-# the separator that opened it, a TAB, then the segment. The separator is `(`
-# or `)` for a subshell boundary (a caller tracking `cd` scopes pushes and pops
-# on them), `^` for the first segment, and `|` for every other separator
-# (`|`, `&`, `;`, `{`, `}`, backtick, newline). Splits exactly where
-# find_matching_segment's `tr` does, so both see the same segments.
+# "<link><TAB><segment>", where <link> is the separator in front of the
+# segment, as written:
+#   ^                 the first segment
+#   && || | & ;       a list or pipeline operator
+#   ( ) { } `         a subshell, group or backtick boundary (a caller
+#                     tracking `cd` scopes pushes and pops on ( and ))
+#   n                 a newline
+#   r                 the & of a redirect (2>&1, >&2, &>, <&0): no link
+#   +                 a split that is no link of its own: the second
+#                     character of && || |&, or a newline right after
+#                     && || | (the command continues on the next line)
+# The segment after a + or r continues the command before it. Splits exactly
+# where find_matching_segment's `tr` does, so both see the same segments, and
+# the keep scan gives the same links as the plain one.
 split_segments() {
   awk '
     { buf = buf $0 "\n" }
@@ -168,6 +271,9 @@ split_segments() {
       n = length(buf)
       sep = "^"
       cur = ""
+      glue = 0
+      last = ""
+      lastpos = 0
       for (i = 1; i <= n; i++) {
         c = substr(buf, i, 1)
         # `>|` (clobber) is a redirect, not a pipe: drop the bar so the
@@ -176,7 +282,21 @@ split_segments() {
         if (index("|&;(){}`\n", c) > 0) {
           print sep "\t" cur
           cur = ""
-          if (c == "(" || c == ")") { sep = c } else { sep = "|" }
+          p = (i > 1) ? substr(buf, i - 1, 1) : ""
+          q = substr(buf, i + 1, 1)
+          if (glue) { sep = "+"; glue = 0 }
+          else if (c == "&" && (p == ">" || p == "<" || q == ">")) sep = "r"
+          else if (c == "&" && q == "&") { sep = "&&"; glue = 1 }
+          else if (c == "|" && q == "|") { sep = "||"; glue = 1 }
+          else if (c == "|" && q == "&") { sep = "|"; glue = 1 }
+          else if (c == "\n") {
+            gap = substr(buf, lastpos + 1, i - lastpos - 1)
+            if (lastpos > 0 && gap ~ /^[ \t]*$/ && (last == "&&" || last == "||" || last == "|")) sep = "+"
+            else sep = "n"
+          }
+          else sep = c
+          if (sep != "+") last = sep
+          lastpos = i
           continue
         }
         cur = cur c
