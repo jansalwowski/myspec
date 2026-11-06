@@ -131,7 +131,8 @@ STAGE=0
 [ -n "$MAIN" ] && [ -n "$SESSIONS" ] &&
 find "$SESSIONS" -maxdepth 1 -type f -name '*.md' -print0 2>/dev/null |
 while IFS= read -r -d '' f; do
-  MTIME=$(stat -f %m "$f" 2>/dev/null || stat -c %Y "$f")
+  # GNU stat first: there `-f` means file-system status and succeeds.
+  MTIME=$(stat -c %Y "$f" 2>/dev/null || stat -f %m "$f")
   AGE=$(( NOW - MTIME ))
   if [ "$AGE" -gt 21600 ]; then
     SLUG=$(basename "$f" .md | head -c 8)
