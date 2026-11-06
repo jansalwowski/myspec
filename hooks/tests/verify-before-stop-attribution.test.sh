@@ -383,7 +383,7 @@ printf 'export const a = 8;\n' > "$REPO/app.ts"
 mark_write 54 "$REPO/app.ts"
 OUT=$(stop 54)
 expect_decision approve "$OUT" "R15: a check with knownFailures that passes approves"
-expect_text "$OUT" "lint: passed, so its knownFailures entries (legacy/**) no longer fail and can be removed" "R15: the approve says the entries are stale"
+expect_text "$OUT" "lint: passed this run with knownFailures set (legacy/**). If those files ran, they did not fail here: check whether they still fail on the default branch" "R15: the approve says to check the entries on the default branch"
 reset_tree
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
