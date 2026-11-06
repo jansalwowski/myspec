@@ -19,8 +19,9 @@
 #          Task worktrees run `isolation.provision.install` too, one after
 #          another; a failing install step fails the create.
 #          --no-symlink is passed through: use it when the task writes into
-#          a linked directory (code generation into node_modules, vendor,
-#          .venv, ...), then install for real.
+#          a linked directory (code generation, a build's output or build
+#          directory, anything that lands in node_modules, vendor, .venv,
+#          ...), then install for real.
 #          Prints the worktree path as the last line. A failed create leaves
 #          no worktree or branch behind.
 # merge    merges the task branch into the controller's current branch. On a
