@@ -339,10 +339,17 @@ branch_verdict() {
 
   checked_out=$(held_branches "$root")
 
+  # A quoted span anywhere in the segment may sit inside a name (wt-"a" scans
+  # as wt-Q), so the name cannot be read back. WT_QUOTED comes from the
+  # keep-mode marker, not the Q placeholder, which a real name can hold (#403).
+  if [ "$WT_QUOTED" = 1 ]; then
+    printf 'BLOCKED: git branch delete names a branch the guard cannot resolve: a quoted name. Write the branch name literally so the guard can confirm no worktree has it checked out. Blocked: %s' "${segment:0:200}"
+    return 0
+  fi
+
   for word in ${names[@]+"${names[@]}"}; do
-    # Q is the scanner placeholder for a quoted span.
-    if [ "$word" = Q ] || [ "$word" = - ] || [[ "$word" == *[\$@*?[]* ]]; then
-      printf 'BLOCKED: git branch delete names a branch the guard cannot resolve (%s): a quoted name, variable, glob or @{-N}. Write the branch name literally so the guard can confirm no worktree has it checked out. Blocked: %s' "$word" "${segment:0:200}"
+    if [ "$word" = - ] || [[ "$word" == *[\$@*?[]* ]]; then
+      printf 'BLOCKED: git branch delete names a branch the guard cannot resolve (%s): a variable, glob or @{-N}. Write the branch name literally so the guard can confirm no worktree has it checked out. Blocked: %s' "$word" "${segment:0:200}"
       return 0
     fi
     # -i: on a case-insensitive filesystem (macOS default) git resolves

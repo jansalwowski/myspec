@@ -114,6 +114,9 @@ check block "case variant of checked-out name" 'git branch -D WT-A'
 check block "names after --"                   'git branch -D -- wt-a'
 check block "delete ok, then rename"           'git branch -D feat/x && git branch -m a b'
 check block "quoted name cannot be resolved"   'git branch -D "wt-a"'
+check block "#403 partly quoted name"           'git branch -D wt-"a"'
+check block "#403 partly quoted, single"       "git branch -D wt-'a'"
+check allow "#403 branch literally named Q"    'git branch -D Q'
 # shellcheck disable=SC2016 # literal text, not an expansion
 check block "variable name cannot be resolved" 'git branch -D $BR'
 check block "@{-1} cannot be resolved"         'git branch -d @{-1}'
