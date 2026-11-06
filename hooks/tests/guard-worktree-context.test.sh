@@ -614,5 +614,55 @@ check_in "$REPO" block "worktree mode, cd .. from a created directory into main"
   "mkdir -p $NEW/c/d && cd $NEW/c/d && cd ../../../checkout && echo x > src.js"
 rm -f "$STATE/"*.jsonl
 
+# --- a git -C into a directory the command creates first (#372) --------------
+# The -C form of #383, with stricter links: none of these directories exist.
+C372="$REPO/.claude/worktrees"
+check block "#372 a plain branch op in main"            'git switch -q develop'
+check allow "#372 git -C an existing worktree"          "git -C $WT merge --no-edit main"
+check block "#372 git -C a worktree nothing creates"    "git -C $C372/missing merge --no-edit main"
+check allow "#372 git -C <repo> worktree add, then git -C it" \
+  "git -C $REPO worktree add -q $C372/n1 main && git -C $C372/n1 merge --no-edit main"
+check allow "#372 relative worktree add, then git -C it" \
+  'git worktree add -q .claude/worktrees/n2 -b n2 && git -C .claude/worktrees/n2 switch -q -c n2b'
+check allow "#372 the add's relative path is read from its own -C" \
+  'git -C .claude worktree add worktrees/n3 -b n3 && git -C .claude/worktrees/n3 checkout -b n3b'
+check block "#372 ... and not from the cwd" \
+  'git -C .claude worktree add worktrees/n9 -b n9 && git -C worktrees/n9 checkout -b n9b'
+check allow "#372 two -C words compose"                 \
+  'git worktree add .claude/worktrees/n4 -b n4 && git -C .claude -C worktrees/n4 switch -c n4b'
+check allow "#372 cd into the created worktree still works" \
+  'git worktree add -q .claude/worktrees/n5 -b n5 && cd .claude/worktrees/n5 && git merge --no-edit main'
+check allow "#372 a read-only segment between"          \
+  'git worktree add .claude/worktrees/n6 -b n6 && git status && git -C .claude/worktrees/n6 switch -c n6b'
+check allow "#372 two uses of the created worktree"     \
+  'git worktree add .claude/worktrees/n7 -b n7 && git -C .claude/worktrees/n7 merge main && git -C .claude/worktrees/n7 switch -c n7b'
+check allow "#372 mkdir outside the repo, then git -C it" \
+  "mkdir -p $NEW/g1 && git -C $NEW/g1 init -q && git -C $NEW/g1 checkout -q -b main"
+check block "#372 a plain directory created inside main is main" \
+  'mkdir -p sub372 && git -C sub372 checkout develop'
+check block "#372 --git-dir of main after git -C a created worktree" \
+  "git worktree add .claude/worktrees/n8 -b n8 && git -C .claude/worktrees/n8 --git-dir=$REPO/.git switch develop"
+check block "#372 a variable -C path is not guessed"    \
+  "git worktree add .claude/worktrees/v1 -b v1 && git -C \$W switch -c v1b"
+check block "#372 a variable assigned on an earlier line" \
+  "W=$C372/v2
+git worktree add \$W -b v2 && git -C \$W switch -c v2b"
+check block "#372 a creation a ; separates"             \
+  'git worktree add .claude/worktrees/s1 -b s1; git -C .claude/worktrees/s1 switch -c s1b'
+check block "#372 a creation after ||"                  \
+  'false || git worktree add .claude/worktrees/o1 -b o1 && git -C .claude/worktrees/o1 switch -c o1b'
+check block "#372 a creation after |"                   \
+  'true | git worktree add .claude/worktrees/p1 -b p1 && git -C .claude/worktrees/p1 switch -c p1b'
+check block "#372 a negated creation"                   \
+  '! git worktree add .claude/worktrees/x1 -b x1 && git -C .claude/worktrees/x1 switch -c x1b'
+check block "#372 a removal and a mkdir between"        \
+  'git worktree add .claude/worktrees/r1 -b r1 && git worktree remove --force .claude/worktrees/r1 && mkdir -p .claude/worktrees/r1 && git -C .claude/worktrees/r1 switch -c r1b'
+check block "#372 a git worktree command in the created worktree" \
+  'git worktree add .claude/worktrees/r2 -b r2 && git -C .claude/worktrees/r2 worktree remove --force . && mkdir -p .claude/worktrees/r2 && git -C .claude/worktrees/r2 switch -c r2b'
+check block "#372 an rm between"                        \
+  'git worktree add .claude/worktrees/r3 -b r3 && rm -rf .claude/worktrees/r3 && mkdir .claude/worktrees/r3 && git -C .claude/worktrees/r3 switch -c r3b'
+check block "#372 a script between"                     \
+  'git worktree add .claude/worktrees/r4 -b r4 && bash ./setup.sh && git -C .claude/worktrees/r4 switch -c r4b'
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
