@@ -132,10 +132,11 @@ yeah, infra/redis/proxy.conf — the key_max_length directive
 ---
 id: S007
 type: semantic
+hook: "redis, key length, proxy — keys over 512 bytes rejected at the proxy"
 topic: redis
-anchor:
-  file: infra/redis/proxy.conf
-  pattern: "key_max_length"
+anchors:
+  - file: infra/redis/proxy.conf
+    pattern: "key_max_length"
 verified: 2026-04-30
 ---
 
@@ -213,12 +214,12 @@ yeah, short atomic batches under like 1000 rows are fine in a tx, and anything t
 ---
 id: P015
 type: procedural
+hook: "export, backfill, batch job, transaction — long-running jobs in one transaction"
 polarity: negative
 triggers: [export, backfill, batch-job, transaction, BEGIN, long-running]
 not_for:
   - short atomic batches under ~1000 rows
   - jobs with strict all-or-nothing correctness requirements
-anchors: []
 validated: 2026-04-30
 ---
 
@@ -316,6 +317,7 @@ just marketing — the app itself stays SSR
 ---
 id: E009
 type: episodic
+hook: "marketing site, SSR — dropped SSR from the marketing site"
 date: 2026-04-22
 outcome: success
 persistent: true
