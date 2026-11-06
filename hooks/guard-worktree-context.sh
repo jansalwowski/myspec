@@ -620,11 +620,28 @@ c_forget() {
 # redirect but to /dev/null (`echo … > new/.git` rewrites a worktree). A
 # trailing `>` is the first half of `2>&1`.
 c_read_only() {
+  c_no_write "$1" && read_only_cmd "$1"
+}
+
+# c_no_write <segment> -> 0 when it redirects output nowhere but /dev/null.
+# Also run on a redirect's tail segment (the `> f` of `&> f`), which is
+# never a command of its own but still writes.
+c_no_write() {
   local s="${1%>}"
   s="${s//>>\/dev\/null/}"
   s="${s//>\/dev\/null/}"
   case "$s" in *'>'*) return 1 ;; esac
-  read_only_cmd "$1"
+}
+
+# c_glue_no_write <tail segment> -> c_no_write, and the tail's first word is
+# a descriptor (`1` of 2>&1, `-`), not the file `>& f` writes to.
+c_glue_no_write() {
+  local first="${1%%[[:space:]]*}"
+  case "$first" in
+    [0-9]|[0-9][0-9]|[0-9]-|-|/dev/null|">"*) ;;
+    *) return 1 ;;
+  esac
+  c_no_write "$1"
 }
 
 # git_c_target_to <var> <base> <word> -> the directory `git -C <word>` from
@@ -658,7 +675,11 @@ check_segment() {
   local segment="$1" dir="$2" gitdir="$3" verdict
 
   note_segment "$segment" "$dir"
-  [ "$WT_GLUE" = 1 ] || [ "$C_KEEP" = 1 ] || c_read_only "$segment" || c_forget
+  if [ "$WT_GLUE" = 1 ]; then
+    c_glue_no_write "$segment" || c_forget
+  elif [ "$C_KEEP" = 0 ]; then
+    c_read_only "$segment" || c_forget
+  fi
 
   if [ "$ALLOW_BRANCH_OPS" = 0 ]; then
     if matches_any "$segment" "${BRANCH_PATTERNS[@]}" \

@@ -674,7 +674,13 @@ check block "#372 only the last -C decides the segment's directory" \
 mark f4-dev develop 60
 check_in "$REPO" block "#372 a builtin with an output redirect is not read-only" f4-dev \
   "git worktree add .claude/worktrees/g4 -b g4 && echo gitdir: $REPO/.git > .claude/worktrees/g4/.git && git -C .claude/worktrees/g4 switch -c g4b"
+for r in '&>' '>&' '&>>' '2>&1 >' '>&'; do
+  check_in "$REPO" block "#372 a write through $r is not read-only" f4-dev \
+    "git worktree add .claude/worktrees/g6 -b g6 && echo gitdir: $REPO/.git $r.claude/worktrees/g6/.git && git -C .claude/worktrees/g6 switch -c g6b"
+done
 rm -f "$STATE/"*.jsonl
+check allow "#372 &>/dev/null stays read-only" \
+  'git worktree add .claude/worktrees/g7 -b g7 && git status &>/dev/null && git -C .claude/worktrees/g7 switch -c g7b'
 check allow "#372 a redirect to /dev/null stays read-only" \
   'git worktree add .claude/worktrees/g5 -b g5 && git status >/dev/null 2>&1 && git -C .claude/worktrees/g5 switch -c g5b'
 HOME="$(dirname "$REPO")" check block "#372 an empty -C leaves the directory unchanged" \
