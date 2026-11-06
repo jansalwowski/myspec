@@ -290,7 +290,11 @@ classify_at() {
     # its longest existing prefix.
     abs=$(cd "$(existing_dir "$1")" 2>/dev/null && git --git-dir="$2" rev-parse --absolute-git-dir 2>/dev/null) || return 0
     case "$abs" in
-      */worktrees/*) return 0 ;;
+      */worktrees/*)
+        # With no work tree set, git takes the cwd as the work tree: a linked
+        # worktree's git dir run from a main checkout rewrites its files.
+        checkout_facts "$1" || return 0
+        [ "$CF_LINKED" = 0 ] && [ "$CF_SUBMODULE" = 0 ] && CLS_ROOT="$CF_ROOT" ;;
       */.git) CLS_ROOT="${abs%/.git}" ;;
     esac
     return 0
@@ -314,6 +318,9 @@ procedure_doc() {
 # included), or the assignment in front of the `bash -c` / `eval` running it.
 GD_UNKNOWN=$'\001'
 GIT_DIR_INH=""
+# GD_ALLEXPORT: 1 after `set -a` / `set -o allexport`, which exports a bare
+# GIT_DIR= assignment as `export` would.
+GD_ALLEXPORT=0
 
 # git_dir_word_to <var> <encoded word> <assignment: 1|0> -> the decoded git
 # dir, or GD_UNKNOWN. The shell expands a leading `~` only in an assignment.
@@ -907,7 +914,7 @@ note_removal() {
   done
   [ "${#ops[@]}" -gt 0 ] || return 0
   case "${ops[0]##*/}" in
-    rm|rmdir) [ "${#ops[@]}" -lt 2 ] || note_gone "$dir" "${ops[@]:1}" ;;
+    rm|rmdir|unlink) [ "${#ops[@]}" -lt 2 ] || note_gone "$dir" "${ops[@]:1}" ;;
     mv) [ "${#ops[@]}" -gt 2 ] && note_gone "$dir" "${ops[@]:1:${#ops[@]}-2}" ;;
     git)
       case "${ops[1]:-} ${ops[2]:-}" in
@@ -966,7 +973,7 @@ walk() {
   local cmd="$1" dir="$2" depth="$3" start="$2"
   local -a seps segs_s segs_r sw rw stack helds
   local line i k n j c w sub gdir gitdir norm payload held="" chain="" link esc=0
-  local made clex envgd inh
+  local made clex envgd inh gd_export
   local saved_wt="$REMOVED_WT"
 
   k=0
@@ -1013,7 +1020,7 @@ walk() {
   done
 
   # A payload (`bash -c`) sees what the command around it creates.
-  if [ "$depth" = 0 ]; then CD_MADE=() CD_NEW_WT=() C_MADE=() C_NEW_WT=() GONE=() READDED=() GIT_DIR_INH=""; fi
+  if [ "$depth" = 0 ]; then CD_MADE=() CD_NEW_WT=() C_MADE=() C_NEW_WT=() GONE=() READDED=() GIT_DIR_INH="" GD_ALLEXPORT=0; fi
   stack=() helds=()
   for ((k = 0; k < n; k++)); do
     link="${seps[k]}"
@@ -1105,12 +1112,33 @@ walk() {
           fi ;;
       esac
     done
-    [ "$j" -lt "${#sw[@]}" ] || continue
+    if [ "$j" -ge "${#sw[@]}" ]; then
+      # A bare assignment under `set -a` is exported.
+      [ "$GD_ALLEXPORT" = 0 ] || [ -z "$envgd" ] || GIT_DIR_INH="$envgd"
+      continue
+    fi
 
     c="${sw[j]##*/}"
+    if [ "$c" = set ]; then
+      for ((i = j + 1; i < ${#sw[@]}; i++)); do
+        case "${sw[i]}" in
+          allexport) [ "${sw[i-1]}" = -o ] && GD_ALLEXPORT=1 ;;
+          --*) ;;
+          -*a*) GD_ALLEXPORT=1 ;;
+        esac
+      done
+    fi
     # `export GIT_DIR=<dir>` (or a bare `export GIT_DIR`) reaches every git
-    # after it.
-    if [ "$c" = export ]; then
+    # after it, and so does `declare -x` / `typeset -x`.
+    gd_export=0
+    case "$c" in
+      export) gd_export=1 ;;
+      declare|typeset|local|readonly)
+        for ((i = j + 1; i < ${#sw[@]}; i++)); do
+          case "${sw[i]}" in --*) ;; -*x*) gd_export=1 ;; esac
+        done ;;
+    esac
+    if [ "$gd_export" = 1 ]; then
       for ((i = j + 1; i < ${#sw[@]}; i++)); do
         case "${sw[i]}" in
           GIT_DIR=?*) git_dir_word_to GIT_DIR_INH "${rw[i]#GIT_DIR=}" 1 ;;
@@ -1125,7 +1153,7 @@ walk() {
       note_made "$dir" "${rw[@]:j}"
       c_note_made "$made"
     fi
-    case "$c" in rm|rmdir|mv) note_removal "$dir" "${rw[@]:j}" ;; esac
+    case "$c" in rm|rmdir|unlink|mv) note_removal "$dir" "${rw[@]:j}" ;; esac
     case "$c" in
       cd|pushd)
         j=$((j + 1))

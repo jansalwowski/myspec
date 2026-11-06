@@ -816,6 +816,27 @@ check allow "#408 a variable removal is not followed"    \
   "rm -rf \$X/.git && cd $WT && git switch -c ok"
 check allow "#408 the worktree added again"              \
   "rm -rf $WT/.git && git worktree add --force $WT wt-a && cd $WT && git switch -c ok"
+# Review of #409.
+check block "#407 a linked git dir with git run in the main checkout" \
+  "GIT_DIR=$REPO/.git/worktrees/wt-a git -C $REPO switch -c rv1"
+check block "#407 ... spelled --git-dir"                  \
+  "git --git-dir=$REPO/.git/worktrees/wt-a -C $REPO switch -c rv2"
+check allow "#407 a linked git dir run in its worktree"  \
+  "GIT_DIR=$REPO/.git/worktrees/wt-a git -C $WT switch -c rv3"
+check block "#407 declare -x exports"                    \
+  "declare -x GIT_DIR=$REPO/.git; cd $WT && git switch -c rv4"
+check block "#407 typeset -gx exports"                   \
+  "typeset -gx GIT_DIR=$REPO/.git; cd $WT && git switch -c rv5"
+check block "#407 set -a exports a bare assignment"      \
+  "set -a; GIT_DIR=$REPO/.git; cd $WT && git switch -c rv6"
+check block "#407 set -o allexport"                      \
+  "set -o allexport; GIT_DIR=$REPO/.git; cd $WT && git switch -c rv7"
+check allow "#407 a declare without -x does not export"  \
+  "declare GIT_DIR=$REPO/.git; cd $WT && git switch -c rv8"
+check allow "#407 set -e is not allexport"               \
+  "set -e; GIT_DIR=$REPO/.git; cd $WT && git switch -c rv9"
+check block "#408 unlink counts as a removal"            \
+  "unlink $WT/.git && cd $WT && git switch -c rv10"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
