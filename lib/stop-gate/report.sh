@@ -53,7 +53,7 @@ conformance_gates() {
 }
 
 # report_decision -> prints the decision and exits 0. Reads the run.sh
-# arrays, the attribute.sh notes, SCOPE_NOTES and DEPS_NOTES (provision.sh). Sets GATE_DECIDED=1 just
+# arrays, the attribute.sh notes (KNOWN_NOTES among them, R15), SCOPE_NOTES and DEPS_NOTES (provision.sh). Sets GATE_DECIDED=1 just
 # before the decision goes out: finish_run records `verified` only then, so a
 # hook that dies on the way (set -e) leaves its checkouts armed.
 report_decision() {
@@ -112,6 +112,9 @@ report_decision() {
     done
     notes+="${scope:+$scope$'\n\n'}"
     for entry in ${WARN_NOTES[@]+"${WARN_NOTES[@]}"}; do
+      notes+="${entry}"$'\n\n'
+    done
+    for entry in ${KNOWN_NOTES[@]+"${KNOWN_NOTES[@]}"}; do
       notes+="${entry}"$'\n\n'
     done
     if [ "$BLOCKING_FAILURE" -eq 0 ]; then

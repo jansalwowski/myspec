@@ -57,6 +57,14 @@ names_cwd() { printf '%s\n' "$3" > "$ROOT/log"; names_in "$1" "$ROOT/paths" "$RO
 eq "$(names_cwd full pkg 'app.ts:3 error')" pkg/app.ts "full: a path relative to the check's cwd (#255 review)"
 eq "$(names_cwd full pkg 'other.ts:3 error')" other.ts "full: a repo-relative path still matches with a cwd"
 eq "$(names_cwd full '' 'app.ts:3 error')" "" "full: without a cwd, no prefix is tried"
+printf 'web/[id].test.tsx\nroutes/+page.test.ts\nmy test.py\napi/src/[x].php\n' > "$ROOT/odd"
+odd() { printf '%s\n' "$3" > "$ROOT/log"; names_in "$1" "$ROOT/odd" "$ROOT/log" "${2:-}" | paste -sd' ' -; }
+eq "$(odd base '' 'error in web/[id].test.tsx:3')" "web/[id].test.tsx" "base: a basename outside the path characters is found as a substring (PR #400 review)"
+eq "$(odd base '' 'FAIL routes/+page.test.ts')" "routes/+page.test.ts" "base: a leading + is found"
+eq "$(odd base '' 'FAILED my test.py::t')" "my test.py" "base: a space is found"
+eq "$(odd full '' 'x web/[id].test.tsx:3')" "web/[id].test.tsx" "full: a path outside the path characters is found"
+eq "$(odd full api 'src/[x].php:3')" "api/src/[x].php" "full: such a path relative to the check's cwd is found"
+eq "$(odd full '' 'other/[id].test.tsx:3')" "" "full: another file with that basename is not the listed one"
 eq "$(printf 'a\nb\nc\n' | join_lines 2)" "a, b" "join_lines: the first N, comma-joined"
 seq 1 2000 > "$ROOT/many"
 eq "$(short_list "$ROOT/many" 3)" "1, 2, 3 and 1997 more" "short_list: the rest counted"
@@ -80,6 +88,7 @@ results() {
     FAILED_CHECKS+=("${a%%=*}")
     FAILED_LOGS+=("$LOGS/$i")
     FAILED_CWDS+=("${RESULT_CWD:-}")
+    FAILED_KNOWN+=("${RESULT_KNOWN:-}")
     FAILED_OUTPUT+=("[${a%%=*}] failed")
     i=$((i + 1))
   done
@@ -188,6 +197,102 @@ has "$out" "A worktree per session" "R4: the warning points at isolation"
 out=$(decide 0 lint='app.ts:1 BROKEN')
 eq "${out%%|*}" 1 "R4: the session's own failure blocks"
 has "$out" "names files this session wrote: app.ts" "R4: the block carries the paragraph"
+
+# --- knownFailures (R15, #394) ----------------------------------------------------
+# A suite red on the default branch: its failing file is listed, with a reason.
+mkdir -p "$REPO/tests/legacy" "$REPO/tests/unit"
+mkdir -p "$REPO/web" "$REPO/routes"
+for x in tests/legacy/old_test.py tests/legacy/older_test.py tests/unit/new_test.py src.py 'web/[id].test.tsx' 'routes/+page.test.ts' 'my test.py'; do printf 'ok\n' > "$REPO/$x"; done
+git -C "$REPO" add tests src.py web routes 'my test.py'
+git -C "$REPO" -c user.email=t@t -c user.name=t commit -q -m tests
+git -C "$REPO" checkout -q -- other.ts
+known() {  # known <glob> <reason> -> one entry line, as run.sh stores it
+  printf '%s\t%s\t%s' "$(glob_regex "$1")" "$1" "$2"
+}
+KNOWN_LEGACY=$(known 'tests/legacy/**' 'red on main, TICKET-1')
+kdecide() {  # kdecide <check=output>... -> block flag|warn notes|known notes|block notes
+  attribute_init
+  IMPLEMENT_ACTIVE=0
+  results "$@"
+  ROOT_LABEL=""
+  attribute_root
+  printf '%s|%s|%s|%s' "$BLOCKING_FAILURE" "${WARN_NOTES[*]:-}" "${KNOWN_NOTES[*]:-}" "${BLOCK_NOTES[*]:-}"
+}
+# The session's only uncommitted change is app.ts: F is empty, so without
+# knownFailures rule 1 blocks.
+out=$(RESULT_KNOWN="$KNOWN_LEGACY" kdecide tests='FAILED tests/legacy/old_test.py::test_x - AssertionError')
+eq "${out%%|*}" 0 "R15: a failure naming only a listed file warns"
+has "$out" "tests fails only on its knownFailures: tests/legacy/** (red on main, TICKET-1)" "R15: the warning names the check, the entry and its reason"
+has "$out" "lists under knownFailures" "R15: the warning says why it does not block"
+out=$(RESULT_KNOWN="$KNOWN_LEGACY" kdecide tests="FAIL $REPO/tests/legacy/old_test.py")
+eq "${out%%|*}" 0 "R15: an absolute path in this checkout is matched repo-relative"
+out=$(RESULT_CWD=tests RESULT_KNOWN="$KNOWN_LEGACY" kdecide tests='FAIL legacy/old_test.py')
+eq "${out%%|*}" 0 "R15: a path relative to the check's cwd is matched as <cwd>/<path>"
+out=$(kdecide tests='FAILED tests/legacy/old_test.py::test_x')
+eq "${out%%|*}" 1 "R15: without knownFailures the same failure blocks"
+out=$(RESULT_KNOWN="$KNOWN_LEGACY" kdecide tests='FAILED tests/legacy/old_test.py::test_x'$'\n''src/app.ts:3 caused by app.ts')
+eq "${out%%|*}" 1 "R15: a failure that also names a file this session wrote blocks"
+has "$out" "knownFailures not applied, it names files this session wrote: app.ts" "R15: and says why"
+out=$(RESULT_KNOWN="$KNOWN_LEGACY" kdecide tests='FAILED tests/legacy/old_test.py::test_x'$'\n''FAILED tests/unit/new_test.py::test_y')
+eq "${out%%|*}" 1 "R15: a failure that also names an unlisted file blocks"
+has "$out" "it also names files no entry matches: tests/unit/new_test.py" "R15: and names that file"
+out=$(RESULT_KNOWN="$KNOWN_LEGACY" kdecide tests='tests/unit/new_test.py .... PASSED'$'\n''FAILED tests/legacy/old_test.py')
+eq "${out%%|*}" 1 "R15: a passing file the runner lists blocks too (errs toward blocking)"
+has "$out" "it also names files no entry matches: tests/unit/new_test.py" "R15: the passing file is named"
+out=$(RESULT_KNOWN="$KNOWN_LEGACY" kdecide tests='FAILED tests/legacy/old_test.py'$'\n''  File "src.py", line 3')
+eq "${out%%|*}" 1 "R15: a tracked file in a stack trace is a file outside the entries"
+has "$out" "it also names files no entry matches: src.py" "R15: the stack-trace file is named"
+out=$(RESULT_KNOWN="$KNOWN_LEGACY" kdecide tests='FAILED legacy/new_test.py')
+eq "${out%%|*}" 1 "R15: a file named by a basename outside the entries blocks"
+has "$out" "it also names files no entry matches: legacy/new_test.py" "R15: the basename-matched file is named"
+# A failing file whose path holds characters outside the path runs (PR #400
+# review): found as a substring, so it is a file outside the entries.
+for odd in 'web/[id].test.tsx' 'routes/+page.test.ts' 'my test.py'; do
+  out=$(RESULT_KNOWN="$KNOWN_LEGACY" kdecide tests="FAILED tests/legacy/old_test.py"$'\n'"FAIL $odd")
+  eq "${out%%|*}" 1 "R15: a failing $odd beside a listed file blocks"
+  has "$out" "it also names files no entry matches: $odd" "R15: and names $odd"
+done
+# A runner that names a test by its dotted module or class (PR #400 review).
+out=$(RESULT_KNOWN="$KNOWN_LEGACY" kdecide tests='FAIL: test_x (tests.legacy.old_test.OldTest.test_x)')
+eq "${out%%|*}" 0 "R15: a dotted name that maps to a listed file is known"
+out=$(RESULT_KNOWN="$KNOWN_LEGACY" kdecide tests='FAIL: test_x (tests.legacy.old_test.OldTest.test_x)'$'\n''FAIL: test_y (tests.unit.new_test.NewTest.test_y)')
+eq "${out%%|*}" 1 "R15: a dotted name that maps to an unlisted file blocks"
+has "$out" "it also names files no entry matches: tests/unit/new_test.py" "R15: and names the file it maps to"
+out=$(RESULT_KNOWN="$KNOWN_LEGACY" kdecide tests='Segmentation fault')
+eq "${out%%|*}" 1 "R15: a failure that names no listed file blocks"
+has "$out" "it names no file an entry matches" "R15: and says so"
+# shellcheck disable=SC2030,SC2031 # each case builds its results in its own subshell
+out=$(attribute_init; IMPLEMENT_ACTIVE=0; RESULT_KNOWN="$KNOWN_LEGACY" results tests='FAILED tests/legacy/old_test.py'; TIMED_OUT_CHECKS+=(slow); ROOT_LABEL=""; attribute_root; printf '%s|%s' "$BLOCKING_FAILURE" "${KNOWN_NOTES[*]:-}")
+eq "$out" "1|tests fails only on its knownFailures: tests/legacy/** (red on main, TICKET-1)." "R15: a timeout in the checkout is never downgraded"
+# shellcheck disable=SC2030,SC2031 # each case builds its results in its own subshell
+out=$(attribute_init; IMPLEMENT_ACTIVE=0; RESULT_KNOWN="$KNOWN_LEGACY" results tests='FAILED tests/legacy/old_test.py'; UNVERIFIABLE_CHECKS+=(container); ROOT_LABEL=""; attribute_root; printf '%s|%s' "$BLOCKING_FAILURE" "${KNOWN_NOTES[*]:-}")
+eq "$out" "1|tests fails only on its knownFailures: tests/legacy/** (red on main, TICKET-1)." "R15: a refused check in the checkout is never downgraded"
+# shellcheck disable=SC2030,SC2031 # each case builds its results in its own subshell
+out=$(attribute_init; IMPLEMENT_ACTIVE=0; RESULT_KNOWN="$KNOWN_LEGACY" results tests='FAILED tests/legacy/old_test.py'; NOT_RUN_CHECKS+=(later); ROOT_LABEL=""; attribute_root; printf '%s|%s' "$BLOCKING_FAILURE" "${KNOWN_NOTES[*]:-}")
+eq "$out" "1|tests fails only on its knownFailures: tests/legacy/** (red on main, TICKET-1)." "R15: a check the budget left unrun is never downgraded"
+# One known check beside one the session broke: the session's blocks.
+# shellcheck disable=SC2030,SC2031 # each case builds its results in its own subshell
+out=$(attribute_init; IMPLEMENT_ACTIVE=0; results tests='FAILED tests/legacy/old_test.py' lint='app.ts:1 BROKEN'; FAILED_KNOWN=("$KNOWN_LEGACY" ""); ROOT_LABEL=""; attribute_root; printf '%s|%s' "$BLOCKING_FAILURE" "${KNOWN_NOTES[*]:-}")
+eq "$out" "1|tests fails only on its knownFailures: tests/legacy/** (red on main, TICKET-1)." "R15: another failing check still blocks, the known one settled"
+# One known check beside one naming only another session's file: both settled.
+printf 'BROKEN\n' >> "$REPO/other.ts"
+# shellcheck disable=SC2030,SC2031 # each case builds its results in its own subshell
+out=$(attribute_init; IMPLEMENT_ACTIVE=0; results tests='FAILED tests/legacy/old_test.py' lint='other.ts:2 BROKEN'; FAILED_KNOWN=("$KNOWN_LEGACY" ""); ROOT_LABEL=""; attribute_root; printf '%s|%s' "$BLOCKING_FAILURE" "${WARN_NOTES[*]}")
+eq "${out%%|*}" 0 "R15 with R4: a known failure and an all-foreign one warn"
+has "$out" "or is a known failure" "R15 with R4: the warning says both"
+git -C "$REPO" checkout -q -- other.ts
+# The report carries the known-failure note in the approve's systemMessage.
+# shellcheck disable=SC2030,SC2031 # each case builds its results in its own subshell
+out=$(attribute_init; IMPLEMENT_ACTIVE=0; RESULT_KNOWN="$KNOWN_LEGACY" results tests='FAILED tests/legacy/old_test.py'; RAN_CHECKS=(tests); SCOPE_NOTES=(); ROOT_LABEL=""; attribute_root; report_decision)
+eq "$(printf '%s' "$out" | jq -r .decision)" approve "R15 report: a known failure approves"
+has "$(printf '%s' "$out" | jq -r .systemMessage)" "tests fails only on its knownFailures" "R15 report: the systemMessage names it"
+
+# Last: the session now wrote a listed file. A dotted name for it is the
+# session's, not a known failure.
+wrote tests/legacy/old_test.py
+out=$(RESULT_KNOWN="$KNOWN_LEGACY" kdecide tests='FAIL: test_x (tests.legacy.old_test.OldTest.test_x)')
+eq "${out%%|*}" 1 "R15: a dotted name for a file this session wrote blocks"
+has "$out" "it names files this session wrote: tests/legacy/old_test.py" "R15: and names it"
 
 printf '\nstop-gate-attribute: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
