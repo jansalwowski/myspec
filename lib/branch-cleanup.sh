@@ -17,10 +17,22 @@
 # TWO PROOFS OF CONTAINMENT — either one is sufficient
 #   A (local, no network): every path the branch touched is byte-identical in
 #     the base. Survives squash merges, needs no remote.
-#   B (remote): a MERGED PR exists for the branch AND the local tip equals that
-#     PR's headRefOid. The tip check is load-bearing: without it, a branch that
-#     was merged and then had new commits pushed reads as "merged" and its
-#     unmerged work is destroyed.
+#   B (remote): a PR MERGED INTO THE BASE exists for the branch AND the local
+#     tip is that PR's headRefOid or an ancestor of it, so every local commit
+#     was part of what merged. A tip behind the head (review fixes pushed from
+#     elsewhere) passes; a tip with any commit the head lacks fails. The
+#     ancestry check is load-bearing: without it, a branch that was merged and
+#     then had new commits added reads as "merged" and its unmerged work is
+#     destroyed. The base check is too: a PR merged into another branch whose
+#     own PR never merged (a stack) carried nothing into the base. A later PR
+#     commit that reverts some of the tip's work loses nothing either: the
+#     revert merged with the PR, and every tip commit stays reachable from
+#     the forge's refs/pull/<N>/head. The PR is looked up by head branch name,
+#     then, when that finds none containing the tip, by the tip commit (a
+#     local branch named apart from the PR's head, such as pr-<N>). Both ask
+#     about origin's repository, the one refs/pull/<N>/head is fetched from;
+#     a head object missing locally is fetched unless --no-fetch, and still
+#     missing, the proof fails.
 #   C (local): every commit has a patch-equivalent upstream (`git cherry`).
 #     Covers commits cherry-picked into the base, which A and B both miss.
 # A alone is incomplete: once later PRs touch the same files, the base moves on
@@ -29,7 +41,10 @@
 # supplements rather than replaces. Together they classify correctly and fail
 # toward KEEP.
 #
-# HARD VETOES — any one keeps the branch, before proofs are considered
+# HARD VETOES — any one keeps the branch, before proofs are considered. The
+# two "may be in use" vetoes (touched in the last hour, and the unattended
+# ones below) add "(otherwise DELETE: <proof>)" when a local proof holds, so
+# the user knows waiting is enough; Proof B is not run for that hint.
 #   - it is the current branch, or the base branch
 #   - its worktree has uncommitted or untracked files
 #   - its worktree was touched in the last hour (possibly a live session)
@@ -78,7 +93,7 @@ while [ "$#" -gt 0 ]; do
     --no-fetch) DO_FETCH=0; shift ;;
     --json)     AS_JSON=1; shift ;;
     --unattended) UNATTENDED=1; shift ;;
-    -h|--help)  sed -n '2,56p' "$0"; exit 0 ;;
+    -h|--help)  awk 'NR > 1 && !/^#/ { exit } NR > 1' "$0"; exit 0 ;;
     *)          echo "branch-cleanup: unknown argument '$1'" >&2; exit 2 ;;
   esac
 done
@@ -146,18 +161,164 @@ mtime_of() {
   printf '%s' "$t"
 }
 
-# Sets PR_HEAD and PR_NUM from the branch's merged PR, or empties them.
-# One network call, made only when classify() needs it: the local proofs
-# settle most branches, and a repo with hundreds of branches otherwise pays
-# a gh round trip for each.
-merged_pr() {
-  local out
-  PR_HEAD="" PR_NUM=""
-  command -v gh >/dev/null 2>&1 || return 0
-  out=$(gh pr list --head "$1" --state merged --json headRefOid,number --limit 1 2>/dev/null \
-    | jq -r '.[0] // empty | "\(.headRefOid) \(.number)"' 2>/dev/null) || return 0
-  [ -n "$out" ] || return 0
-  PR_HEAD="${out%% *}" PR_NUM="${out#* }"
+# The base as a branch name, to compare with a PR's base branch.
+BASE_NAME="$BASE"
+case "$BASE_NAME" in
+  refs/heads/*)   BASE_NAME="${BASE_NAME#refs/heads/}" ;;
+  refs/remotes/*) BASE_NAME="${BASE_NAME#refs/remotes/}"; BASE_NAME="${BASE_NAME#*/}" ;;
+  *) if ! git show-ref --verify --quiet "refs/heads/$BASE_NAME" \
+       && git show-ref --verify --quiet "refs/remotes/$BASE_NAME"; then
+       BASE_NAME="${BASE_NAME#*/}"
+     fi ;;
+esac
+
+# gh is asked about origin's repository, the one every fetch here uses. Left
+# to itself gh resolves a fork to its upstream, whose PR numbers do not match
+# origin's refs/pull/<n>/head. Read from the raw URL; an origin that names no
+# host/owner/repo is no forge gh knows, so no PR is looked up (KEEP).
+GH_STATE=0 GH_HOST="" GH_REPO=""
+gh_ready() {
+  local url rest host path
+  if [ "$GH_STATE" -eq 0 ]; then
+    GH_STATE=2
+    command -v gh >/dev/null 2>&1 || return 1
+    url=$(git config --get remote.origin.url 2>/dev/null) || return 1
+    case "$url" in
+      *://*) rest="${url#*://}"; rest="${rest#*@}"; host="${rest%%/*}"; path="${rest#*/}" ;;
+      *@*:*) rest="${url#*@}"; host="${rest%%:*}"; path="${rest#*:}" ;;
+      *) return 1 ;;
+    esac
+    host="${host%%:*}" path="${path%/}"
+    path="${path%.git}"
+    case "$path" in */*/*|/*) return 1 ;; ?*/?*) ;; *) return 1 ;; esac
+    [ -n "$host" ] || return 1
+    GH_HOST="$host" GH_REPO="$path" GH_STATE=1
+  fi
+  [ "$GH_STATE" -eq 1 ]
+}
+
+# pr_rows <name|commit> <branch|sha>: sets PR_ROWS, one
+# "<STATE> <head sha> <number> <base>" line per PR. Not called in $( ), which
+# would drop the cache. One gh call per key per run, cached: --apply re-runs classify, and
+# a merged PR stays merged, so the answer cannot go stale; containment is
+# re-checked against the current tip each time. gh absent, unauthenticated
+# or offline, or a commit GitHub does not have: no rows.
+PR_CACHE=""
+pr_rows() {
+  local key="$1:$2" hit out
+  if hit=$(printf '%s\n' "$PR_CACHE" | awk -F'\t' -v k="$key" '$1 == k { print $2; f = 1 } END { exit !f }'); then
+    PR_ROWS=$(printf '%s\n' "$hit" | sed '/^-$/d')
+    return
+  fi
+  out=""
+  if gh_ready; then
+    if [ "$1" = name ]; then
+      out=$(gh pr list -R "$GH_HOST/$GH_REPO" --head "$2" --state all \
+          --json headRefOid,number,state,baseRefName --limit 30 2>/dev/null \
+        | jq -r '.[] | "\(.state) \(.headRefOid) \(.number) \(.baseRefName)"' 2>/dev/null) || out=""
+    else
+      out=$(gh api --hostname "$GH_HOST" "repos/$GH_REPO/commits/$2/pulls" 2>/dev/null \
+        | jq -r '.[] | "\(if .merged_at then "MERGED" else (.state | ascii_upcase) end) \(.head.sha) \(.number) \(.base.ref)"' 2>/dev/null) || out=""
+    fi
+  fi
+  [ -n "$out" ] || out="-"
+  PR_CACHE="$PR_CACHE$(printf '%s\n' "$out" | awk -v k="$key" '{ print k "\t" $0 }')
+"
+  PR_ROWS=$(printf '%s\n' "$out" | sed '/^-$/d')
+}
+
+# pr_contains <tip> <rows> -> 0, with PR_NUM and PR_HEAD set, when a row is a
+# PR merged into the base whose head is the tip or a descendant of it. Notes
+# for the KEEP detail accumulate across calls: PR_MERGED (merged into the
+# base, head testable), PR_MISSING (merged into the base, head object not to
+# be had, so it might have proved containment), PR_ELSEWHERE (merged into
+# another branch), PR_CLOSED (closed unmerged).
+FETCHED=" "
+pr_contains() {
+  local tip="$1" state head num base
+  while read -r state head num base; do
+    [ -n "$num" ] || continue
+    case "$state" in
+      CLOSED) [ -n "$PR_CLOSED" ] || PR_CLOSED="$num"; continue ;;
+      MERGED) ;;
+      *) continue ;;
+    esac
+    if [ "$base" != "$BASE_NAME" ]; then
+      [ -n "$PR_ELSEWHERE" ] || PR_ELSEWHERE="$num $base"
+      continue
+    fi
+    if ! git cat-file -e "$head^{commit}" 2>/dev/null; then
+      case "$FETCHED" in *" $num "*) ;; *)
+        FETCHED="$FETCHED$num "
+        [ "$DO_FETCH" -eq 1 ] && git fetch --quiet --no-tags origin "refs/pull/$num/head" 2>/dev/null ;;
+      esac
+      if ! git cat-file -e "$head^{commit}" 2>/dev/null; then
+        [ -n "$PR_MISSING" ] || PR_MISSING="$num $head"
+        continue
+      fi
+    fi
+    if git merge-base --is-ancestor "$tip" "$head" 2>/dev/null; then
+      PR_HEAD="$head" PR_NUM="$num"
+      return 0
+    fi
+    [ -n "$PR_MERGED" ] || PR_MERGED="$num $head"
+  done <<< "$2"
+  return 1
+}
+
+# find_pr <branch> <tip> -> 0, with PR_NUM and PR_HEAD set, when Proof B
+# holds. The commit lookup runs only when the name lookup proves nothing.
+find_pr() {
+  PR_HEAD="" PR_NUM="" PR_MERGED="" PR_MISSING="" PR_ELSEWHERE="" PR_CLOSED=""
+  pr_rows name "$1"
+  pr_contains "$2" "$PR_ROWS" && return 0
+  pr_rows commit "$2"
+  pr_contains "$2" "$PR_ROWS"
+}
+
+# Why find_pr found no proof, for the KEEP detail.
+pr_detail() {
+  local tip="$1" extra=""
+  if [ -n "$PR_MISSING" ]; then
+    printf 'PR #%s merged but its head %s is not available locally (fetch refs/pull/%s/head to check)' \
+      "${PR_MISSING%% *}" "$(printf '%.8s' "${PR_MISSING#* }")" "${PR_MISSING%% *}"
+  elif [ -n "$PR_MERGED" ]; then
+    printf 'PR #%s merged but local tip %.8s is not contained in PR head %.8s — work added after the merge' \
+      "${PR_MERGED%% *}" "$tip" "${PR_MERGED#* }"
+  else
+    [ -z "$PR_ELSEWHERE" ] || extra="; PR #${PR_ELSEWHERE%% *} merged into ${PR_ELSEWHERE#* }, not $BASE_NAME"
+    [ -z "$PR_CLOSED" ] || extra="$extra; PR #$PR_CLOSED closed unmerged"
+    printf '%s' "$extra"
+  fi
+}
+
+# Was this branch ever published? Two local signals, because each one alone
+# has a blind spot: `git push` without -u sets no upstream config; a merged
+# PR's remote branch is deleted, taking origin/<br> with it. A merged PR is
+# the third, and needs the network.
+published_locally() {
+  [ -n "$(git config --get "branch.${1}.remote" 2>/dev/null)" ] \
+    || git rev-parse --verify --quiet "origin/$1" >/dev/null
+}
+
+# Commits sitting ahead of a remote-tracking ref that still exists.
+ahead_of_remote() {
+  git rev-parse --verify --quiet "origin/$1" >/dev/null \
+    && [ -n "$(git log --oneline "origin/$1..$1" 2>/dev/null)" ]
+}
+
+# The local proofs, cheapest first. Sets PROOF when one holds.
+local_proof() {
+  local br="$1"
+  if git merge-base --is-ancestor "$br" "$BASE" 2>/dev/null; then
+    PROOF="ancestor of $BASE"
+  elif content_equivalent "$br"; then
+    PROOF="content-equivalent to $BASE"
+  elif patches_upstream "$br"; then
+    PROOF="every commit patch-equivalent to $BASE"
+  else
+    return 1
+  fi
 }
 
 # Proof A: every path the branch introduced is byte-identical in the base.
@@ -327,76 +488,70 @@ classify() {
       return
     fi
 
-    local age
+    local age veto=""
     age=$(( $(date +%s) - $(mtime_of "$WT") ))
     if [ "$age" -lt 3600 ]; then
-      DETAIL="worktree touched $(( age / 60 ))min ago — may be a live session"
-      return
+      veto="worktree touched $(( age / 60 ))min ago — may be a live session"
+    elif [ "$UNATTENDED" -eq 1 ] && unattended_veto "$WT"; then
+      veto="$DETAIL"
     fi
 
-    if [ "$UNATTENDED" -eq 1 ] && unattended_veto "$WT"; then
+    # Vetoed either way; say what the verdict would be once the veto lapses,
+    # from the local proofs only, so the hint costs no network call.
+    if [ -n "$veto" ]; then
+      DETAIL="$veto"
+      if published_locally "$br" && ! ahead_of_remote "$br" && local_proof "$br"; then
+        DETAIL="$veto (otherwise DELETE: $PROOF)"
+      fi
+      PROOF=""
       return
     fi
   fi
 
-  local tip pr_looked=0
+  local tip pr_looked=0 why
   tip=$(git rev-parse "$br")
-  PR_HEAD="" PR_NUM=""
 
-  # "Was this branch ever published?" Three independent signals, because each
-  # one alone has a blind spot: `git push` without -u sets no upstream config;
-  # a merged PR's remote branch is deleted, taking origin/<br> with it.
-  local upstream_remote has_remote_ref=0
-  upstream_remote=$(git config --get "branch.${br}.remote" 2>/dev/null)
-  git rev-parse --verify --quiet "origin/$br" >/dev/null && has_remote_ref=1
-
-  if [ -z "$upstream_remote" ] && [ "$has_remote_ref" -eq 0 ]; then
-    merged_pr "$br"
+  if ! published_locally "$br"; then
     pr_looked=1
-    if [ -z "$PR_HEAD" ]; then
-      DETAIL="never pushed and no merged PR — local-only work"
-      return
-    fi
-  fi
-
-  # Commits sitting ahead of a remote-tracking ref that still exists.
-  if git rev-parse --verify --quiet "origin/$br" >/dev/null; then
-    if [ -n "$(git log --oneline "origin/$br..$br" 2>/dev/null)" ]; then
-      DETAIL="commits ahead of origin/$br"
-      return
-    fi
-  fi
-
-  if git merge-base --is-ancestor "$br" "$BASE" 2>/dev/null; then
-    VERDICT=DELETE
-    PROOF="ancestor of $BASE"
-    return
-  fi
-
-  if content_equivalent "$br"; then
-    VERDICT=DELETE
-    PROOF="content-equivalent to $BASE"
-    return
-  fi
-
-  if patches_upstream "$br"; then
-    VERDICT=DELETE
-    PROOF="every commit patch-equivalent to $BASE"
-    return
-  fi
-
-  [ "$pr_looked" -eq 1 ] || merged_pr "$br"
-  if [ -n "$PR_HEAD" ]; then
-    if [ "$PR_HEAD" = "$tip" ]; then
+    if find_pr "$br" "$tip"; then
       VERDICT=DELETE
-      PROOF="PR #${PR_NUM} merged, tip matches its head"
+      PROOF=$(pr_proof_text "$tip")
       return
     fi
-    DETAIL="PR #${PR_NUM} merged but local tip ${tip:0:8} != PR head ${PR_HEAD:0:8} — work added after the merge"
+    if [ -z "$PR_MERGED$PR_MISSING" ]; then
+      DETAIL="never pushed and no merged PR$(pr_detail "$tip") — local-only work"
+      return
+    fi
+  fi
+
+  if ahead_of_remote "$br"; then
+    DETAIL="commits ahead of origin/$br"
     return
   fi
 
-  DETAIL="no containment proof (differs from $BASE, no merged PR)"
+  if local_proof "$br"; then
+    VERDICT=DELETE
+    return
+  fi
+
+  if [ "$pr_looked" -eq 1 ] || ! find_pr "$br" "$tip"; then
+    why=$(pr_detail "$tip")
+    case "$why" in
+      ''|';'*) DETAIL="no containment proof (differs from $BASE, no merged PR$why)" ;;
+      *)       DETAIL="$why" ;;
+    esac
+    return
+  fi
+  VERDICT=DELETE
+  PROOF=$(pr_proof_text "$tip")
+}
+
+pr_proof_text() {
+  if [ "$PR_HEAD" = "$1" ]; then
+    printf 'PR #%s merged, tip matches its head' "$PR_NUM"
+  else
+    printf 'tip contained in merged PR #%s head' "$PR_NUM"
+  fi
 }
 
 # --- collect candidates -----------------------------------------------------
