@@ -79,7 +79,7 @@ Required (a tech-spec with nothing to reuse carries `<!-- myspec:reuse-audit ski
 | useFormState | apps/web/src/composables | skip | needs multi-step state outside its scope |
 
 Rules (mechanically enforced by the `require-reuse-audit` hook when the tech-spec is created and whenever a write changes this section or the marker; also checked by `feature-tech-spec-review`):
-- `Decision` is exactly `reuse` or `skip` — one token, no prose.
+- `Decision` is exactly `reuse` or `skip` — one token, no prose. A component reused with changes (a new prop or mode) is `reuse`, with the change in `Reason`.
 - `Reason` is mandatory for every `skip` row; optional for `reuse`.
 - The marker needs a reason too: `<!-- myspec:reuse-audit skip: greenfield service, no shared surfaces yet -->`.
 - Do not proceed to "Validate Alignment" with an empty audit.

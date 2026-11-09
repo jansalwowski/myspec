@@ -96,7 +96,9 @@ write "$SPEC" "${HEADER}"'### Reuse audit
 | Foo | lib | maybe | - |
 '"${FOOTER}"
 expect_deny "creating a tech-spec whose Decision is not reuse|skip is denied"
-reason | grep -q 'Decision must be reuse|skip' && ok || fail "the deny names the bad decision"
+reason | grep -qF 'Decision must be reuse or skip' && ok || fail "the deny names the bad decision"
+reason | grep -qF 'has invalid rows in its "## Reuse audit" table' && ok || fail "a row-only deny opens with the row line"
+reason | grep -qF '| Candidate |' && fail "a row-only deny leaves out the section template" || ok
 
 write "$SPEC" "${HEADER}"'### Reuse audit
 

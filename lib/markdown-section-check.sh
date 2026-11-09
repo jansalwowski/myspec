@@ -133,7 +133,7 @@ assert_reuse_audit_rows() {
       }
       ld = tolower(dec)
       if (ld != "reuse" && ld != "skip") {
-        printf "row %d: Decision must be reuse|skip, got \"%s\"\n", NR, dec
+        printf "row %d: Decision must be reuse or skip, got \"%s\"; a component reused with changes is reuse, with the change in Reason\n", NR, dec
         next
       }
       if (ld == "skip") {
