@@ -82,7 +82,7 @@ Worked examples of both: "Diagrams and graphs" and "Showing results" in `${CLAUD
 Submit writes `<state_dir>/answer.json`, naming the screen it answers; the server refuses a Submit from any other screen (a stale tab, a send queued across a reconnect). Wait with Bash `run_in_background: true`, so the harness wakes you, then end your turn:
 
 ```bash
-until grep -qs '"screen": "{id}.html"' <state_dir>/answer.json || [ -f <state_dir>/server-stopped ] || [ ! -d <state_dir> ]; do sleep 1; done; cat <state_dir>/answer.json <state_dir>/server-stopped 2>/dev/null
+until grep -qs '"screen": "{id}.html"' <state_dir>/answer.json || [ -f <state_dir>/server-stopped ] || [ ! -d <state_dir> ]; do sleep 1; done; cat <state_dir>/answer.json <state_dir>/server-stopped 2>/dev/null || true
 ```
 
 The `screen` match keeps an earlier decision's answer from being read as this one's. The loop also ends when the session directory is gone (`stop-server.sh` deletes temp sessions, a killed server writes nothing).
