@@ -29,7 +29,7 @@ fail() { FAIL=$((FAIL + 1)); printf 'FAIL  %s\n' "$1" >&2; }
 # and framework files the cases below move.
 PLUGIN="$ROOT/plugin"
 mkdir -p "$PLUGIN/lib" "$PLUGIN/framework-files/rules" "$PLUGIN/framework-files/templates"
-cp "$SCRIPT" "$REAL_PLUGIN/lib/myspec-config.mjs" "$REAL_PLUGIN/lib/myspec-config.schema.json" "$PLUGIN/lib/"
+cp "$SCRIPT" "$REAL_PLUGIN/lib/myspec-config.mjs" "$REAL_PLUGIN/lib/myspec-config.schema.json" "$REAL_PLUGIN/lib/plugin-root.mjs" "$PLUGIN/lib/"
 cat > "$PLUGIN/framework-files/manifest.json" <<'EOF'
 {
   "frameworkVersion": "3.0.0",

@@ -34,6 +34,7 @@ check "no outer pipes" '["a","b"]' "md.tableCells('a | b')"
 check "escaped pipe kept by default" '["a \\| b","c"]' "md.tableCells('| a \\\\| b | c |')"
 check "escaped pipe unescaped on request" '["a | b","c"]' "md.tableCells('| a \\\\| b | c |', { unescape: true })"
 check "trailing escaped pipe is cell text" '["a","b \\|"]' "md.tableCells('| a | b \\\\|')"
+check "a pipe after an escaped backslash is a delimiter" '["a","b \\\\"]' "md.tableCells('| a | b \\\\\\\\|')"
 check "empty cells kept" '["Q1","","x"]' "md.tableCells('| Q1 |  | x |')"
 check "delimiter row" '["---",":-:"]' "md.tableCells('|---|:-:|')"
 
@@ -47,6 +48,7 @@ check "closing line with a trailing space" '"a: 1"' "md.frontmatterText('---\\na
 check "a ---- line does not close" '"a: 1\n---- x\nb: 2"' "md.frontmatterText('---\\na: 1\\n---- x\\nb: 2\\n---\\n')"
 check "unclosed block" '""' "md.frontmatterText('---\\na: 1\\nbody')"
 check "not on line 1" '""' "md.frontmatterText('\\n---\\na: 1\\n---\\n')"
+check "an indented opening line is no block" '-1' "md.frontmatterBlock('  ---\\na: 1\\n---\\n').close"
 check "no frontmatter" '-1' "md.frontmatterBlock('# Title\\n').close"
 check "horizontal rules read as a block by default" '3' "md.frontmatterBlock('---\\n\\nSome intro\\n---\\n').close"
 check "yamlOnly rejects horizontal rules" '-1' "md.frontmatterBlock('---\\n\\nSome intro\\n---\\n', { yamlOnly: true }).close"
@@ -54,7 +56,8 @@ check "yamlOnly accepts lists, comments, nesting" '4' "md.frontmatterBlock('---\
 
 # memory-files frontmatterOf now goes through frontmatterText.
 check "frontmatterOf LF" '"id: P001"' "frontmatterOf('---\\nid: P001\\n---\\n# x')"
-check "frontmatterOf CRLF (was empty before #429)" '"id: P001"' "frontmatterOf('---\\r\\nid: P001\\r\\n---\\r\\n')"
+check "frontmatterOf stays byte-exact: CRLF opening is no block" '""' "frontmatterOf('---\\r\\nid: P001\\r\\n---\\r\\n')"
+check "frontmatterOf keeps CRs inside (withHook offsets)" '"id: P001\r"' "frontmatterOf('---\\nid: P001\\r\\n---\\r\\n')"
 check "frontmatterOf no block" '""' "frontmatterOf('# x\\n')"
 
 # --- pluginRoot -----------------------------------------------------------------
