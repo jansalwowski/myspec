@@ -294,6 +294,8 @@ The skill never silently flips [~] → [x]; the only path to [x] is
 "task completes + phase review passes" in this run.
 ```
 
+Before re-executing T5 and T6, the skill reads Phase 4's stage stamps, `.claude/state/implement/scheduled-reports/phase-4.times`. It holds only an `implement` stamp, so the barrier never started and the work never reached the feature branch. Had its last stamp been `barrier`, Phase 4 would resume at its barrier (4a) instead, merging the task worktrees rather than discarding them; had it been `review` or a fix round, at a fresh phase review (4b). Either way the committed tasks are not re-implemented.
+
 The first milestone with a non-`[x]` task is Milestone 1, Phase 4 — resume there.
 
 #### Step 2 — Inspect working tree, clean stale worktrees
