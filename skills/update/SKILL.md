@@ -225,7 +225,7 @@ Hooks: run from the plugin (hooks.json); {unwired N framework entries from .clau
 Memory: {indexes up to date / regenerated N, backfilled M hook: lines (K from heading — review) / skipped — no memory tree}
         doctor: {clean / N error(s), M warning(s) — see above}
 Setup:  {clean / N error(s), M warning(s) — see above / skipped — node not found}
-Mockups: {up to date / answered Q… / N question(s) offered, not now / declined Q… / file missing / check failed: <its stderr> / omit without a `mockups` block}
+Mockups: {up to date / renamed ## Old -> ## New … / answered Q… / N question(s) offered, not now / declined Q… / file missing / check failed: <its stderr> / omit without a `mockups` block}
 
 Next: Run the `bootstrap` skill to verify the setup is still correct.
 ```

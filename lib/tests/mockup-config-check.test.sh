@@ -48,12 +48,24 @@ run() { OUTPUT=$(cd "$REPO" && node "$SCRIPT" --blueprint "$BLUEPRINT" "$@" 2>&1
 mkdir -p "$(dirname "$FILE")"
 printf '{"aiDir":"ai"}\n' > "$REPO/.myspec.json"
 
-table() {           # table <rows…>: a blueprint whose Question changes table holds the rows
+# table <rows…>: a blueprint whose Question changes table holds the rows. A
+# row given with three cells gets an empty fourth (Present when); $RENAMES
+# holds the Heading renames rows.
+RENAMES=''
+table() {
   {
-    printf '# Blueprint: Mockup\n\n## Question changes\n\nIntro.\n\n| Question | Writes | Since |\n|---|---|---|\n'
-    printf '%s\n' "$@"
+    printf '# Blueprint: Mockup\n\n## Question changes\n\nIntro.\n\n| Question | Writes | Since | Present when |\n|---|---|---|---|\n'
+    for r in "$@"; do
+      case "$r" in
+        '') printf '\n' ;;
+        *'|'*'|'*'|'*'|'*'|'*) printf '%s\n' "$r" ;;
+        *) printf '%s |\n' "$r" ;;
+      esac
+    done
     # shellcheck disable=SC2016 # literal backticks in a markdown table
-    printf '\n### Writes forms\n\nThe *Writes* cell forms:\n\n| Form | Example | How |\n|---|---|---|\n| `## X (new section)` | ex | how |\n\n## Output Location\n| Q15 | Outside | 5.0.0 |\n'
+    printf '\n### Writes forms\n\nThe *Writes* cell forms:\n\n| Form | Example | How |\n|---|---|---|\n| `## X (new section)` | ex | how |\n\n## Heading renames\n\n| Old | New | Since |\n|---|---|---|\n'
+    printf '%s' "$RENAMES"
+    printf '\n## Output Location\n| Q15 | Outside | 5.0.0 |\n'
   } > "$BLUEPRINT"
 }
 
@@ -81,7 +93,7 @@ expect_line '^file: ai/conventions/mockup-design\.md  myspec_version: 3\.7\.0$' 
 expect_line '^ask: Q13  writes: ## Motion \(new section\)  \(since 3\.8\.0\)$' "Q13 offered"
 expect_line '^ask: Q2  writes: ## Style baseline \(in section\)  \(since 4\.0\.0\)$' "bare number and loose v4.0 read"
 expect_no_line 'Q15|Form|ask: Q?X' "forms table and rows outside the section ignored"
-expect_line '^mockup-config-check: 2 question\(s\) to ask$' "summary"
+expect_line '^mockup-config-check: 0 rename\(s\) to apply, 2 question\(s\) to ask$' "summary"
 
 stamped_file 3.8.0
 run
@@ -97,7 +109,7 @@ stamped_file 3.7.0
 run
 expect_line '^ask: Q2  writes: ## Style baseline \(replaces section\)  \(since 3\.9\.0\)$' "newest Q2 row asked"
 if [ "$(grep -c '^ask: Q2 ' <<<"$OUTPUT")" = 1 ]; then ok; else fail "Q2 asked more than once: $OUTPUT"; fi
-expect_line '^mockup-config-check: 2 question\(s\) to ask$' "deduped summary"
+expect_line '^mockup-config-check: 0 rename\(s\) to apply, 2 question\(s\) to ask$' "deduped summary"
 table '| Q2 | ## Style baseline (in section) | 3.8.0 |' '| Q2 | ## Component library (replaces section) | 3.9.0 |'
 run
 expect_line '^ask: Q2  writes: ## Style baseline \(in section\)  \(since 3\.8\.0\)$' "a Q2 change to another target is kept"
@@ -116,7 +128,7 @@ expect_line '^ask: Q14 ' "a row after a blank line is read"
 
 # An escaped pipe is a literal pipe in its cell.
 # shellcheck disable=SC2016 # literal backticks in a markdown row
-table '| Q14 | ## Notes \| misc (new section) | 3.9.0 |'
+table '| Q14 | ## Notes \| misc (new section) | 3.9.0 | |'
 run
 expect_status 3 "escaped pipe row readable"
 # shellcheck disable=SC2016 # literal backticks in the expected line
@@ -124,11 +136,11 @@ expect_line '^ask: Q14  writes: ## Notes \| misc \(new section\)' "escaped pipe 
 
 # --- 3. a row it cannot read stops the check ---------------------------------
 
-for bad in 'Q13 | Motion | 3.8.0 |' 'Some prose after the table.' '| Q13 | Motion | soon |' '| Q13 | Motion |' '| Q13 | Motion | 3.8.0 | note |' '| Thirteen | Motion | 3.8.0 |' '| Q13 |  | 3.8.0 |'; do
+for bad in 'Q13 | Motion | 3.8.0 |' 'Some prose after the table.' '| Q13 | Motion | soon |' '| Q13 | Motion |' '| Q13 | ## Motion (new section) | 3.8.0 | note | extra |' '| Thirteen | Motion | 3.8.0 |' '| Q13 |  | 3.8.0 |'; do
   table "$bad"
   run
   expect_status 2 "unreadable row exits 2: $bad"
-  expect_line 'cannot read the ## Question changes line' "unreadable line named: $bad"
+  expect_line 'cannot read the ## Question changes (line|row)' "unreadable line named: $bad"
 done
 # A Writes cell must use a known form.
 for bad in '| Q13 | ## Motion (new) | 3.8.0 |' '| Q13 | Motion | 3.8.0 |' '| Q13 | .myspec.json mockups | 3.8.0 |'; do
@@ -143,18 +155,80 @@ run
 expect_line '^ask: Q13  writes: \.myspec\.json mockups\.commands\.audit ' "a .myspec.json key form is read"
 
 # A table without its header line would lose its first row.
-printf '## Question changes\n\n| Q2 | ## X (new section) | 3.0.0 |\n| Q3 | ## Y (new section) | 3.0.0 |\n' > "$BLUEPRINT"
+printf '## Question changes\n\n| Q2 | ## X (new section) | 3.0.0 | |\n| Q3 | ## Y (new section) | 3.0.0 | |\n\n## Heading renames\n\n| Old | New | Since |\n|---|---|---|\n' > "$BLUEPRINT"
 run
 expect_status 2 "a table without its header row exits 2"
 expect_line 'must start with its header row' "missing header named"
 
 # A trailing space on the section heading still finds it.
-printf '## Question changes \n\n| Question | Writes | Since |\n|---|---|---|\n| Q13 | ## Motion (new section) | 3.8.0 |\n' > "$BLUEPRINT"
+printf '## Question changes \n\n| Question | Writes | Since | Present when |\n|---|---|---|---|\n| Q13 | ## Motion (new section) | 3.8.0 | |\n\n## Heading renames\n\n| Old | New | Since |\n|---|---|---|\n' > "$BLUEPRINT"
 stamped_file 3.7.0
 run
 expect_line '^ask: Q13 ' "heading with a trailing space found"
 
 table '| Q13 | ## Motion (new section) | 3.8.0 |'
+
+# --- 3b. what the file already holds is not asked (#428) --------------------
+
+table '| Q2 | ## Component library (replaces section) | 1.21.0 | Configured against: |' '| Q13 | ## Motion (new section) | 3.8.0 |'
+printf -- '---\nmyspec_version: 1.20.0\n---\n\n## Component library\n@corp/ui\nConfigured against: @corp/ui@4.2.0\n\n## Motion\nNone.\n' > "$FILE"
+run
+expect_status 0 "everything the rows write is already there"
+expect_line '^present: Q2  writes: ## Component library' "Q2 reported present by its Present when text"
+expect_line '^present: Q13  writes: ## Motion \(new section\)' "a new section whose heading exists is present"
+expect_line ', 2 already present$' "present rows counted apart"
+
+# shellcheck disable=SC2016 # literal code fence
+printf -- '---\nmyspec_version: 1.20.0\n---\n\n## Component library\n@corp/ui\n\n```md\n## Motion\n```\n\n## Detection patterns\nConfigured against: elsewhere\n' > "$FILE"
+run
+expect_status 3 "missing text and a fenced heading are not present"
+expect_line '^ask: Q2  writes: ## Component library' "pin outside its section does not count"
+expect_line '^ask: Q13  writes: ## Motion' "a heading inside a code fence does not count"
+
+printf -- '---\nmyspec_version: 1.20.0\n---\n\n## Component library\nConfigured against: in-repo (evolves with the repo)\n' > "$FILE"
+OUTPUT=$(cd "$REPO" && node "$SCRIPT" 2>&1 </dev/null); STATUS=$?
+expect_line '^present: Q2  writes: ## Component library \(replaces section\)' "shipped Q2 row present once the pin is there"
+
+# --- 3c. heading renames are applied, not asked (#427) ------------------------
+
+RENAMES='| ## Detection patterns | ## Pattern checks | 3.8.0 |
+| ## Pattern checks | ## Checks | 3.9.0 |
+'
+table '| Q13 | ## Motion (new section) | 3.8.0 |'
+# shellcheck disable=SC2016 # literal code fence
+printf -- '---\r\nmyspec_version: 3.7.0\r\n---\r\n\r\n## Detection patterns\r\n- x\r\n\r\n```\r\n## Detection patterns\r\n```\r\n\r\n## Motion\r\n' > "$FILE"
+run
+expect_status 3 "pending renames exit 3"
+expect_line '^rename: ## Detection patterns -> ## Pattern checks  \(since 3\.8\.0\)$' "first rename listed"
+expect_line '^rename: ## Pattern checks -> ## Checks  \(since 3\.9\.0\)$' "chained rename listed"
+expect_line '^mockup-config-check: 2 rename\(s\) to apply, 0 question\(s\) to ask, 1 already present$' "renames summary"
+run --apply-renames
+expect_status 0 "apply exits 0"
+expect_line '^mockup-config-check: 2 heading\(s\) renamed$' "apply summary"
+if grep -q $'^## Checks\r$' "$FILE" && [ "$(grep -c '^## Detection patterns' "$FILE")" = 1 ] && [ "$(grep -c $'\r$' "$FILE")" = 12 ]; then ok; else fail "rename wrong (fenced copy must stay, CRLF kept): $(od -c "$FILE" | head -8)"; fi
+run
+expect_status 0 "renamed file is clean"
+expect_no_line '^rename:' "no rename left"
+
+printf -- '---\nmyspec_version: 3.7.0\n---\n\n## Detection patterns\n\n## Checks\n' > "$FILE"
+run
+expect_no_line '^rename: ## Pattern checks' "no rename onto a heading the file already has"
+printf -- '---\nmyspec_version: 3.9.0\n---\n\n## Detection patterns\n' > "$FILE"
+run
+expect_status 0 "renames not newer than the stamp are not applied"
+
+RENAMES='| Detection patterns | ## Checks | 3.8.0 |
+'
+table '| Q13 | ## Motion (new section) | 3.8.0 |'
+run
+expect_status 2 "a rename cell without ## exits 2"
+expect_line 'cannot read the ## Heading renames row' "bad rename row named"
+RENAMES=''
+table '| Q13 | ## Motion (new section) | 3.8.0 |'
+printf '## Question changes\n\n| Question | Writes | Since | Present when |\n|---|---|---|---|\n' > "$ROOT/norenames.md"
+OUTPUT=$(cd "$REPO" && node "$SCRIPT" --blueprint "$ROOT/norenames.md" 2>&1 </dev/null); STATUS=$?
+expect_status 2 "a blueprint without Heading renames exits 2"
+grep -q '^## Heading renames$' "$REAL_BLUEPRINT" && ok || fail "shipped blueprint lost its Heading renames heading"
 
 # --- 4. unstamped and odd files ----------------------------------------------
 

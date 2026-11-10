@@ -150,11 +150,11 @@ The blueprint is re-runnable — `/myspec:setup mockup` prompts before overwriti
 
 ## Question changes
 
-Every question above dates from v1.20.0, when this blueprint was added, unless a row below says otherwise. A release that adds a question, or changes what one asks or writes, adds a row to this table. A number names one question for good: a change to Q2 adds another `Q2` row with the new version, and update asks only its newest row; a new question takes the next unused number. `/myspec:update` compares each row's version with the file's `myspec_version` (the plugin's `lib/mockup-config-check.mjs`; a file without a readable stamp counts as 1.20.0) and offers only the newer rows. Every line between the table and the next heading must be a row in this form, or the check stops:
+Every question above dates from v1.20.0, when this blueprint was added, unless a row below says otherwise. A release that adds a question, or changes what one asks or writes, adds a row to this table. A number names one question for good: a change to Q2 adds another `Q2` row with the new version, and update asks only its newest row; a new question takes the next unused number. `/myspec:update` compares each row's version with the file's `myspec_version` (the plugin's `lib/mockup-config-check.mjs`; a file without a readable stamp counts as 1.20.0) and offers only the newer rows the file does not already hold: a `(new section)` row whose heading exists is skipped, and so is a row whose *Present when* text appears in its target section (leave the cell empty when no text proves it). Every line between the table and the next heading must be a row in this form, or the check stops:
 
-| Question | Writes | Since |
-|---|---|---|
-| Q2 | ## Component library (replaces section) | 1.21.0 |
+| Question | Writes | Since | Present when |
+|---|---|---|---|
+| Q2 | ## Component library (replaces section) | 1.21.0 | Configured against: |
 
 ### Writes forms
 
@@ -167,11 +167,18 @@ The *Writes* cell names where the answer lands:
 | `## <Section> (replaces section)` | `## Component library (replaces section)` | Show the section's current content with the question, and replace that content with the answer |
 | `.myspec.json mockups.<key>` | `.myspec.json mockups.commands.audit` | Set that key in the `mockups` block, nothing else |
 
-Never rename a section heading through this table: the mockup skills read headings by name, and a row the user declines would leave the old heading in place. A rename ships as a manual step in the release notes.
+A section heading is never renamed through this table: the mockup skills read headings by name, and a row the user declines would leave the old heading in place. Renames go in *Heading renames*.
 
 ### Asking only the changed questions
 
 When `/myspec:update` passes question numbers, skip the overwrite question, and run only the Recon bullets those questions present a detected value from. Ask those questions alone, one at a time, and write each answer as its row's *Writes* cell says; change no other line of the file and no other `.myspec.json` key. A "skip" answer to a new section writes its header with "(none configured)"; to any other form it writes nothing. Finally stamp the file (*Post-generation*, step 4).
+
+## Heading renames
+
+A release that renames a section heading the mockup skills read adds a row here, and renames it in this template and in both mockup skills in the same change. `/myspec:update` applies each row newer than the file's stamp without asking, when the file has the old heading and not the new one, and reports it; it rewrites the heading line only. Rows apply in table order, so a later row may rename the result of an earlier one.
+
+| Old | New | Since |
+|---|---|---|
 
 ## Output Location
 - `${aiDir}/conventions/mockup-design.md`
