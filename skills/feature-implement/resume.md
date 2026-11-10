@@ -1,6 +1,6 @@
 # Resuming a Run
 
-Read from SKILL.md Step 1, when the plan already holds a `[x]` or `[~]` task or an `## Execution Log` section. `<plugin lib>` is the path SKILL.md resolves.
+Read from SKILL.md Step 1, at startup only, when the plan already holds a `[x]` or `[~]` task or an `## Execution Log` section. Never apply it mid-run: a `[~]` task there is one this session dispatched, and its worktree is live. `<plugin lib>` is the path SKILL.md resolves.
 
 1. **Scan every task checkbox.**
    - `[x]` = already done — skip entirely

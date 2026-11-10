@@ -22,7 +22,7 @@ description: "Use when an approved implementation-plan.md is ready to execute �
 | Front-matter sets `auto_parallel_phases: true` | [parallel-phases.md](parallel-phases.md) |
 | Step 1 chose workflow mode | [workflow-args.md](workflow-args.md) |
 | Triage leaves a Critical or Important finding (4d) | [fix-loop.md](fix-loop.md) |
-| The plan already holds a `[x]` or `[~]` task | [resume.md](resume.md) |
+| At startup, the plan already holds a `[x]` or `[~]` task or an Execution Log | [resume.md](resume.md) |
 | A milestone carries `**Checkpoint probes:**` | [probe-gate.md](probe-gate.md) |
 | Every milestone is complete (Step 5) | [completion.md](completion.md) |
 
@@ -42,7 +42,7 @@ Flip a task with `"${CLAUDE_PLUGIN_ROOT}/lib/plan-checkbox.sh" <plan> <N> doing|
 
 ## Execution Log (plan section)
 
-The plan is the state that survives a crashed session. Maintain a `## Execution Log` section at the end of implementation-plan.md (create it on the first entry). Entry shapes:
+The plan is the state that survives a crashed session. Maintain a `## Execution Log` section at the end of implementation-plan.md. Entry shapes:
 
 - `Ruling: <what you decided> — <why> — <what it costs if wrong>`
 - `Deferred minor (Phase N): <one-line finding> (file:line)`
@@ -82,7 +82,7 @@ Confirm where implementation will happen before parsing the plan. Always ask —
 
 | Option | Recommended when | On choice |
 |--------|------------------|-----------|
-| Worktree `feat-{name}` | A worktree for the feature exists (reuse), or the plan has `[parallel:*]` groups | Enter `.claude/worktrees/feat-{name}`, creating it with EnterWorktree (or `git worktree add .claude/worktrees/feat-{name} -b feat/{name}`), then provision it: `"${CLAUDE_PLUGIN_ROOT}/lib/worktree-provision.sh" <path> --base origin/<default-branch>` |
+| Worktree `feat-{name}` | A worktree for the feature exists (reuse), or the plan has `[parallel:*]` groups | Enter `.claude/worktrees/feat-{name}` if it exists; else create it with EnterWorktree (or `git worktree add .claude/worktrees/feat-{name} -b feat/{name}`). Then provision it: `"${CLAUDE_PLUGIN_ROOT}/lib/worktree-provision.sh" <path> --base origin/<default-branch>` |
 | Current branch `{HEAD}` | HEAD is already `feat/{name}` or equivalent | No-op |
 | New branch `feat/{name}` | HEAD is the default branch | `git checkout -b feat/{name}`. If it exists, offer checkout vs. a numeric suffix |
 | Main branch | Never — only for trivial fixes | Require explicit confirmation, and record the user's reason in the commit history |
@@ -94,7 +94,7 @@ Barrier checks, checkpoints and probes build or serve the app in this worktree; 
 Read the implementation plan, front-matter first.
 
 - **Retired front-matter.** A plan carrying `orchestration: agent-chain` stops with one line: "Plan carries retired `orchestration: agent-chain` front-matter — re-plan with /myspec:feature-plan."
-- **Run mode.** `"${CLAUDE_PLUGIN_ROOT}/lib/myspec-config.sh" get orchestration.featureImplement` prints `"controller"` (also for an unrecognised value or a failed read) or `"workflow"`. Choose workflow only when this session has the Workflow tool; without it print "Workflow mode is unavailable in this session (no Workflow tool), so feature-implement runs in controller mode." The setting loosens no gate.
+- **Run mode.** `"${CLAUDE_PLUGIN_ROOT}/lib/myspec-config.sh" get orchestration.featureImplement` prints `"controller"` (also for an unrecognised value or a failed read) or `"workflow"`. Choose workflow only when this session has the Workflow tool; without it print "Workflow mode is unavailable in this session (no Workflow tool), so feature-implement runs in controller mode."
 
 **Build the DAG:**
 
@@ -105,12 +105,12 @@ Read the implementation plan, front-matter first.
 
 **Validate before starting:** every task in an Execution Order table has a `### Task N:` section; every parallel group has a `## Barrier:` section; parallel tasks share no file (if they do, treat them as sequential); phase numbers are unique across milestones.
 
-**Resume.** A plan that already holds a `[x]` or `[~]` task is a resumed run: read [resume.md](resume.md). In short, `[x]` tasks are skipped, `[~]` tasks are re-executed from scratch, `BASE_SHA` and `PHASE_BASE` come back from their `Base` entries, and a milestone whose probes have no passing `Probe` or `Waiver` entry resumes at its probe gate (Step 4b).
+**Resume** — at startup only. A plan that already holds a `[x]` or `[~]` task or an Execution Log is a resumed run: read [resume.md](resume.md) for the checkbox states, the recovered bases and the resume point. Mid-run, a `[~]` task is one you dispatched: leave it.
 
 **Plan freshness** — only when the front-matter has `planned_against: <sha>`. Collect the `Modify:` paths of every task not yet `[x]`. `$INTEGRATION` is the branch feature work merges into: the one CLAUDE.md or the topology file names, else the default branch. Run `"${CLAUDE_PLUGIN_ROOT}/lib/plan-freshness.sh" check <sha> "$INTEGRATION" <paths>` and act on its exit status:
 
 - **0, `fresh`** — proceed.
-- **1, `stale`** plus the changed paths — warn with the list, log `Ruling: run despite <files> changed on $INTEGRATION since planned_against — implementers read current code — cost if wrong: a stale task snippet costs a fix round`, and tell each task that modifies a listed file that it changed after the plan was written.
+- **1, `stale`** plus the changed paths — warn with the list, log a `Ruling:` naming the files (cost if wrong: a stale task snippet costs a fix round), and tell each task that modifies a listed file that it changed after the plan was written.
 - **2, `unknown: <reason>`** — warn "cannot verify plan freshness — <reason>" and proceed. Never read it as fresh.
 
 ### Step 2: Setup
@@ -137,9 +137,9 @@ Read the implementation plan, front-matter first.
 
 Walk milestones in order, and each milestone's DAG topologically.
 
-**Before a phase's first dispatch:** refresh the orchestration marker and record `PHASE_BASE=$(git rev-parse HEAD)`, logging `Base (Phase N): <sha>` (a resumed phase keeps the base its entry holds). Stamp each stage as it starts, so 4f can report timings after a restart: `"${CLAUDE_PLUGIN_ROOT}/lib/implement-state.sh" stamp {feature} N implement`, then `barrier` (4a), `review` (4b), `fix-R` (each 4d round), and `done` (4e).
+**Before a phase's first dispatch:** refresh the orchestration marker and record `PHASE_BASE=$(git rev-parse HEAD)`, logging `Base (Phase N): <sha>` (a resumed phase keeps the base its entry holds; a concurrent phase records it before its merge instead). Stamp each stage as it starts, for 4f's timings: `"${CLAUDE_PLUGIN_ROOT}/lib/implement-state.sh" stamp {feature} N implement`, then `barrier` (4a), `review` (4b), `fix-R` (each 4d round), and `done` (4e).
 
-**Verification tiers.** Each check runs at the narrowest scope that catches it. An implementer runs its task's `Verify at phase review` command plus lint and typecheck scoped to the files it touched — never the full suite, a build, or an install. You run the full suite once per phase (4a), at each milestone checkpoint, and at Final Verification.
+**Verification tiers.** An implementer runs its task's `Verify at phase review` command plus lint and typecheck scoped to the files it touched — never the full suite, a build, or an install. You run the full suite once per phase (4a), at each milestone checkpoint, and at Final Verification.
 
 **Dispatch one implementer per task** with [implementer-prompt.md](implementer-prompt.md), sequential tasks one at a time. Fill each dispatch with:
 
@@ -153,7 +153,9 @@ Walk milestones in order, and each milestone's DAG topologically.
 | DONE | Log decisions, proceed |
 | DONE_WITH_CONCERNS | Read the concerns, decide before proceeding |
 | NEEDS_CONTEXT | Provide the missing info, re-dispatch |
-| BLOCKED | More context, a better model, or a smaller task, then re-dispatch; else ask the user. After 3 attempts on one task, escalate: "I've made N attempts. What I tried: [list]." |
+| BLOCKED | More context, a better model, or a smaller task, then re-dispatch; else ask the user |
+
+After 3 attempts on one task, whatever it reported, escalate: "I've made N attempts. What I tried: [list]."
 
 **Parallel groups, dual-stream forks, concurrent phases and workflow mode** replace only this step's dispatches, per their files (Read on demand); barriers and reviews stay per phase.
 
@@ -178,11 +180,11 @@ Hand the reviewer the path, never a pasted diff. Every review package in this sk
 
 **c) Triage findings** (before any fix dispatch):
 
-- **Minor** findings never enter the fix loop: log each as `Deferred minor (Phase N): …` — the holistic review triages them.
-- A finding labeled **plan-mandated**, or one that conflicts with the plan's text, is yours to rule on with the spec as the binding authority: log the ruling, then send it into the loop or park it. Never dismiss a finding because the plan mandates it, nor fix against the plan without a logged ruling.
+- **Minor** findings never enter the fix loop: log each as `Deferred minor (Phase N): …`.
+- A finding labeled **plan-mandated**, or one that conflicts with the plan's text, is yours to rule on with the spec as the binding authority: log the ruling, then send it into the loop or park it. Never dismiss it because the plan mandates it, nor fix against the plan without a logged ruling.
 - **Critical / Important** findings enter the fix loop.
 
-**d) Fix loop.** Read [fix-loop.md](fix-loop.md) before the first fix dispatch. Its shape: a round is one fix dispatch plus one fresh scoped re-review ([re-review-prompt.md](re-review-prompt.md)), five rounds at most. Round 1 resumes the implementer that owns the finding; later rounds dispatch a fresh one. Tell the fixer that a finding about a rule is fixed everywhere the rule is stated or applied, not only at the cited line. After round 5 you adjudicate each open finding (the breaker) — never a round 6, and never earlier.
+**d) Fix loop.** Read [fix-loop.md](fix-loop.md) before a fix dispatch whenever it is not in your context. Its shape: a round is one fix dispatch plus one fresh scoped re-review ([re-review-prompt.md](re-review-prompt.md)) over a logged `Fix base`, five rounds at most. Round 1 resumes the implementer that owns the finding; later rounds dispatch a fresh one, rounds 4–5 one tier up. Tell the fixer that a finding about a rule is fixed everywhere the rule is stated or applied, not only at the cited line. After round 5 you adjudicate each open finding (the breaker) — never a round 6, and never earlier.
 
 **e) Mark the phase complete:** flip its tasks to `[x]` (parked findings do not block — their rulings are logged) and unlock downstream phases.
 
@@ -220,6 +222,7 @@ Map each tier name to a concrete model the runtime has; never hardcode a model I
 | Implementer — pure transcription (the task text holds the complete code) or a single-file mechanical fix | `cheap` |
 | Implementer — multi-file, integration, or working from prose | `mid` |
 | Phase reviewer, probe executor | `mid` |
+| Fix-loop rounds 4–5 | one tier above the stuck implementer |
 | Holistic reviewer | `premium` |
 
 **Name the tier on every dispatch** — an omitted model inherits the session's, often the most expensive. `mid` is the floor for reviewers: the cheapest models take 2-3x the turns on multi-step work.
@@ -230,18 +233,18 @@ Map each tier name to a concrete model the runtime has; never hardcode a model I
 - Write or edit a file a plan task owns, or fix a review finding yourself — not after a denied command, not to save a dispatch. Controller-written code skips every review
 - Tell a reviewer what not to flag — a suppressed finding never reaches the user; adjudicate it in triage
 - Skip the barrier's verification commands
-- Run two verification suites at once in one worktree — concurrent runs share caches, build output, ports, and test databases, and the timing flakes cost an investigation. The Stop hook can run the suite when your turn ends, so do not end a turn while a subagent is running checks in the same worktree
+- Run two verification suites at once in one worktree — concurrent runs share caches, build output, ports, and test databases. The Stop hook can run the suite when your turn ends, so do not end a turn while a subagent is running checks in the same worktree
 - `cd` into a task worktree — use `git -C <path>` and absolute paths
 
 ## Verification Checklist
 
 - [ ] No `[~]` or `[ ]` task left in implementation-plan.md
 - [ ] Every required `.claude/verification.json` check and the plan's Final Verification pass, run after `session-event.sh implement stop`
-- [ ] `holistic-review.md` is committed, and its deferred minors are triaged (fixed or explicitly accepted)
+- [ ] The holistic verdict is READY TO MERGE, or the user accepted a lesser one; `holistic-review.md` is committed and its deferred minors triaged
 - [ ] Every logged `Ruling:`, `Decision` and `Waiver:` line is in the completion report
 - [ ] `git status --porcelain` is empty
 
 ## Integration
 
 **Called by** [REQUIRED — an approved plan must exist]: `/myspec:feature-plan`
-**Next** [OPTIONAL reviews, then REQUIRED completion]: `/myspec:feature-implement-review` and/or the built-in `/code-review`, then `/myspec:feature-complete` — the user chooses in Step 5
+**Next** [OPTIONAL reviews, then REQUIRED completion]: `/myspec:feature-implement-review` and/or `/code-review`, then `/myspec:feature-complete`

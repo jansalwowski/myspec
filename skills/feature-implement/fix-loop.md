@@ -1,6 +1,6 @@
 # Fix Loop and Breaker
 
-Read from SKILL.md Step 4d, before the first fix dispatch of a phase. Critical and Important findings that survived triage (4c) enter this loop. `<plugin lib>` is the path SKILL.md resolves.
+Read from SKILL.md Step 4d, before a fix dispatch whenever this file is not in your context (the first round of a phase, and again after a compaction). Critical and Important findings that survived triage (4c) enter this loop. `<plugin lib>` is the path SKILL.md resolves.
 
 A round is one fix dispatch plus one scoped re-review. Five rounds maximum per phase.
 
