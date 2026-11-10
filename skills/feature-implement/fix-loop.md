@@ -9,12 +9,12 @@ A round is one fix dispatch plus one scoped re-review. Five rounds maximum per p
 - **Round 1 — resume the implementer that owns the finding.** Its context is intact: it knows the task, the code, and its own choices. Send the open findings verbatim, scoped to its task. If the harness cannot resume a completed subagent, dispatch fresh as in round 2.
 - **Rounds 2–5 — fresh implementer.** A resumed context grows by a whole transcript per round and carries the last round's stale hypotheses, while each round usually chases a different root cause (one run's implementer grew from 194k to 430k tokens over three resumed rounds). Dispatch with the task text, the open findings verbatim, and the rounds summary below; it reads the current code itself. Frame it: "A prior implementer attempted this fix N times; you own it now." Rounds 4–5 go one tier up: a loop that survives three rounds usually needs more capability, not more context.
 - **A finding about a rule** — an invariant, a boundary, a format, a requirement's wording — is fixed everywhere the rule is stated or applied, not only at the cited line: say so in the fix dispatch, next to the finding. A rule fixed in the code but still stated the old way in a test, a doc or the tech-spec comes back NOT ADDRESSED and costs a whole extra round.
-- A parallel task's worktree was merged and removed at 4a: every fix implementer works from your checkout, since fixes are sequential.
-- Never fix findings yourself in the controller session — your context stays clean for coordination, and controller fixes skip review.
+- A parallel task's or a concurrent phase's worktree was merged and removed at 4a: every fix implementer works from your checkout, since fixes are sequential.
+- Never fix findings yourself (SKILL.md Constraints): your context stays clean for coordination.
 
 ## Every round ends with a scoped re-review
 
-Dispatch `./re-review-prompt.md` fresh every round — never a resumed re-reviewer and never a full phase re-review.
+Dispatch `./re-review-prompt.md` fresh every round — never a resumed re-reviewer and never a full phase re-review. A resumed reviewer carries every earlier round's transcript (one reached 251k tokens), and the rounds summary carries all it needs from them.
 
 1. Record `FIX_BASE` (the HEAD the previous review saw) and log `Fix base (Phase N, round R): <sha>`.
 2. Build the fix-diff package: `"<plugin lib>/review-diff.sh" "$FIX_BASE" "$STATE/phase-N-fix-R.diff"`.

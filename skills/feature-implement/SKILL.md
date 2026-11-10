@@ -100,12 +100,12 @@ Read the implementation plan, front-matter first.
 
 1. Each `### Milestone N:` heading scopes a milestone; a plan with no milestone heading is one milestone.
 2. Per milestone, read the Execution Order table: nodes = tasks + barriers, edges = the `Depends On` column, phases = task groups separated by barriers. Note parallel groups (`**parallel:groupName**` in Mode) and dual-stream forks (`3a`/`3b` rows).
-3. Only when the front-matter sets `auto_parallel_phases: true`: find concurrent phase sets (parallel-phases.md). Without the key, phases run serially.
+3. Only when the front-matter sets `auto_parallel_phases: true`: find concurrent phase sets (parallel-phases.md).
 4. A milestone whose first phase says `Depends On: Milestone N` starts only after that milestone is complete.
 
 **Validate before starting:** every task in an Execution Order table has a `### Task N:` section; every parallel group has a `## Barrier:` section; parallel tasks share no file (if they do, treat them as sequential); phase numbers are unique across milestones.
 
-**Resume** — at startup only. A plan that already holds a `[x]` or `[~]` task or an Execution Log is a resumed run: read [resume.md](resume.md) for the checkbox states, the recovered bases and the resume point. Mid-run, a `[~]` task is one you dispatched: leave it.
+**Resume** — at startup only, on the Read on demand trigger: [resume.md](resume.md) gives the checkbox states, the recovered bases and the resume point. Mid-run, a `[~]` task is one you dispatched: leave it.
 
 **Plan freshness** — only when the front-matter has `planned_against: <sha>`. Collect the `Modify:` paths of every task not yet `[x]`. `$INTEGRATION` is the branch feature work merges into: the one CLAUDE.md or the topology file names, else the default branch. Run `"${CLAUDE_PLUGIN_ROOT}/lib/plan-freshness.sh" check <sha> "$INTEGRATION" <paths>` and act on its exit status:
 
@@ -137,7 +137,7 @@ Read the implementation plan, front-matter first.
 
 Walk milestones in order, and each milestone's DAG topologically.
 
-**Before a phase's first dispatch:** refresh the orchestration marker and record `PHASE_BASE=$(git rev-parse HEAD)`, logging `Base (Phase N): <sha>` (a resumed phase keeps the base its entry holds; a concurrent phase records it before its merge instead). Stamp each stage as it starts, for 4f's timings: `"${CLAUDE_PLUGIN_ROOT}/lib/implement-state.sh" stamp {feature} N implement`, then `barrier` (4a), `review` (4b), `fix-R` (each 4d round), and `done` (4e).
+**Before a phase's first dispatch:** refresh the orchestration marker and record `PHASE_BASE=$(git rev-parse HEAD)`, logging `Base (Phase N): <sha>` — once per phase: a resumed phase keeps its entry's base; a concurrent phase logs it at its merge (parallel-phases.md), not here. Stamp each stage as it starts, for 4f's timings: `"${CLAUDE_PLUGIN_ROOT}/lib/implement-state.sh" stamp {feature} N implement`, then `barrier` (4a), `review` (4b), `fix-R` (each 4d round), and `done` (4e).
 
 **Verification tiers.** An implementer runs its task's `Verify at phase review` command plus lint and typecheck scoped to the files it touched — never the full suite, a build, or an install. You run the full suite once per phase (4a), at each milestone checkpoint, and at Final Verification.
 
@@ -234,7 +234,7 @@ Map each tier name to a concrete model the runtime has; never hardcode a model I
 - Tell a reviewer what not to flag — a suppressed finding never reaches the user; adjudicate it in triage
 - Skip the barrier's verification commands
 - Run two verification suites at once in one worktree — concurrent runs share caches, build output, ports, and test databases. The Stop hook can run the suite when your turn ends, so do not end a turn while a subagent is running checks in the same worktree
-- `cd` into a task worktree — use `git -C <path>` and absolute paths
+- `cd` into a task worktree — use `git -C <path>` and absolute paths. Why: `_shared/worktree-provisioning.md` (Controller stays out)
 
 ## Verification Checklist
 
