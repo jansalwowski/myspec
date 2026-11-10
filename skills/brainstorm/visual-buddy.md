@@ -259,10 +259,10 @@ When something visual is on the table (an image, a render, a chart, a screenshot
 
 1. Find its `src` by where the image is:
    - **A file on disk**: copy it into `screen_dir` under a new name (`cp out/blur-v2.png <screen_dir>/blur-v2.png`) and use `/files/<name>`. Only `.html` files become screens, so the copy does not replace what is on screen.
-   - **An image URL**: use the URL itself. The server serves only files in `screen_dir` and never fetches a URL; the user's browser loads it, so it shows only if that browser can reach it.
-   - **An image pasted into the chat**, with no path: it cannot be shown. Say so in one line and, if seeing it matters, ask for its file path. Never invent a path.
+   - **An image URL** (`http` or `https`, pointing at the image itself, not a page that embeds it): use the URL itself. A `file://` URL is a file on disk. The server serves only files in `screen_dir` and never fetches a URL; the user's browser loads it, so it shows only if that browser can reach it.
+   - **An image pasted into the chat**, with no path: it cannot be shown. Say so in one line and, if seeing it matters, ask for its file path or URL. Never invent a path, and stop here: there is nothing to push.
 2. Push a screen with that `src`: `<img src="/files/blur-v2.png" alt="…" style="max-width:100%">`. For a comparison, put the images in a `.split`, each with a one-line caption saying what differs.
-3. Tell the user what is on screen in one line, and keep the file path for the record.
+3. Tell the user what is on screen in one line, and keep the file path or URL for the record.
 
 If Visual Buddy is not running and was never offered, offer it now, as its own message (brainstorm's offer text). If the user declined earlier, offer once more for a result you produced; a second no stands for the session. An image the user mentions after declining does not reopen the offer.
 

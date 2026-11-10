@@ -73,9 +73,9 @@ Pushing the file opens the browser (first screen) or reloads the open tab. Tell 
 For something to look at rather than pick: a diagram of a design, a graph of measurements, or a visual result (an image, a render, a screenshot, a before/after). Start or reuse as in step 1, then write one new screen with no `data-question` and no Submit:
 
 - **A diagram or graph**: inline SVG in the fragment, labelled boxes and arrows, axes with units; two designs side by side in `<div class="split">`. A graph uses only numbers you measured, with their source under it.
-- **A visual result, yours or the user's** (a file on disk, an image URL, an image pasted into the chat): follow "Showing results" in `${CLAUDE_PLUGIN_ROOT}/skills/brainstorm/visual-buddy.md`, which says how each one gets on screen, or that it cannot.
+- **A visual result, yours or the user's** (a file on disk, an image URL, an image pasted into the chat): follow "Showing results" in `${CLAUDE_PLUGIN_ROOT}/skills/brainstorm/visual-buddy.md`, which says how each one gets on screen, or that it cannot. For a pasted image with no path, say so before starting the server.
 
-Worked diagram examples: "Diagrams and graphs" in the same file. Tell the user the full `url` and, in one line, what is on screen; keep the file path for the record. There is nothing to wait for: skip steps 3 and 4.
+Worked diagram examples: "Diagrams and graphs" in the same file. Tell the user the full `url` and, in one line, what is on screen; keep the file path or URL for the record. There is nothing to wait for: skip steps 3 and 4.
 
 ### 3. Wait for Submit
 
