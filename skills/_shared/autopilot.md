@@ -14,6 +14,7 @@ Autopilot is on only when the user asked for it in this session: the words "auto
 | "Review passed — mark `status: approved`?" | Yes, when the skill's own rule says the review passed (no Critical/High open) |
 | Next-step / hand-off choice | The recommended skill, invoked directly |
 | Fixes tagged `[requires confirmation]` with no Critical among them | Apply the ones the skill recommends; leave the rest unapplied and listed |
+| `feature-complete`'s comprehension offer (Phase 2b), reached through `feature-implement`'s hand-off | Skip — the pass needs the user's own answers |
 
 Print each decision as it is made — `Autopilot: <gate header> → <option> — <why it was recommended>` — so the transcript shows what was chosen on the user's behalf. `feature-implement` also records it in the Execution Log as a `Ruling:` line, so it reaches "Rulings I made".
 

@@ -83,9 +83,13 @@ The skill reports:
 
 > Phase 1 complete. Documentation synced. Plan archived.
 
-#### Comprehension pass (before branch integration)
+#### Phase 2 — Verification
 
-Verification is green. The skill asks once:
+Every required check passes.
+
+#### Phase 2b — Comprehension (optional)
+
+The skill asks once:
 
 > Walk through the change and answer a few questions before merging?
 >
@@ -94,7 +98,7 @@ Verification is green. The skill asks once:
 
 User: Walk me through it.
 
-The skill traces the code paths from the branch diff — `StarButton` (`src/features/reports/StarButton.tsx:14`) → `useReportFavorites` (`src/features/reports/useReportFavorites.ts:22`) → `POST /api/reports/:id/favorite` (`src/api/reports/favorite.ts:9`) → `ReportFavoritesService.add` (`src/features/reports/favorites/service.ts:31`), which writes `report_favorites` — then lists the archived plan's Execution Log:
+The skill traces the code paths from the branch diff — `StarButton` (`src/features/reports/StarButton.tsx:14`) → `useReportFavorites` (`src/features/reports/useReportFavorites.ts:22`) → `POST /api/reports/:id/favorite` (`src/api/reports/favorite.ts:9`) → `ReportFavoritesService.add` (`src/features/reports/favorites/service.ts:31`), which writes `report_favorites` — then lists the archived plan's Execution Log (it holds no `Decision`, `Waiver` or `Deferred minor` entries):
 
 > - `Ruling: unique index on (user_id, report_id); a duplicate star returns 200, not 409 — re-clicks are not errors — cost if wrong: a client that relies on 409 to detect a double star never sees it`
 > - `Parked (Phase 2): reviewer asked for a transaction around add + count — Ruling: the count is read-only and never written back`
@@ -107,7 +111,7 @@ Then three questions in one message:
 
 The user answers 1 and 3 correctly and leaves 2 blank. The skill confirms 1 and 3 in a line each, and for 2: "The star rolls back and a toast shows the error — `useReportFavorites.ts:48`." It moves on to branch integration; the answers gate nothing.
 
-#### Phase 2 — Branch integration
+#### Phase 3 — Branch integration
 
 The skill commits the Phase 1 doc changes (`docs(favorite-reports): complete`), then checks `git status`:
 
@@ -258,9 +262,13 @@ Sometimes verify wasn't run, or it was run too early, and the completion phase e
 
 10. **Compact tech-spec.md**: converts the 12-item checkbox list to a numbered outline, and deletes the v1 delivery-window decision marked "superseded by ADR-3", leaving only ADR-3. Architecture, interfaces, and edge cases stay. The CHANGELOG row from step 7 now ends `Compacted tech-spec.md.`
 
-#### Phase 2 — Branch integration
+#### Phase 2b — Comprehension (optional)
 
-The skill offers the comprehension pass; the user picks Skip. Standard PR flow.
+The skill offers the comprehension pass; the user picks Skip.
+
+#### Phase 3 — Branch integration
+
+Standard PR flow.
 
 ### Result
 
