@@ -63,10 +63,11 @@ table '| Q13 | ## Motion (new section) | 3.8.0 |' '| 2 | ## Style baseline (in s
 
 # --- 1. the shipped blueprint parses -----------------------------------------
 
+# Rows carry the release they ship in, which can be newer than the manifest
+# until /release bumps it, so only parsing is asserted: exit 0 or 3, never 2.
 stamped_file "$PLUGIN_VERSION"
 OUTPUT=$(cd "$REPO" && node "$SCRIPT" 2>&1 </dev/null); STATUS=$?
-expect_status 0 "shipped blueprint parses (every row readable, forms table ignored)"
-expect_line '^mockup-config-check: 0 question\(s\) to ask$' "shipped table lists nothing newer than the plugin itself"
+if [ "$STATUS" = 0 ] || [ "$STATUS" = 3 ]; then ok; else fail "shipped blueprint does not parse (exit $STATUS): $OUTPUT"; fi
 printf '# Mockup Design Conventions\n' > "$FILE"
 OUTPUT=$(cd "$REPO" && node "$SCRIPT" 2>&1 </dev/null); STATUS=$?
 expect_line '^ask: Q2  writes: ## Component library \(replaces section\)  \(since 1\.21\.0\)$' "shipped Q2 row offered to an unstamped v1.20.0 file"
@@ -97,6 +98,12 @@ run
 expect_line '^ask: Q2  writes: ## Style baseline \(replaces section\)  \(since 3\.9\.0\)$' "newest Q2 row asked"
 if [ "$(grep -c '^ask: Q2 ' <<<"$OUTPUT")" = 1 ]; then ok; else fail "Q2 asked more than once: $OUTPUT"; fi
 expect_line '^mockup-config-check: 2 question\(s\) to ask$' "deduped summary"
+table '| Q2 | ## Style baseline (in section) | 3.8.0 |' '| Q2 | ## Component library (replaces section) | 3.9.0 |'
+run
+expect_line '^ask: Q2  writes: ## Style baseline \(in section\)  \(since 3\.8\.0\)$' "a Q2 change to another target is kept"
+expect_line '^ask: Q2  writes: ## Component library \(replaces section\)' "and the newer target asked too"
+table '| Q2 | ## Style baseline (in section) | 3.8.0 |' '| Q2 | ## Style baseline (replaces section) | 3.9.0 |'
+stamped_file 3.7.0
 stamped_file 3.8.5
 run
 expect_line '^ask: Q2  writes: ## Style baseline \(replaces section\)' "only the change after the stamp"
@@ -109,11 +116,11 @@ expect_line '^ask: Q14 ' "a row after a blank line is read"
 
 # An escaped pipe is a literal pipe in its cell.
 # shellcheck disable=SC2016 # literal backticks in a markdown row
-table '| Q14 | `## Notes \| misc` (new section) | 3.9.0 |'
+table '| Q14 | ## Notes \| misc (new section) | 3.9.0 |'
 run
 expect_status 3 "escaped pipe row readable"
 # shellcheck disable=SC2016 # literal backticks in the expected line
-expect_line '^ask: Q14  writes: `## Notes \| misc` \(new section\)' "escaped pipe unescaped in the Writes cell"
+expect_line '^ask: Q14  writes: ## Notes \| misc \(new section\)' "escaped pipe unescaped in the Writes cell"
 
 # --- 3. a row it cannot read stops the check ---------------------------------
 
@@ -123,6 +130,30 @@ for bad in 'Q13 | Motion | 3.8.0 |' 'Some prose after the table.' '| Q13 | Motio
   expect_status 2 "unreadable row exits 2: $bad"
   expect_line 'cannot read the ## Question changes line' "unreadable line named: $bad"
 done
+# A Writes cell must use a known form.
+for bad in '| Q13 | ## Motion (new) | 3.8.0 |' '| Q13 | Motion | 3.8.0 |' '| Q13 | .myspec.json mockups | 3.8.0 |'; do
+  table "$bad"
+  run
+  expect_status 2 "unknown Writes form exits 2: $bad"
+  expect_line 'names no known Writes form' "unknown form named: $bad"
+done
+table '| Q13 | .myspec.json mockups.commands.audit | 3.8.0 |'
+stamped_file 3.7.0
+run
+expect_line '^ask: Q13  writes: \.myspec\.json mockups\.commands\.audit ' "a .myspec.json key form is read"
+
+# A table without its header line would lose its first row.
+printf '## Question changes\n\n| Q2 | ## X (new section) | 3.0.0 |\n| Q3 | ## Y (new section) | 3.0.0 |\n' > "$BLUEPRINT"
+run
+expect_status 2 "a table without its header row exits 2"
+expect_line 'must start with its header row' "missing header named"
+
+# A trailing space on the section heading still finds it.
+printf '## Question changes \n\n| Question | Writes | Since |\n|---|---|---|\n| Q13 | ## Motion (new section) | 3.8.0 |\n' > "$BLUEPRINT"
+stamped_file 3.7.0
+run
+expect_line '^ask: Q13 ' "heading with a trailing space found"
+
 table '| Q13 | ## Motion (new section) | 3.8.0 |'
 
 # --- 4. unstamped and odd files ----------------------------------------------
@@ -138,13 +169,19 @@ expect_status 0 "BOM and CRLF frontmatter: stamp read"
 
 printf -- '\n\n---\nmyspec_version: 4.0.0\n---\n' > "$FILE"
 run
-expect_status 0 "leading blank lines before the frontmatter: stamp read"
+expect_line 'myspec_version: unstamped' "frontmatter must start on line 1"
 run --stamp
-if [ "$(grep -c '^---$' "$FILE")" = 2 ] && grep -q "^myspec_version: $PLUGIN_VERSION\$" "$FILE"; then ok; else fail "leading blank lines: block not edited in place: $(cat "$FILE")"; fi
+expect_status 2 "a block after blank lines is refused, never given a second one"
+if [ "$(grep -c '^---$' "$FILE")" = 2 ]; then ok; else fail "file changed: $(cat "$FILE")"; fi
+
+printf -- '---\n\nSome intro\n\n---\n\n## Always\n' > "$FILE"
+run --stamp
+expect_status 2 "a pair of horizontal rules is not frontmatter"
+if ! grep -q myspec_version "$FILE"; then ok; else fail "stamp written into the body: $(cat "$FILE")"; fi
 
 printf -- '---\ntitle: x\n---- note\nmyspec_version: 4.0.0\n---\n' > "$FILE"
 run
-expect_status 0 "a ---- line inside the frontmatter does not end it"
+expect_line 'myspec_version: unstamped' "a ---- line is not YAML, so the block is not frontmatter"
 printf -- '---\ntitle: x\n--- \n\nbody\n\n---\nmore\n' > "$FILE"
 run --stamp
 if [ "$(sed -n 3p "$FILE")" = "myspec_version: $PLUGIN_VERSION" ] && [ "$(sed -n 4p "$FILE")" = '--- ' ]; then ok; else fail "stamp not inside a frontmatter closed by '--- ': $(cat "$FILE")"; fi
@@ -191,6 +228,8 @@ run --stamp 3.9.0
 expect_status 2 "--stamp takes no value"
 run --bogus x
 expect_status 2 "unknown flag exits 2"
+run toString x
+expect_status 2 "an Object.prototype name is not a flag"
 chmod 444 "$FILE"
 run --stamp
 chmod 644 "$FILE"
