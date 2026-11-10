@@ -44,6 +44,8 @@ Check if the output file already exists.
 
 `visual-questions` is a toggle, not a generated file: skip the overwrite question; its discovery question covers it.
 
+`mockup` run with question numbers (`/myspec:update` Step 3.5 passes the ones its *Added questions* table lists): skip the overwrite question and follow the blueprint's *Asking only the added questions* procedure instead of Steps 3 and 4. The file stays; only the new sections and its stamp are written.
+
 ### Step 3: Execute Blueprint
 
 Read the blueprint file from the plugin's `blueprints/{name}.md`.

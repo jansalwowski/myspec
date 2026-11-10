@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
-# Tests for lib/mockup-config-check.mjs: update's check of a generated
-# ${aiDir}/conventions/mockup-design.md against the framework-owned parts of
-# the mockup blueprint's output template (section headings, fixed rows and
-# bullets). Missing parts are reported, then patched in with --apply; project
-# content, adapted rows and the feedback log are left alone.
+# Tests for lib/mockup-config-check.mjs: update's list of the mockup blueprint
+# questions a generated ${aiDir}/conventions/mockup-design.md was never asked
+# (rows of the blueprint's *Added questions* table newer than the file's
+# myspec_version stamp), and --stamp, which writes only that frontmatter line.
 #
 # Usage: mockup-config-check.test.sh [path-to-script]
 
@@ -11,7 +10,7 @@ set -uo pipefail
 
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 SCRIPT="${1:-$HERE/../mockup-config-check.mjs}"
-BLUEPRINT="$HERE/../../blueprints/mockup.md"
+REAL_BLUEPRINT="$HERE/../../blueprints/mockup.md"
 
 if [ ! -f "$SCRIPT" ]; then
   echo "FATAL: script not found: $SCRIPT" >&2
@@ -21,6 +20,7 @@ fi
 ROOT=$(cd "$(mktemp -d)" && pwd -P)
 REPO="$ROOT/proj"
 FILE="$REPO/ai/conventions/mockup-design.md"
+BLUEPRINT="$ROOT/mockup.md"
 trap 'rm -rf "$ROOT"' EXIT
 
 PASS=0
@@ -37,212 +37,122 @@ expect_line() {     # expect_line <regex> <description>
 expect_no_line() {  # expect_no_line <regex> <description>
   if grep -Eq -- "$1" <<<"$OUTPUT"; then fail "$2 (unexpected line matching: $1)"; else ok; fi
 }
-expect_in_file() {  # expect_in_file <fixed string> <description>
-  if grep -Fq -- "$1" "$FILE"; then ok; else fail "$2 (file lacks: $1)"; fi
+expect_file() {     # expect_file <expected content> <description>
+  if [ "$(cat "$FILE")" = "$1" ]; then ok; else fail "$2 (got: $(cat "$FILE"))"; fi
 }
-expect_count() {    # expect_count <fixed string> <n> <description>
-  local n
-  n=$(grep -Fc -- "$1" "$FILE")
-  if [ "$n" = "$2" ]; then ok; else fail "$3 (found $n, want $2: $1)"; fi
-}
-line_no() { grep -nF -- "$1" "$FILE" | head -1 | cut -d: -f1; }
 
-run() { OUTPUT=$(cd "$REPO" && node "$SCRIPT" --blueprint "$BLUEPRINT" "$@" 2>&1); STATUS=$?; }
+run() { OUTPUT=$(cd "$REPO" && node "$SCRIPT" --blueprint "$BLUEPRINT" "$@" 2>&1 </dev/null); STATUS=$?; }
 
 mkdir -p "$(dirname "$FILE")"
 printf '{"aiDir":"ai"}\n' > "$REPO/.myspec.json"
 
-FRONTMATTER_ROW=$(grep -F '| Frontmatter |' "$BLUEPRINT")
-STATES_ROW=$(grep -F '| States & modals |' "$BLUEPRINT")
-TOGGLE=$(grep -F -- '- In-page mock state toggle:' "$BLUEPRINT")
+cat > "$BLUEPRINT" <<'MD'
+# Blueprint: Mockup
 
-# A file generated before the blueprint carried the fixed rows and the toggle
-# pattern (as by v3.0), with no Cross-mockup consistency section either.
-old_file() {
-  cat > "$FILE" <<'MD'
----
-title: "Mockup Design Conventions"
-updated: 2026-08-03
-myspec_version: 3.0.0
----
+## Added questions
 
-# Mockup Design Conventions
+| Question | Section | Since |
+|---|---|---|
+| Q13 | Motion | 3.8.0 |
+| Q14 | Print layouts | v4.0.0 |
 
-## Always
-| Rule | Detail |
-|---|---|
-| Tokens | Semantic tokens only on chrome |
+**Asking only the added questions.** Not a row: | Q99 | Nope | 9.9.9 |
 
-## Style baseline
-| Rule | Detail |
-|---|---|
-| Density | Compact tables |
-
-## Imports
-
-### Allowed
-| Package | Purpose |
-|---|---|
-| @corp/ui | components |
-
-### Forbidden
-| Package | Why |
-|---|---|
-| api-client | mockups mirror types inline |
-
-## Data model source
-db/schema.sql — copy enum values exactly.
-
-## Component library
-@corp/ui — external dependency.
-Configured against: @corp/ui@4.2.0
-
-## Detection patterns
-- Raw palette classes on chrome · Medium · map to semantic token
-
-## Repeated user feedback
-
-### 2026-08-10 — destructive actions name the entity
-- **Why**: users confirmed the wrong record
+## Output Location
+| Q15 | Outside the table | 5.0.0 |
 MD
-}
 
-# --- 1. check mode reports what is missing and writes nothing ----------------
+stamped_file() { printf -- '---\ntitle: "Mockup Design Conventions"\nmyspec_version: %s\n---\n\n## Always\n| Rule | Detail |\n' "$1" > "$FILE"; }
 
-old_file
-BEFORE=$(cat "$FILE")
+# --- 1. the real blueprint parses, and lists nothing for a current file -----
+
+stamped_file 3.6.0
+OUTPUT=$(cd "$REPO" && node "$SCRIPT" 2>&1 </dev/null); STATUS=$?
+expect_status 0 "shipped blueprint parses (default --blueprint)"
+expect_line '^mockup-config-check: 0 question\(s\) to ask$' "shipped table lists nothing newer than 3.6.0"
+
+# --- 2. only rows newer than the stamp, only inside the table --------------
+
+stamped_file 3.7.0
 run
-expect_status 3 "missing parts exit 3"
-expect_line '^file: ai/conventions/mockup-design\.md  myspec_version: 3\.0\.0$' "reports the file and its stamp"
-expect_line '^missing-section: ## Cross-mockup consistency  ask: Q10$' "missing section names its question"
-expect_line '^missing-line: ## Style baseline  \| Frontmatter \|' "missing Frontmatter row"
-expect_line '^missing-line: ## Style baseline  \| States & modals \|' "missing States & modals row"
-expect_line '^missing-line: ## Detection patterns  - In-page mock state toggle:' "missing toggle pattern"
-expect_no_line 'missing-section: ## (Always|Imports|Repeated user feedback)' "present sections are not reported"
-expect_line '^mockup-config-check: 4 missing, 0 differ$' "summary"
-if [ "$(cat "$FILE")" = "$BEFORE" ]; then ok; else fail "check mode wrote the file"; fi
+expect_status 3 "newer questions exit 3"
+expect_line '^file: ai/conventions/mockup-design\.md  myspec_version: 3\.7\.0$' "file and stamp"
+expect_line '^ask: Q13  ## Motion  \(since 3\.8\.0\)$' "Q13 offered"
+expect_line '^ask: Q14  ## Print layouts  \(since 4\.0\.0\)$' "v-prefixed version read"
+expect_no_line 'Q99|Q15' "rows outside the table ignored"
+expect_line '^mockup-config-check: 2 question\(s\) to ask$' "summary"
 
-# --- 2. --apply inserts in place and keeps project content -------------------
-
-run --apply --stamp 3.7.0
-expect_status 0 "apply exits 0"
-expect_line '^added-section: ## Cross-mockup consistency  ask: Q10$' "apply reports the added section"
-expect_line '^stamped: myspec_version 3\.7\.0$' "apply reports the stamp"
-expect_in_file 'myspec_version: 3.7.0' "stamp written"
-expect_count 'myspec_version:' 1 "stamp replaced, not duplicated"
-expect_in_file "$FRONTMATTER_ROW" "Frontmatter row added"
-expect_in_file "$STATES_ROW" "States & modals row added"
-expect_in_file "$TOGGLE" "toggle pattern added"
-expect_in_file '| Density | Compact tables |' "project row kept"
-expect_in_file '- Raw palette classes on chrome · Medium · map to semantic token' "project pattern kept"
-expect_in_file '### 2026-08-10 — destructive actions name the entity' "feedback log kept"
-expect_in_file 'Configured against: @corp/ui@4.2.0' "library pin kept"
-# Rows go after the table's last row, inside Style baseline.
-if [ "$(line_no '| Density |')" -lt "$(line_no '| Frontmatter |')" ] \
-  && [ "$(line_no '| States & modals |')" -lt "$(line_no '## Imports')" ]; then ok; else fail "rows not appended to the Style baseline table"; fi
-# The toggle goes first in Detection patterns.
-if [ "$(line_no '- In-page mock state toggle:')" -lt "$(line_no '- Raw palette classes')" ]; then ok; else fail "toggle pattern not first"; fi
-# The missing section lands in template order: after Component library, before Detection patterns.
-if [ "$(line_no 'Configured against:')" -lt "$(line_no '## Cross-mockup consistency')" ] \
-  && [ "$(line_no '## Cross-mockup consistency')" -lt "$(line_no '## Detection patterns')" ]; then ok; else fail "section not in template order"; fi
-
-# --- 3. a patched file is clean, and a re-run changes nothing ----------------
-
-AFTER=$(cat "$FILE")
+stamped_file 3.8.0
 run
-expect_status 0 "patched file checks clean"
-expect_line '^mockup-config-check: 0 missing, 0 differ$' "clean summary"
-run --apply
-if [ "$(cat "$FILE")" = "$AFTER" ]; then ok; else fail "re-apply changed the file"; fi
+expect_line '^ask: Q14 ' "Q14 still newer than 3.8.0"
+expect_no_line '^ask: Q13 ' "Q13 not newer than its own version"
 
-# --- 4. an adapted row is reported as differing, never rewritten -------------
-
-# shellcheck disable=SC2016 # literal backticks in a markdown row
-ADAPTED='| Frontmatter | A `<!-- title: … -->` comment block, one `controls:` line per state switch. |'
-awk -v row="$ADAPTED" '/^\| Frontmatter \|/{print row; next} {print}' "$FILE" > "$FILE.tmp" && mv "$FILE.tmp" "$FILE"
-run --apply
-expect_status 0 "differs alone does not fail"
-expect_line '^differs: ## Style baseline  plugin: \| Frontmatter \|' "adapted row reported"
-expect_line '^mockup-config-check: 0 added, 1 differ \(left as is\)$' "differs summary"
-expect_in_file "$ADAPTED" "adapted row kept"
-expect_count '| Frontmatter |' 1 "no second Frontmatter row"
-
-# --- 5. headings in code fences do not count; unstamped file -----------------
-
-cat > "$FILE" <<'MD'
-# Mockup Design Conventions
-
-```markdown
-## Always
-```
-MD
-run --apply --stamp 3.7.0
-expect_status 0 "apply on a sparse file"
-expect_line '^file: ai/conventions/mockup-design\.md  myspec_version: unstamped$' "unstamped reported"
-expect_line '^added-section: ## Always  ask: Q2, Q3, Q4, Q11$' "fenced heading ignored, range expanded"
-expect_line '^added-section: ## Repeated user feedback$' "feedback section added without ask"
-expect_no_line '^stamped:' "no frontmatter, no stamp"
-expect_in_file '> Append-only log of design corrections' "feedback section body added"
-expect_count '## Always' 2 "real Always heading added beside the fenced one"
-
-# --- 6. rows under a ### subheading, emphasised keys, other bullet separators
-
-{
-  printf '%s\n' '---' 'myspec_version: 3.0.0' '---' '' '## Style baseline' '' '### Tables' "$FRONTMATTER_ROW"
-  printf '%s\n' '| **States & modals** | Preview controls, never in-page toggles. |' ''
-  printf '%s\n' '## Detection patterns' '- In-page mock state toggle — move it to a controls: line · Medium'
-} > "$FILE"
-run --apply
-expect_no_line '^added-line:' "subsection rows, bold keys and dash bullets are found"
-expect_line '^differs: ## Style baseline  plugin: \| States & modals \|' "bold key reported as differing"
-expect_line '^differs: ## Detection patterns  plugin: - In-page mock state toggle:' "dash bullet reported as differing"
-expect_count '| Frontmatter |' 1 "no duplicate row under the subheading"
-expect_count 'States & modals' 1 "no duplicate for the bold key"
-expect_count 'In-page mock state toggle' 1 "no duplicate for the dash bullet"
-
-# --- 7. a missing table section gets a header row ----------------------------
-
-printf '%s\n' '---' 'myspec_version: 3.0.0' '---' '' '## Always' 'x' '' '## Imports' > "$FILE"
-run --apply
-expect_line '^added-section: ## Style baseline  ask: Q2, Q11$' "missing Style baseline added"
-SB=$(line_no '## Style baseline')
-if [ "$(sed -n "$((SB + 2)),$((SB + 4))p" "$FILE" | cut -c1-15)" = "$(printf '| Rule | Detail\n|---|---|\n| Frontmatter |')" ]; then ok; else fail "added table has no header row: $(sed -n "$SB,$((SB + 5))p" "$FILE")"; fi
-
-# --- 8. line endings: each line keeps its own --------------------------------
-
-printf -- '---\r\nmyspec_version: 3.0.0\r\n---\r\n\n## Style baseline\n| Rule | Detail |\n|---|---|\n| Density | Compact |\n' > "$FILE"
-run --apply --stamp 3.7.0
-CR_LINES=$(grep -c $'\r$' "$FILE")
-if [ "$CR_LINES" = 3 ]; then ok; else fail "mixed endings rewritten: $CR_LINES CRLF lines, want 3"; fi
-expect_line '^file: ai/conventions/mockup-design\.md  myspec_version: 3\.0\.0$' "CRLF frontmatter stamp read"
-if head -2 "$FILE" | tail -1 | grep -q $'^myspec_version: 3.7.0\r$'; then ok; else fail "CRLF stamp line lost its ending"; fi
-
-# --- 9. aiDir: empty means the default ---------------------------------------
-
-mkdir -p "$REPO/.ai/conventions"
-printf '{"aiDir":""}\n' > "$REPO/.myspec.json"
-cp "$FILE" "$REPO/.ai/conventions/mockup-design.md"
+stamped_file '"v4.0"'
 run
-expect_line '^file: \.ai/conventions/mockup-design\.md ' "empty aiDir resolves to the schema default"
-printf '{"aiDir":"ai"}\n' > "$REPO/.myspec.json"
+expect_status 0 "quoted loose stamp v4.0 reads as 4.0.0"
 
-# --- 10. errors -----------------------------------------------------------------
+# --- 3. unstamped and odd files ----------------------------------------------
 
+printf '# Mockup Design Conventions\n' > "$FILE"
+run
+expect_status 3 "no frontmatter counts as the base version"
+expect_line '^file: .*  myspec_version: unstamped \(counted as 1\.20\.0\)$' "unstamped reported"
+
+printf '\xef\xbb\xbf---\r\nmyspec_version: 4.0.0\r\n---\r\n' > "$FILE"
+run
+expect_status 0 "BOM and CRLF frontmatter: stamp read"
+
+# --- 4. --stamp writes only the stamp line -----------------------------------
+
+stamped_file 3.0.0
+BODY=$(tail -n +4 "$FILE")
+run --stamp 3.9.0
+expect_status 0 "stamp exits 0"
+expect_line '^stamped: ai/conventions/mockup-design\.md  myspec_version: 3\.9\.0$' "stamp reported"
+if [ "$(sed -n 3p "$FILE")" = 'myspec_version: 3.9.0' ] && [ "$(tail -n +4 "$FILE")" = "$BODY" ]; then ok; else fail "stamp touched more than its line: $(cat "$FILE")"; fi
+run
+expect_line '^ask: Q14 ' "after stamping 3.9.0 only Q14 remains"
+
+printf -- '---\ntitle: x\n---\nbody\n' > "$FILE"
+run --stamp 3.9.0
+expect_file "$(printf -- '---\ntitle: x\nmyspec_version: 3.9.0\n---\nbody')" "missing stamp key added before the closing ---"
+
+printf '\xef\xbb\xbf---\r\nmyspec_version: 3.0.0\r\n---\r\nbody\n' > "$FILE"
+run --stamp 3.9.0
+if [ "$(head -c 3 "$FILE" | od -An -tx1 | tr -d ' ')" = efbbbf ]; then ok; else fail "BOM dropped"; fi
+if [ "$(grep -c $'\r$' "$FILE")" = 3 ] && grep -q $'^myspec_version: 3.9.0\r$' "$FILE"; then ok; else fail "CRLF endings not kept: $(od -c "$FILE" | head -3)"; fi
+
+printf 'no frontmatter\n' > "$FILE"
+run --stamp 3.9.0
+expect_status 2 "nothing to stamp exits 2"
+expect_file 'no frontmatter' "file without frontmatter untouched"
+
+# --- 5. errors -----------------------------------------------------------------
+
+stamped_file 3.0.0
+run --stamp nonsense
+expect_status 2 "bad stamp version exits 2"
+run --bogus x
+expect_status 2 "unknown flag exits 2"
+chmod 444 "$FILE"
+run --stamp 3.9.0
+chmod 644 "$FILE"
+expect_status 2 "read-only file exits 2, not a crash"
+expect_line '^mockup-config-check: .*(EACCES|permission denied)' "write error named"
+printf '# no table\n' > "$ROOT/empty.md"
+OUTPUT=$(cd "$REPO" && node "$SCRIPT" --blueprint "$ROOT/empty.md" 2>&1 </dev/null); STATUS=$?
+expect_status 2 "blueprint without the section exits 2"
 rm "$FILE"
 run
 expect_status 4 "missing file exits 4"
-run --bogus
-expect_status 2 "usage error exits 2"
-printf '# no template here\n' > "$ROOT/empty.md"
-printf -- '---\n---\n' > "$FILE"
-OUTPUT=$(cd "$REPO" && node "$SCRIPT" --blueprint "$ROOT/empty.md" 2>&1); STATUS=$?
-expect_status 2 "blueprint without the template exits 2"
-printf -- '---\nmyspec_version: 3.0.0\n---\n' > "$FILE"
-chmod 444 "$FILE"
-run --apply
-chmod 644 "$FILE"
-expect_status 2 "a file it cannot write exits 2, not a crash"
-expect_line '^mockup-config-check: .*(EACCES|permission denied)' "the write error is named"
+
+mkdir -p "$REPO/.ai/conventions"
+printf '{"aiDir":""}\n' > "$REPO/.myspec.json"
+printf -- '---\nmyspec_version: 4.0.0\n---\n' > "$REPO/.ai/conventions/mockup-design.md"
+run
+expect_line '^file: \.ai/conventions/mockup-design\.md ' "empty aiDir resolves to the schema default"
+
+grep -q '^## Added questions$' "$REAL_BLUEPRINT" && ok || fail "shipped blueprint lost its Added questions heading"
 
 printf '\nmockup-config-check: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

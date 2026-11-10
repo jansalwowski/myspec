@@ -62,6 +62,8 @@ Any question may be answered "skip"; sections left unanswered keep their header 
 
 ## Output Format
 
+The file holds this project's answers only. Rules that hold in every project, such as switching mock states through preview `controls:` lines rather than an in-page toggle, live in the `feature-mockup` and `feature-mockup-review` skills, so a release that changes one reaches every project without touching this file.
+
 ### `${aiDir}/conventions/mockup-design.md` (required)
 
 ```markdown
@@ -82,9 +84,7 @@ myspec_version: {frameworkVersion from .myspec.json at generation time — lets 
 <hard guards from Q2–Q4 and Q11 as a table: design-baseline discipline, token rules, import discipline, idioms promoted to guards>
 
 ## Style baseline
-<from Q2 + Q11 as a table: density, spacing scale, modal mockup pattern, sample-data rules, icon library. Always include these two rows, adapted to the file format's comment syntax:>
-| Frontmatter | `title:` + `description:`, plus one `controls: <name>=<default>\|<opt2>\|...` line per state switch. One control per line; the first option is the default. |
-| States & modals | Switch loading / empty / error / modal states through preview controls, never a toggle rendered inside the mockup (reviewers read it as design, and it pushes the content down). Read the value once with `new URLSearchParams(window.location.search).get('<name>')` and fall back to the default. Preview tooling without a controls toolbar: append `<name>=<value>` to the frame URL by hand. |
+<from Q2 + Q11 as a table: density, spacing scale, modal mockup pattern, sample-data rules, icon library>
 
 ## Imports
 
@@ -104,8 +104,7 @@ myspec_version: {frameworkVersion from .myspec.json at generation time — lets 
 <from Q10: canonical reference mockups (admin / end-user), plus the rule: new mockups copy structural idioms from the reference unless the user explicitly opts out>
 
 ## Detection patterns
-<from Q12, one per line: pattern (regex or description) · severity · mechanical fix if any. Always include this line first:>
-- In-page mock state toggle: a segmented control, select, tab row or button group inside the mockup whose options name mock states (loading, empty, error, success, a modal open/closed) · Medium · move it to a `controls:` frontmatter line and read the value from the URL (*States & modals*)
+<from Q12, one per line: pattern (regex or description) · severity · mechanical fix if any — or "(none configured)">
 
 ## Repeated user feedback
 
@@ -145,7 +144,16 @@ myspec_version: {frameworkVersion from .myspec.json at generation time — lets 
 
 ## Re-running
 
-The blueprint is re-runnable — `/myspec:setup mockup` prompts before overwriting. Re-run (or hand-edit the affected sections) after a design-system major upgrade (the `Configured against:` pin will have drifted). A myspec release that adds a section heading or a fixed row to the output template needs no re-run: `/myspec:update` finds the missing parts (`lib/mockup-config-check.mjs`) and offers to add only those, asking just the questions behind a new section. Re-running preserves nothing automatically — port the *Repeated user feedback* log forward manually; it is append-only project history.
+The blueprint is re-runnable — `/myspec:setup mockup` prompts before overwriting. Re-run (or hand-edit the affected sections) after a design-system major upgrade (the `Configured against:` pin will have drifted). A myspec release that adds a question needs no re-run either: see *Added questions*. Re-running preserves nothing automatically — port the *Repeated user feedback* log forward manually; it is append-only project history.
+
+## Added questions
+
+Every question above dates from v1.20.0, when this blueprint was added, unless a row below says otherwise. When a release adds a question, it adds a row here; never reuse a number. `/myspec:update` compares each row's version with the file's `myspec_version` (`lib/mockup-config-check.mjs`; an unstamped file counts as 1.20.0) and offers to ask only the newer questions.
+
+| Question | Section | Since |
+|---|---|---|
+
+**Asking only the added questions.** When `/myspec:update` passes question numbers, ask those alone, one at a time. Write each answer as its section in the Output Format's form, placed where the template puts it, and change no other line of the file. Finally run `node "${CLAUDE_PLUGIN_ROOT}/lib/mockup-config-check.mjs" --stamp <frameworkVersion>`. A "skip" answer writes the section header with "(none configured)".
 
 ## Output Location
 - `${aiDir}/conventions/mockup-design.md`
