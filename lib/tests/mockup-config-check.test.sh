@@ -185,7 +185,48 @@ expect_no_line '^stamped:' "no frontmatter, no stamp"
 expect_in_file '> Append-only log of design corrections' "feedback section body added"
 expect_count '## Always' 2 "real Always heading added beside the fenced one"
 
-# --- 6. errors -----------------------------------------------------------------
+# --- 6. rows under a ### subheading, emphasised keys, other bullet separators
+
+{
+  printf '%s\n' '---' 'myspec_version: 3.0.0' '---' '' '## Style baseline' '' '### Tables' "$FRONTMATTER_ROW"
+  printf '%s\n' '| **States & modals** | Preview controls, never in-page toggles. |' ''
+  printf '%s\n' '## Detection patterns' '- In-page mock state toggle — move it to a controls: line · Medium'
+} > "$FILE"
+run --apply
+expect_no_line '^added-line:' "subsection rows, bold keys and dash bullets are found"
+expect_line '^differs: ## Style baseline  plugin: \| States & modals \|' "bold key reported as differing"
+expect_line '^differs: ## Detection patterns  plugin: - In-page mock state toggle:' "dash bullet reported as differing"
+expect_count '| Frontmatter |' 1 "no duplicate row under the subheading"
+expect_count 'States & modals' 1 "no duplicate for the bold key"
+expect_count 'In-page mock state toggle' 1 "no duplicate for the dash bullet"
+
+# --- 7. a missing table section gets a header row ----------------------------
+
+printf '%s\n' '---' 'myspec_version: 3.0.0' '---' '' '## Always' 'x' '' '## Imports' > "$FILE"
+run --apply
+expect_line '^added-section: ## Style baseline  ask: Q2, Q11$' "missing Style baseline added"
+SB=$(line_no '## Style baseline')
+if [ "$(sed -n "$((SB + 2)),$((SB + 4))p" "$FILE" | cut -c1-15)" = "$(printf '| Rule | Detail\n|---|---|\n| Frontmatter |')" ]; then ok; else fail "added table has no header row: $(sed -n "$SB,$((SB + 5))p" "$FILE")"; fi
+
+# --- 8. line endings: each line keeps its own --------------------------------
+
+printf -- '---\r\nmyspec_version: 3.0.0\r\n---\r\n\n## Style baseline\n| Rule | Detail |\n|---|---|\n| Density | Compact |\n' > "$FILE"
+run --apply --stamp 3.7.0
+CR_LINES=$(grep -c $'\r$' "$FILE")
+if [ "$CR_LINES" = 3 ]; then ok; else fail "mixed endings rewritten: $CR_LINES CRLF lines, want 3"; fi
+expect_line '^file: ai/conventions/mockup-design\.md  myspec_version: 3\.0\.0$' "CRLF frontmatter stamp read"
+if head -2 "$FILE" | tail -1 | grep -q $'^myspec_version: 3.7.0\r$'; then ok; else fail "CRLF stamp line lost its ending"; fi
+
+# --- 9. aiDir: empty means the default ---------------------------------------
+
+mkdir -p "$REPO/.ai/conventions"
+printf '{"aiDir":""}\n' > "$REPO/.myspec.json"
+cp "$FILE" "$REPO/.ai/conventions/mockup-design.md"
+run
+expect_line '^file: \.ai/conventions/mockup-design\.md ' "empty aiDir resolves to the schema default"
+printf '{"aiDir":"ai"}\n' > "$REPO/.myspec.json"
+
+# --- 10. errors -----------------------------------------------------------------
 
 rm "$FILE"
 run
@@ -196,6 +237,12 @@ printf '# no template here\n' > "$ROOT/empty.md"
 printf -- '---\n---\n' > "$FILE"
 OUTPUT=$(cd "$REPO" && node "$SCRIPT" --blueprint "$ROOT/empty.md" 2>&1); STATUS=$?
 expect_status 2 "blueprint without the template exits 2"
+printf -- '---\nmyspec_version: 3.0.0\n---\n' > "$FILE"
+chmod 444 "$FILE"
+run --apply
+chmod 644 "$FILE"
+expect_status 2 "a file it cannot write exits 2, not a crash"
+expect_line '^mockup-config-check: .*(EACCES|permission denied)' "the write error is named"
 
 printf '\nmockup-config-check: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

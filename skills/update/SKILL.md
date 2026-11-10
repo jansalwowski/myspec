@@ -36,7 +36,7 @@ Resolve the plugin directory in this order:
 2. The directory containing this `SKILL.md`, walking up until a sibling `framework-files/manifest.json` is found (typically `…/myspec/{version}/framework-files/manifest.json`).
 3. If neither resolves, stop and tell the user: "Cannot locate plugin manifest. Verify the myspec plugin is installed."
 
-Compare versions. If they match, tell the user: "Already up to date (v{version}). No changes needed." and stop.
+Compare versions. If they match, run Step 3.5 alone (a mockup config the last update skipped is still offered), then tell the user: "Already up to date (v{version}). No changes needed." and stop.
 
 **Upgrade base.** The manifest's `upgradeFrom` is the oldest version this plugin migrates from, and `upgradeChain` lists the earlier majors' floors (RELEASING.md, "Upgrade base"). Run `node "${CLAUDE_PLUGIN_ROOT}/lib/upgrade-route.mjs" --version "<project frameworkVersion>"` (empty when none is recorded). Exit 0 → continue. Exit 3 → stop and print its stdout verbatim: it names every release to update through, oldest first, so the user never learns the route one refusal at a time. Any other exit (2 is a bad manifest or version; 1 is Node itself failing, e.g. a missing script) → stop, tell the user the upgrade floor check could not run and quote its stderr. Never continue the update without a 0, and never print a non-3 output as the route.
 Every migration, rename and removal an older version needed ran in that update; this plugin no longer ships them.
@@ -137,13 +137,13 @@ node "${CLAUDE_PLUGIN_ROOT}/lib/mockup-config-check.mjs"
 
 It reads the framework-owned parts from the plugin's `blueprints/mockup.md` output template and compares the file with them. Act on its exit status:
 
-- **0** → nothing is missing. Report `differs:` lines (a fixed row the project adapted) under `Mockups` in the summary and leave them.
+- **0** → nothing is missing. Run it again with `--apply --stamp <newVersion>`, which writes only the `myspec_version` stamp, so `feature-mockup-review` stops calling the file stale. Report `differs:` lines (a fixed row the project adapted) under `Mockups` in the summary and leave them.
 - **3** → show its `missing-section` / `missing-line` lines and ask with AskUserQuestion, naming them in the question:
   - **Add only the missing parts (Recommended)**: run it again with `--apply --stamp <newVersion>`. It inserts each missing heading and fixed line in template order and touches nothing else. Then for each `added-section` line carrying `ask: Q<n>`, ask that question from `${CLAUDE_PLUGIN_ROOT}/blueprints/mockup.md` and write the answer into the new section in the template's form; "skip" leaves the heading empty.
   - **Regenerate the whole file**: run `/myspec:setup mockup` once this update finishes. It prompts before overwriting, and the *Repeated user feedback* log is ported forward by hand.
-  - **Skip**: leave the file; the next update asks again.
+  - **Skip**: leave the file and its stamp; the next `/myspec:update` asks again, also when the plugin version has not moved.
 - **4** → the file is gone; report "`mockup-design.md` missing, run `/myspec:setup mockup`" under `Mockups`.
-- **2** → report its stderr under `Mockups` and go on; it never blocks the update.
+- **2 or any other status** → report its stderr under `Mockups` and go on; it never blocks the update.
 
 ### Step 3.6: Check memory health
 
