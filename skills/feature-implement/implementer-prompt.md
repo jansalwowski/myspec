@@ -67,9 +67,10 @@ Task tool (general-purpose):
     [Commit trailers]
 
     **While you work:** If you encounter something unexpected or unclear, **ask questions**.
-    It is always OK to pause and clarify. Do not guess or make assumptions.
-    A choice the task text did not settle that you make anyway goes in your
-    report under Decisions I made.
+    It is always OK to pause and clarify. Ask rather than guess when the
+    choice changes behavior the spec describes. A smaller choice the task
+    text did not settle (a default, an edge case left out) you may make:
+    list it under Decisions I made.
 
     ## Checks You May Run
 

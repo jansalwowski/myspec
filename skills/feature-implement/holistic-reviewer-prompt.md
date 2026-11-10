@@ -48,7 +48,17 @@ Task tool (general-purpose):
 
     ## Evidence Already Gathered
 
-    [Each Final Verification command with its exit code, and every `Probe` and `Waiver` line from the Execution Log, verbatim]
+    [Each Final Verification command with its exit code, and every `Probe`, `Waiver` and `Not proven` line from the Execution Log, verbatim]
+
+    ## Implementer Decisions
+
+    [Every `Decision (Task N):` line from the Execution Log, verbatim]
+
+    Each was checked only against its own phase. Check each against the
+    whole feature: a later phase that relies on the opposite choice, or a
+    decision that contradicts an acceptance criterion, is an integration
+    issue. A phase Not proven line that later work did not close stays in
+    your Not proven list.
 
     ## Deferred Minors and Parked Findings
 

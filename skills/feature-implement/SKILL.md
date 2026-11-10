@@ -49,7 +49,8 @@ Plans use three checkbox states:
 Durable decisions live in the plan file, next to the checkboxes — the plan is the state that survives a crashed session, and `feature-complete` archives it. Maintain a `## Execution Log` section at the end of implementation-plan.md (create it on the first entry). Entry shapes:
 
 - `Ruling: <what you decided> — <why> — <what it costs if wrong>`
-- `Decision (Task N): <what> — <why>` — one per item of an implementer's "Decisions I made", logged when it reports, fix rounds included
+- `Decision (Task N): <what> — <why>` — one per item of an implementer's "Decisions I made", logged when it reports, fix rounds included, and one per unlisted decision a reviewer finds (`— <why>` is then `found by review`). A fix that reverses a logged decision appends `— reversed (Phase N, round R)` to its line
+- `Not proven (Phase N): <ID>: <behavior>` — one per entry of the phase reviewer's Not proven list
 - `Deferred minor (Phase N): <one-line finding> (file:line)`
 - `Parked (Phase N): <finding> — Ruling: <why the code stands>`
 - `Probe (Milestone N): <P|D><n> <verdict> — observed: <value> — artifact: <path>` (copied from the probe executor's report)
@@ -279,7 +280,7 @@ The helper writes the commit list, stat and `-U10` diff over `PHASE_BASE..HEAD`,
 - Pass `VERIFY_LOG`, and the spec requirement IDs the phase touches (from task spec citations and the plan's `## Spec Coverage` table) with their text, plus each one's Test cell when that table has a Test column. In workflow mode, also pass the per-task loop results (workflow-args.md). The reviewer checks each as behavior across the whole feature: an invariant spanning tasks otherwise surfaces only at holistic review, after later phases built on it.
 - Never pre-judge findings for the reviewer — never instruct it to ignore or not flag a specific issue. If the prompt you are writing contains "do not flag", "don't treat X as a defect", or "at most Minor" — stop: you are pre-judging, usually to spare yourself a fix loop. Let the reviewer raise it and rule on it in triage.
 - Covers ALL tasks in the phase: spec compliance, code quality, test coverage, test-weakening audit, integration, docs.
-- Returns: `APPROVED` or `ISSUES_FOUND` with per-finding severity (Critical / Important / Minor).
+- Returns: `APPROVED` or `ISSUES_FOUND` with per-finding severity (Critical / Important / Minor), plus Decisions and Not proven lines: log each Not proven entry and each unlisted decision (Execution Log) before triage, whatever the verdict.
 
 **c) Triage findings** (before any fix dispatch):
 
@@ -367,7 +368,7 @@ milestones.
 ### Step 5: Completion
 
 1. Remove the orchestration marker (Step 2.5) so the Stop hook blocks again, then run the Final Verification section from the plan.
-2. Build the full-feature review package: `"${CLAUDE_PLUGIN_ROOT}/lib/review-diff.sh" "$BASE_SHA" "$STATE/feature-review.diff"` and dispatch the holistic reviewer (`./holistic-reviewer-prompt.md`) on the `premium` tier with the package path, the Final Verification exit codes, and the plan's Execution Log entries (deferred minors and parked findings to triage, probes and waivers to weigh as evidence). This pass is mandatory — never skipped, never downgraded to a cheaper tier. Write its report to `${aiDir}/features/{feature}/holistic-review.md` (frontmatter in the prompt file) and commit it with the commit trailers (Step 3): `/myspec:feature-implement-review` reads it and skips what it already covers.
+2. Build the full-feature review package: `"${CLAUDE_PLUGIN_ROOT}/lib/review-diff.sh" "$BASE_SHA" "$STATE/feature-review.diff"` and dispatch the holistic reviewer (`./holistic-reviewer-prompt.md`) on the `premium` tier with the package path, the Final Verification exit codes, and the plan's Execution Log entries (deferred minors and parked findings to triage, probes, waivers and phase Not proven lines to weigh as evidence, decisions to check across the feature). This pass is mandatory — never skipped, never downgraded to a cheaper tier. Write its report to `${aiDir}/features/{feature}/holistic-review.md` (frontmatter in the prompt file) and commit it with the commit trailers (Step 3): `/myspec:feature-implement-review` reads it and skips what it already covers.
 3. Print the completion report. Evidence comes first, so a red or missing check is not buried under the summary. In order: **Evidence** — each Final Verification command and each required `verification.json` check with its exit code, then every `Probe` line (verdict, observed value, artifact path); the holistic verdict with its **Not proven** list; the milestone summary, with any live demo URL; **"Rulings I made"** — every `Ruling:` line from the Execution Log, in the order made, each with its cost-if-wrong; **"Decisions implementers made"** — every `Decision (Task N):` line, in log order; every `Waiver:` line; and the deferred-minors triage outcome. Write "none" for an empty list. This report is the only place the decisions taken on the user's behalf reach them.
 4. **Ask the user what to do next** via `AskUserQuestion` — do not auto-hand-off:
 
@@ -436,7 +437,7 @@ After all phases complete:
 
 - [ ] All plan task checkboxes marked `[x]` in implementation-plan.md (no `[~]` or `[ ]` remaining)
 - [ ] All barrier verification commands passed (typecheck, tests)
-- [ ] Holistic reviewer returned `APPROVED`
+- [ ] Holistic reviewer returned `READY TO MERGE`
 - [ ] Execution Log deferred minors triaged by the holistic review (fixed or explicitly accepted)
 - [ ] Every `Ruling:` and `Decision` line from the Execution Log surfaced in the completion report
 - [ ] No uncommitted changes from implementation

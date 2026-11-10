@@ -33,7 +33,11 @@ const IMPL_SCHEMA = {
     },
     filesChanged: { type: 'array', items: { type: 'string' } },
     concerns: { type: 'array', items: { type: 'string' }, description: 'doubts, or what you need (BLOCKED / NEEDS_CONTEXT)' },
-    decisions: { type: 'array', items: { type: 'string' }, description: 'each default chosen, requirement interpreted, edge case left out, or scope cut the task text did not dictate, with its reason; empty when none' },
+    decisions: {
+      type: 'array',
+      description: 'each default chosen, requirement interpreted, edge case left out, or scope cut the task text did not dictate; empty when none',
+      items: { type: 'object', required: ['what', 'why'], properties: { what: { type: 'string' }, why: { type: 'string' } } },
+    },
   },
 }
 
