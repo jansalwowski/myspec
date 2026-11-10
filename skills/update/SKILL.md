@@ -129,21 +129,7 @@ node "${CLAUDE_PLUGIN_ROOT}/lib/setup-doctor.mjs" wiring
 
 ### Step 3.5: Offer new or changed mockup questions
 
-Only when `.myspec.json` has a `mockups` block. `/myspec:setup mockup` generates `{aiDir}/conventions/mockup-design.md` once, from the answers to its questions, and the project owns it. A release that adds a question, or changes what one asks or writes, lists it in the blueprint's *Question changes* table, and the project has never been asked it in that form. Run from the project root:
-
-```bash
-node "${CLAUDE_PLUGIN_ROOT}/lib/mockup-config-check.mjs"
-```
-
-It compares each row's version with the file's `myspec_version` and never reads the rest of the file. Act on its exit status:
-
-- **0** → nothing to ask; report `up to date` under `Mockups`.
-- **3** → ask with AskUserQuestion, naming each `ask:` line's question number and what it writes:
-  - **Answer them (Recommended)**: run the `setup` skill's `mockup` blueprint for those question numbers alone (its *Question changes* section: it asks them, writes each answer where its row says, and stamps the file).
-  - **Not now**: leave the file; the next `/myspec:update` offers them again.
-  - **Don't ask again**: run it with `--stamp`, which writes only the `myspec_version` line (the plugin's version), so these rows are never offered again.
-- **4** → the file is gone; report "`mockup-design.md` missing, run `/myspec:setup mockup`" under `Mockups`.
-- **2 or any other status** → report its stderr under `Mockups` and go on; it never blocks the update.
+Only when `.myspec.json` has a `mockups` block. From the project root run `node "${CLAUDE_PLUGIN_ROOT}/lib/mockup-config-check.mjs"` (add `--stamp` for "Don't ask again"), then act on its exit status as [references/mockup-questions.md](references/mockup-questions.md) says. It lists the mockup blueprint questions the project's `mockup-design.md` was never asked, and never blocks the update.
 
 ### Step 3.6: Check memory health
 

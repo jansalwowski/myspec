@@ -63,10 +63,10 @@ table '| Q13 | ## Motion (new section) | 3.8.0 |' '| 2 | ## Style baseline (in s
 
 # --- 1. the shipped blueprint parses -----------------------------------------
 
-stamped_file 3.6.0
+stamped_file "$PLUGIN_VERSION"
 OUTPUT=$(cd "$REPO" && node "$SCRIPT" 2>&1 </dev/null); STATUS=$?
 expect_status 0 "shipped blueprint parses (every row readable, forms table ignored)"
-expect_line '^mockup-config-check: 0 question\(s\) to ask$' "shipped table lists nothing newer than 3.6.0"
+expect_line '^mockup-config-check: 0 question\(s\) to ask$' "shipped table lists nothing newer than the plugin itself"
 
 # --- 2. only rows newer than the stamp, only the section's first table -------
 
@@ -86,6 +86,25 @@ expect_no_line '^ask: Q13 ' "a row is not newer than its own version"
 stamped_file '"v4.0" # quoted, commented'
 run
 expect_status 0 "quoted loose stamp with a comment reads as 4.0.0"
+
+# One row per question: the newest form of a question changed twice.
+table '| Q2 | ## Style baseline (in section) | 3.8.0 |' '| Q2 | ## Style baseline (replaces section) | 3.9.0 |' '| Q13 | ## Motion (new section) | 3.8.0 |'
+stamped_file 3.7.0
+run
+expect_line '^ask: Q2  writes: ## Style baseline \(replaces section\)  \(since 3\.9\.0\)$' "newest Q2 row asked"
+if [ "$(grep -c '^ask: Q2 ' <<<"$OUTPUT")" = 1 ]; then ok; else fail "Q2 asked more than once: $OUTPUT"; fi
+expect_line '^mockup-config-check: 2 question\(s\) to ask$' "deduped summary"
+stamped_file 3.8.5
+run
+expect_line '^ask: Q2  writes: ## Style baseline \(replaces section\)' "only the change after the stamp"
+
+# An escaped pipe stays in its cell.
+# shellcheck disable=SC2016 # literal backticks in a markdown row
+table '| Q14 | `## Notes \| misc` (new section) | 3.9.0 |'
+run
+expect_status 3 "escaped pipe row readable"
+# shellcheck disable=SC2016 # literal backticks in the expected line
+expect_line '^ask: Q14  writes: `## Notes \\\| misc` \(new section\)' "escaped pipe kept in the Writes cell"
 
 # --- 3. a row it cannot read stops the check ---------------------------------
 
@@ -133,6 +152,12 @@ run --stamp
 if [ "$(head -c 3 "$FILE" | od -An -tx1 | tr -d ' ')" = efbbbf ]; then ok; else fail "BOM dropped"; fi
 if [ "$(grep -c $'\r$' "$FILE")" = 3 ] && grep -q $'^myspec_version: .*\r$' "$FILE"; then ok; else fail "CRLF endings not kept"; fi
 
+printf -- '---\ntitle: x\nbody\n' > "$FILE"
+run --stamp
+expect_status 2 "an unclosed frontmatter is refused"
+expect_line 'never closes' "refusal named"
+expect_file "$(printf -- '---\ntitle: x\nbody')" "unclosed frontmatter left untouched"
+
 printf '## Always\nbody\n' > "$FILE"
 run --stamp
 expect_status 0 "a file without frontmatter can be stamped"
@@ -152,6 +177,10 @@ run --stamp
 chmod 644 "$FILE"
 expect_status 2 "read-only file exits 2, not a crash"
 expect_line '^mockup-config-check: .*(EACCES|permission denied)' "write error named"
+cp "$BLUEPRINT" "$REPO/bp.md"
+OUTPUT=$(cd "$ROOT" && node "$SCRIPT" --root proj --blueprint bp.md 2>&1 </dev/null); STATUS=$?
+expect_line '^file: ai/conventions/mockup-design\.md ' "--blueprint resolves against --root, like --file"
+rm "$REPO/bp.md"
 printf '# no table\n' > "$ROOT/empty.md"
 OUTPUT=$(cd "$REPO" && node "$SCRIPT" --blueprint "$ROOT/empty.md" 2>&1 </dev/null); STATUS=$?
 expect_status 2 "blueprint without the section exits 2"

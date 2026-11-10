@@ -71,7 +71,7 @@ The file holds this project's answers only. Rules that hold in every project, su
 title: "Mockup Design Conventions"
 purpose: "Persistent design rules for ${aiDir}/features/{feature}/mockups/*. Loaded by the feature-mockup and feature-mockup-review skills at silent recon. Append-only — do not delete prior rules without user approval."
 updated: {YYYY-MM-DD}
-myspec_version: {written by Post-generation step 4: the plugin version whose questions were asked}
+myspec_version: {the plugin's version, `frameworkVersion` in its `framework-files/manifest.json`: the version whose questions were asked. Post-generation step 4 rewrites it the same way}
 ---
 
 # Mockup Design Conventions
@@ -150,7 +150,7 @@ The blueprint is re-runnable — `/myspec:setup mockup` prompts before overwriti
 
 ## Question changes
 
-Every question above dates from v1.20.0, when this blueprint was added, unless a row below says otherwise. A release that adds a question, or changes what one asks or writes, adds a row here; never reuse a number. `/myspec:update` compares each row's version with the file's `myspec_version` (the plugin's `lib/mockup-config-check.mjs`; an unstamped file counts as 1.20.0) and offers only the newer rows. A row that cannot be read stops the check, so write every row in this form:
+Every question above dates from v1.20.0, when this blueprint was added, unless a row below says otherwise. A release that adds a question, or changes what one asks or writes, adds a row here. A number names one question for good: a change to Q2 adds another `Q2` row with the new version, and update asks only its newest row; a new question takes the next unused number. `/myspec:update` compares each row's version with the file's `myspec_version` (the plugin's `lib/mockup-config-check.mjs`; an unstamped file counts as 1.20.0) and offers only the newer rows. A row that cannot be read stops the check, so write every row in this form:
 
 | Question | Writes | Since |
 |---|---|---|
@@ -164,7 +164,7 @@ The *Writes* cell names where the answer lands, in one of these forms:
 | `## <Section> (replaces section)` | `## Detection patterns (replaces section)` | Show the section's current content with the question, and replace that content with the answer; a heading the row renames (`## New (replaces ## Old)`) is renamed too |
 | `.myspec.json mockups.<key>` | `.myspec.json mockups.commands.audit` | Set that key in the `mockups` block, nothing else |
 
-**Asking only the changed questions.** When `/myspec:update` passes question numbers, skip Recon and the overwrite question. Ask those questions alone, one at a time, and write each answer as its row's *Writes* cell says; change no other line of the file and no other `.myspec.json` key. A "skip" answer to a new section writes its header with "(none configured)"; to any other form it writes nothing. Finally stamp the file (*Post-generation*, step 4).
+**Asking only the changed questions.** When `/myspec:update` passes question numbers, skip the overwrite question, and run only the Recon bullets those questions present a detected value from. Ask those questions alone, one at a time, and write each answer as its row's *Writes* cell says; change no other line of the file and no other `.myspec.json` key. A "skip" answer to a new section writes its header with "(none configured)"; to any other form it writes nothing. Finally stamp the file (*Post-generation*, step 4).
 
 ## Output Location
 - `${aiDir}/conventions/mockup-design.md`
