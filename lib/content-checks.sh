@@ -317,8 +317,19 @@ reuse_audit_issues() {
   fi
 }
 
-# reuse_audit_reason <path> <diagnostics> -> the reason.
+# reuse_audit_reason <path> <diagnostics> -> the reason. When every
+# diagnostic is a row's, the section and its table exist: the reason names
+# only those rows, not the how-to-add-a-section template (#412).
 reuse_audit_reason() {
+  if ! printf '%s\n' "$2" | grep -qvE '^row [0-9]+: '; then
+    cat <<EOF
+BLOCKED: $1 has invalid rows in its "## Reuse audit" table.
+
+$2
+Fix only these rows; the rest of the section is valid.
+EOF
+    return 0
+  fi
   cat <<EOF
 BLOCKED: $1 is missing a valid "## Reuse audit" section.
 

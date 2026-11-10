@@ -170,6 +170,8 @@ printf '# T\n\n## Architecture\n' > "$CUR"
 expect 'missing required section: "## Reuse audit" (or ### )' "$(reuse_audit_issues "$CUR")" "a missing section is reported"
 printf '# T\n\n### Reuse audit\n\n| a | b | c | d |\n|---|---|---|---|\n| Foo | lib | skip | - |\n' > "$CUR"
 expect "row 1: skip rows require a non-empty Reason" "$(reuse_audit_issues "$CUR")" "a skip row without a reason is reported"
+printf '# T\n\n## Reuse audit\n\n| a | b | c | d |\n|---|---|---|---|\n| Foo | lib | reuse | - |\n| Bar | ui | extend | new size prop |\n' > "$CUR"
+expect 'row 2: Decision must be reuse or skip, got "extend"; a component reused with changes is reuse, with the change in Reason' "$(reuse_audit_issues "$CUR")" "an extend row names the accepted spelling"
 reuse_audit_scope .ai .ai/features/pay/tech-spec.md && ok || fail "a tech-spec is in scope"
 reuse_audit_scope .ai .ai/features/pay/sub/tech-spec.md && ok || fail "a nested tech-spec is in scope"
 reuse_audit_scope docs/ai docs/ai/features/pay/tech-spec.md && ok || fail "a tech-spec under a configured aiDir is in scope"
@@ -183,6 +185,15 @@ done
 expect_in() { case "$2" in *"$1"*) ok ;; *) fail "$3" ;; esac; }
 expect_in 'BLOCKED: x/tech-spec.md is missing a valid "## Reuse audit" section.' "$(reuse_audit_reason x/tech-spec.md diag)" "the reason opens with the friction-scan line"
 expect_in "myspec:reuse-audit skip: <reason>" "$(reuse_audit_reason x/tech-spec.md diag)" "the reason names the marker"
+# #412: when only rows are wrong, the section exists; the reason names the
+# rows and leaves out the add-a-section template.
+ROWS_REASON=$(reuse_audit_reason x/tech-spec.md 'row 2: Decision must be reuse or skip, got "extend"')
+expect_in 'BLOCKED: x/tech-spec.md has invalid rows in its "## Reuse audit" table.' "$ROWS_REASON" "a row-only finding opens with the row line"
+expect_in 'row 2: Decision must be reuse or skip' "$ROWS_REASON" "a row-only reason carries the finding"
+case "$ROWS_REASON" in *'is missing a valid'*|*'| Candidate |'*) fail "a row-only reason drops the missing-section opener and the template" ;; *) ok ;; esac
+case "$(reuse_audit_reason x/tech-spec.md "$(printf 'row 1: expected 4 columns, found 3: x\nsection "Reuse audit" has no data rows')")" in
+  *'is missing a valid'*) ok ;; *) fail "a section-level finding keeps the full reason" ;;
+esac
 
 # --- absolute paths -----------------------------------------------------------
 printf 'see /Users/alice/x and /home/bob/y\nrel home/HomeFoo.vue\n-Users-alice-work\n' > "$CUR"
