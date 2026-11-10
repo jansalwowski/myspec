@@ -213,6 +213,23 @@ printf -- '---\nmyspec_version: 1.20.0\n---\n\nExample:\n\n    ## Component libr
 OUTPUT=$(cd "$REPO" && node "$SCRIPT" 2>&1 </dev/null); STATUS=$?
 expect_line '^ask: Q2 ' "a heading in an indented code block does not count"
 
+# Present when is matched as written: "(none of …)" or a skipped Q2 is no answer.
+printf -- '---\nmyspec_version: 1.20.0\n---\n\n## Component library\nUses Foo (none of the old widgets)\n' > "$FILE"
+OUTPUT=$(cd "$REPO" && node "$SCRIPT" 2>&1 </dev/null); STATUS=$?
+expect_line '^ask: Q2 ' "a stray (none … is not the Q2 answer"
+printf -- '---\nmyspec_version: 1.20.0\n---\n\n## Component library\n(none configured)\n' > "$FILE"
+OUTPUT=$(cd "$REPO" && node "$SCRIPT" 2>&1 </dev/null); STATUS=$?
+expect_line '^ask: Q2 ' "a skipped Q2 is asked again"
+printf -- '---\nmyspec_version: 1.20.0\n---\n\n## Component library\n<!-- Configured against: x -->\n\n    Configured against: y\n' > "$FILE"
+OUTPUT=$(cd "$REPO" && node "$SCRIPT" 2>&1 </dev/null); STATUS=$?
+expect_line '^ask: Q2 ' "a pin in an HTML comment or indented code does not count"
+
+# A new section already written at another level or case counts.
+table '| Q13 | ## Motion (new section) | 3.8.0 |'
+printf -- '---\nmyspec_version: 3.7.0\n---\n\n### motion\nx\n' > "$FILE"
+run
+expect_line '^present: Q13 ' "### motion counts for ## Motion (new section)"
+
 # --- 3c. heading renames are applied, not asked (#427) ------------------------
 
 RENAMES='| ## Detection patterns | ## Pattern checks | 3.8.0 |
@@ -258,6 +275,26 @@ expect_line '^conflict: ## A and ## C both exist' "chain end already present is 
 expect_no_line '^rename:' "no first step applied"
 run --apply-renames
 if [ "$(cat "$FILE")" = "$BEFORE" ]; then ok; else fail "chain conflict wrote the file: $(cat "$FILE")"; fi
+
+# A chain that returns to its start changes nothing and is no conflict.
+RENAMES='| ## A | ## B | 3.8.0 |
+| ## B | ## A | 3.9.0 |
+'
+table '| Q13 | ## A (in section) | 3.9.0 | x |'
+printf -- '---\nmyspec_version: 3.7.0\n---\n\n## A\nx\n' > "$FILE"
+run
+expect_status 0 "a reverted rename changes nothing"
+expect_no_line '^(rename|conflict):' "no rename or conflict for a reverted rename"
+expect_line '^present: Q13 ' "a question on the reverted name is accepted"
+
+# --apply-renames reports conflicts it left.
+RENAMES='| ## Old | ## New | 3.8.0 |
+'
+table '| Q13 | ## Motion (new section) | 3.8.0 |'
+printf -- '---\nmyspec_version: 3.7.0\n---\n\n## Old\n\n## New\n' > "$FILE"
+run --apply-renames
+expect_status 3 "apply with a conflict left exits 3"
+expect_line '^conflict: ## Old and ## New both exist' "apply prints the conflict"
 
 # Questions are judged against the file as renamed.
 RENAMES='| ## Component library | ## UI kit | 3.8.0 |

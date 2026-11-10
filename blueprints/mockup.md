@@ -154,7 +154,7 @@ Every question above dates from v1.20.0, when this blueprint was added, unless a
 
 | Question | Writes | Since | Present when |
 |---|---|---|---|
-| Q2 | ## Component library (replaces section) | 1.21.0 | `Configured against:` or `(none` |
+| Q2 | ## Component library (replaces section) | 1.21.0 | `Configured against:` or `(none — plain semantic HTML/CSS)` |
 
 ### Writes forms
 
@@ -175,7 +175,7 @@ When `/myspec:update` passes question numbers, skip the overwrite question, and 
 
 ## Heading renames
 
-A release that renames a section heading the mockup skills read adds a row here, and renames it in this template and in both mockup skills in the same change. `/myspec:update` applies every row, whatever the file's stamp, when the file has the old heading and not the new one, rewriting the heading line only, and reports it. When the file has both headings it renames nothing and reports a conflict to merge by hand. Rows apply in table order, so a later row may rename the result of an earlier one. A *Question changes* row must name a heading by its newest name: the check refuses a row whose target a rename moves away.
+A release that renames a section heading the mockup skills read adds a row here, and renames it in this template and in both mockup skills in the same change. `/myspec:update` applies every row, whatever the file's stamp, when the file has the old heading and not the new one, rewriting the heading line only, and reports it. When the file has both headings it renames nothing and reports a conflict to merge by hand. Rows apply in table order, so a later row may rename the result of an earlier one, and a chain that returns to its start changes nothing. *Since* records the release that made the rename; it does not gate it. A *Question changes* row must name a heading by its newest name: the check refuses a row whose target a rename moves away.
 
 | Old | New | Since |
 |---|---|---|
