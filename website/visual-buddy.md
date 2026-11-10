@@ -82,7 +82,7 @@ When the agent produces something visual, such as screenshots, renders or a befo
 
 ![The docs site quickstart in light and dark theme, side by side](assets/visual-buddy/results-compare.jpg)
 
-The file path still appears in the terminal as a one-line footnote. A brainstorm that turns into an experiment works the same way: [show-don't-link example](examples/skills/brainstorm.md#solve-mode-that-turns-into-an-experiment-show-dont-link).
+A result you bring works the same way, as a file path or an image URL your browser can open. An image pasted into the chat has no file behind it, so the agent says it cannot show it and, if seeing it matters, asks for the path. The file path still appears in the terminal as a one-line footnote. A brainstorm that turns into an experiment works the same way: [show-don't-link example](examples/skills/brainstorm.md#solve-mode-that-turns-into-an-experiment-show-dont-link).
 
 ## A session, step by step
 
