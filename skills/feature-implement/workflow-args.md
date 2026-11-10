@@ -2,6 +2,17 @@
 
 Read from SKILL.md Step 3, "Workflow mode". The plugin workflow `myspec:implement-phase` (`workflows/implement-phase.js`) runs one phase's per-task loop. For each task it runs an implementer, then an independent verify agent, then a standards and spec-contract check on the cheap tier. Every serious finding is re-judged on the mid tier before it costs a fix. A task gets at most two fix rounds, and the second runs one tier up. The workflow then returns a structured result for each task. It flips no checkbox, merges nothing, runs no barrier, and asks nobody anything. The controller keeps every gate.
 
+## Running a phase
+
+Workflow mode replaces Step 3's implementer dispatches for a phase and nothing else. For each phase:
+
+1. Record `PHASE_BASE`, create the parallel task worktrees, and mark the tasks `[~]`, exactly as in controller mode.
+2. Start `Workflow({name: "myspec:implement-phase", args})`. Build `args` from the contract below, with `reviewDiff` set to `<plugin lib>/review-diff.sh` (the path SKILL.md resolves).
+3. Wait for the result, and dispatch nothing for that phase meanwhile.
+4. Act on each task's status per the table below, then continue at SKILL.md Step 4.
+
+A concurrent phase set launches one workflow per phase. If the call is refused, run that phase in controller mode and log a `Ruling:`.
+
 ## args
 
 Pass `args` as a JSON object, not as a JSON-encoded string.
