@@ -52,12 +52,13 @@ Task tool (general-purpose):
 
     ## Implementer Decisions
 
-    [Every `Decision (Task N):` line from the Execution Log, verbatim]
+    [Every `Decision (Task N)` and `Decision (Phase N, round R)` line from the Execution Log, verbatim]
 
     Each was checked only against its own phase. Check each against the
-    whole feature: a later phase that relies on the opposite choice, or a
-    decision that contradicts an acceptance criterion, is an integration
-    issue. A phase Not proven line that later work did not close stays in
+    final code and the whole feature. Under Integration issues, report one a
+    later fix reversed as stale, not current. A later phase that relies on the opposite choice,
+    or a decision that contradicts an acceptance criterion, is an
+    integration issue. A phase Not proven line that later work did not close stays in
     your Not proven list.
 
     ## Deferred Minors and Parked Findings

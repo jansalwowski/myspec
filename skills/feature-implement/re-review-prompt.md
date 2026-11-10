@@ -110,6 +110,6 @@ Task tool (general-purpose):
 - `[FIX_BASE sha]` — the HEAD the previous review saw (recorded by the controller before the fix dispatch)
 - `[HEAD sha]` — current commit
 - `[PKG path]` — the file the controller wrote the fix-diff package to
-- Decisions This Round — the fix implementer's list; the controller logs each as a `Decision (Task N):` line
+- Decisions This Round — the fix implementer's list; the controller logs each as a `Decision (Task N):` line, or `Decision (Phase N, round R)` for a fix spanning tasks
 
 **Re-reviewer returns:** per-finding verdicts (ADDRESSED / NOT ADDRESSED), new breakage in the fix diff, out-of-scope observations, and a round verdict.

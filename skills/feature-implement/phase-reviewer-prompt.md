@@ -18,7 +18,7 @@ Task tool (general-purpose):
     ## Phase Summary
 
     This phase included the following tasks:
-    [List each task with: task name, files created/modified, implementer's reported status, and its Decisions I made list verbatim]
+    [List each task with: task name, files created/modified, implementer's reported status, and its Decisions I made list verbatim (controller mode; workflow mode passes them under Per-Task Loop Results)]
 
     ## What Was Requested
 
