@@ -262,6 +262,10 @@ Sometimes verify wasn't run, or it was run too early, and the completion phase e
 
 10. **Compact tech-spec.md**: converts the 12-item checkbox list to a numbered outline, and deletes the v1 delivery-window decision marked "superseded by ADR-3", leaving only ADR-3. Architecture, interfaces, and edge cases stay. The CHANGELOG row from step 7 now ends `Compacted tech-spec.md.`
 
+#### Phase 2 — Verification
+
+Every required check passes.
+
 #### Phase 2b — Comprehension (optional)
 
 The skill offers the comprehension pass; the user picks Skip.

@@ -111,15 +111,15 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 **If failures detected:**
 - Analyze failures against files changed in this feature branch
 - **Failures are related to this feature → hard stop. Fix before proceeding.**
-- Failures appear unrelated (pre-existing or from parallel changes) → ask user to confirm before continuing
+- Failures appear unrelated (pre-existing or from parallel changes) → ask user to confirm, then continue to Phase 2b
 
 ### Phase 2b — Comprehension (optional)
 
-The user is about to merge code they have mostly seen as summaries and reports. When it later needs changing, someone has to explain why it is shaped this way. Offer one pass that has them explain it now. Under autopilot, skip the offer and print the decision line ([`_shared/autopilot.md`](../_shared/autopilot.md), "At a gate").
+The user is about to merge code they have mostly seen as summaries and reports. When it later needs changing, someone has to explain why it is shaped this way. Offer one pass that has them explain it now. Under autopilot, skip the offer and print the decision line ([`_shared/autopilot.md`](../_shared/autopilot.md)).
 
 Ask once with `AskUserQuestion`: "Walk through the change and answer a few questions before merging?", options "Walk me through it" and "Skip", neither `(Recommended)`. On "Skip", go to Phase 3.
 
-1. **Walkthrough.** `<base-branch>` is the branch Phase 3 integrates into: the default branch ([`_shared/git-helpers.md`](../_shared/git-helpers.md)) unless this branch was cut from another. From `git diff $(git merge-base HEAD <base-branch>)`, which includes uncommitted work so develop-mode changes show too, trace the main code paths: where each starts, the layers it crosses, where it writes state, each with file:line. Then list every `Ruling:`, `Decision (Task N):`, `Parked`, `Waiver` and `Deferred minor` entry from the Execution Log of the plan archived in Phase 1 step 7, with its cost-if-wrong or reason. If the plan has no Execution Log, say so and cover code paths only.
+1. **Walkthrough.** `<base-branch>` is the branch Phase 3 integrates into: the default branch ([`_shared/git-helpers.md`](../_shared/git-helpers.md)) unless this branch was cut from another. From `git diff $(git merge-base HEAD <base-branch>)` plus the files `git ls-files --others --exclude-standard` lists (the diff covers uncommitted edits, not new untracked files, and develop-mode work has both), trace the main code paths: where each starts, the layers it crosses, where it writes state, each with file:line. Then list every `Ruling:`, `Decision (Task N):`, `Parked`, `Waiver` and `Deferred minor` entry from the Execution Log of the plan archived in Phase 1 step 7, with its cost-if-wrong or reason. If the plan has no Execution Log, say so and cover code paths only.
 2. **Questions.** Ask three to five in one plain message (answers are in the user's words, so not `AskUserQuestion`). Pick the riskiest points from the walkthrough: what a ruling costs if wrong, where a transaction or ordering boundary sits and what breaks across it, why a default was chosen. Never quiz on names.
 3. **Feedback.** For each answer: right → one line confirming it. Wrong, partial or blank → the correct answer in a sentence and the file:line that shows it. No score, no retries.
 

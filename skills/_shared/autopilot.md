@@ -14,7 +14,7 @@ Autopilot is on only when the user asked for it in this session: the words "auto
 | "Review passed — mark `status: approved`?" | Yes, when the skill's own rule says the review passed (no Critical/High open) |
 | Next-step / hand-off choice | The recommended skill, invoked directly |
 | Fixes tagged `[requires confirmation]` with no Critical among them | Apply the ones the skill recommends; leave the rest unapplied and listed |
-| `feature-complete`'s comprehension offer (Phase 2b), reached through `feature-implement`'s hand-off | Skip — the pass needs the user's own answers |
+| An optional pass that only works on the user's own answers (`feature-complete`'s comprehension offer) | Skip it — an answer autopilot gives teaches nobody |
 
 Print each decision as it is made — `Autopilot: <gate header> → <option> — <why it was recommended>` — so the transcript shows what was chosen on the user's behalf. `feature-implement` also records it in the Execution Log as a `Ruling:` line, so it reaches "Rulings I made".
 
@@ -26,7 +26,7 @@ Autopilot never answers these; ask exactly as without it:
 - A checkpoint probe that came back FAIL or BLOCKED — fix and waive are the user's calls, and a waiver is never automatic
 - An outward-facing or irreversible action: push, opening or merging a PR, deploy, publish, force operations, deleting data or files the user wrote
 - `feature-implement`'s hard stops (Rulings, Not Stalls) and a dirty working tree at Step 0
-- A gate with no recommended option, or one the skill says needs the user's decision by name (a `DEFERRED` requirement in `feature-plan`, a scope cut)
+- A gate with no recommended option (except the optional passes above, which are skipped), or one the skill says needs the user's decision by name (a `DEFERRED` requirement in `feature-plan`, a scope cut)
 - The user's own earlier answer contradicts the recommendation — their answer wins
 
 At the end of the run, list every autopilot decision in the skill's summary so the user can reverse any of them.
