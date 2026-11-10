@@ -25,8 +25,8 @@ Task tool (general-purpose):
     Plan checkboxes are controller-managed: the controller flips each task
     to `[~]` in implementation-plan.md before dispatching it, and flips the
     phase's tasks to `[x]` after your approval. Those plan edits stay
-    uncommitted until the controller commits them. A resumed run re-executes every
-    `[~]` task from scratch.
+    uncommitted until the controller commits them. A resumed run re-executes a
+    `[~]` task from scratch unless its phase had finished implementing.
 
     ## Spec and Acceptance Criteria
 

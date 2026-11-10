@@ -13,6 +13,9 @@
 //   names Claude Code also ships as built-in skills, the grader must reject
 //   the bare built-in call; a name only the built-in has is called bare, and
 //   the grader is checked against that call.
+// - other tool_used graders (Agent, Read, ...) with samples in
+//   grader-samples.json: each sample is one run's calls, [{tool, input}, ...];
+//   the grader must pass every `pass` run and fail every `fail` run.
 // - every case has at least one deterministic grader.
 //
 // Exit 0 when every check holds, 1 otherwise.
@@ -46,8 +49,17 @@ const regexPasses = (g, text) => {
   const hit = new RegExp(g.pattern, g.flags || '').test(text);
   return g.match === 'not_contains' ? !hit : hit;
 };
+// Graders run in Claude Code's runtime, which supports inline modifier groups
+// such as `(?i:...)`. An older Node (CI) does not: there, compile the group as
+// `(?:...)` and make the whole pattern case-insensitive, a close approximation.
+const compile = (src) => {
+  try { return new RegExp(src); } catch (e) {
+    if (!/\(\?i:/.test(src)) throw e;
+    return new RegExp(src.replace(/\(\?i:/g, '(?:'), 'i');
+  }
+};
 const toolPasses = (g, calls) => {
-  const re = g.input_match ? new RegExp(g.input_match) : null;
+  const re = g.input_match ? compile(g.input_match) : null;
   const n = calls.filter((c) => c.tool === g.tool && (!re || re.test(JSON.stringify(c.input)))).length;
   const min = g.min === undefined ? 1 : Number(g.min);
   const max = g.max === undefined ? Infinity : Number(g.max);
@@ -80,6 +92,15 @@ for (const name of fs.readdirSync(E).sort()) {
       }
       for (const t of s.pass) expect(regexPasses(g, t), `${id}: rejects its pass sample: ${JSON.stringify(t.slice(0, 80))}`);
       for (const t of s.fail) expect(!regexPasses(g, t), `${id}: accepts its fail sample: ${JSON.stringify(t.slice(0, 80))}`);
+    } else if (g.type === 'tool_used' && g.tool !== 'Skill' && samples[g.name]) {
+      // A sample is one run's tool calls, in order: [{tool, input}, ...].
+      const s = samples[g.name];
+      if (!(s.pass ?? []).length || !(s.fail ?? []).length) {
+        expect(false, `${id}: grader-samples.json needs at least one "pass" and one "fail" sample`);
+        continue;
+      }
+      for (const calls of s.pass) expect(toolPasses(g, calls), `${id}: rejects its pass sample`);
+      for (const calls of s.fail) expect(!toolPasses(g, calls), `${id}: accepts its fail sample`);
     } else if (g.type === 'tool_used' && g.tool === 'Skill' && g.input_match) {
       const skill = (g.input_match.match(/([A-Za-z0-9_-]+)"?$/) ?? [])[1];
       if (!skill) { expect(false, `${id}: cannot read the skill name from input_match`); continue; }
