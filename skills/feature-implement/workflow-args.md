@@ -9,7 +9,7 @@ Workflow mode replaces Step 3's implementer dispatches for a phase and nothing e
 1. Record `PHASE_BASE` (a concurrent phase records it at its merge instead, per parallel-phases.md), create the parallel task worktrees or a concurrent phase's worktree, and mark the tasks `[~]`, exactly as in controller mode.
 2. Start `Workflow({name: "myspec:implement-phase", args})`. Build `args` from the contract below, with `reviewDiff` set to `<plugin lib>/review-diff.sh` (the path SKILL.md resolves).
 3. Wait for the result, and dispatch nothing for that phase meanwhile.
-4. Act on each task's status per the table below, then continue at SKILL.md Step 4.
+4. Act on each task's status per the table below, then continue at SKILL.md Step 4 — for a concurrent phase, through parallel-phases.md's per-phase steps (base, merge, then 4a).
 
 A concurrent phase set launches one workflow per phase. If the call is refused, run that phase in controller mode and log a `Ruling:`.
 
