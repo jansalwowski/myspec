@@ -216,6 +216,8 @@ const statusOf = (r, id) => r.out.tasks.find((t) => t.id === String(id))?.status
   check('decisions: implementer asked for them', r.calls[0].prompt.includes('decisions'))
   check('decisions: both rounds carried, in order', JSON.stringify(r.out.tasks[0].decisions) === JSON.stringify([{ what: 'default page size 20', why: 'the spec names none' }, { what: 'empty list returns 200', why: 'matches the list endpoint' }]), JSON.stringify(r.out.tasks[0].decisions))
   check('decisions: status stays DONE', statusOf(r, 1) === 'DONE')
+  const fixCall = r.calls.find((c) => c.label && c.label.startsWith('fix 1'))
+  check('decisions: the fix round sees the earlier decisions', fixCall && fixCall.prompt.includes('default page size 20 (the spec names none)'), fixCall && fixCall.prompt.slice(-400))
   const none = await run(payload([task(1)]), { 'implement 1': [done()], 'verify 1': [verified(1)], 'check 1': [clean] })
   check('decisions: empty when none reported', JSON.stringify(none.out.tasks[0].decisions) === '[]')
   const blockedFix = await run(payload([task(1)]), {

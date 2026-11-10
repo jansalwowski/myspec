@@ -217,6 +217,13 @@ function findingLine(f) {
   return '- [' + f.kind + '] ' + where + f.claim + (f.rule ? '\n  rule: ' + f.rule : '')
 }
 
+// Earlier decisions ride in the fix history so a fresh fix round does not
+// silently pick the opposite choice.
+function decisionsNote(r) {
+  const d = r.decisions || []
+  return d.length ? '; decisions: ' + d.map((x) => x.what + ' (' + x.why + ')').join('; ') : ''
+}
+
 const IMPL_TAIL = '\n\nReturn your report as the structured result: status, summary, testsWritten, checksRun (exact commands and observed results), filesChanged, concerns, decisions. Commit your work as the task says before you return.'
 
 function verifyPrompt(task, base, round) {
@@ -360,7 +367,7 @@ async function taskLoop(task, base, id, result, check) {
   }
 
   let lastImpl = impl
-  const history = []
+  const history = decisionsNote(impl) ? ['Implementation' + decisionsNote(impl)] : []
   for (let round = 0; ; round++) {
     const v = await agent(verifyPrompt(task, base, round), {
       label: 'verify ' + id + (round ? ' r' + round : ''), phase: 'Verify', model: models.cheap, schema: VERIFY_SCHEMA,
@@ -435,7 +442,7 @@ async function taskLoop(task, base, id, result, check) {
       result.status = fix.status
       return result
     }
-    history.push('Round ' + next + ' (' + tier + '): ' + open.length + ' finding(s) sent; implementer reported: ' + fix.summary)
+    history.push('Round ' + next + ' (' + tier + '): ' + open.length + ' finding(s) sent; implementer reported: ' + fix.summary + decisionsNote(fix))
     lastImpl = fix
   }
 }

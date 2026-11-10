@@ -69,8 +69,9 @@ Task tool (general-purpose):
     **While you work:** If you encounter something unexpected or unclear, **ask questions**.
     It is always OK to pause and clarify. Ask rather than guess when the
     choice changes behavior the spec describes. A smaller choice the task
-    text did not settle (a default, an edge case left out) you may make:
-    list it under Decisions I made.
+    text did not settle (a default, a format) you may make: list it under
+    Decisions I made. Leaving out an edge case or cutting scope is also
+    listed there, and makes your status DONE_WITH_CONCERNS.
 
     ## Checks You May Run
 

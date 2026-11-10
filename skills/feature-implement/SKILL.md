@@ -49,7 +49,7 @@ Plans use three checkbox states:
 Durable decisions live in the plan file, next to the checkboxes — the plan is the state that survives a crashed session, and `feature-complete` archives it. Maintain a `## Execution Log` section at the end of implementation-plan.md (create it on the first entry). Entry shapes:
 
 - `Ruling: <what you decided> — <why> — <what it costs if wrong>`
-- `Decision (Task N): <what> — <why>` — one per item of an implementer's "Decisions I made", logged when it reports, fix rounds included, and one per unlisted decision a reviewer finds (`— <why>` is then `found by review`). A fix spanning tasks logs `Decision (Phase N, round R)`. The holistic reviewer checks every line against the final code, so a later reversal shows there
+- `Decision (Task N): <what> — <why>` — one per item of an implementer's "Decisions I made", logged when it reports, fix rounds included, and one per unlisted decision a reviewer finds (`— <why>` is then `found by review`). A fix spanning tasks logs `Decision (Phase N, round R)`. The holistic reviewer checks every line against the final code, so a later reversal shows there.
 - `Not proven (Phase N): <ID>: <behavior>` — one per entry of the phase reviewer's Not proven list
 - `Deferred minor (Phase N): <one-line finding> (file:line)`
 - `Parked (Phase N): <finding> — Ruling: <why the code stands>`
@@ -229,7 +229,7 @@ Fill each implementer dispatch with its Verify command and the file-scoped lint/
 
 ```
 Dispatch implementer (./implementer-prompt.md)
-  → DONE: proceed
+  → DONE: log its Decisions I made, proceed
   → DONE_WITH_CONCERNS: read concerns, decide before proceeding
   → NEEDS_CONTEXT: provide missing info, re-dispatch
   → BLOCKED: assess (more context / better model / break down / escalate to user)
@@ -383,7 +383,7 @@ options:
   - "Stop here"                 → leave the branch as-is; continue later
 ```
 
-Recommend `feature-implement-review` when the holistic verdict is not READY TO MERGE, any criterion came back ⚠/❌, its Not proven list is not "none", a probe was waived, or the plan has 10+ tasks; otherwise `feature-complete`, since the holistic pass already checked every criterion. Execute the choice: invoke `/myspec:feature-implement-review`, the built-in `/code-review` (not a myspec skill; Claude Code only), `/myspec:feature-complete`, or stop and report the branch name. The two review passes are complementary, not exclusive (conformance vs. bugs) — after one finishes, offer this choice again so the user can run the other or proceed.
+Recommend `feature-implement-review` when the holistic verdict is not READY TO MERGE, any criterion came back ⚠/❌, its Not proven list names a criterion with no test at all or a waived probe (mocked-only coverage alone does not count), a probe was waived, or the plan has 10+ tasks; otherwise `feature-complete`, since the holistic pass already checked every criterion. Execute the choice: invoke `/myspec:feature-implement-review`, the built-in `/code-review` (not a myspec skill; Claude Code only), `/myspec:feature-complete`, or stop and report the branch name. The two review passes are complementary, not exclusive (conformance vs. bugs) — after one finishes, offer this choice again so the user can run the other or proceed.
 
 ## Model Selection
 

@@ -4,7 +4,7 @@ Dispatch after ALL phases complete. Reviews the entire implementation as a whole
 
 Before dispatching, write the full-feature review package to one file and substitute its path below: `review-diff.sh` over `BASE_SHA..HEAD` as `$STATE/feature-review.diff` (SKILL.md Step 5 gives the call; Step 4b says what its exit 2 means).
 
-`BASE_SHA` is the sha recorded in Step 2 before any implementation — never `HEAD~1`. Also paste in the plan's Execution Log entries (deferred minors and parked findings) — this reviewer is where they get triaged; a roll-up nobody reads is a silent discard. Paste the evidence already gathered too, so it can say what that evidence leaves unproven.
+`BASE_SHA` is the sha recorded in Step 2 before any implementation — never `HEAD~1`. Also paste in the plan's Execution Log entries (deferred minors and parked findings, plus every `Decision` line) — this reviewer is where they get triaged; a roll-up nobody reads is a silent discard. Paste the evidence already gathered too, so it can say what that evidence leaves unproven.
 
 ```
 Task tool (general-purpose):
@@ -55,11 +55,11 @@ Task tool (general-purpose):
     [Every `Decision (Task N)` and `Decision (Phase N, round R)` line from the Execution Log, verbatim]
 
     Each was checked only against its own phase. Check each against the
-    final code and the whole feature. Under Integration issues, report one a
-    later fix reversed as stale, not current. A later phase that relies on the opposite choice,
-    or a decision that contradicts an acceptance criterion, is an
-    integration issue. A phase Not proven line that later work did not close stays in
-    your Not proven list.
+    final code and the whole feature, and report under Integration issues:
+    a decision a later fix reversed (mark it stale), a later phase that
+    relies on the opposite choice, and a decision that contradicts an
+    acceptance criterion. A phase Not proven line that later work did not
+    close stays in your Not proven list.
 
     ## Deferred Minors and Parked Findings
 
