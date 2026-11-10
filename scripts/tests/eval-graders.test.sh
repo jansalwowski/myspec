@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Every deterministic grader in evals/ must be able to fail:
 # scripts/evals/check-graders.mjs runs each regex grader against its case's
-# grader-samples.json and each Skill grader against synthetic calls.
+# grader-samples.json, each other tool_used grader against its samples when
+# it has some, and each Skill grader against synthetic calls.
 # This suite runs it on the real evals/ and proves the checker itself
 # catches a grader with no samples and a grader that accepts its fail sample.
 #
@@ -22,8 +23,8 @@ out=$(node "$CHECK" "$SRC_ROOT/evals" 2>&1); rc=$?
 if [ "$rc" = 0 ]; then ok "real evals/: every deterministic grader passes its pass samples and fails its fail samples"; else nok "real evals/ grader checks" "$out"; fi
 
 # A synthetic suite with four broken cases.
-mkdir -p "$TMP/evals/no-samples/graders" "$TMP/evals/loose-regex/graders" "$TMP/evals/loose-skill/graders" "$TMP/evals/stale-sibling/graders" "$TMP/evals/judge-only/graders"
-for c in no-samples loose-regex loose-skill stale-sibling judge-only; do printf -- '---\ntags: [x]\n---\n\nprompt\n' > "$TMP/evals/$c/prompt.md"; done
+mkdir -p "$TMP/evals/loose-agent/graders" "$TMP/evals/no-samples/graders" "$TMP/evals/loose-regex/graders" "$TMP/evals/loose-skill/graders" "$TMP/evals/stale-sibling/graders" "$TMP/evals/judge-only/graders"
+for c in loose-agent no-samples loose-regex loose-skill stale-sibling judge-only; do printf -- '---\ntags: [x]\n---\n\nprompt\n' > "$TMP/evals/$c/prompt.md"; done
 printf -- "---\ntype: regex\npattern: 'REQ-004'\n---\n" > "$TMP/evals/no-samples/graders/flags.md"
 printf -- "---\ntype: regex\npattern: 'invoice-reminders'\n---\n" > "$TMP/evals/loose-regex/graders/entry.md"
 printf '{"entry": {"pass": ["- name: invoice-reminders"], "fail": ["- name: invoice-reminders-v2"]}}\n' > "$TMP/evals/loose-regex/grader-samples.json"
@@ -32,10 +33,14 @@ printf -- "---\ntype: tool_used\ntool: Skill\ninput_match: '\"skill\"\\\\s*:\\\\
 # grader still written against myspec:code-review guards nothing.
 printf -- "---\ntype: tool_used\ntool: Skill\ninput_match: '\"skill\"\\\\s*:\\\\s*\"myspec:code-review\"'\nmin: 0\nmax: 0\n---\n" > "$TMP/evals/stale-sibling/graders/not-code-review.md"
 printf -- "---\ntype: llm\n---\n\nPASS if good.\n" > "$TMP/evals/judge-only/graders/judge.md"
+# An Agent grader whose pattern also matches an implementer prompt ("Verify at phase review").
+printf -- "---\ntype: tool_used\ntool: Agent\ninput_match: '(?i:phase review)'\n---\n" > "$TMP/evals/loose-agent/graders/reviewer.md"
+printf '{"reviewer": {"pass": [[{"tool": "Agent", "input": {"prompt": "You are reviewing Phase 1."}}]], "fail": [[{"tool": "Agent", "input": {"prompt": "You are implementing Task 1. Verify at phase review: pytest"}}]]}}\n' > "$TMP/evals/loose-agent/grader-samples.json"
 
 out=$(node "$CHECK" "$TMP/evals" 2>&1); rc=$?
 [ "$rc" = 1 ] && ok "broken suite: exit 1" || nok "broken suite: exit 1 (got $rc)" "$out"
 for want in "no-samples/flags: grader-samples.json needs" \
+            "loose-agent/reviewer: accepts its fail sample" \
             "loose-regex/entry: accepts its fail sample" \
             "loose-skill/fired: accepts a skill that only shares the prefix" \
             "loose-skill/fired: accepts the built-in doctor skill" \
