@@ -1,6 +1,6 @@
 # Autopilot
 
-Opt-in mode for the feature pipeline skills whose `AskUserQuestion` gates otherwise block: `feature-spec-review`, `cross-spec-validation`, `feature-tech-spec-review`, `feature-plan`, `feature-implement`. One feature run can hit a dozen gates before any code exists (issue #98), most of them confirming the option the skill already recommends. Autopilot answers those gates for the user and still stops where their judgment is the point.
+Opt-in mode for the feature pipeline skills whose `AskUserQuestion` gates otherwise block: `feature-spec-review`, `cross-spec-validation`, `feature-tech-spec-review`, `feature-plan`, `feature-implement`, `feature-complete`. One feature run can hit a dozen gates before any code exists (issue #98), most of them confirming the option the skill already recommends. Autopilot answers those gates for the user and still stops where their judgment is the point.
 
 ## Turning it on
 
