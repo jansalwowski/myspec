@@ -1,0 +1,100 @@
+{
+  "dispatched-phase-reviewer": {
+    "pass": [
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Phase 1 review",
+            "subagent_type": "general-purpose",
+            "prompt": "You are reviewing Phase 1 of invoice-due-dates. Phase review: read the package at .claude/state/implement/invoice-due-dates/phase-1-review.diff. Plan checkboxes are controller-managed."
+          }
+        }
+      ]
+    ],
+    "fail": [
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Implement Task 1",
+            "subagent_type": "general-purpose",
+            "prompt": "You are implementing Task 1: due-date rules.\n\nReport one of DONE, DONE_WITH_CONCERNS, NEEDS_CONTEXT, BLOCKED."
+          }
+        }
+      ]
+    ]
+  },
+  "no-resume-read": {
+    "pass": [
+      [
+        {
+          "tool": "Read",
+          "input": {
+            "file_path": "/plugin/skills/feature-implement/phase-reviewer-prompt.md"
+          }
+        },
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Phase 1 review",
+            "subagent_type": "general-purpose",
+            "prompt": "You are reviewing Phase 1 of invoice-due-dates. Phase review: read the package at .claude/state/implement/invoice-due-dates/phase-1-review.diff. Plan checkboxes are controller-managed."
+          }
+        }
+      ]
+    ],
+    "fail": [
+      [
+        {
+          "tool": "Read",
+          "input": {
+            "file_path": "/plugin/skills/feature-implement/resume.md"
+          }
+        },
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Phase 1 review",
+            "subagent_type": "general-purpose",
+            "prompt": "You are reviewing Phase 1 of invoice-due-dates. Phase review: read the package at .claude/state/implement/invoice-due-dates/phase-1-review.diff. Plan checkboxes are controller-managed."
+          }
+        }
+      ]
+    ]
+  },
+  "no-implementer-redispatch": {
+    "pass": [
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Phase 1 review",
+            "subagent_type": "general-purpose",
+            "prompt": "You are reviewing Phase 1 of invoice-due-dates. Phase review: read the package at .claude/state/implement/invoice-due-dates/phase-1-review.diff. Plan checkboxes are controller-managed."
+          }
+        }
+      ]
+    ],
+    "fail": [
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Implement Task 1",
+            "subagent_type": "general-purpose",
+            "prompt": "You are implementing Task 1: due-date rules.\n\nReport one of DONE, DONE_WITH_CONCERNS, NEEDS_CONTEXT, BLOCKED."
+          }
+        },
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Phase 1 review",
+            "subagent_type": "general-purpose",
+            "prompt": "You are reviewing Phase 1 of invoice-due-dates. Phase review: read the package at .claude/state/implement/invoice-due-dates/phase-1-review.diff. Plan checkboxes are controller-managed."
+          }
+        }
+      ]
+    ]
+  }
+}
