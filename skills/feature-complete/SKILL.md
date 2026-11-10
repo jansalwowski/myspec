@@ -106,12 +106,24 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 
 1. Remove any leftover feature-implement orchestration marker (`"${CLAUDE_PLUGIN_ROOT}/lib/session-event.sh" implement stop`) — while it is set the Stop hook only warns on failing checks. Then read `.claude/verification.json` and run each required check. Export a fresh `MYSPEC_CHECK_RUN_ID` per check. When a check is killed or times out, run its `cleanup` (if it declares one) with the same `MYSPEC_CHECK_RUN_ID` before running that check again: a kill stops only the local client, and work it started in a container or on another host keeps running
 2. Run project documentation audit command if configured
-3. If all pass → continue to Phase 3
+3. If all pass → continue to Phase 2b
 
 **If failures detected:**
 - Analyze failures against files changed in this feature branch
 - **Failures are related to this feature → hard stop. Fix before proceeding.**
 - Failures appear unrelated (pre-existing or from parallel changes) → ask user to confirm before continuing
+
+### Phase 2b — Comprehension (optional)
+
+The user is about to merge code they have mostly seen as summaries and reports. When it later needs changing, someone has to explain why it is shaped this way. Offer one pass that has them explain it now. Under autopilot ([`_shared/autopilot.md`](../_shared/autopilot.md)) skip it without asking and say so in the summary.
+
+Ask once with `AskUserQuestion`: "Walk through the change and answer a few questions before merging?", options "Walk me through it" and "Skip", neither `(Recommended)`. On "Skip", go to Phase 3.
+
+1. **Walkthrough.** From `git diff <base-branch>...HEAD`, trace the main code paths: where each starts, the layers it crosses, where it writes state, each with file:line. Then list every `Ruling:`, `Decision (Task N):`, `Parked` and `Waiver` entry from the Execution Log of the plan archived in Phase 1 step 7, with its cost-if-wrong or reason. If the plan has no Execution Log, say so and cover code paths only.
+2. **Questions.** Ask three to five in one plain message (answers are in the user's words, so not `AskUserQuestion`). Pick the riskiest points from the walkthrough: what a ruling costs if wrong, where a transaction or ordering boundary sits and what breaks across it, why a default was chosen. Never quiz on names.
+3. **Feedback.** For each answer: right → one line confirming it. Wrong, partial or blank → the correct answer in a sentence and the file:line that shows it. No score, no retries.
+
+The pass is not a gate: continue to Phase 3 whatever the answers.
 
 ### Phase 3 — Branch Integration
 
@@ -205,6 +217,7 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
 
 - [ ] Phase 1 checklist fully satisfied (docs, manifest `complete`, plan archived, CHANGELOG row, tech-spec compacted)
 - [ ] All required checks from `.claude/verification.json` passed — or failures confirmed unrelated by the user
+- [ ] Comprehension pass offered once before Phase 3 (skipped under autopilot), and the merge never waited on its answers
 - [ ] Branch resolved per the user's Phase 3 choice (merged / PR created / kept / discarded after typed confirmation)
 - [ ] Worktree removed when options 1 or 4 were chosen and one existed — via the path recorded before any checkout
 - [ ] No `git worktree remove --force` and no `rm -rf`: a refused removal was surfaced with its file list and resolved by user choice
