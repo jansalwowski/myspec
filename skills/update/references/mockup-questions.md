@@ -7,4 +7,4 @@
 | 0 | Nothing to ask: report `up to date` under `Mockups`. |
 | 3 | Ask with AskUserQuestion, naming each `ask:` line's question number and what it writes. **Answer them (Recommended)**: run the `setup` skill's `mockup` blueprint for those question numbers alone; its *Question changes* section asks them, writes each answer where its row says, and stamps the file. **Not now**: leave the file; the next `/myspec:update` offers them again. **Don't ask again**: run the check with `--stamp`, which writes only the `myspec_version` line (the plugin's version), so these rows are never offered again. |
 | 4 | The file is gone: report "`mockup-design.md` missing, run `/myspec:setup mockup`" under `Mockups`. |
-| 2 or any other | Report its stderr under `Mockups` and go on. |
+| 2 or any other | Report `check failed: <its stderr>` under `Mockups` and go on; never report the file as up to date. |

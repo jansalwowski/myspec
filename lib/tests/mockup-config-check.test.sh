@@ -53,7 +53,7 @@ table() {           # table <rows…>: a blueprint whose Question changes table 
     printf '# Blueprint: Mockup\n\n## Question changes\n\nIntro.\n\n| Question | Writes | Since |\n|---|---|---|\n'
     printf '%s\n' "$@"
     # shellcheck disable=SC2016 # literal backticks in a markdown table
-    printf '\nThe *Writes* cell forms:\n\n| Form | Example | How |\n|---|---|---|\n| `## X (new section)` | ex | how |\n\n## Output Location\n| Q15 | Outside | 5.0.0 |\n'
+    printf '\n### Writes forms\n\nThe *Writes* cell forms:\n\n| Form | Example | How |\n|---|---|---|\n| `## X (new section)` | ex | how |\n\n## Output Location\n| Q15 | Outside | 5.0.0 |\n'
   } > "$BLUEPRINT"
 }
 
@@ -67,6 +67,9 @@ stamped_file "$PLUGIN_VERSION"
 OUTPUT=$(cd "$REPO" && node "$SCRIPT" 2>&1 </dev/null); STATUS=$?
 expect_status 0 "shipped blueprint parses (every row readable, forms table ignored)"
 expect_line '^mockup-config-check: 0 question\(s\) to ask$' "shipped table lists nothing newer than the plugin itself"
+printf '# Mockup Design Conventions\n' > "$FILE"
+OUTPUT=$(cd "$REPO" && node "$SCRIPT" 2>&1 </dev/null); STATUS=$?
+expect_line '^ask: Q2  writes: ## Component library \(replaces section\)  \(since 1\.21\.0\)$' "shipped Q2 row offered to an unstamped v1.20.0 file"
 
 # --- 2. only rows newer than the stamp, only the section's first table -------
 
@@ -98,21 +101,27 @@ stamped_file 3.8.5
 run
 expect_line '^ask: Q2  writes: ## Style baseline \(replaces section\)' "only the change after the stamp"
 
-# An escaped pipe stays in its cell.
+# Blank lines between rows are part of the table.
+table '| Q13 | ## Motion (new section) | 3.8.0 |' '' '| Q14 | ## Print (new section) | 3.9.0 |'
+stamped_file 3.7.0
+run
+expect_line '^ask: Q14 ' "a row after a blank line is read"
+
+# An escaped pipe is a literal pipe in its cell.
 # shellcheck disable=SC2016 # literal backticks in a markdown row
 table '| Q14 | `## Notes \| misc` (new section) | 3.9.0 |'
 run
 expect_status 3 "escaped pipe row readable"
 # shellcheck disable=SC2016 # literal backticks in the expected line
-expect_line '^ask: Q14  writes: `## Notes \\\| misc` \(new section\)' "escaped pipe kept in the Writes cell"
+expect_line '^ask: Q14  writes: `## Notes \| misc` \(new section\)' "escaped pipe unescaped in the Writes cell"
 
 # --- 3. a row it cannot read stops the check ---------------------------------
 
-for bad in '| Q13 | Motion | soon |' '| Q13 | Motion |' '| Q13 | Motion | 3.8.0 | note |' '| Thirteen | Motion | 3.8.0 |' '| Q13 |  | 3.8.0 |'; do
+for bad in 'Q13 | Motion | 3.8.0 |' 'Some prose after the table.' '| Q13 | Motion | soon |' '| Q13 | Motion |' '| Q13 | Motion | 3.8.0 | note |' '| Thirteen | Motion | 3.8.0 |' '| Q13 |  | 3.8.0 |'; do
   table "$bad"
   run
   expect_status 2 "unreadable row exits 2: $bad"
-  expect_line 'cannot read the ## Question changes row' "unreadable row named: $bad"
+  expect_line 'cannot read the ## Question changes line' "unreadable line named: $bad"
 done
 table '| Q13 | ## Motion (new section) | 3.8.0 |'
 
@@ -126,6 +135,12 @@ expect_line '^file: .*  myspec_version: unstamped \(counted as 1\.20\.0\)$' "uns
 printf '\xef\xbb\xbf---\r\nmyspec_version: 4.0.0\r\n---\r\n' > "$FILE"
 run
 expect_status 0 "BOM and CRLF frontmatter: stamp read"
+
+printf -- '\n\n---\nmyspec_version: 4.0.0\n---\n' > "$FILE"
+run
+expect_status 0 "leading blank lines before the frontmatter: stamp read"
+run --stamp
+if [ "$(grep -c '^---$' "$FILE")" = 2 ] && grep -q "^myspec_version: $PLUGIN_VERSION\$" "$FILE"; then ok; else fail "leading blank lines: block not edited in place: $(cat "$FILE")"; fi
 
 printf -- '---\ntitle: x\n---- note\nmyspec_version: 4.0.0\n---\n' > "$FILE"
 run
@@ -155,15 +170,19 @@ if [ "$(grep -c $'\r$' "$FILE")" = 3 ] && grep -q $'^myspec_version: .*\r$' "$FI
 printf -- '---\ntitle: x\nbody\n' > "$FILE"
 run --stamp
 expect_status 2 "an unclosed frontmatter is refused"
-expect_line 'never closes' "refusal named"
+expect_line 'no closed frontmatter block' "refusal named"
 expect_file "$(printf -- '---\ntitle: x\nbody')" "unclosed frontmatter left untouched"
 
 printf '## Always\nbody\n' > "$FILE"
 run --stamp
-expect_status 0 "a file without frontmatter can be stamped"
-expect_file "$(printf -- '---\ntitle: "Mockup Design Conventions"\nmyspec_version: %s\n---\n## Always\nbody' "$PLUGIN_VERSION")" "frontmatter block added, body kept"
-run
-expect_line "myspec_version: $PLUGIN_VERSION\$" "the added block is read back"
+expect_status 2 "a file without frontmatter is refused, never given a block"
+expect_file "$(printf '## Always\nbody')" "file without frontmatter untouched"
+
+# --root defaults to the nearest directory holding .myspec.json.
+stamped_file 3.7.0
+mkdir -p "$REPO/packages/preview"
+OUTPUT=$(cd "$REPO/packages/preview" && node "$SCRIPT" --blueprint "$BLUEPRINT" 2>&1 </dev/null); STATUS=$?
+expect_line '^file: ai/conventions/mockup-design\.md  myspec_version: 3\.7\.0$' "found from a subdirectory"
 
 # --- 6. errors -----------------------------------------------------------------
 

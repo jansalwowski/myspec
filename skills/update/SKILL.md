@@ -36,7 +36,7 @@ Resolve the plugin directory in this order:
 2. The directory containing this `SKILL.md`, walking up until a sibling `framework-files/manifest.json` is found (typically `…/myspec/{version}/framework-files/manifest.json`).
 3. If neither resolves, stop and tell the user: "Cannot locate plugin manifest. Verify the myspec plugin is installed."
 
-Compare versions. If they match, run Step 3.5 alone (rows an earlier update was told "Not now" are offered again) and print its `Mockups` line, then tell the user: "Already up to date (v{version}). No changes needed." and stop.
+Compare versions. If they match, run Step 3.5 alone (rows an earlier update was told "Not now" are offered again), then tell the user "Framework files already up to date (v{version})." followed by its `Mockups` line, and stop.
 
 **Upgrade base.** The manifest's `upgradeFrom` is the oldest version this plugin migrates from, and `upgradeChain` lists the earlier majors' floors (RELEASING.md, "Upgrade base"). Run `node "${CLAUDE_PLUGIN_ROOT}/lib/upgrade-route.mjs" --version "<project frameworkVersion>"` (empty when none is recorded). Exit 0 → continue. Exit 3 → stop and print its stdout verbatim: it names every release to update through, oldest first, so the user never learns the route one refusal at a time. Any other exit (2 is a bad manifest or version; 1 is Node itself failing, e.g. a missing script) → stop, tell the user the upgrade floor check could not run and quote its stderr. Never continue the update without a 0, and never print a non-3 output as the route.
 Every migration, rename and removal an older version needed ran in that update; this plugin no longer ships them.
@@ -225,7 +225,7 @@ Hooks: run from the plugin (hooks.json); {unwired N framework entries from .clau
 Memory: {indexes up to date / regenerated N, backfilled M hook: lines (K from heading — review) / skipped — no memory tree}
         doctor: {clean / N error(s), M warning(s) — see above}
 Setup:  {clean / N error(s), M warning(s) — see above / skipped — node not found}
-Mockups: {up to date / answered Q… / N question(s) offered, not now / declined Q… / file missing / omit without a `mockups` block}
+Mockups: {up to date / answered Q… / N question(s) offered, not now / declined Q… / file missing / check failed: <its stderr> / omit without a `mockups` block}
 
 Next: Run the `bootstrap` skill to verify the setup is still correct.
 ```
