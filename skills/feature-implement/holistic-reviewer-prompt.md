@@ -2,9 +2,9 @@
 
 Dispatch after ALL phases complete. Reviews the entire implementation as a whole.
 
-Before dispatching, write the full-feature review package to one file and substitute its path below: `review-diff.sh` over `BASE_SHA..HEAD` as `$STATE/feature-review.diff` (completion.md gives the call; SKILL.md Step 4b says what its exit 2 means).
+Before dispatching, write the full-feature review package to one file and substitute its path below: `review-diff.sh` over `BASE_SHA..HEAD` as `$STATE/feature-review.diff` (completion.md gives the call; SKILL.md Step 4 (b) gives the base rule and what its exit 2 means).
 
-`BASE_SHA` is the sha recorded in Step 2 before any implementation — never `HEAD~1`. Also paste in the plan's Execution Log entries (deferred minors and parked findings, plus every `Decision` line) — this reviewer is where they get triaged; a roll-up nobody reads is a silent discard. Paste the evidence already gathered too, so it can say what that evidence leaves unproven.
+Paste in what completion.md step 2 lists. This reviewer is where deferred minors and parked findings get triaged — a roll-up nobody reads is a silent discard — and the evidence lets it say what is left unproven.
 
 ```
 Task tool (general-purpose):

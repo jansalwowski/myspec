@@ -17,7 +17,6 @@ Task M, Task K as separate Agent calls in the same message → track per-task st
 - Tasks that share a file are not parallel: the worktree merge will conflict on the shared path. Run them sequentially.
 - Create the worktrees before marking the tasks `[~]`, so the uncommitted plan edit does not trip `create`'s dirty-tree warning — a warning that fires every time trains you to ignore the one that matters.
 - When a task regenerates output into a dependency directory (codegen into `node_modules`, `vendor`, `.venv`, …), pass `--no-symlink` and run the project's install in that worktree yourself before dispatch — implementers never install.
-- Never `cd` into a task worktree: reach it with `git -C <path>` and absolute paths; implementers do the `cd`. Why: `_shared/worktree-provisioning.md` (Controller stays out).
 
 ## Dual-stream fork
 
@@ -27,8 +26,8 @@ Dispatch both stream heads simultaneously, each in its own task worktree. Each s
 
 Merge worktrees back to the feature branch **one at a time** (`"<plugin lib>/task-worktree.sh" merge <feature>-t<N>`), then run the phase's full suite as Step 4a says. On conflict: attempt resolution (auto-generated files like lockfiles, codegen output → take union). Escalate to the user if truly stuck.
 
-After the merge the task worktrees are gone, so every fix implementer works from your checkout.
+The merge removes each task worktree; who works where in the fix loop: [fix-loop.md](fix-loop.md) (Who fixes).
 
 ## Resume
 
-A parallel task left `[~]` by a stopped session is re-executed from scratch. First clear its stale worktree with `"<plugin lib>/task-worktree.sh" discard <feature>-t<N>` (a no-op when none exists) — `create` refuses an existing slug, and the partial work never passed review.
+At startup only, a parallel task left `[~]` by a stopped session: [resume.md](resume.md) step 1.

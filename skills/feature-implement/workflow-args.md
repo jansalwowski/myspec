@@ -6,10 +6,10 @@ Read from SKILL.md Step 3, when Step 1 chose workflow mode. The plugin workflow 
 
 Workflow mode replaces Step 3's implementer dispatches for a phase and nothing else. For each phase:
 
-1. Record `PHASE_BASE`, create the parallel task worktrees, and mark the tasks `[~]`, exactly as in controller mode.
+1. Record `PHASE_BASE` (a concurrent phase records it at its merge instead, per parallel-phases.md), create the parallel task worktrees or a concurrent phase's worktree, and mark the tasks `[~]`, exactly as in controller mode.
 2. Start `Workflow({name: "myspec:implement-phase", args})`. Build `args` from the contract below, with `reviewDiff` set to `<plugin lib>/review-diff.sh` (the path SKILL.md resolves).
 3. Wait for the result, and dispatch nothing for that phase meanwhile.
-4. Act on each task's status per the table below, then continue at SKILL.md Step 4.
+4. Act on each task's status per the table below, then continue at SKILL.md Step 4 — for a concurrent phase, through parallel-phases.md's per-phase steps (base, merge, then 4a).
 
 A concurrent phase set launches one workflow per phase. If the call is refused, run that phase in controller mode and log a `Ruling:`.
 
@@ -22,7 +22,7 @@ Pass `args` as a JSON object, not as a JSON-encoded string.
 | `feature` | yes | the feature directory name |
 | `phase` | yes | the phase number |
 | `mode` | yes | `sequential` or `parallel`, from the phase's Mode column |
-| `phaseBase` | yes | the `PHASE_BASE` sha recorded before this launch |
+| `phaseBase` | yes | the sha the phase's tasks start from: `PHASE_BASE`, or for a concurrent phase the HEAD its worktree was created from (`git -C <phase worktree> merge-base HEAD <feature branch>` recovers it) |
 | `stateDir` | yes | `$STATE`, absolute. The verify agent writes each task's diff here as `phase-N-task-<id>-r<round>.diff` |
 | `planPath` | yes | the plan's repo-relative path. Its uncommitted checkbox edits are not counted as a dirty tree |
 | `models` | yes | `{cheap, mid, premium}`: the concrete model for each tier, chosen as in the Model Selection table |
@@ -38,7 +38,7 @@ Each `tasks` entry:
 | `id` | yes | the task number |
 | `name` | no | the task name |
 | `tier` | yes | `cheap`, `mid` or `premium`: the implementer tier, chosen as in controller mode |
-| `workdir` | yes | absolute path: your checkout for a sequential task, or the task worktree you created for a parallel one |
+| `workdir` | yes | absolute path: your checkout for a sequential task, the phase worktree for every task of a concurrent phase, or the task worktree you created for a parallel one |
 | `implementerPrompt` | yes | `implementer-prompt.md`'s prompt, filled exactly as for a controller-mode dispatch (task text, context, plan drift, isolation constraint, Verify command, commit trailers) |
 | `files` | yes | the paths from the task's `**Files:**` lines (Create, Modify, Test). A changed file outside them is a scope finding |
 | `verifyCommand` | yes | the task's `Verify at phase review:` command |

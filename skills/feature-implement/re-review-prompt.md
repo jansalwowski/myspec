@@ -1,8 +1,8 @@
 # Scoped Re-Review Prompt Template
 
-Dispatch after each fix round (SKILL.md Step 4d). The re-reviewer verifies the findings were addressed and checks the fix diff for new breakage. It is not a fresh phase review — the full review already happened. Dispatch a new re-reviewer every round, never resume the last one: a resumed reviewer carries every earlier round's transcript (one reached 251k tokens), and the rounds summary below carries all it needs from them.
+Dispatch after each fix round (SKILL.md Step 4d). The re-reviewer verifies the findings were addressed and checks the fix diff for new breakage. It is not a fresh phase review — the full review already happened. Dispatch it fresh each round (fix-loop.md says why).
 
-Build the fix-diff package first: `review-diff.sh` over `FIX_BASE..HEAD` as `$STATE/phase-N-fix-R.diff` (fix-loop.md gives the call; SKILL.md Step 4b says what its exit 2 means). `FIX_BASE` is the HEAD the previous review saw — never `HEAD~1`.
+Build the fix-diff package first: `review-diff.sh` over `FIX_BASE..HEAD` as `$STATE/phase-N-fix-R.diff` (fix-loop.md gives the call and defines `FIX_BASE`; SKILL.md Step 4 (b) gives the base rule and what its exit 2 means).
 
 ```
 Task tool (general-purpose):
@@ -106,8 +106,8 @@ Task tool (general-purpose):
 
 - `model` — REQUIRED tier per SKILL.md Model Selection; scoped re-reviews of small fix diffs take `cheap`-to-`mid`
 - `[Findings]` — the Critical/Important findings still open, copied verbatim from the previous review, one per bullet
-- `[Rounds summary]` — one paragraph: each earlier round's findings closed, the controller's rulings on them, and approaches already rejected; "none" in round 1
-- `[FIX_BASE sha]` — the HEAD the previous review saw (recorded by the controller before the fix dispatch)
+- `[Rounds summary]` — the paragraph fix-loop.md step 3 defines
+- `[FIX_BASE sha]` — the base fix-loop.md step 1 records
 - `[HEAD sha]` — current commit
 - `[PKG path]` — the file the controller wrote the fix-diff package to
 - Decisions This Round — the fix implementer's list; the controller logs each as a `Decision (Task N):` line, or `Decision (Phase N, round R)` for a fix spanning tasks
