@@ -97,6 +97,8 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 | `trigger-implement-review` | trigger, near-miss | "does what we built match the spec and plan?" → feature-implement-review, not the built-in /code-review or feature-verify |
 | `nearmiss-skill-verify` | trigger, near-miss | "check my SKILL.md for problems" → skill-verify, not the built-in /code-review or feature-spec-review |
 | `trigger-visualize-options` | trigger, near-miss | "show me both layouts side by side in my browser … let me click one" → visualize-options, not feature-mockup or brainstorm |
+| `trigger-brainstorm` | trigger, near-miss | "give me name options for the overdue-reminders feature, and which you'd argue against", with nothing to read → brainstorm, not feature-spec or feature-plan (#410) |
+| `brainstorm-visual-result` | behaviour | started with `/myspec:brainstorm` on a spike whose renders are images → offers Visual Buddy for them instead of only linking the files (#359); routing is `trigger-brainstorm`'s (#410) |
 | `visual-questions-auto` | trigger, rule | `visualQuestions: "auto"` with its rule installed → a spacing-scale choice goes through visualize-options |
 | `visual-questions-off` | near-miss, rule | the same prompt with the setting off → not visualize-options: the rule, not the skill description, does the routing |
 | `trigger-doctor` | trigger | "health check of our myspec setup" → doctor, not the feature audits |
