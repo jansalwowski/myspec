@@ -98,7 +98,7 @@ The skill asks once:
 
 User: Walk me through it.
 
-The skill traces the code paths from the branch diff — `StarButton` (`src/features/reports/StarButton.tsx:14`) → `useReportFavorites` (`src/features/reports/useReportFavorites.ts:22`) → `POST /api/reports/:id/favorite` (`src/api/reports/favorite.ts:9`) → `ReportFavoritesService.add` (`src/features/reports/favorites/service.ts:31`), which writes `report_favorites` — then lists the archived plan's Execution Log (it holds no `Decision`, `Waiver` or `Deferred minor` entries):
+The skill traces the code paths from the branch diff — `StarButton` (`src/features/reports/StarButton.tsx:14`) → `useReportFavorites` (`src/features/reports/useReportFavorites.ts:22`) → `POST /api/reports/:id/favorite` (`src/api/reports/favorite.ts:9`) → `ReportFavoritesService.add` (`src/features/reports/favorites/service.ts:31`), which writes `report_favorites` — then lists ADR-2 (optimistic update with rollback), added to the tech-spec in Phase 1, and the archived plan's Execution Log (it holds no `Decision`, `Waiver` or `Deferred minor` entries):
 
 > - `Ruling: unique index on (user_id, report_id); a duplicate star returns 200, not 409 — re-clicks are not errors — cost if wrong: a client that relies on 409 to detect a double star never sees it`
 > - `Parked (Phase 2): reviewer asked for a transaction around add + count — Ruling: the count is read-only and never written back`
