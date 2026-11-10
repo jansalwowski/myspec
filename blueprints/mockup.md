@@ -71,7 +71,7 @@ The file holds this project's answers only. Rules that hold in every project, su
 title: "Mockup Design Conventions"
 purpose: "Persistent design rules for ${aiDir}/features/{feature}/mockups/*. Loaded by the feature-mockup and feature-mockup-review skills at silent recon. Append-only — do not delete prior rules without user approval."
 updated: {YYYY-MM-DD}
-myspec_version: {frameworkVersion from .myspec.json at generation time — lets skills and /myspec:update see how old this generated config is}
+myspec_version: {written by Post-generation step 4: the plugin version whose questions were asked}
 ---
 
 # Mockup Design Conventions
@@ -142,18 +142,29 @@ myspec_version: {frameworkVersion from .myspec.json at generation time — lets 
 
 3. If Q2 named a component library AND the preview template was installed: wire the library into the preview app following the template README's "Wiring your design system" section. For an **external npm dependency** that means adding the package to the preview app's own `package.json` and aliasing it to the app's `node_modules/{package}` in `vite.config.ts` (the same pattern the template uses for `vue` — required because mockups live outside the app and strict hoisting only guarantees the package inside the app's own `node_modules`). For an **in-repo package**, alias its source entry point. In both cases mirror the alias in `tsconfig.json` `paths`, import the library stylesheet in `src/main.ts`, and set `LIBRARY_MODULES` / `LIBRARY_EXPORT_INDEX` in `scripts/audit.ts`.
 
+4. Stamp the file with the plugin version whose questions were just asked: run the plugin's `lib/mockup-config-check.mjs` with `--stamp` (the `setup` skill gives its resolved path). It writes only the frontmatter `myspec_version` line; `/myspec:update` reads it to offer only the questions this file was never asked (*Question changes*).
+
 ## Re-running
 
-The blueprint is re-runnable — `/myspec:setup mockup` prompts before overwriting. Re-run (or hand-edit the affected sections) after a design-system major upgrade (the `Configured against:` pin will have drifted). A myspec release that adds a question needs no re-run either: see *Added questions*. Re-running preserves nothing automatically — port the *Repeated user feedback* log forward manually; it is append-only project history.
+The blueprint is re-runnable — `/myspec:setup mockup` prompts before overwriting. Re-run (or hand-edit the affected sections) after a design-system major upgrade (the `Configured against:` pin will have drifted). A myspec release that adds or changes a question needs no re-run either: see *Question changes*. Re-running preserves nothing automatically — port the *Repeated user feedback* log forward manually; it is append-only project history.
 
-## Added questions
+## Question changes
 
-Every question above dates from v1.20.0, when this blueprint was added, unless a row below says otherwise. When a release adds a question, it adds a row here; never reuse a number. `/myspec:update` compares each row's version with the file's `myspec_version` (`lib/mockup-config-check.mjs`; an unstamped file counts as 1.20.0) and offers to ask only the newer questions.
+Every question above dates from v1.20.0, when this blueprint was added, unless a row below says otherwise. A release that adds a question, or changes what one asks or writes, adds a row here; never reuse a number. `/myspec:update` compares each row's version with the file's `myspec_version` (the plugin's `lib/mockup-config-check.mjs`; an unstamped file counts as 1.20.0) and offers only the newer rows. A row that cannot be read stops the check, so write every row in this form:
 
-| Question | Section | Since |
+| Question | Writes | Since |
 |---|---|---|
 
-**Asking only the added questions.** When `/myspec:update` passes question numbers, ask those alone, one at a time. Write each answer as its section in the Output Format's form, placed where the template puts it, and change no other line of the file. Finally run `node "${CLAUDE_PLUGIN_ROOT}/lib/mockup-config-check.mjs" --stamp <frameworkVersion>`. A "skip" answer writes the section header with "(none configured)".
+The *Writes* cell names where the answer lands, in one of these forms:
+
+| Form | Example | How to write the answer |
+|---|---|---|
+| `## <Section> (new section)` | `## Motion (new section)` | Insert the section in the Output Format's form, where the template places it |
+| `## <Section> (in section)` | `## Style baseline (in section)` | Add the answer to that existing section (a table row, a bullet), keeping its other lines; when the section is missing, write it first |
+| `## <Section> (replaces section)` | `## Detection patterns (replaces section)` | Show the section's current content with the question, and replace that content with the answer; a heading the row renames (`## New (replaces ## Old)`) is renamed too |
+| `.myspec.json mockups.<key>` | `.myspec.json mockups.commands.audit` | Set that key in the `mockups` block, nothing else |
+
+**Asking only the changed questions.** When `/myspec:update` passes question numbers, skip Recon and the overwrite question. Ask those questions alone, one at a time, and write each answer as its row's *Writes* cell says; change no other line of the file and no other `.myspec.json` key. A "skip" answer to a new section writes its header with "(none configured)"; to any other form it writes nothing. Finally stamp the file (*Post-generation*, step 4).
 
 ## Output Location
 - `${aiDir}/conventions/mockup-design.md`

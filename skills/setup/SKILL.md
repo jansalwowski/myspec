@@ -44,11 +44,13 @@ Check if the output file already exists.
 
 `visual-questions` is a toggle, not a generated file: skip the overwrite question; its discovery question covers it.
 
-`mockup` run with question numbers (`/myspec:update` Step 3.5 passes the ones its *Added questions* table lists): skip the overwrite question and follow the blueprint's *Asking only the added questions* procedure instead of Steps 3 and 4. The file stays; only the new sections and its stamp are written.
+`mockup` run with question numbers (`/myspec:update` Step 3.5 passes the ones its *Question changes* table lists): skip the overwrite question and follow the blueprint's *Asking only the changed questions* procedure instead of Steps 3 and 4. The file stays; only what those rows write and its stamp change.
 
 ### Step 3: Execute Blueprint
 
 Read the blueprint file from the plugin's `blueprints/{name}.md`.
+
+A blueprint names plugin files repo-relative (`lib/mockup-config-check.mjs`, `templates/…`): nothing substitutes `${CLAUDE_PLUGIN_ROOT}` in a file you Read, and the Bash tool does not export it. Run and copy them from `${CLAUDE_PLUGIN_ROOT}/<path>`, resolved here.
 
 Follow the blueprint's **Discovery Questions** exactly — ask one at a time, wait for each answer.
 

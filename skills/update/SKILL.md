@@ -36,7 +36,7 @@ Resolve the plugin directory in this order:
 2. The directory containing this `SKILL.md`, walking up until a sibling `framework-files/manifest.json` is found (typically `…/myspec/{version}/framework-files/manifest.json`).
 3. If neither resolves, stop and tell the user: "Cannot locate plugin manifest. Verify the myspec plugin is installed."
 
-Compare versions. If they match, run Step 3.5 alone (questions an earlier update was told "Not now" are offered again) and print its `Mockups` line, then tell the user: "Already up to date (v{version}). No changes needed." and stop.
+Compare versions. If they match, run Step 3.5 alone (rows an earlier update was told "Not now" are offered again) and print its `Mockups` line, then tell the user: "Already up to date (v{version}). No changes needed." and stop.
 
 **Upgrade base.** The manifest's `upgradeFrom` is the oldest version this plugin migrates from, and `upgradeChain` lists the earlier majors' floors (RELEASING.md, "Upgrade base"). Run `node "${CLAUDE_PLUGIN_ROOT}/lib/upgrade-route.mjs" --version "<project frameworkVersion>"` (empty when none is recorded). Exit 0 → continue. Exit 3 → stop and print its stdout verbatim: it names every release to update through, oldest first, so the user never learns the route one refusal at a time. Any other exit (2 is a bad manifest or version; 1 is Node itself failing, e.g. a missing script) → stop, tell the user the upgrade floor check could not run and quote its stderr. Never continue the update without a 0, and never print a non-3 output as the route.
 Every migration, rename and removal an older version needed ran in that update; this plugin no longer ships them.
@@ -127,21 +127,21 @@ node "${CLAUDE_PLUGIN_ROOT}/lib/setup-doctor.mjs" wiring
 
 **State gitignore.** Ensure `.gitignore` contains a `.claude/state/` line; append it if missing (create `.gitignore` if absent). The hooks write per-checkout state there (session logs, isolation decisions, field metrics in `.claude/state/metrics/`, the retired copies under `retired-3.0/`), and the metrics recorder refuses to write while the line is missing.
 
-### Step 3.5: Offer new mockup questions
+### Step 3.5: Offer new or changed mockup questions
 
-Only when `.myspec.json` has a `mockups` block. `/myspec:setup mockup` generates `{aiDir}/conventions/mockup-design.md` once, from the answers to its questions, and the project owns it. A release that adds a question lists it in the blueprint's *Added questions* table, and the project has never been asked it. Run from the project root:
+Only when `.myspec.json` has a `mockups` block. `/myspec:setup mockup` generates `{aiDir}/conventions/mockup-design.md` once, from the answers to its questions, and the project owns it. A release that adds a question, or changes what one asks or writes, lists it in the blueprint's *Question changes* table, and the project has never been asked it in that form. Run from the project root:
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/lib/mockup-config-check.mjs"
 ```
 
-It compares each added question's version with the file's `myspec_version` and never reads the rest of the file. Act on its exit status:
+It compares each row's version with the file's `myspec_version` and never reads the rest of the file. Act on its exit status:
 
 - **0** → nothing to ask; report `up to date` under `Mockups`.
-- **3** → ask with AskUserQuestion, naming each `ask:` line's question number and section:
-  - **Answer the new questions (Recommended)**: run the `setup` skill's `mockup` blueprint for those question numbers alone (its *Added questions* section: it asks them, writes each section, and stamps the file).
+- **3** → ask with AskUserQuestion, naming each `ask:` line's question number and what it writes:
+  - **Answer them (Recommended)**: run the `setup` skill's `mockup` blueprint for those question numbers alone (its *Question changes* section: it asks them, writes each answer where its row says, and stamps the file).
   - **Not now**: leave the file; the next `/myspec:update` offers them again.
-  - **Don't ask again**: run it with `--stamp <newVersion>`, which writes only the `myspec_version` line, so these questions are never offered again.
+  - **Don't ask again**: run it with `--stamp`, which writes only the `myspec_version` line (the plugin's version), so these rows are never offered again.
 - **4** → the file is gone; report "`mockup-design.md` missing, run `/myspec:setup mockup`" under `Mockups`.
 - **2 or any other status** → report its stderr under `Mockups` and go on; it never blocks the update.
 
@@ -249,7 +249,7 @@ Next: Run the `bootstrap` skill to verify the setup is still correct.
 - **Never copy a hook or lib helper into the project.** Since 3.0 they run from the plugin, and a copy under `.claude/` is dead weight at best and a second, stale run of a gate at worst (a copy is moved to `.claude/state/retired-3.0/`, never written). Only the `files` and `rules` blocks exist, and both carry `${aiDir}` as a placeholder to substitute.
 - Never overwrite a file whose `frameworkFiles[...].pinned` is set, and never add or clear a pin yourself — except the `hooks/*` and `lib/*` pins the `3.0.0-plugin-hooks` migration drops, which it reports
 - Never overwrite content after `<!-- myspec:framework-end -->` in a `marker-merge` file
-- Never modify files not listed in `manifest.json`, with five exceptions this skill owns: the `.myspec.json` `visualQuestions` key (Step 1.6, through the `visual-questions` blueprint), the sections and `myspec_version` stamp of `{aiDir}/conventions/mockup-design.md` when the user chose to answer or decline its new questions (Step 3.5), the `hooks` key of `.claude/settings.json` (framework entries removed, nothing added), `.claude/state/retired-3.0/` (where the migration moves the retired copies), and the frontmatter `status:` line of feature docs the `3.1.0-doc-status` migration rewrites
+- Never modify files not listed in `manifest.json`, with five exceptions this skill owns: the `.myspec.json` `visualQuestions` key (Step 1.6, through the `visual-questions` blueprint), what the `mockup` blueprint's *Question changes* rows write (sections of `{aiDir}/conventions/mockup-design.md`, `.myspec.json` `mockups` keys) and that file's `myspec_version` stamp, when the user chose to answer or decline them (Step 3.5), the `hooks` key of `.claude/settings.json` (framework entries removed, nothing added), `.claude/state/retired-3.0/` (where the migration moves the retired copies), and the frontmatter `status:` line of feature docs the `3.1.0-doc-status` migration rewrites
 - Never update `.myspec.json` project fields (`name`, `techStack`) or `aiDir`. Keys a migration retires are deleted only by it: `codeReview` by `3.0.0-code-review`, `reuseAudit` by `3.0.0-reuse-audit`, `project.description` by `3.0.0-schema-v2`. A pin's `hash` and `upstreamHash` are written only by `pin-reconcile.mjs` (`--backfill`, `--record`)
 - Never run a migration whose id is already in `.myspec.json` `migrations`; record each one the moment it completes
 - If a source file is missing from the plugin, skip it and warn the user — do not delete the destination
@@ -279,6 +279,6 @@ After running the skill:
 - [ ] `setup-doctor.mjs wiring` run from the plugin: `hook-wired-locally` and `hook-copy-retired` gone, nothing added to `settings.json`, project-hook findings and `settings.local.json` entries reported with their fix line; `.gitignore` has a `.claude/state/` line
 - [ ] Full `setup-doctor.mjs` run in Step 3.7, before the Step 5 version stamp; every `install`-, `schema`- and `features`-group error resolved or reported
 - [ ] `3.1.0-doc-status` (first run only): `doc-status-normalize.mjs` run, every rewritten doc listed under `Migrations`, every off-vocabulary value reported and left alone
-- [ ] No file outside `manifest.json` was modified, except `settings.json` `hooks` (removals only), the `mockup-design.md` sections and stamp the user chose to answer or decline, `.claude/state/retired-3.0/`, and the doc `status:` lines `3.1.0-doc-status` rewrote
+- [ ] No file outside `manifest.json` was modified, except `settings.json` `hooks` (removals only), what the *Question changes* rows the user answered write, the `mockup-design.md` stamp, `.claude/state/retired-3.0/`, and the doc `status:` lines `3.1.0-doc-status` rewrote
 - [ ] Summary printed with `Updated files`, `Migrations`, `Removed`, `Preserved` and `Hooks` lines
-- [ ] `mockup-config-check.mjs` run when a `mockups` block exists, also when the versions matched; on exit 3 the user chose answer / not now / don't ask again, and `mockup-design.md` changed only through the blueprint's *Added questions* procedure or `--stamp`
+- [ ] `mockup-config-check.mjs` run when a `mockups` block exists, also when the versions matched; on exit 3 the user chose answer / not now / don't ask again, and `mockup-design.md` and the `mockups` block changed only through the blueprint's *Question changes* procedure or `--stamp`

@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Tests for lib/mockup-config-check.mjs: update's list of the mockup blueprint
 # questions a generated ${aiDir}/conventions/mockup-design.md was never asked
-# (rows of the blueprint's *Added questions* table newer than the file's
-# myspec_version stamp), and --stamp, which writes only that frontmatter line.
+# in their current form (rows of the blueprint's *Question changes* table
+# newer than the file's myspec_version stamp), and --stamp, which writes only
+# that frontmatter line, with the plugin's own version.
 #
 # Usage: mockup-config-check.test.sh [path-to-script]
 
@@ -11,6 +12,7 @@ set -uo pipefail
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 SCRIPT="${1:-$HERE/../mockup-config-check.mjs}"
 REAL_BLUEPRINT="$HERE/../../blueprints/mockup.md"
+PLUGIN_VERSION=$(sed -n 's/.*"frameworkVersion": *"\([^"]*\)".*/\1/p' "$HERE/../../framework-files/manifest.json" | head -1)
 
 if [ ! -f "$SCRIPT" ]; then
   echo "FATAL: script not found: $SCRIPT" >&2
@@ -46,52 +48,56 @@ run() { OUTPUT=$(cd "$REPO" && node "$SCRIPT" --blueprint "$BLUEPRINT" "$@" 2>&1
 mkdir -p "$(dirname "$FILE")"
 printf '{"aiDir":"ai"}\n' > "$REPO/.myspec.json"
 
-cat > "$BLUEPRINT" <<'MD'
-# Blueprint: Mockup
-
-## Added questions
-
-| Question | Section | Since |
-|---|---|---|
-| Q13 | Motion | 3.8.0 |
-| Q14 | Print layouts | v4.0.0 |
-
-**Asking only the added questions.** Not a row: | Q99 | Nope | 9.9.9 |
-
-## Output Location
-| Q15 | Outside the table | 5.0.0 |
-MD
+table() {           # table <rows…>: a blueprint whose Question changes table holds the rows
+  {
+    printf '# Blueprint: Mockup\n\n## Question changes\n\nIntro.\n\n| Question | Writes | Since |\n|---|---|---|\n'
+    printf '%s\n' "$@"
+    # shellcheck disable=SC2016 # literal backticks in a markdown table
+    printf '\nThe *Writes* cell forms:\n\n| Form | Example | How |\n|---|---|---|\n| `## X (new section)` | ex | how |\n\n## Output Location\n| Q15 | Outside | 5.0.0 |\n'
+  } > "$BLUEPRINT"
+}
 
 stamped_file() { printf -- '---\ntitle: "Mockup Design Conventions"\nmyspec_version: %s\n---\n\n## Always\n| Rule | Detail |\n' "$1" > "$FILE"; }
 
-# --- 1. the real blueprint parses, and lists nothing for a current file -----
+table '| Q13 | ## Motion (new section) | 3.8.0 |' '| 2 | ## Style baseline (in section) | v4.0 |'
+
+# --- 1. the shipped blueprint parses -----------------------------------------
 
 stamped_file 3.6.0
 OUTPUT=$(cd "$REPO" && node "$SCRIPT" 2>&1 </dev/null); STATUS=$?
-expect_status 0 "shipped blueprint parses (default --blueprint)"
+expect_status 0 "shipped blueprint parses (every row readable, forms table ignored)"
 expect_line '^mockup-config-check: 0 question\(s\) to ask$' "shipped table lists nothing newer than 3.6.0"
 
-# --- 2. only rows newer than the stamp, only inside the table --------------
+# --- 2. only rows newer than the stamp, only the section's first table -------
 
 stamped_file 3.7.0
 run
-expect_status 3 "newer questions exit 3"
+expect_status 3 "newer rows exit 3"
 expect_line '^file: ai/conventions/mockup-design\.md  myspec_version: 3\.7\.0$' "file and stamp"
-expect_line '^ask: Q13  ## Motion  \(since 3\.8\.0\)$' "Q13 offered"
-expect_line '^ask: Q14  ## Print layouts  \(since 4\.0\.0\)$' "v-prefixed version read"
-expect_no_line 'Q99|Q15' "rows outside the table ignored"
+expect_line '^ask: Q13  writes: ## Motion \(new section\)  \(since 3\.8\.0\)$' "Q13 offered"
+expect_line '^ask: Q2  writes: ## Style baseline \(in section\)  \(since 4\.0\.0\)$' "bare number and loose v4.0 read"
+expect_no_line 'Q15|Form|ask: Q?X' "forms table and rows outside the section ignored"
 expect_line '^mockup-config-check: 2 question\(s\) to ask$' "summary"
 
 stamped_file 3.8.0
 run
-expect_line '^ask: Q14 ' "Q14 still newer than 3.8.0"
-expect_no_line '^ask: Q13 ' "Q13 not newer than its own version"
+expect_no_line '^ask: Q13 ' "a row is not newer than its own version"
 
-stamped_file '"v4.0"'
+stamped_file '"v4.0" # quoted, commented'
 run
-expect_status 0 "quoted loose stamp v4.0 reads as 4.0.0"
+expect_status 0 "quoted loose stamp with a comment reads as 4.0.0"
 
-# --- 3. unstamped and odd files ----------------------------------------------
+# --- 3. a row it cannot read stops the check ---------------------------------
+
+for bad in '| Q13 | Motion | soon |' '| Q13 | Motion |' '| Q13 | Motion | 3.8.0 | note |' '| Thirteen | Motion | 3.8.0 |' '| Q13 |  | 3.8.0 |'; do
+  table "$bad"
+  run
+  expect_status 2 "unreadable row exits 2: $bad"
+  expect_line 'cannot read the ## Question changes row' "unreadable row named: $bad"
+done
+table '| Q13 | ## Motion (new section) | 3.8.0 |'
+
+# --- 4. unstamped and odd files ----------------------------------------------
 
 printf '# Mockup Design Conventions\n' > "$FILE"
 run
@@ -102,40 +108,47 @@ printf '\xef\xbb\xbf---\r\nmyspec_version: 4.0.0\r\n---\r\n' > "$FILE"
 run
 expect_status 0 "BOM and CRLF frontmatter: stamp read"
 
-# --- 4. --stamp writes only the stamp line -----------------------------------
+printf -- '---\ntitle: x\n---- note\nmyspec_version: 4.0.0\n---\n' > "$FILE"
+run
+expect_status 0 "a ---- line inside the frontmatter does not end it"
+printf -- '---\ntitle: x\n--- \n\nbody\n\n---\nmore\n' > "$FILE"
+run --stamp
+if [ "$(sed -n 3p "$FILE")" = "myspec_version: $PLUGIN_VERSION" ] && [ "$(sed -n 4p "$FILE")" = '--- ' ]; then ok; else fail "stamp not inside a frontmatter closed by '--- ': $(cat "$FILE")"; fi
+
+# --- 5. --stamp writes only the stamp line, with the plugin's version --------
 
 stamped_file 3.0.0
 BODY=$(tail -n +4 "$FILE")
-run --stamp 3.9.0
+run --stamp
 expect_status 0 "stamp exits 0"
-expect_line '^stamped: ai/conventions/mockup-design\.md  myspec_version: 3\.9\.0$' "stamp reported"
-if [ "$(sed -n 3p "$FILE")" = 'myspec_version: 3.9.0' ] && [ "$(tail -n +4 "$FILE")" = "$BODY" ]; then ok; else fail "stamp touched more than its line: $(cat "$FILE")"; fi
-run
-expect_line '^ask: Q14 ' "after stamping 3.9.0 only Q14 remains"
+expect_line "^stamped: ai/conventions/mockup-design\.md  myspec_version: $PLUGIN_VERSION\$" "stamped with the plugin manifest version"
+if [ "$(sed -n 3p "$FILE")" = "myspec_version: $PLUGIN_VERSION" ] && [ "$(tail -n +4 "$FILE")" = "$BODY" ]; then ok; else fail "stamp touched more than its line: $(cat "$FILE")"; fi
 
 printf -- '---\ntitle: x\n---\nbody\n' > "$FILE"
-run --stamp 3.9.0
-expect_file "$(printf -- '---\ntitle: x\nmyspec_version: 3.9.0\n---\nbody')" "missing stamp key added before the closing ---"
+run --stamp
+expect_file "$(printf -- '---\ntitle: x\nmyspec_version: %s\n---\nbody' "$PLUGIN_VERSION")" "missing stamp key added before the closing ---"
 
 printf '\xef\xbb\xbf---\r\nmyspec_version: 3.0.0\r\n---\r\nbody\n' > "$FILE"
-run --stamp 3.9.0
+run --stamp
 if [ "$(head -c 3 "$FILE" | od -An -tx1 | tr -d ' ')" = efbbbf ]; then ok; else fail "BOM dropped"; fi
-if [ "$(grep -c $'\r$' "$FILE")" = 3 ] && grep -q $'^myspec_version: 3.9.0\r$' "$FILE"; then ok; else fail "CRLF endings not kept: $(od -c "$FILE" | head -3)"; fi
+if [ "$(grep -c $'\r$' "$FILE")" = 3 ] && grep -q $'^myspec_version: .*\r$' "$FILE"; then ok; else fail "CRLF endings not kept"; fi
 
-printf 'no frontmatter\n' > "$FILE"
-run --stamp 3.9.0
-expect_status 2 "nothing to stamp exits 2"
-expect_file 'no frontmatter' "file without frontmatter untouched"
+printf '## Always\nbody\n' > "$FILE"
+run --stamp
+expect_status 0 "a file without frontmatter can be stamped"
+expect_file "$(printf -- '---\ntitle: "Mockup Design Conventions"\nmyspec_version: %s\n---\n## Always\nbody' "$PLUGIN_VERSION")" "frontmatter block added, body kept"
+run
+expect_line "myspec_version: $PLUGIN_VERSION\$" "the added block is read back"
 
-# --- 5. errors -----------------------------------------------------------------
+# --- 6. errors -----------------------------------------------------------------
 
 stamped_file 3.0.0
-run --stamp nonsense
-expect_status 2 "bad stamp version exits 2"
+run --stamp 3.9.0
+expect_status 2 "--stamp takes no value"
 run --bogus x
 expect_status 2 "unknown flag exits 2"
 chmod 444 "$FILE"
-run --stamp 3.9.0
+run --stamp
 chmod 644 "$FILE"
 expect_status 2 "read-only file exits 2, not a crash"
 expect_line '^mockup-config-check: .*(EACCES|permission denied)' "write error named"
@@ -152,7 +165,7 @@ printf -- '---\nmyspec_version: 4.0.0\n---\n' > "$REPO/.ai/conventions/mockup-de
 run
 expect_line '^file: \.ai/conventions/mockup-design\.md ' "empty aiDir resolves to the schema default"
 
-grep -q '^## Added questions$' "$REAL_BLUEPRINT" && ok || fail "shipped blueprint lost its Added questions heading"
+grep -q '^## Question changes$' "$REAL_BLUEPRINT" && ok || fail "shipped blueprint lost its Question changes heading"
 
 printf '\nmockup-config-check: %d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
