@@ -2,7 +2,7 @@
 
 Dispatch after each fix round (SKILL.md Step 4d). The re-reviewer verifies the findings were addressed and checks the fix diff for new breakage. It is not a fresh phase review — the full review already happened. Dispatch it fresh each round (fix-loop.md says why).
 
-Build the fix-diff package first: `review-diff.sh` over `FIX_BASE..HEAD` as `$STATE/phase-N-fix-R.diff` (fix-loop.md gives the call and defines `FIX_BASE`; SKILL.md Step 4b gives the base rule and what its exit 2 means).
+Build the fix-diff package first: `review-diff.sh` over `FIX_BASE..HEAD` as `$STATE/phase-N-fix-R.diff` (fix-loop.md gives the call and defines `FIX_BASE`; SKILL.md Step 4 (b) gives the base rule and what its exit 2 means).
 
 ```
 Task tool (general-purpose):

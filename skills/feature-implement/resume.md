@@ -1,6 +1,6 @@
 # Resuming a Run
 
-Read from SKILL.md Step 1 (Resume), at startup only; the trigger and the mid-run rule are there. Mid-run, a `[~]` task's worktree is live. `<plugin lib>` is the path SKILL.md resolves.
+Read from SKILL.md Step 1 (Resume), at startup only, on the trigger SKILL.md gives. Never apply it mid-run: a `[~]` task there is one this session dispatched, and its worktree is live. `<plugin lib>` is the path SKILL.md resolves.
 
 1. **Scan every task checkbox.**
    - `[x]` = already done — skip entirely

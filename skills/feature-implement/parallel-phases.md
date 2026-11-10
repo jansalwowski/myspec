@@ -24,7 +24,7 @@ Log the decision once per set, before the first dispatch: `Ruling: Phases 3 and 
   2. Run `task-worktree.sh merge <feature>-p<N>`. A conflict means the disjointness proof was wrong. Resolve it as parallel-tasks.md resolves a task merge, and log a `Ruling:` naming the shared file.
   3. Continue with Step 4a's full suite, then 4b to 4f, exactly as for a serial phase; [fix-loop.md](fix-loop.md) says where fixes run.
 - The other phase's implementers keep working in their worktree during this. Its merge waits until the current phase is marked complete (4e), so each review package and each fix loop covers exactly one phase.
-- Resume: [resume.md](resume.md) step 1.
+- Resume, at startup only: [resume.md](resume.md) step 1. Mid-run, a `[~]` task is one you dispatched: leave it.
 
 ## Opting in and out
 

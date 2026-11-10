@@ -2,7 +2,7 @@
 
 Dispatch after ALL phases complete. Reviews the entire implementation as a whole.
 
-Before dispatching, write the full-feature review package to one file and substitute its path below: `review-diff.sh` over `BASE_SHA..HEAD` as `$STATE/feature-review.diff` (completion.md gives the call; SKILL.md Step 4b gives the base rule and what its exit 2 means).
+Before dispatching, write the full-feature review package to one file and substitute its path below: `review-diff.sh` over `BASE_SHA..HEAD` as `$STATE/feature-review.diff` (completion.md gives the call; SKILL.md Step 4 (b) gives the base rule and what its exit 2 means).
 
 Paste in what completion.md step 2 lists. This reviewer is where deferred minors and parked findings get triaged — a roll-up nobody reads is a silent discard — and the evidence lets it say what is left unproven.
 
