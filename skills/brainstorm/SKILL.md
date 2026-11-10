@@ -99,16 +99,16 @@ A browser tab beside the conversation for showing mockups, diagrams, graphs, sid
 - options that would look different from each other: layouts, screens, UI states, visual directions
 - a structure that is easier to see than read: architecture, data flow, a state machine, a sequence, entity relationships, a timeline
 - numbers whose shape matters: a comparison of measurements, a distribution, a trend
-- a **visual result** you just produced: an image, a render, a chart, a screenshot, a before/after. This holds after the brainstorm pivots into an experiment or spike too
+- a **visual result** on the table: an image, a render, a chart, a screenshot, a before/after — one you just produced, or one the user brought or pointed you at. You reading the file is not the user seeing it, and describing it in words is not showing it. This holds after the brainstorm pivots into an experiment or spike too
 
 A question *about* a UI topic is not automatically visual: "what kind of wizard?" is words; "which of these wizard layouts?" is visual.
 
 The offer, as its own message:
 > "This next part might be easier if I show you: I can put mockups, diagrams and comparisons in a browser tab (Visual Buddy) as we go. It uses more tokens. Want me to? I'll open it for you."
 
-**The offer MUST be its own message.** Only the offer, no other content; hold the rest for the next message. Wait for the answer. Accepted: start the server with `--open` so their browser opens on the first screen. Declined: continue text-only and don't offer again unless they raise it, or a visual result comes up (offer once more then, for that result only).
+**The offer MUST be its own message.** Only the offer, no other content; hold the rest for the next message. Wait for the answer. Accepted: start the server with `--open` so their browser opens on the first screen. Declined: continue text-only and don't offer again unless they raise it, or you produce a visual result (offer once more then, for that result only). An image the user mentions after declining does not reopen the offer.
 
-**Show, don't link.** Once Visual Buddy is running, never hand over a visual result as a file path: copy the file next to the screens and push a screen that shows it (see "Showing results" in the guide). The path can follow in one line, for the record.
+**Show, don't link or describe.** Once Visual Buddy is running, never hand over a visual result as a file path or a description in words: copy the file next to the screens and push a screen that shows it (see "Showing results" in the guide). The path can follow in one line, for the record.
 
 **Per-step decision.** Even after the user accepts, decide for each step whether to use the browser or the terminal. The test: **would the user understand this better by seeing it than reading it?** Requirements, conceptual choices, trade-off lists and scope decisions stay in the terminal.
 
@@ -128,4 +128,4 @@ Once they accept, read the guide before proceeding: [visual-buddy.md](visual-bud
 - [ ] Checked scope — flagged multi-area topics before diving in
 - [ ] Offered 2-3 approaches with trade-offs for key decisions
 - [ ] Asked what to do with results only at the end
-- [ ] Every visual result was shown in Visual Buddy, or Visual Buddy was offered for it, never only linked as a file path
+- [ ] Every visual result was shown in Visual Buddy, or Visual Buddy was offered for it, never only linked as a file path or described in words

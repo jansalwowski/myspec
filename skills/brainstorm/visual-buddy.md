@@ -14,7 +14,7 @@ Decide per-question, not per-session. The test: **would the user understand this
 - **Design polish** — when the question is about look and feel, spacing, visual hierarchy
 - **Spatial relationships** — state machines, flowcharts, sequences, entity relationships rendered as diagrams
 - **Graphs** — measurements, distributions, trends, before/after numbers, where the shape matters more than the values
-- **Visual results** — an image, render, chart, screenshot or comparison sheet you just produced (see "Showing results")
+- **Visual results** — an image, render, chart, screenshot or comparison sheet you just produced, or one the user brought or pointed you at (see "Showing results")
 
 **Use the terminal** when the content is text or tabular:
 
@@ -255,13 +255,13 @@ For a graph, draw bars or points in SVG from the real numbers you measured, labe
 
 ## Showing results
 
-When you produce something visual (an image, a render, a chart, a screenshot, a before/after), show it instead of linking it:
+When something visual is on the table (an image, a render, a chart, a screenshot, a before/after), show it instead of linking or describing it. That covers what you produced and what the user brought or pointed you at: you reading a file is not the user seeing it. To show one:
 
 1. Copy the file into `screen_dir` under a new name (`cp out/blur-v2.png <screen_dir>/blur-v2.png`). Only `.html` files become screens, so the copy does not replace what is on screen.
 2. Push a screen that references it by `/files/<name>`: `<img src="/files/blur-v2.png" alt="…" style="max-width:100%">`. For a comparison, put the images in a `.split`, each with a one-line caption saying what differs.
 3. Tell the user what is on screen in one line, and keep the file path for the record.
 
-If Visual Buddy is not running and was never offered, offer it now, as its own message (brainstorm's offer text). If the user declined earlier, offer once more for this result; a second no stands for the session.
+If Visual Buddy is not running and was never offered, offer it now, as its own message (brainstorm's offer text). If the user declined earlier, offer once more for a result you produced; a second no stands for the session. An image the user mentions after declining does not reopen the offer.
 
 ## Decision screens
 
