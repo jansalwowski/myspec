@@ -99,7 +99,7 @@ A browser tab beside the conversation for showing mockups, diagrams, graphs, sid
 - options that would look different from each other: layouts, screens, UI states, visual directions
 - a structure that is easier to see than read: architecture, data flow, a state machine, a sequence, entity relationships, a timeline
 - numbers whose shape matters: a comparison of measurements, a distribution, a trend
-- a **visual result** you just produced: an image, a render, a chart, a screenshot, a before/after. This holds after the brainstorm pivots into an experiment or spike too
+- a **visual result** on the table: an image, a render, a chart, a screenshot, a before/after — one you just produced, or one the user brought or pointed you at. You reading the file is not the user seeing it, and describing it in words is not showing it. This holds after the brainstorm pivots into an experiment or spike too
 
 A question *about* a UI topic is not automatically visual: "what kind of wizard?" is words; "which of these wizard layouts?" is visual.
 
