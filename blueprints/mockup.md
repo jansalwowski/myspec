@@ -145,7 +145,7 @@ myspec_version: {frameworkVersion from .myspec.json at generation time — lets 
 
 ## Re-running
 
-The blueprint is re-runnable — `/myspec:setup mockup` prompts before overwriting. Re-run (or hand-edit the affected sections) after a design-system major upgrade (the `Configured against:` pin will have drifted) or when a myspec release changes the mockup surface (compare the file's `myspec_version` stamp against `.myspec.json` `frameworkVersion`; `/myspec:update` prints this advisory). Re-running preserves nothing automatically — port the *Repeated user feedback* log forward manually; it is append-only project history.
+The blueprint is re-runnable — `/myspec:setup mockup` prompts before overwriting. Re-run (or hand-edit the affected sections) after a design-system major upgrade (the `Configured against:` pin will have drifted). A myspec release that adds a section heading or a fixed row to the output template needs no re-run: `/myspec:update` finds the missing parts (`lib/mockup-config-check.mjs`) and offers to add only those, asking just the questions behind a new section. Re-running preserves nothing automatically — port the *Repeated user feedback* log forward manually; it is append-only project history.
 
 ## Output Location
 - `${aiDir}/conventions/mockup-design.md`
