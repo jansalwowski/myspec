@@ -185,6 +185,11 @@ expect_status 3 "missing text and a fenced heading are not present"
 expect_line '^ask: Q2  writes: ## Component library' "pin outside its section does not count"
 expect_line '^ask: Q13  writes: ## Motion' "a heading inside a code fence does not count"
 
+# shellcheck disable=SC2016 # literal code fence
+printf -- '---\nmyspec_version: 1.20.0\n---\n\n## Component library\n```\nConfigured against: x@1\n```\n' > "$FILE"
+run
+expect_line '^ask: Q2  writes: ## Component library' "present text inside a code fence does not count"
+
 printf -- '---\nmyspec_version: 1.20.0\n---\n\n## Component library\nConfigured against: in-repo (evolves with the repo)\n' > "$FILE"
 OUTPUT=$(cd "$REPO" && node "$SCRIPT" 2>&1 </dev/null); STATUS=$?
 expect_line '^present: Q2  writes: ## Component library \(replaces section\)' "shipped Q2 row present once the pin is there"
@@ -210,12 +215,31 @@ run
 expect_status 0 "renamed file is clean"
 expect_no_line '^rename:' "no rename left"
 
-printf -- '---\nmyspec_version: 3.7.0\n---\n\n## Detection patterns\n\n## Checks\n' > "$FILE"
+printf -- '---\nmyspec_version: 3.7.0\n---\n\n## Pattern checks\nold\n\n## Checks\nnew\n' > "$FILE"
 run
+expect_status 3 "both headings exit 3"
+expect_line '^conflict: ## Pattern checks and ## Checks both exist; merge ## Pattern checks into ## Checks by hand' "both headings reported as a conflict"
 expect_no_line '^rename: ## Pattern checks' "no rename onto a heading the file already has"
-printf -- '---\nmyspec_version: 3.9.0\n---\n\n## Detection patterns\n' > "$FILE"
+run --apply-renames
+if [ "$(grep -c '^## Checks$' "$FILE")" = 1 ] && grep -q '^## Pattern checks$' "$FILE"; then ok; else fail "conflict was renamed: $(cat "$FILE")"; fi
+
+printf -- '---\nmyspec_version: 9.9.9\n---\n\n## Detection patterns\n' > "$FILE"
 run
-expect_status 0 "renames not newer than the stamp are not applied"
+expect_line '^rename: ## Detection patterns -> ## Pattern checks' "a rename applies whatever the stamp"
+
+# Questions are judged against the file as renamed.
+RENAMES='| ## Component library | ## UI kit | 3.8.0 |
+'
+table '| Q13 | ## UI kit (in section) | 3.8.0 | Theme: |'
+printf -- '---\nmyspec_version: 3.7.0\n---\n\n## Component library\nTheme: dark\n' > "$FILE"
+run
+expect_line '^present: Q13  writes: ## UI kit \(in section\)' "present text found under the heading's new name"
+
+# A question row may not target a heading a rename moves away.
+table '| Q13 | ## Component library (in section) | 3.8.0 | Theme: |'
+run
+expect_status 2 "question row on a renamed-away heading exits 2"
+expect_line 'targets "## Component library", which ## Heading renames renames to "## UI kit"' "conflicting tables named"
 
 RENAMES='| Detection patterns | ## Checks | 3.8.0 |
 '

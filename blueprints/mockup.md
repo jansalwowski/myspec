@@ -175,7 +175,7 @@ When `/myspec:update` passes question numbers, skip the overwrite question, and 
 
 ## Heading renames
 
-A release that renames a section heading the mockup skills read adds a row here, and renames it in this template and in both mockup skills in the same change. `/myspec:update` applies each row newer than the file's stamp without asking, when the file has the old heading and not the new one, and reports it; it rewrites the heading line only. Rows apply in table order, so a later row may rename the result of an earlier one.
+A release that renames a section heading the mockup skills read adds a row here, and renames it in this template and in both mockup skills in the same change. `/myspec:update` applies every row, whatever the file's stamp, when the file has the old heading and not the new one, rewriting the heading line only, and reports it. When the file has both headings it renames nothing and reports a conflict to merge by hand. Rows apply in table order, so a later row may rename the result of an earlier one. A *Question changes* row must name a heading by its newest name: the check refuses a row whose target a rename moves away.
 
 | Old | New | Since |
 |---|---|---|

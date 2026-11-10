@@ -127,9 +127,9 @@ node "${CLAUDE_PLUGIN_ROOT}/lib/setup-doctor.mjs" wiring
 
 **State gitignore.** Ensure `.gitignore` contains a `.claude/state/` line; append it if missing (create `.gitignore` if absent). The hooks write per-checkout state there (session logs, isolation decisions, field metrics in `.claude/state/metrics/`, the retired copies under `retired-3.0/`), and the metrics recorder refuses to write while the line is missing.
 
-### Step 3.5: Offer new or changed mockup questions
+### Step 3.5: Mockup heading renames and questions
 
-Only when `.myspec.json` has a `mockups` block. From the project root run `node "${CLAUDE_PLUGIN_ROOT}/lib/mockup-config-check.mjs"` (add `--stamp` for "Don't ask again"), then act on its exit status as [references/mockup-questions.md](references/mockup-questions.md) says. It lists the mockup blueprint questions the project's `mockup-design.md` was never asked, and never blocks the update.
+Only when `.myspec.json` has a `mockups` block. From the project root run `node "${CLAUDE_PLUGIN_ROOT}/lib/mockup-config-check.mjs"`, then act on its exit status as [references/mockup-questions.md](references/mockup-questions.md) says: apply its heading renames first (`--apply-renames`, no question), then offer its questions (`--stamp` for "Don't ask again"). It lists what the project's `mockup-design.md` lacks, and never blocks the update.
 
 ### Step 3.6: Check memory health
 
@@ -225,7 +225,7 @@ Hooks: run from the plugin (hooks.json); {unwired N framework entries from .clau
 Memory: {indexes up to date / regenerated N, backfilled M hook: lines (K from heading — review) / skipped — no memory tree}
         doctor: {clean / N error(s), M warning(s) — see above}
 Setup:  {clean / N error(s), M warning(s) — see above / skipped — node not found}
-Mockups: {up to date / renamed ## Old -> ## New … / answered Q… / N question(s) offered, not now / declined Q… / file missing / check failed: <its stderr> / omit without a `mockups` block}
+Mockups: {each that applies, comma-separated: renamed ## Old -> ## New / conflict: ## Old and ## New, merge by hand / answered Q… / N question(s) offered, not now / declined Q… — or up to date / file missing / check failed: <its stderr> / omit without a `mockups` block}
 
 Next: Run the `bootstrap` skill to verify the setup is still correct.
 ```
@@ -235,7 +235,7 @@ Next: Run the `bootstrap` skill to verify the setup is still correct.
 - **Never copy a hook or lib helper into the project.** Since 3.0 they run from the plugin, and a copy under `.claude/` is dead weight at best and a second, stale run of a gate at worst (a copy is moved to `.claude/state/retired-3.0/`, never written). Only the `files` and `rules` blocks exist, and both carry `${aiDir}` as a placeholder to substitute.
 - Never overwrite a file whose `frameworkFiles[...].pinned` is set, and never add or clear a pin yourself — except the `hooks/*` and `lib/*` pins the `3.0.0-plugin-hooks` migration drops, which it reports
 - Never overwrite content after `<!-- myspec:framework-end -->` in a `marker-merge` file
-- Never modify files not listed in `manifest.json`, with five exceptions this skill owns: the `.myspec.json` `visualQuestions` key (Step 1.6, through the `visual-questions` blueprint), what Step 3.5 writes when the user chooses it ([references/mockup-questions.md](references/mockup-questions.md)), the `hooks` key of `.claude/settings.json` (framework entries removed, nothing added), `.claude/state/retired-3.0/` (where the migration moves the retired copies), and the frontmatter `status:` line of feature docs the `3.1.0-doc-status` migration rewrites
+- Never modify files not listed in `manifest.json`, with five exceptions this skill owns: the `.myspec.json` `visualQuestions` key (Step 1.6, through the `visual-questions` blueprint), what Step 3.5 writes ([references/mockup-questions.md](references/mockup-questions.md): heading renames without asking, answers and stamps when the user chooses them), the `hooks` key of `.claude/settings.json` (framework entries removed, nothing added), `.claude/state/retired-3.0/` (where the migration moves the retired copies), and the frontmatter `status:` line of feature docs the `3.1.0-doc-status` migration rewrites
 - Never update `.myspec.json` project fields (`name`, `techStack`) or `aiDir`. Keys a migration retires are deleted only by it: `codeReview` by `3.0.0-code-review`, `reuseAudit` by `3.0.0-reuse-audit`, `project.description` by `3.0.0-schema-v2`. A pin's `hash` and `upstreamHash` are written only by `pin-reconcile.mjs` (`--backfill`, `--record`)
 - Never run a migration whose id is already in `.myspec.json` `migrations`; record each one the moment it completes
 - If a source file is missing from the plugin, skip it and warn the user — do not delete the destination
