@@ -1,6 +1,6 @@
 # Autopilot
 
-Opt-in mode for the feature pipeline skills whose `AskUserQuestion` gates otherwise block: `feature-spec-review`, `cross-spec-validation`, `feature-tech-spec-review`, `feature-plan`, `feature-implement`. One feature run can hit a dozen gates before any code exists (issue #98), most of them confirming the option the skill already recommends. Autopilot answers those gates for the user and still stops where their judgment is the point.
+Opt-in mode for the feature pipeline skills whose `AskUserQuestion` gates otherwise block: `feature-spec-review`, `cross-spec-validation`, `feature-tech-spec-review`, `feature-plan`, `feature-implement`, `feature-complete`. One feature run can hit a dozen gates before any code exists (issue #98), most of them confirming the option the skill already recommends. Autopilot answers those gates for the user and still stops where their judgment is the point.
 
 ## Turning it on
 
@@ -14,6 +14,7 @@ Autopilot is on only when the user asked for it in this session: the words "auto
 | "Review passed — mark `status: approved`?" | Yes, when the skill's own rule says the review passed (no Critical/High open) |
 | Next-step / hand-off choice | The recommended skill, invoked directly |
 | Fixes tagged `[requires confirmation]` with no Critical among them | Apply the ones the skill recommends; leave the rest unapplied and listed |
+| An optional pass that only works on the user's own answers (`feature-complete`'s comprehension offer) | Skip it — an answer autopilot gives teaches nobody |
 
 Print each decision as it is made — `Autopilot: <gate header> → <option> — <why it was recommended>` — so the transcript shows what was chosen on the user's behalf. `feature-implement` also records it in the Execution Log as a `Ruling:` line, so it reaches "Rulings I made".
 
@@ -25,7 +26,7 @@ Autopilot never answers these; ask exactly as without it:
 - A checkpoint probe that came back FAIL or BLOCKED — fix and waive are the user's calls, and a waiver is never automatic
 - An outward-facing or irreversible action: push, opening or merging a PR, deploy, publish, force operations, deleting data or files the user wrote
 - `feature-implement`'s hard stops (Rulings, Not Stalls) and a dirty working tree at Step 0
-- A gate with no recommended option, or one the skill says needs the user's decision by name (a `DEFERRED` requirement in `feature-plan`, a scope cut)
+- A gate with no recommended option (except the optional passes above, which are skipped), or one the skill says needs the user's decision by name (a `DEFERRED` requirement in `feature-plan`, a scope cut)
 - The user's own earlier answer contradicts the recommendation — their answer wins
 
 At the end of the run, list every autopilot decision in the skill's summary so the user can reverse any of them.
