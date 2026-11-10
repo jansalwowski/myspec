@@ -17,11 +17,11 @@ Log the decision once per set, before the first dispatch: `Ruling: Phases 3 and 
 
 ## Running a concurrent set
 
-- Create one worktree per phase from the controller's HEAD with `task-worktree.sh create <feature>-p<N>`, before marking the phase's tasks `[~]`. The `--no-symlink` rule in SKILL.md Step 3 applies here too.
+- Create one worktree per phase from the controller's HEAD with `task-worktree.sh create <feature>-p<N>`, before marking the phase's tasks `[~]`. The `--no-symlink` rule in [parallel-tasks.md](parallel-tasks.md) applies here too.
 - Dispatch each phase's first implementer in the same message. Within a phase, tasks still run in listed order, all of them in that phase's worktree.
 - The barrier and the review stay per phase, and they run one phase at a time in the controller's checkout, in the order the phases finish implementing. For each phase:
   1. Record `PHASE_BASE=$(git rev-parse HEAD)` and log `Base (Phase N): <sha>`.
-  2. Run `task-worktree.sh merge <feature>-p<N>`. A conflict means the disjointness proof was wrong. Resolve it as SKILL.md Step 4a resolves a task merge, and log a `Ruling:` naming the shared file.
+  2. Run `task-worktree.sh merge <feature>-p<N>`. A conflict means the disjointness proof was wrong. Resolve it as parallel-tasks.md resolves a task merge, and log a `Ruling:` naming the shared file.
   3. Continue with Step 4a's full suite, then 4b to 4f, exactly as for a serial phase. The fix loop works in the controller's checkout.
 - The other phase's implementers keep working in their worktree during this. Its merge waits until the current phase is marked complete (4e), so each review package and each fix loop covers exactly one phase.
 - Resume: when a concurrent phase still has `[~]` tasks, discard its worktree with `task-worktree.sh discard <feature>-p<N>` and run the phase again from scratch, as with a parallel task.
