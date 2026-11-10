@@ -17,6 +17,36 @@ Read the whole written plan against `spec.md` and `tech-spec.md`, not against yo
 
 The executor runs a milestone's probes in plan order, in one session (`feature-implement` Step 4b). A probe may depend on an earlier one; don't remove the dependency just to make the probes independent. Declare it on the probe line instead, `P8 [visual] (after P7: layer B hidden): …`, so a reader and the executor know the starting state. A dependency only counts as a finding when it is left undeclared. When reordering costs nothing, put a probe that needs pristine state before the probes that change it.
 
+## Before presenting
+
+Walk this after the four checks, against the written plan. Each line restates a rule from SKILL.md; fix the plan where one fails.
+
+- [ ] `## Spec Coverage` holds one row per spec.md requirement ID, per spec.md acceptance criterion, and per tech-spec.md implementation step, each mapped to task IDs and the test that proves it, or explicitly `DEFERRED` with a reason (Step 4.5)
+- [ ] Header `spec` / `tech_spec` keys point at the feature's `spec.md` and `tech-spec.md`; `planned_against` holds HEAD's SHA after the Step 1 sync; `auto_parallel_phases: true` is set
+- [ ] `## Global Constraints` holds every project-wide exact (versions, limits, naming, invariants) verbatim with source refs; no task text re-derives one
+- [ ] Task boundaries are right-sized — each task independently rejectable by a reviewer; trivial same-shape changes batched into one task
+- [ ] Every task has exact file paths matching tech-spec file inventory
+- [ ] Every task has TDD steps and a `**Verify at phase review:**` command scoped to the task's own tests
+- [ ] Every algorithm or relied-on library call has a `**Prototype:**` line from a scratch run
+- [ ] If Test Hooks names *Real inputs*: the derivation's core ran on that corpus and the plan quotes the result, or the first task is a spike on it
+- [ ] Parallel groups have zero file overlap (check file lists)
+- [ ] Barriers exist after every parallel group
+- [ ] Consecutive small sequential tasks share a phase; a new phase starts only after a task publishing a contract later tasks are written against
+- [ ] Execution order table matches task dependencies
+- [ ] Every `DEFERRED` row was surfaced to the user in Step 6, not decided unilaterally
+- [ ] Every task has a populated **Spec contract** block with verbatim quotes (not paraphrased) from spec.md / tech-spec.md
+- [ ] Every task whose Files contain `Modify:` has a populated **Touch only** line
+- [ ] Every task has an Interfaces block (Consumes/Produces, exact signatures); names and types match verbatim between producer and consumer tasks
+- [ ] Walked in execution order, every Consumes item matches an earlier task's Produces as written, and no task in between removed or renamed it (a retired field, symbol, or config key a later task still relies on)
+- [ ] Every signature-, field-, enum-, symbol-, or directory-changing Produces item has its grepped callers and consumers in that task's Files/Touch only or a barrier step, including tests and fixtures that use a newly added entity or value as the absent example
+- [ ] Within each milestone, lower-level layers (data, services) precede higher-level layers (UI, presentation) per project conventions
+- [ ] Phase numbers are globally unique across all milestones
+- [ ] Cross-milestone dependencies use `Milestone N` in the Depends On column (not individual phase numbers from other milestones)
+- [ ] Each milestone is a coherent vertical slice
+- [ ] If tech-spec.md sets `verification_mode` (not `none`): every milestone has a `**Checkpoint probes:**` block of literal probes with expected values, referencing only `### Test Hooks` handles; a `[real-input]` probe on every milestone touching a named real corpus; a *Scratch environment* line in Test Hooks whenever any probe writes
+- [ ] `## Plan Self-Check` records the four Step 4.6 checks, each clean or naming its fixes; every probe that depends on an earlier probe declares it
+- [ ] Commit decision presented to user (Step 7); plan committed before handoff
+
 ## Recording the result
 
 Add `## Plan Self-Check` as the last section of the plan, with one line per check. Each line says `clean`, or names each fix in a few words (task, step, what changed). Probe lint says `not applicable` when the plan has no probes. The plan shows the user what was caught and changed before they approve it. `feature-implement` does not read this section and does not require it, so a plan written without one runs as before.
