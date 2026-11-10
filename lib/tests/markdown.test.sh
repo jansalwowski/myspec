@@ -44,6 +44,8 @@ check "LF block" '"a: 1\nb: 2"' "md.frontmatterText('---\\na: 1\\nb: 2\\n---\\nb
 check "CRLF block" '"a: 1"' "md.frontmatterText('---\\r\\na: 1\\r\\n---\\r\\nbody')"
 check "BOM block" '"a: 1"' "md.frontmatterText('\\uFEFF---\\na: 1\\n---\\n')"
 check "BOM kept apart" '65279' "md.frontmatterBlock('\\uFEFF---\\na: 1\\n---\\n').bom.charCodeAt(0)"
+check "opening line with a trailing space" '"a: 1"' "md.frontmatterText('--- \\na: 1\\n---\\n')"
+check "an indented --- in a block scalar does not close" '"d: |\n  ---\n  more\nv: 1"' "md.frontmatterText('---\\nd: |\\n  ---\\n  more\\nv: 1\\n---\\n')"
 check "closing line with a trailing space" '"a: 1"' "md.frontmatterText('---\\na: 1\\n--- \\nbody')"
 check "a ---- line does not close" '"a: 1\n---- x\nb: 2"' "md.frontmatterText('---\\na: 1\\n---- x\\nb: 2\\n---\\n')"
 check "unclosed block" '""' "md.frontmatterText('---\\na: 1\\nbody')"
@@ -54,10 +56,11 @@ check "horizontal rules read as a block by default" '3' "md.frontmatterBlock('--
 check "yamlOnly rejects horizontal rules" '-1' "md.frontmatterBlock('---\\n\\nSome intro\\n---\\n', { yamlOnly: true }).close"
 check "yamlOnly accepts lists, comments, nesting" '4' "md.frontmatterBlock('---\\ntags:\\n  - x\\n# note\\n---\\n', { yamlOnly: true }).close"
 
-# memory-files frontmatterOf now goes through frontmatterText.
+# memory-files frontmatterOf goes through frontmatterText (memory-index
+# withHook edits the block by line, see memory-index-endings.test.sh).
 check "frontmatterOf LF" '"id: P001"' "frontmatterOf('---\\nid: P001\\n---\\n# x')"
-check "frontmatterOf stays byte-exact: CRLF opening is no block" '""' "frontmatterOf('---\\r\\nid: P001\\r\\n---\\r\\n')"
-check "frontmatterOf keeps CRs inside (withHook offsets)" '"id: P001\r"' "frontmatterOf('---\\nid: P001\\r\\n---\\r\\n')"
+check "frontmatterOf reads a CRLF block" '"id: P001"' "frontmatterOf('---\\r\\nid: P001\\r\\n---\\r\\n')"
+check "frontmatterOf strips CRs inside" '"id: P001"' "frontmatterOf('---\\nid: P001\\r\\n---\\r\\n')"
 check "frontmatterOf no block" '""' "frontmatterOf('# x\\n')"
 
 # --- pluginRoot -----------------------------------------------------------------
@@ -65,8 +68,11 @@ check "frontmatterOf no block" '""' "frontmatterOf('# x\\n')"
 mkdir -p "$ROOT/plug/framework-files" "$ROOT/plug/lib/sub" "$ROOT/other"
 printf '{}\n' > "$ROOT/plug/framework-files/manifest.json"
 check "explicit path wins" "\"$ROOT/other\"" "pluginRoot('file://$ROOT/plug/lib/x.mjs', { explicit: '$ROOT/other', env: {} })"
-check "CLAUDE_PLUGIN_ROOT when it is a plugin" "\"$ROOT/plug\"" "pluginRoot('file://$ROOT/other/x.mjs', { env: { CLAUDE_PLUGIN_ROOT: '$ROOT/plug' } })"
-check "CLAUDE_PLUGIN_ROOT ignored when not a plugin" "\"$ROOT/plug\"" "pluginRoot('file://$ROOT/plug/lib/sub/x.mjs', { env: { CLAUDE_PLUGIN_ROOT: '$ROOT/other' } })"
+mkdir -p "$ROOT/plug2/framework-files"
+printf '{}\n' > "$ROOT/plug2/framework-files/manifest.json"
+check "the script's own plugin wins over CLAUDE_PLUGIN_ROOT" "\"$ROOT/plug\"" "pluginRoot('file://$ROOT/plug/lib/sub/x.mjs', { env: { CLAUDE_PLUGIN_ROOT: '$ROOT/plug2' } })"
+check "CLAUDE_PLUGIN_ROOT when the script is in no plugin" "\"$ROOT/plug\"" "pluginRoot('file://$ROOT/other/x.mjs', { env: { CLAUDE_PLUGIN_ROOT: '$ROOT/plug' } })"
+check "CLAUDE_PLUGIN_ROOT ignored when not a plugin" 'null' "pluginRoot('file://$ROOT/other/x.mjs', { env: { CLAUDE_PLUGIN_ROOT: '$ROOT/other' } })"
 check "walks up from the script" "\"$ROOT/plug\"" "pluginRoot('file://$ROOT/plug/lib/sub/x.mjs', { env: {} })"
 check "none found" 'null' "pluginRoot('file://$ROOT/other/x.mjs', { env: {} })"
 
