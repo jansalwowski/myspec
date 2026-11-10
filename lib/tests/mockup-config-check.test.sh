@@ -194,6 +194,25 @@ printf -- '---\nmyspec_version: 1.20.0\n---\n\n## Component library\nConfigured 
 OUTPUT=$(cd "$REPO" && node "$SCRIPT" 2>&1 </dev/null); STATUS=$?
 expect_line '^present: Q2  writes: ## Component library \(replaces section\)' "shipped Q2 row present once the pin is there"
 
+# A ``` fence closes only on a bare fence line, never on ```md.
+# shellcheck disable=SC2016 # literal code fences
+printf -- '---\nmyspec_version: 1.20.0\n---\n\n## Detection patterns\n```\nExample:\n```md\n## Fake\n```\n\n## Component library\nConfigured against: x@1\n' > "$FILE"
+OUTPUT=$(cd "$REPO" && node "$SCRIPT" 2>&1 </dev/null); STATUS=$?
+expect_line '^present: Q2 ' "heading after a fence quoting an md fence opener is still found"
+
+# No component library: the "(none" answer proves Q2 was asked.
+printf -- '---\nmyspec_version: 1.20.0\n---\n\n## Component library\n(none — plain semantic HTML/CSS)\n' > "$FILE"
+OUTPUT=$(cd "$REPO" && node "$SCRIPT" 2>&1 </dev/null); STATUS=$?
+expect_line '^present: Q2 ' "a (none …) Component library counts as answered"
+
+# Headings: closing #s and extra spaces match; an indented code line is no heading.
+printf -- '---\nmyspec_version: 1.20.0\n---\n\n##   Component library  ##\nConfigured against: x@1\n' > "$FILE"
+OUTPUT=$(cd "$REPO" && node "$SCRIPT" 2>&1 </dev/null); STATUS=$?
+expect_line '^present: Q2 ' "closing hashes and extra spaces normalised"
+printf -- '---\nmyspec_version: 1.20.0\n---\n\nExample:\n\n    ## Component library\n    Configured against: x@1\n' > "$FILE"
+OUTPUT=$(cd "$REPO" && node "$SCRIPT" 2>&1 </dev/null); STATUS=$?
+expect_line '^ask: Q2 ' "a heading in an indented code block does not count"
+
 # --- 3c. heading renames are applied, not asked (#427) ------------------------
 
 RENAMES='| ## Detection patterns | ## Pattern checks | 3.8.0 |
@@ -226,6 +245,19 @@ if [ "$(grep -c '^## Checks$' "$FILE")" = 1 ] && grep -q '^## Pattern checks$' "
 printf -- '---\nmyspec_version: 9.9.9\n---\n\n## Detection patterns\n' > "$FILE"
 run
 expect_line '^rename: ## Detection patterns -> ## Pattern checks' "a rename applies whatever the stamp"
+
+# A chain whose end already exists is a conflict; nothing is renamed.
+RENAMES='| ## A | ## B | 3.8.0 |
+| ## B | ## C | 3.9.0 |
+'
+table '| Q13 | ## Motion (new section) | 3.8.0 |'
+printf -- '---\nmyspec_version: 3.7.0\n---\n\n## A\nold\n\n## C\nnew\n' > "$FILE"
+BEFORE=$(cat "$FILE")
+run
+expect_line '^conflict: ## A and ## C both exist' "chain end already present is a conflict"
+expect_no_line '^rename:' "no first step applied"
+run --apply-renames
+if [ "$(cat "$FILE")" = "$BEFORE" ]; then ok; else fail "chain conflict wrote the file: $(cat "$FILE")"; fi
 
 # Questions are judged against the file as renamed.
 RENAMES='| ## Component library | ## UI kit | 3.8.0 |

@@ -129,7 +129,7 @@ node "${CLAUDE_PLUGIN_ROOT}/lib/setup-doctor.mjs" wiring
 
 ### Step 3.5: Mockup heading renames and questions
 
-Only when `.myspec.json` has a `mockups` block. From the project root run `node "${CLAUDE_PLUGIN_ROOT}/lib/mockup-config-check.mjs"`, then act on its exit status as [references/mockup-questions.md](references/mockup-questions.md) says: apply its heading renames first (`--apply-renames`, no question), then offer its questions (`--stamp` for "Don't ask again"). It lists what the project's `mockup-design.md` lacks, and never blocks the update.
+Only when `.myspec.json` has a `mockups` block. From the project root run `node "${CLAUDE_PLUGIN_ROOT}/lib/mockup-config-check.mjs"` and act on its output as [references/mockup-questions.md](references/mockup-questions.md) says (same script, `--apply-renames` and `--stamp`). It never blocks the update.
 
 ### Step 3.6: Check memory health
 
@@ -225,7 +225,7 @@ Hooks: run from the plugin (hooks.json); {unwired N framework entries from .clau
 Memory: {indexes up to date / regenerated N, backfilled M hook: lines (K from heading — review) / skipped — no memory tree}
         doctor: {clean / N error(s), M warning(s) — see above}
 Setup:  {clean / N error(s), M warning(s) — see above / skipped — node not found}
-Mockups: {each that applies, comma-separated: renamed ## Old -> ## New / conflict: ## Old and ## New, merge by hand / answered Q… / N question(s) offered, not now / declined Q… — or up to date / file missing / check failed: <its stderr> / omit without a `mockups` block}
+Mockups: {what references/mockup-questions.md says to report / omit without a `mockups` block}
 
 Next: Run the `bootstrap` skill to verify the setup is still correct.
 ```

@@ -150,11 +150,11 @@ The blueprint is re-runnable — `/myspec:setup mockup` prompts before overwriti
 
 ## Question changes
 
-Every question above dates from v1.20.0, when this blueprint was added, unless a row below says otherwise. A release that adds a question, or changes what one asks or writes, adds a row to this table. A number names one question for good: a change to Q2 adds another `Q2` row with the new version, and update asks only its newest row; a new question takes the next unused number. `/myspec:update` compares each row's version with the file's `myspec_version` (the plugin's `lib/mockup-config-check.mjs`; a file without a readable stamp counts as 1.20.0) and offers only the newer rows the file does not already hold: a `(new section)` row whose heading exists is skipped, and so is a row whose *Present when* text appears in its target section (leave the cell empty when no text proves it). Every line between the table and the next heading must be a row in this form, or the check stops:
+Every question above dates from v1.20.0, when this blueprint was added, unless a row below says otherwise. A release that adds a question, or changes what one asks or writes, adds a row to this table. A number names one question for good: a change to Q2 adds another `Q2` row with the new version, and update asks only its newest row; a new question takes the next unused number. `/myspec:update` compares each row's version with the file's `myspec_version` (the plugin's `lib/mockup-config-check.mjs`; a file without a readable stamp counts as 1.20.0) and offers only the newer rows the file does not already hold: a `(new section)` row whose heading exists is skipped, and so is a row with one of its *Present when* texts in its target section, outside code (each text in backticks, or the whole cell; leave it empty when no text proves the answer is there). Every line between the table and the next heading must be a row in this form, or the check stops:
 
 | Question | Writes | Since | Present when |
 |---|---|---|---|
-| Q2 | ## Component library (replaces section) | 1.21.0 | Configured against: |
+| Q2 | ## Component library (replaces section) | 1.21.0 | `Configured against:` or `(none` |
 
 ### Writes forms
 
