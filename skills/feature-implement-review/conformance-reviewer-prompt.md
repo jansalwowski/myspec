@@ -32,7 +32,9 @@ Agent tool (general-purpose):
     architecture, and deferred minors. Treat those verdicts as settled: do not
     re-audit them and do not re-report its findings. Its acceptance-criteria
     list is a claim, not proof — your forward and test traces still pin every
-    criterion to code and a test. Spend the pass on the four checks below.
+    criterion to code and a test. Its Not proven list names where its
+    evidence stops: trace those behaviors first. Spend the pass on the four
+    checks below.
 
     ## What Was Built — the Diff
 

@@ -33,6 +33,11 @@ const IMPL_SCHEMA = {
     },
     filesChanged: { type: 'array', items: { type: 'string' } },
     concerns: { type: 'array', items: { type: 'string' }, description: 'doubts, or what you need (BLOCKED / NEEDS_CONTEXT)' },
+    decisions: {
+      type: 'array',
+      description: 'each default chosen, requirement interpreted, edge case left out, or scope cut the task text did not dictate; empty when none',
+      items: { type: 'object', required: ['what', 'why'], properties: { what: { type: 'string' }, why: { type: 'string' } } },
+    },
   },
 }
 
@@ -212,7 +217,14 @@ function findingLine(f) {
   return '- [' + f.kind + '] ' + where + f.claim + (f.rule ? '\n  rule: ' + f.rule : '')
 }
 
-const IMPL_TAIL = '\n\nReturn your report as the structured result: status, summary, testsWritten, checksRun (exact commands and observed results), filesChanged, concerns. Commit your work as the task says before you return.'
+// Earlier decisions ride in the fix history so a fresh fix round does not
+// silently pick the opposite choice.
+function decisionsNote(r) {
+  const d = r.decisions || []
+  return d.length ? '; decisions: ' + d.map((x) => x.what + ' (' + x.why + ')').join('; ') : ''
+}
+
+const IMPL_TAIL = '\n\nReturn your report as the structured result: status, summary, testsWritten, checksRun (exact commands and observed results), filesChanged, concerns, decisions. Commit your work as the task says before you return.'
 
 function verifyPrompt(task, base, round) {
   const diffPath = a.stateDir + '/phase-' + a.phase + '-task-' + task.id + '-r' + round + '.diff'
@@ -322,6 +334,7 @@ async function runTask(task, base) {
     deferredMinors: [],
     notEvidenced: [],
     concerns: [],
+    decisions: [],
     summary: '',
     checkStats: null,
   }
@@ -347,13 +360,14 @@ async function taskLoop(task, base, id, result, check) {
   }
   result.summary = impl.summary
   result.concerns = impl.concerns || []
+  result.decisions = impl.decisions || []
   if (impl.status === 'BLOCKED' || impl.status === 'NEEDS_CONTEXT') {
     result.status = impl.status
     return result
   }
 
   let lastImpl = impl
-  const history = []
+  const history = decisionsNote(impl) ? ['Implementation' + decisionsNote(impl)] : []
   for (let round = 0; ; round++) {
     const v = await agent(verifyPrompt(task, base, round), {
       label: 'verify ' + id + (round ? ' r' + round : ''), phase: 'Verify', model: models.cheap, schema: VERIFY_SCHEMA,
@@ -422,13 +436,13 @@ async function taskLoop(task, base, id, result, check) {
       result.concerns.push('fix round ' + next + ' returned no report')
       return result
     }
+    result.concerns = result.concerns.concat(fix.concerns || [])
+    result.decisions = result.decisions.concat(fix.decisions || [])
     if (fix.status === 'BLOCKED' || fix.status === 'NEEDS_CONTEXT') {
       result.status = fix.status
-      result.concerns = result.concerns.concat(fix.concerns || [])
       return result
     }
-    result.concerns = result.concerns.concat(fix.concerns || [])
-    history.push('Round ' + next + ' (' + tier + '): ' + open.length + ' finding(s) sent; implementer reported: ' + fix.summary)
+    history.push('Round ' + next + ' (' + tier + '): ' + open.length + ' finding(s) sent; implementer reported: ' + fix.summary + decisionsNote(fix))
     lastImpl = fix
   }
 }
@@ -443,7 +457,7 @@ if (a.mode === 'parallel') {
   // from PHASE_BASE, so each diffs from PHASE_BASE.
   const out = await parallel(a.tasks.map((t) => () => runTask(t, a.phaseBase)))
   out.forEach((r, i) => {
-    results.push(r || { id: String(a.tasks[i].id), status: 'BLOCKED', rounds: 0, findings: [], notChecked: [], deferredMinors: [], notEvidenced: [], concerns: ['the task loop failed'], checkStats: checkStatsOf(newCheckLog()) })
+    results.push(r || { id: String(a.tasks[i].id), status: 'BLOCKED', rounds: 0, findings: [], notChecked: [], deferredMinors: [], notEvidenced: [], concerns: ['the task loop failed'], decisions: [], checkStats: checkStatsOf(newCheckLog()) })
   })
 } else {
   // Sequential tasks share one checkout: each diffs from the head the

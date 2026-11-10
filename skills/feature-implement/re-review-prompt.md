@@ -24,6 +24,13 @@ Task tool (general-purpose):
     Context only: re-open a closed finding only if this fix diff breaks it
     again.
 
+    ## Decisions This Round
+
+    [The fix implementer's Decisions I made list, verbatim, or "none"]
+
+    Check each against the spec and the findings: one that contradicts
+    them, or that cuts scope a finding required, is New Breakage.
+
     ## The Fix
 
     **Fix base:** [FIX_BASE sha] (the head the previous review saw)  **Head:** [HEAD sha]
@@ -103,5 +110,6 @@ Task tool (general-purpose):
 - `[FIX_BASE sha]` — the HEAD the previous review saw (recorded by the controller before the fix dispatch)
 - `[HEAD sha]` — current commit
 - `[PKG path]` — the file the controller wrote the fix-diff package to
+- Decisions This Round — the fix implementer's list; the controller logs each as a `Decision (Task N):` line, or `Decision (Phase N, round R)` for a fix spanning tasks
 
 **Re-reviewer returns:** per-finding verdicts (ADDRESSED / NOT ADDRESSED), new breakage in the fix diff, out-of-scope observations, and a round verdict.

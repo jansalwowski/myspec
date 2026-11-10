@@ -61,6 +61,7 @@ A missing or malformed required field returns `started: false`, `reason: "bad-ar
 | `notChecked` | commands the verify agent could not run, and checks that returned nothing |
 | `notEvidenced` | checks the implementer reported running that the verify agent did not run |
 | `concerns`, `summary` | from the implementer and its fix rounds |
+| `decisions` | the implementer's "Decisions I made", over every round, as `{what, why}`: each default chosen, requirement interpreted, edge case left out, or scope cut the task text did not dictate |
 | `checkStats` | what the check stage did: `{runs, claims, minor, upheld, rejected, unjudged}`. `runs` counts the check runs that returned; 0 means the stage never ran on this task (a BLOCKED implementer, no diff, a check that returned nothing), not that it found nothing. `claims` counts distinct findings (file and rule) over every round, so one raised again each round counts once. Each one is `minor` (deferred) or carries its best re-judge verdict: `upheld`, else `rejected`, else `unjudged`. `null` when `checkStage` was `false` |
 
 ## Status → controller action
@@ -73,7 +74,7 @@ A missing or malformed required field returns `started: false`, `reason: "bad-ar
 | `BLOCKED` / `NEEDS_CONTEXT` | Handle as in controller mode: supply the context, raise the tier, split the task, or ask the user. Then launch the workflow again with only that task and the `notRun` tasks, with `phaseBase` set to the current HEAD. That field is only the workflow's diff base: the phase review keeps the recorded `PHASE_BASE`. The task stays `[~]` |
 | `started: false` | Fix the payload, or run the phase in controller mode, and log a `Ruling:` |
 
-For every task: append each `deferredMinors` entry to the Execution Log as `Deferred minor (Phase N)`, and log its `checkStats` as `Check stage (Phase N, Task <id>): <runs> runs, <claims> claims, <minor> minor, <upheld> upheld, <rejected> rejected, <unjudged> unjudged`, as `Check stage (Phase N, Task <id>): not run` when `runs` is 0, or as `Check stage (Phase N, Task <id>): skipped` when it is `null`. Pass `notChecked` and `notEvidenced` to the phase reviewer: they are claims nobody verified, and the barrier's full suite is what decides them.
+For every task: append each `deferredMinors` entry to the Execution Log as `Deferred minor (Phase N)`, and log its `checkStats` as `Check stage (Phase N, Task <id>): <runs> runs, <claims> claims, <minor> minor, <upheld> upheld, <rejected> rejected, <unjudged> unjudged`, as `Check stage (Phase N, Task <id>): not run` when `runs` is 0, or as `Check stage (Phase N, Task <id>): skipped` when it is `null`. Log each `decisions` entry as `Decision (Task <id>): <what> — <why>` from its two fields. Pass `notChecked`, `notEvidenced` and `decisions` to the phase reviewer: they are claims nobody verified, and the barrier's full suite and the spec are what decide them.
 
 ## Measuring the check stage
 

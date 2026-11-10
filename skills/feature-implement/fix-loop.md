@@ -18,7 +18,7 @@ Dispatch `./re-review-prompt.md` fresh every round — never a resumed re-review
 
 1. Record `FIX_BASE` (the HEAD the previous review saw) and log `Fix base (Phase N, round R): <sha>`.
 2. Build the fix-diff package: `"<plugin lib>/review-diff.sh" "$FIX_BASE" "$STATE/phase-N-fix-R.diff"`.
-3. Dispatch with the open findings list and the rounds summary: one paragraph naming each earlier round's findings closed, your rulings on them, and approaches already rejected ("none" in round 1).
+3. Dispatch with the open findings list, the fix implementer's Decisions I made, and the rounds summary: one paragraph naming each earlier round's findings closed, your rulings on them, and approaches already rejected ("none" in round 1).
 
 The re-reviewer verdicts each finding ADDRESSED / NOT ADDRESSED against the fix diff only, running just the checks each finding touches; the next barrier or milestone checkpoint runs the full suite over the fix. New Critical/Important breakage in the fix diff joins the open findings; out-of-scope observations go to the Execution Log as deferred minors — they never extend the loop.
 

@@ -47,6 +47,7 @@ The plan is the state that survives a crashed session. Maintain a `## Execution 
 - `Ruling: <what you decided> — <why> — <what it costs if wrong>`
 - `Deferred minor (Phase N): <one-line finding> (file:line)`
 - `Parked (Phase N): <finding> — Ruling: <why the code stands>`
+- `Decision (Task N): <what> — <why>` (`Phase N, round R` for a cross-task fix) and `Not proven (Phase N): <ID>: <behavior>`
 - `Probe (Milestone N): <P|D><n> <verdict> — observed: <value> — artifact: <path>`
 - `Waiver (Milestone N): <P|D><n> — <the user's reason, in their words>`
 - `Base (feature): <sha>`, `Base (Phase N): <sha>`, `Fix base (Phase N, round R): <sha>` — `BASE_SHA`, `PHASE_BASE`, `FIX_BASE`: the bases reviews diff from, logged so a restart can recover them
@@ -149,7 +150,7 @@ Walk milestones in order, and each milestone's DAG topologically.
 
 | Report | Action |
 |--------|--------|
-| DONE | Proceed |
+| DONE | Log decisions, proceed |
 | DONE_WITH_CONCERNS | Read the concerns, decide before proceeding |
 | NEEDS_CONTEXT | Provide the missing info, re-dispatch |
 | BLOCKED | More context, a better model, or a smaller task, then re-dispatch; else ask the user. After 3 attempts on one task, escalate: "I've made N attempts. What I tried: [list]." |
@@ -173,7 +174,7 @@ Hand the reviewer the path, never a pasted diff. Every review package in this sk
 
 - Pass `VERIFY_LOG`, and the spec requirement IDs the phase touches (from task spec citations and the plan's `## Spec Coverage` table) with their text, plus each one's Test cell when that table has a Test column. In workflow mode, also pass the per-task loop results.
 - Never pre-judge findings. If the prompt you are writing contains "do not flag", "don't treat X as a defect", or "at most Minor" — stop: let the reviewer raise it and rule on it in triage.
-- It returns `APPROVED` or `ISSUES_FOUND` with per-finding severity (Critical / Important / Minor).
+- It returns `APPROVED` or `ISSUES_FOUND` with per-finding severity (Critical / Important / Minor), plus Decisions and Not proven to log.
 
 **c) Triage findings** (before any fix dispatch):
 
@@ -208,7 +209,7 @@ Mark `fresh` as `(Recommended)` when the plan has more than five tasks: the cont
 
 ### Step 5: Completion
 
-Read [completion.md](completion.md) and follow it: remove the orchestration marker and run Final Verification; dispatch the holistic reviewer on the `premium` tier (mandatory — it is the only pass that sees the whole feature); print the completion report with every `Ruling:` and `Waiver:` under **"Rulings I made"**; then ask the user what comes next — never auto-hand-off.
+Read [completion.md](completion.md) and follow it: Final Verification, the mandatory `premium` holistic review, the report (evidence first), then ask the user what comes next — never auto-hand-off.
 
 ## Model Selection
 
@@ -237,7 +238,7 @@ Map each tier name to a concrete model the runtime has; never hardcode a model I
 - [ ] No `[~]` or `[ ]` task left in implementation-plan.md
 - [ ] Every required `.claude/verification.json` check and the plan's Final Verification pass, run after `session-event.sh implement stop`
 - [ ] `holistic-review.md` is committed, and its deferred minors are triaged (fixed or explicitly accepted)
-- [ ] Every `Ruling:` and `Waiver:` line in the Execution Log appears in the completion report
+- [ ] Every logged `Ruling:`, `Decision` and `Waiver:` line is in the completion report
 - [ ] `git status --porcelain` is empty
 
 ## Integration

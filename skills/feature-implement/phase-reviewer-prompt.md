@@ -18,7 +18,7 @@ Task tool (general-purpose):
     ## Phase Summary
 
     This phase included the following tasks:
-    [List each task with: task name, files created/modified, implementer's reported status]
+    [List each task with: task name, files created/modified, implementer's reported status, and its Decisions I made list verbatim (controller mode; workflow mode passes them under Per-Task Loop Results)]
 
     ## What Was Requested
 
@@ -63,15 +63,15 @@ Task tool (general-purpose):
 
     ## Per-Task Loop Results (workflow mode only; omit otherwise)
 
-    [Per task: status, open findings, notChecked, notEvidenced, from the
-    implement-phase workflow]
+    [Per task: status, open findings, notChecked, notEvidenced, decisions,
+    from the implement-phase workflow]
 
     Before this phase review, a workflow ran each task through an
     independent verify agent and a standards and spec-contract check. Its
     open findings are claims, not verdicts. Confirm each one against the
     diff and report it at its true severity, or reject it with the code you
     read. `notChecked` and `notEvidenced` list checks nobody ran: the
-    barrier log decides them.
+    barrier log decides them, and what it leaves open goes under Not proven.
 
     Your review is read-only on this checkout, except for running the
     commands named under Test coverage. Never edit files or mutate the
@@ -91,6 +91,8 @@ Task tool (general-purpose):
     Implementer agents commonly over-report completeness, miss requirements, or misinterpret specs without realizing it. Skipping independent verification is how broken phases reach holistic review.
 
     Treat the implementers' reports as unverified claims about the code — including any check they say they ran. Evidence is the barrier log and the commands you run yourself; compare implementation to requirements line by line. Design rationales are claims too: "kept it simple deliberately", "left it per YAGNI", or any other justification is the implementer grading their own work. Judge the code on its merits — a stated rationale never downgrades a finding's severity.
+
+    Each implementer's Decisions I made entry is a claim as well: check it against the spec and the requirements above, and report a decision they contradict as a finding. A choice the task text did not settle that you find in the diff but no report lists is a finding too, labeled unlisted decision, at the severity of its effect.
 
     ## Your Job
 
@@ -214,7 +216,11 @@ Task tool (general-purpose):
 
     **Spec requirements:** one line per listed ID — holds | violated (file:line); where a test is named, add `test: proves (file:line of the assertion)` or `test: gap (why)`
 
+    **Decisions:** one line per listed implementer decision — consistent with the spec | contradicts it (finding below)
+
     **Test-weakening audit:** each hit with file:line, or "none found"
+
+    **Not proven:** per listed requirement ID, the behavior no check you observed exercises (covered only by a mocked test, an untested branch, a check that did not run, a `notChecked` or `notEvidenced` entry the barrier log does not settle), with file:line where one applies. Write "none" only when every ID has direct evidence
 
     **Issues by severity** (each: file:line, what is wrong, why it matters, how to fix if not obvious):
     - Critical: …
