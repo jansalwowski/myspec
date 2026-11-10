@@ -62,6 +62,8 @@ Any question may be answered "skip"; sections left unanswered keep their header 
 
 ## Output Format
 
+The file holds this project's answers only. Rules that hold in every project, such as switching mock states through preview `controls:` lines rather than an in-page toggle, live in the `feature-mockup` and `feature-mockup-review` skills, so a release that changes one reaches every project without touching this file.
+
 ### `${aiDir}/conventions/mockup-design.md` (required)
 
 ```markdown
@@ -69,7 +71,7 @@ Any question may be answered "skip"; sections left unanswered keep their header 
 title: "Mockup Design Conventions"
 purpose: "Persistent design rules for ${aiDir}/features/{feature}/mockups/*. Loaded by the feature-mockup and feature-mockup-review skills at silent recon. Append-only — do not delete prior rules without user approval."
 updated: {YYYY-MM-DD}
-myspec_version: {frameworkVersion from .myspec.json at generation time — lets skills and /myspec:update see how old this generated config is}
+myspec_version: {left as this placeholder; Post-generation step 4 writes it}
 ---
 
 # Mockup Design Conventions
@@ -82,9 +84,7 @@ myspec_version: {frameworkVersion from .myspec.json at generation time — lets 
 <hard guards from Q2–Q4 and Q11 as a table: design-baseline discipline, token rules, import discipline, idioms promoted to guards>
 
 ## Style baseline
-<from Q2 + Q11 as a table: density, spacing scale, modal mockup pattern, sample-data rules, icon library. Always include these two rows, adapted to the file format's comment syntax:>
-| Frontmatter | `title:` + `description:`, plus one `controls: <name>=<default>\|<opt2>\|...` line per state switch. One control per line; the first option is the default. |
-| States & modals | Switch loading / empty / error / modal states through preview controls, never a toggle rendered inside the mockup (reviewers read it as design, and it pushes the content down). Read the value once with `new URLSearchParams(window.location.search).get('<name>')` and fall back to the default. Preview tooling without a controls toolbar: append `<name>=<value>` to the frame URL by hand. |
+<from Q2 + Q11 as a table: density, spacing scale, modal mockup pattern, sample-data rules, icon library>
 
 ## Imports
 
@@ -104,8 +104,7 @@ myspec_version: {frameworkVersion from .myspec.json at generation time — lets 
 <from Q10: canonical reference mockups (admin / end-user), plus the rule: new mockups copy structural idioms from the reference unless the user explicitly opts out>
 
 ## Detection patterns
-<from Q12, one per line: pattern (regex or description) · severity · mechanical fix if any. Always include this line first:>
-- In-page mock state toggle: a segmented control, select, tab row or button group inside the mockup whose options name mock states (loading, empty, error, success, a modal open/closed) · Medium · move it to a `controls:` frontmatter line and read the value from the URL (*States & modals*)
+<from Q12, one per line: pattern (regex or description) · severity · mechanical fix if any — or "(none configured)">
 
 ## Repeated user feedback
 
@@ -143,9 +142,36 @@ myspec_version: {frameworkVersion from .myspec.json at generation time — lets 
 
 3. If Q2 named a component library AND the preview template was installed: wire the library into the preview app following the template README's "Wiring your design system" section. For an **external npm dependency** that means adding the package to the preview app's own `package.json` and aliasing it to the app's `node_modules/{package}` in `vite.config.ts` (the same pattern the template uses for `vue` — required because mockups live outside the app and strict hoisting only guarantees the package inside the app's own `node_modules`). For an **in-repo package**, alias its source entry point. In both cases mirror the alias in `tsconfig.json` `paths`, import the library stylesheet in `src/main.ts`, and set `LIBRARY_MODULES` / `LIBRARY_EXPORT_INDEX` in `scripts/audit.ts`.
 
+4. Stamp the file with the plugin version whose questions were just asked: run the plugin's `lib/mockup-config-check.mjs` with `--stamp` (the `setup` skill gives its resolved path). It writes only the frontmatter `myspec_version` line; `/myspec:update` reads it to offer only the questions this file was never asked (*Question changes*).
+
 ## Re-running
 
-The blueprint is re-runnable — `/myspec:setup mockup` prompts before overwriting. Re-run (or hand-edit the affected sections) after a design-system major upgrade (the `Configured against:` pin will have drifted) or when a myspec release changes the mockup surface (compare the file's `myspec_version` stamp against `.myspec.json` `frameworkVersion`; `/myspec:update` prints this advisory). Re-running preserves nothing automatically — port the *Repeated user feedback* log forward manually; it is append-only project history.
+The blueprint is re-runnable — `/myspec:setup mockup` prompts before overwriting. Re-run (or hand-edit the affected sections) after a design-system major upgrade (the `Configured against:` pin will have drifted). A myspec release that adds or changes a question needs no re-run either: see *Question changes*. Re-running preserves nothing automatically — port the *Repeated user feedback* log forward manually; it is append-only project history.
+
+## Question changes
+
+Every question above dates from v1.20.0, when this blueprint was added, unless a row below says otherwise. A release that adds a question, or changes what one asks or writes, adds a row to this table. A number names one question for good: a change to Q2 adds another `Q2` row with the new version, and update asks only its newest row; a new question takes the next unused number. `/myspec:update` compares each row's version with the file's `myspec_version` (the plugin's `lib/mockup-config-check.mjs`; a file without a readable stamp counts as 1.20.0) and offers only the newer rows. Every line between the table and the next heading must be a row in this form, or the check stops:
+
+| Question | Writes | Since |
+|---|---|---|
+| Q2 | ## Component library (replaces section) | 1.21.0 |
+
+### Writes forms
+
+The *Writes* cell names where the answer lands:
+
+| Form | Example | How to write the answer |
+|---|---|---|
+| `## <Section> (new section)` | `## Motion (new section)` | Insert the section in the Output Format's form, where the template places it |
+| `## <Section> (in section)` | `## Style baseline (in section)` | Add the answer to that existing section (a table row, a bullet), keeping its other lines; when the section is missing, write it first |
+| `## <Section> (replaces section)` | `## Component library (replaces section)` | Show the section's current content with the question, and replace that content with the answer |
+| `.myspec.json mockups.<key>` | `.myspec.json mockups.commands.audit` | Set that key in the `mockups` block, nothing else |
+
+Never rename a section heading through this table: the mockup skills read headings by name, and a row the user declines would leave the old heading in place. A rename ships as a manual step in the release notes.
+
+### Asking only the changed questions
+
+When `/myspec:update` passes question numbers, skip the overwrite question, and run only the Recon bullets those questions present a detected value from. Ask those questions alone, one at a time, and write each answer as its row's *Writes* cell says; change no other line of the file and no other `.myspec.json` key. A "skip" answer to a new section writes its header with "(none configured)"; to any other form it writes nothing. Finally stamp the file (*Post-generation*, step 4).
 
 ## Output Location
 - `${aiDir}/conventions/mockup-design.md`

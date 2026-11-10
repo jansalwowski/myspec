@@ -31,6 +31,8 @@ If no blueprint name was given: print the table above and ask "Which blueprint w
 
 If a name was given: match it to the table. If no match, list available names and ask the user to choose.
 
+**Plugin paths in a blueprint.** A blueprint names plugin files repo-relative (`lib/mockup-config-check.mjs`, `templates/…`): nothing substitutes `${CLAUDE_PLUGIN_ROOT}` in a file you Read, and the Bash tool does not export it. Run and copy them from `${CLAUDE_PLUGIN_ROOT}/<path>`, resolved here. This holds in every mode below, including question numbers.
+
 ### Step 2: Pre-flight Check
 
 Read `.myspec.json` to get `aiDir` and project metadata.
@@ -43,6 +45,8 @@ Check if the output file already exists.
 → If user says no: stop.
 
 `visual-questions` is a toggle, not a generated file: skip the overwrite question; its discovery question covers it.
+
+`mockup` run with question numbers (`/myspec:update` Step 3.5 passes the ones its *Question changes* table lists): skip the overwrite question, read the blueprint, and follow its *Asking only the changed questions* procedure instead of the rest of Steps 3 and 4. The file stays; only what those rows write and its stamp change.
 
 ### Step 3: Execute Blueprint
 
@@ -79,7 +83,7 @@ Next: {relevant next step — e.g., "Run /myspec:bootstrap to load the topology"
 
 - [ ] Blueprint name resolved against the Available Blueprints table (asked the user if missing or unmatched)
 - [ ] `.myspec.json` read before running; stopped with the init warning if absent
-- [ ] Checked whether the output file exists; asked before overwriting
+- [ ] Checked whether the output file exists; asked before overwriting (not asked in `mockup` question-numbers mode, which overwrites nothing)
 - [ ] Discovery questions asked one at a time, each answer awaited
 - [ ] Output generated using the blueprint's Output Format and written to its Output Location
 - [ ] `${aiDir}` placeholders replaced with the configured value
