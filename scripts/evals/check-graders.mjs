@@ -49,8 +49,17 @@ const regexPasses = (g, text) => {
   const hit = new RegExp(g.pattern, g.flags || '').test(text);
   return g.match === 'not_contains' ? !hit : hit;
 };
+// Graders run in Claude Code's runtime, which supports inline modifier groups
+// such as `(?i:...)`. An older Node (CI) does not: there, compile the group as
+// `(?:...)` and make the whole pattern case-insensitive, a close approximation.
+const compile = (src) => {
+  try { return new RegExp(src); } catch (e) {
+    if (!/\(\?i:/.test(src)) throw e;
+    return new RegExp(src.replace(/\(\?i:/g, '(?:'), 'i');
+  }
+};
 const toolPasses = (g, calls) => {
-  const re = g.input_match ? new RegExp(g.input_match) : null;
+  const re = g.input_match ? compile(g.input_match) : null;
   const n = calls.filter((c) => c.tool === g.tool && (!re || re.test(JSON.stringify(c.input)))).length;
   const min = g.min === undefined ? 1 : Number(g.min);
   const max = g.max === undefined ? Infinity : Number(g.max);
