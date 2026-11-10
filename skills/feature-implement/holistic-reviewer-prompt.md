@@ -48,7 +48,7 @@ Task tool (general-purpose):
 
     ## Evidence Already Gathered
 
-    [Each Final Verification command with its exit code, and every `Probe`, `Waiver` and `Not proven` line from the Execution Log, verbatim]
+    [Each Final Verification command and each required `verification.json` check with its exit code, and every `Probe`, `Waiver` and `Not proven` line from the Execution Log, verbatim]
 
     ## Implementer Decisions
 
