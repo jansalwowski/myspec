@@ -1,6 +1,6 @@
 # Workflow Mode: args Contract and Status Table
 
-Read from SKILL.md Step 3, "Workflow mode". The plugin workflow `myspec:implement-phase` (`workflows/implement-phase.js`) runs one phase's per-task loop. For each task it runs an implementer, then an independent verify agent, then a standards and spec-contract check on the cheap tier. Every serious finding is re-judged on the mid tier before it costs a fix. A task gets at most two fix rounds, and the second runs one tier up. The workflow then returns a structured result for each task. It flips no checkbox, merges nothing, runs no barrier, and asks nobody anything. The controller keeps every gate.
+Read from SKILL.md Step 3, when Step 1 chose workflow mode. The plugin workflow `myspec:implement-phase` (`workflows/implement-phase.js`) runs one phase's per-task loop. For each task it runs an implementer, then an independent verify agent, then a standards and spec-contract check on the cheap tier. Every serious finding is re-judged on the mid tier before it costs a fix. A task gets at most two fix rounds, and the second runs one tier up. The workflow then returns a structured result for each task. It flips no checkbox, merges nothing, runs no barrier, and asks nobody anything. The controller keeps every gate.
 
 ## Running a phase
 
