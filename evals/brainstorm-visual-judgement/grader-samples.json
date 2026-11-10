@@ -10,5 +10,13 @@
       "Open spike/out/compare-crops.png in your browser and compare it with the synthetic one.",
       "Which render looks less fake: compare-crops.png. Its band has a faint texture, while the blur band is flat and smooth. Neither is a street frame, so treat that as a weak signal."
     ]
+  },
+  "offer-stands-alone": {
+    "pass": [
+      "This next part might be easier if I show you: I can put mockups, diagrams and comparisons in a browser tab (Visual Buddy) as we go. It uses more tokens. Want me to? I'll open it for you."
+    ],
+    "fail": [
+      "Which render looks less fake: compare-crops.png. Its band has a faint texture, while the blur band is flat and smooth. ## Directions beyond blur and pasted crops\n\n1. **Direction 1.** A paragraph of reasoning about this direction, its trade-offs, what it costs, and how it could fail in a street scene with real plates at different distances and angles.\n2. **Direction 2.** A paragraph of reasoning about this direction, its trade-offs, what it costs, and how it could fail in a street scene with real plates at different distances and angles.\n3. **Direction 3.** A paragraph of reasoning about this direction, its trade-offs, what it costs, and how it could fail in a street scene with real plates at different distances and angles.\n4. **Direction 4.** A paragraph of reasoning about this direction, its trade-offs, what it costs, and how it could fail in a street scene with real plates at different distances and angles.\n5. **Direction 5.** A paragraph of reasoning about this direction, its trade-offs, what it costs, and how it could fail in a street scene with real plates at different distances and angles.\n6. **Direction 6.** A paragraph of reasoning about this direction, its trade-offs, what it costs, and how it could fail in a street scene with real plates at different distances and angles.\n7. **Direction 7.** A paragraph of reasoning about this direction, its trade-offs, what it costs, and how it could fail in a street scene with real plates at different distances and angles.\n\nI can also put both renders in a browser tab (Visual Buddy) if you want to see them side by side."
+    ]
   }
 }

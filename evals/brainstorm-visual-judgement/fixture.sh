@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# A spike already rendered two comparison images; the brainstorm has to show them, not link them.
+# A spike already rendered two comparison images; asked which looks less fake, the brainstorm has to offer to show them, not describe them.
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../_fixtures/lib.sh"
 myspec_init

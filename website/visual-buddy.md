@@ -14,7 +14,7 @@ It runs locally as a small Node server that ships with the plugin and needs no d
 | Comparing designs | Two or three candidate architectures, data flows or state machines drawn next to each other | Options a skill proposes, with the visual-questions setting on |
 | Explaining a structure | A diagram of a flow, sequence, state machine or entity relationships | `/myspec:brainstorm`, `visualize-options` show mode |
 | Graphs | Bars or points drawn from real measurements, axes with units, the source named | `visualize-options` show mode, brainstorm |
-| Results | The images, renders, charts or screenshots the agent just produced, or a before/after in a split | Brainstorm and any spike: *show, don't link* |
+| Results | The images, renders, charts or screenshots the agent just produced or you pointed it at, or a before/after in a split | Brainstorm and any spike: *show, don't link* |
 | Exploring | Mockups and wireframes you react to while ideas are still forming | `/myspec:brainstorm` |
 
 The rule of thumb the agent follows is: would you understand this better by seeing it than by reading it? Requirements, scope, naming and trade-offs are words, so they stay in the terminal. A question *about* UI is not automatically visual. "What kind of wizard?" is a question in words, while "which of these wizard layouts?" needs a picture.
@@ -23,7 +23,7 @@ The rule of thumb the agent follows is: would you understand this better by seei
 
 There are two ways in.
 
-- **Brainstorm offers it on its own.** In `/myspec:brainstorm`, the agent offers Visual Buddy the first time seeing would beat reading. That happens with options that look different, a structure that is easier to see than read, numbers whose shape matters, or a visual result the agent just produced. The offer comes as a message of its own. If you say no, the session stays text-only.
+- **Brainstorm offers it on its own.** In `/myspec:brainstorm`, the agent offers Visual Buddy the first time seeing would beat reading. That happens with options that look different, a structure that is easier to see than read, numbers whose shape matters, or a visual result: one the agent just produced, or one you brought or pointed it at. The offer comes as a message of its own. If you say no, the session stays text-only.
 - **The project setting turns it on everywhere.** `/myspec:setup visual-questions` sets `visualQuestions` to `"auto"` in `.myspec.json` and installs `.claude/rules/visual-questions.md`. From the next session on, in every skill:
     - clearly visual questions are asked through `/myspec:visualize-options`;
     - partly visual questions get a last option, `Show in Visual Buddy`. When a reply lays out options, such as approaches or designs a skill proposes, it ends with one line offering to show them side by side;
@@ -78,7 +78,7 @@ A graph appears only when the numbers were measured, never estimated. It has lab
 
 ### Show, don't link
 
-When the agent produces something visual, such as screenshots, renders or a before/after, it puts the result on screen instead of handing you a file path. Here it captured the docs site in both themes and shows them side by side, each with a caption saying what differs:
+When the agent produces something visual, such as screenshots, renders or a before/after, it puts the result on screen instead of handing you a file path. It does the same with a result you bring, instead of describing it back to you. Here it captured the docs site in both themes and shows them side by side, each with a caption saying what differs:
 
 ![The docs site quickstart in light and dark theme, side by side](assets/visual-buddy/results-compare.jpg)
 

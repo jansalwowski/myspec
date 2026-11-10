@@ -261,7 +261,7 @@ When something visual is on the table (an image, a render, a chart, a screenshot
 2. Push a screen that references it by `/files/<name>`: `<img src="/files/blur-v2.png" alt="…" style="max-width:100%">`. For a comparison, put the images in a `.split`, each with a one-line caption saying what differs.
 3. Tell the user what is on screen in one line, and keep the file path for the record.
 
-If Visual Buddy is not running and was never offered, offer it now, as its own message (brainstorm's offer text). If the user declined earlier, offer once more for this result; a second no stands for the session.
+If Visual Buddy is not running and was never offered, offer it now, as its own message (brainstorm's offer text). If the user declined earlier, offer once more for a result you produced; a second no stands for the session. An image the user mentions after declining does not reopen the offer.
 
 ## Decision screens
 
