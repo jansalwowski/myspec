@@ -61,10 +61,10 @@ Parses the Execution Order table: 6 sequential tasks, no barriers between them �
 For T1 (migration):
 
 1. Flips T1 `[ ]` → `[~]` before dispatching, with `"${CLAUDE_PLUGIN_ROOT}/lib/plan-checkbox.sh" <plan> 1 doing` — it edits only the `### Task 1:` section, never the Execution Order row or a milestone heading.
-2. Dispatches one implementer subagent (`implementer-prompt.md`) with the task text inline — it never reads the plan file. The tier is named on the dispatch (`cheap` here: one file plus its test, fully specified in the task text). It also carries the commit trailers the controller's own instructions require (a harness attribution line, a project commit rule), verbatim, since the subagent never sees those instructions. The dispatch carries the task block's `**Verify at phase review:**` command (`pnpm test migrations/report_favorites`) and the file-scoped static checks (`pnpm eslint <touched files>`). The implementer writes the migration and its test, runs those two, commits with the task block's `**Commit:**` message and those trailers, self-reviews its own diff, and reports `DONE` with each command it ran and its result. It never runs the full suite, a build, or an install.
+2. Dispatches one implementer subagent (`implementer-prompt.md`) with the task text inline — it never reads the plan file. The tier is named on the dispatch (`cheap` here: one file plus its test, fully specified in the task text). It also carries the commit trailers the controller's own instructions require (a harness attribution line, a project commit rule), verbatim, since the subagent never sees those instructions. The dispatch carries the task block's `**Verify at phase review:**` command (`pnpm test migrations/report_favorites`) and the file-scoped static checks (`pnpm eslint <touched files>`). The implementer writes the migration and its test, runs those two, commits with the task block's `**Commit:**` message and those trailers, self-reviews its own diff, and reports `DONE` with each command it ran and its result, and **Decisions I made: none**. It never runs the full suite, a build, or an install.
 3. The skill leaves T1 at `[~]` — the only route to `[x]` is the phase review.
 
-Repeats for T2–T6 in order, each leaving its checkbox at `[~]`. The implementer never spawns a reviewer of its own: review is the controller's job and is already scheduled. Had an implementer come back BLOCKED on its environment (a denied command, a missing dependency), the controller would have left that task `[~]`, recorded it as BLOCKED, and asked the user what would unblock it. It never writes a task's files itself, because code it writes skips the phase review.
+Repeats for T2–T6 in order, each leaving its checkbox at `[~]`. T3's report lists one decision the task text did not settle, and the controller logs it as `Decision (Task 3): unfavoriting a report that is not a favorite returns 204 — the spec names no error for it`. The implementer never spawns a reviewer of its own: review is the controller's job and is already scheduled. Had an implementer come back BLOCKED on its environment (a denied command, a missing dependency), the controller would have left that task `[~]`, recorded it as BLOCKED, and asked the user what would unblock it. It never writes a task's files itself, because code it writes skips the phase review.
 
 #### Step 4 — Phase review (once, at the barrier)
 
@@ -74,7 +74,9 @@ After all 6 implementers report `DONE`, the phase hits its barrier. The controll
 - impl ↔ plan: each task's declared files and interfaces are present ✓
 - spec requirements: AC-1 and AC-2 each checked as behavior across the whole feature, not only in the task that cites them — AC-2's pin-to-top also holds on the empty-favorites path ✓
 - test coverage: each in-scope acceptance criterion has a test in the diff, and the test its Spec Coverage row names (`ReportList.test` › favorites sort first for AC-2's pinning) exists and asserts the behavior. A plan without a Test column skips this per-requirement check. The reviewer reads the barrier log (all green) and reruns each task's `Verify at phase review:` command itself; the implementers' reported greens count as claims, not evidence. It never reruns the whole suite ✓
+- decisions: Task 3's 204 checked against AC-1, consistent with it; no unlisted decision found in the diff ✓
 - test-weakening audit: no deleted or loosened assertions, skips, disables, `as any`, or fixtures off their production values — "none found" ✓
+- not proven: none — AC-1 and AC-2 each have a test the barrier ran ✓
 - naming, pattern conformance, maintainability ✓
 - Verdict: `APPROVED`.
 
@@ -104,8 +106,25 @@ This is the only milestone, so the skill goes directly to Step 5 (no Milestone C
 #### Step 5 — Completion + review choice
 
 1. Removes the orchestration marker, so the Stop hook blocks on failures again, then runs the plan's Final Verification section.
-2. Writes the full-feature review package to `feature-review.diff` in the state directory (`review-diff.sh "$BASE_SHA"`, over `BASE_SHA..HEAD`) and dispatches the holistic reviewer with the package path plus the plan's Execution Log entries to triage. This pass is mandatory and the tier (premium) is named explicitly on the dispatch — an omitted model would silently inherit the session's model. Returns `APPROVED`, no MUST FIX triage items. The controller writes the report to `${aiDir}/features/favorite-reports/holistic-review.md` (frontmatter records `head_sha` and `verdict: ready-to-merge`) and commits it with the same trailers.
-3. Prints the completion report — milestone summary, holistic verdict, **Rulings I made: none**, deferred-minors triage — then asks via `AskUserQuestion` — it does **not** auto-hand-off:
+2. Writes the full-feature review package to `feature-review.diff` in the state directory (`review-diff.sh "$BASE_SHA"`, over `BASE_SHA..HEAD`) and dispatches the holistic reviewer with the package path, the Final Verification exit codes, and the plan's Execution Log entries. This pass is mandatory and the tier (premium) is named explicitly on the dispatch — an omitted model would silently inherit the session's model. Returns READY TO MERGE, **Not proven: none**, no MUST FIX triage items. The controller writes the report to `${aiDir}/features/favorite-reports/holistic-review.md` (frontmatter records `head_sha` and `verdict: ready-to-merge`) and commits it with the same trailers.
+3. Prints the completion report, evidence first, so the summary is read against what ran:
+
+   ```
+   Evidence
+     pnpm test        exit 0
+     pnpm typecheck   exit 0
+     pnpm lint        exit 0
+     probes: none in this plan
+   Holistic verdict: READY TO MERGE — Not proven: none
+   Milestone 1: Favorites end to end — 6 tasks, 1 phase
+   Rulings I made: none
+   Decisions implementers made:
+     Decision (Task 3): unfavoriting a report that is not a favorite returns 204 — the spec names no error for it
+   Waivers: none
+   Deferred-minors triage: none logged
+   ```
+
+   Then it asks via `AskUserQuestion` — it does **not** auto-hand-off:
 
 > **Implementation complete. What next?**
 >
@@ -114,7 +133,7 @@ This is the only milestone, so the skill goes directly to Step 5 (no Milestone C
 > - **/code-review** → Claude Code's built-in bug review of the branch diff
 > - **Stop here** → leave the branch as-is; continue later
 
-`feature-complete` carries the recommendation because the holistic verdict is READY TO MERGE, every criterion came back ✅, no probe was waived, and the plan has fewer than 10 tasks — the conformance audit would re-walk criteria the holistic pass just checked. Any one of those failing moves the recommendation to `feature-implement-review`. The two review passes are **complementary, not exclusive** (conformance vs. bugs). After whichever the user picks finishes, the skill offers this same choice again so they can run the other or proceed to `feature-complete`.
+`feature-complete` carries the recommendation because the holistic verdict is READY TO MERGE, every criterion came back ✅, Not proven is "none", no probe was waived, and the plan has fewer than 10 tasks — the conformance audit would re-walk criteria the holistic pass just checked. Any one of those failing moves the recommendation to `feature-implement-review`. The two review passes are **complementary, not exclusive** (conformance vs. bugs). After whichever the user picks finishes, the skill offers this same choice again so they can run the other or proceed to `feature-complete`.
 
 User picks **feature-implement-review** anyway. The skill invokes `/myspec:feature-implement-review favorite-reports`, which finds `holistic-review.md` with no code changed since its `head_sha` and spends its pass on traceability and test proof only.
 
@@ -200,7 +219,7 @@ This plan has 12 tasks, so `fresh` carries the `(Recommended)` marker: one miles
 
 #### Step 5 — Completion
 
-Final Verification runs, then the controller builds the full-feature review package (`feature-review.diff` in the state directory, written by `review-diff.sh` over `BASE_SHA..HEAD`) and dispatches the holistic reviewer on the premium tier with the package path and the plan's Execution Log entries. Per-phase reviews saw one phase's diff each; this one sees the feature — no overlap, and it is never skipped. The completion report surfaces every `Ruling:` line from the Execution Log under **Rulings I made**, then offers the same 4-option choice (feature-implement-review / /code-review / feature-complete / Stop here). With 12 tasks, `feature-implement-review` carries the recommendation even on a READY TO MERGE verdict.
+Final Verification runs, then the controller builds the full-feature review package (`feature-review.diff` in the state directory, written by `review-diff.sh` over `BASE_SHA..HEAD`) and dispatches the holistic reviewer on the premium tier with the package path, the Final Verification exit codes, and the plan's Execution Log entries, P1 and P2's probe lines among them. Per-phase reviews saw one phase's diff each; this one sees the feature — no overlap, and it is never skipped. Its Not proven list names one gap: the weekly cron's next-run calculation across a daylight-saving change is covered only by a test with a mocked clock. The completion report opens with the evidence — each Final Verification command with its exit code, then each probe line from the `run-2/` dispatch with its observed value and artifact — then the verdict with that Not proven line, the milestone summary, every `Ruling:` line under **Rulings I made**, every `Decision` line, and the triage, then offers the same 4-option choice (feature-implement-review / /code-review / feature-complete / Stop here). With 12 tasks and a Not proven gap, `feature-implement-review` carries the recommendation even on a READY TO MERGE verdict.
 
 ### Result
 
@@ -374,7 +393,7 @@ The project opted in with `.myspec.json` → `"orchestration": {"featureImplemen
    ```
 
 3. **Inside the workflow**, Task 1's implementer reports DONE. The verify agent never saw the implementation. It runs `pytest tests/test_due_dates.py`, which exits 1: a paid invoice past its due date is reported overdue. That costs fix round 1 on the `mid` tier, and the second verify passes. The cheap check then claims a function name breaks the conventions file. The mid-tier re-judge reads the rule and rejects the claim, so it costs nothing. Task 2 diffs from the head Task 1's last verify saw and passes on its first run. Its implementer also reported running `mypy src`, which the verify agent never ran, so that claim lands in `notEvidenced`.
-4. **The result** is `DONE` for both tasks, and Task 2 carries one `notEvidenced` entry. Task 1's `checkStats` is `{runs: 2, claims: 1, minor: 0, upheld: 0, rejected: 1, unjudged: 0}` (the check ran after each verify), Task 2's is `{runs: 1}` with everything else 0, and the controller logs them as `Check stage (Phase 1, Task 1): 2 runs, 1 claims, 0 minor, 0 upheld, 1 rejected, 0 unjudged` and `Check stage (Phase 1, Task 2): 1 runs, 0 claims, …`. Across runs, these lines show whether the check stage catches anything the phase review would not. The controller runs the barrier suite, builds the review package with `review-diff.sh`, and dispatches the phase reviewer. The prompt's "Per-Task Loop Results" section tells the reviewer that `mypy src` was claimed but never verified. The barrier log, not the claim, decides it.
+4. **The result** is `DONE` for both tasks, and Task 2 carries one `notEvidenced` entry. Neither implementer reported a decision, so both `decisions` lists are empty and no `Decision` line is logged. Task 1's `checkStats` is `{runs: 2, claims: 1, minor: 0, upheld: 0, rejected: 1, unjudged: 0}` (the check ran after each verify), Task 2's is `{runs: 1}` with everything else 0, and the controller logs them as `Check stage (Phase 1, Task 1): 2 runs, 1 claims, 0 minor, 0 upheld, 1 rejected, 0 unjudged` and `Check stage (Phase 1, Task 2): 1 runs, 0 claims, …`. Across runs, these lines show whether the check stage catches anything the phase review would not. The controller runs the barrier suite, builds the review package with `review-diff.sh`, and dispatches the phase reviewer. The prompt's "Per-Task Loop Results" section tells the reviewer that `mypy src` was claimed but never verified. The barrier log, not the claim, decides it.
 5. Phase review, fix loop, checkbox flips, Execution Log, probes and the milestone checkpoint all run exactly as in controller mode.
 
 ### Why this example matters

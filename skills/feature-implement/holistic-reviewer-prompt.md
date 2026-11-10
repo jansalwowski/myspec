@@ -4,7 +4,7 @@ Dispatch after ALL phases complete. Reviews the entire implementation as a whole
 
 Before dispatching, write the full-feature review package to one file and substitute its path below: `review-diff.sh` over `BASE_SHA..HEAD` as `$STATE/feature-review.diff` (SKILL.md Step 5 gives the call; Step 4b says what its exit 2 means).
 
-`BASE_SHA` is the sha recorded in Step 2 before any implementation — never `HEAD~1`. Also paste in the plan's Execution Log entries (deferred minors and parked findings) — this reviewer is where they get triaged; a roll-up nobody reads is a silent discard.
+`BASE_SHA` is the sha recorded in Step 2 before any implementation — never `HEAD~1`. Also paste in the plan's Execution Log entries (deferred minors and parked findings) — this reviewer is where they get triaged; a roll-up nobody reads is a silent discard. Paste the evidence already gathered too, so it can say what that evidence leaves unproven.
 
 ```
 Task tool (general-purpose):
@@ -45,6 +45,10 @@ Task tool (general-purpose):
     spawn duplicates one of them at full cost, and its verdict counts for
     nothing. If the diff feels too large for one pass, review it in passes
     yourself and say so in your report.
+
+    ## Evidence Already Gathered
+
+    [Each Final Verification command with its exit code, and every `Probe` and `Waiver` line from the Execution Log, verbatim]
 
     ## Deferred Minors and Parked Findings
 
@@ -91,6 +95,10 @@ Task tool (general-purpose):
     - ✅ [criterion]: met
     - ❌ [criterion]: [what is missing]
     - ⚠️ [criterion]: [partially met, what is missing]
+
+    **Not proven:**
+    - [criterion]: [the behavior no observed check exercises: covered only by a mocked test, an untested branch, a waived probe, a check that did not run]
+    - Write "none" only when every criterion has direct evidence
 
     **Integration issues (if any):**
     [specific file:line references]

@@ -49,6 +49,7 @@ Plans use three checkbox states:
 Durable decisions live in the plan file, next to the checkboxes — the plan is the state that survives a crashed session, and `feature-complete` archives it. Maintain a `## Execution Log` section at the end of implementation-plan.md (create it on the first entry). Entry shapes:
 
 - `Ruling: <what you decided> — <why> — <what it costs if wrong>`
+- `Decision (Task N): <what> — <why>` — one per item of an implementer's "Decisions I made", logged when it reports, fix rounds included
 - `Deferred minor (Phase N): <one-line finding> (file:line)`
 - `Parked (Phase N): <finding> — Ruling: <why the code stands>`
 - `Probe (Milestone N): <P|D><n> <verdict> — observed: <value> — artifact: <path>` (copied from the probe executor's report)
@@ -58,7 +59,7 @@ Durable decisions live in the plan file, next to the checkboxes — the plan is 
 
 Everything else a restarted session needs — review packages, verification logs — goes in the run's state directory, `$STATE` (Step 2), under a fixed name. Never `mktemp` and never a session scratchpad: a restart starts a new session with a new temp directory, and an implementer or reviewer dispatched with a path that no longer exists comes back NEEDS_CONTEXT.
 
-The holistic reviewer (Step 5) reads this section to triage deferred minors, and the completion report surfaces every ruling. An entry that exists only in session context is a decision made in secret.
+The holistic reviewer (Step 5) reads this section to triage deferred minors, and the completion report surfaces every ruling and decision. An entry that exists only in session context is a decision made in secret.
 
 ## Rulings, Not Stalls
 
@@ -366,8 +367,8 @@ milestones.
 ### Step 5: Completion
 
 1. Remove the orchestration marker (Step 2.5) so the Stop hook blocks again, then run the Final Verification section from the plan.
-2. Build the full-feature review package: `"${CLAUDE_PLUGIN_ROOT}/lib/review-diff.sh" "$BASE_SHA" "$STATE/feature-review.diff"` and dispatch the holistic reviewer (`./holistic-reviewer-prompt.md`) on the `premium` tier with the package path plus the plan's Execution Log entries (deferred minors and parked findings) so it can triage which must be fixed before merge. This pass is mandatory — never skipped, never downgraded to a cheaper tier. Write its report to `${aiDir}/features/{feature}/holistic-review.md` (frontmatter in the prompt file) and commit it with the commit trailers (Step 3): `/myspec:feature-implement-review` reads it and skips what it already covers.
-3. Print the completion report. It contains, in order: the milestone summary, with probe results and any live demo URL; the holistic verdict; **"Rulings I made"** — every `Ruling:` line from the Execution Log, in the order made, each with its cost-if-wrong ("none" if the log holds no rulings); every `Waiver:` line; and the deferred-minors triage outcome. This report is the only place the decisions taken on the user's behalf reach them.
+2. Build the full-feature review package: `"${CLAUDE_PLUGIN_ROOT}/lib/review-diff.sh" "$BASE_SHA" "$STATE/feature-review.diff"` and dispatch the holistic reviewer (`./holistic-reviewer-prompt.md`) on the `premium` tier with the package path, the Final Verification exit codes, and the plan's Execution Log entries (deferred minors and parked findings to triage, probes and waivers to weigh as evidence). This pass is mandatory — never skipped, never downgraded to a cheaper tier. Write its report to `${aiDir}/features/{feature}/holistic-review.md` (frontmatter in the prompt file) and commit it with the commit trailers (Step 3): `/myspec:feature-implement-review` reads it and skips what it already covers.
+3. Print the completion report. Evidence comes first, so a red or missing check is not buried under the summary. In order: **Evidence** — each Final Verification command and each required `verification.json` check with its exit code, then every `Probe` line (verdict, observed value, artifact path); the holistic verdict with its **Not proven** list; the milestone summary, with any live demo URL; **"Rulings I made"** — every `Ruling:` line from the Execution Log, in the order made, each with its cost-if-wrong; **"Decisions implementers made"** — every `Decision (Task N):` line, in log order; every `Waiver:` line; and the deferred-minors triage outcome. Write "none" for an empty list. This report is the only place the decisions taken on the user's behalf reach them.
 4. **Ask the user what to do next** via `AskUserQuestion` — do not auto-hand-off:
 
 ```
@@ -381,7 +382,7 @@ options:
   - "Stop here"                 → leave the branch as-is; continue later
 ```
 
-Recommend `feature-implement-review` when the holistic verdict is not READY TO MERGE, any criterion came back ⚠/❌, a probe was waived, or the plan has 10+ tasks; otherwise `feature-complete`, since the holistic pass already checked every criterion. Execute the choice: invoke `/myspec:feature-implement-review`, the built-in `/code-review` (not a myspec skill; Claude Code only), `/myspec:feature-complete`, or stop and report the branch name. The two review passes are complementary, not exclusive (conformance vs. bugs) — after one finishes, offer this choice again so the user can run the other or proceed.
+Recommend `feature-implement-review` when the holistic verdict is not READY TO MERGE, any criterion came back ⚠/❌, its Not proven list is not "none", a probe was waived, or the plan has 10+ tasks; otherwise `feature-complete`, since the holistic pass already checked every criterion. Execute the choice: invoke `/myspec:feature-implement-review`, the built-in `/code-review` (not a myspec skill; Claude Code only), `/myspec:feature-complete`, or stop and report the branch name. The two review passes are complementary, not exclusive (conformance vs. bugs) — after one finishes, offer this choice again so the user can run the other or proceed.
 
 ## Model Selection
 
@@ -437,7 +438,7 @@ After all phases complete:
 - [ ] All barrier verification commands passed (typecheck, tests)
 - [ ] Holistic reviewer returned `APPROVED`
 - [ ] Execution Log deferred minors triaged by the holistic review (fixed or explicitly accepted)
-- [ ] Every `Ruling:` line from the Execution Log surfaced under "Rulings I made" in the completion report
+- [ ] Every `Ruling:` and `Decision` line from the Execution Log surfaced in the completion report
 - [ ] No uncommitted changes from implementation
 - [ ] Orchestration marker removed (`session-event.sh implement stop`) before Final Verification
 - [ ] Read `.claude/verification.json` and run each required check — all pass

@@ -68,6 +68,8 @@ Task tool (general-purpose):
 
     **While you work:** If you encounter something unexpected or unclear, **ask questions**.
     It is always OK to pause and clarify. Do not guess or make assumptions.
+    A choice the task text did not settle that you make anyway goes in your
+    report under Decisions I made.
 
     ## Checks You May Run
 
@@ -167,7 +169,8 @@ Task tool (general-purpose):
     the findings. Fix exactly what the findings name — do not expand scope
     while fixing — rerun the checks the finding touches (the test it names,
     static checks on the files you changed), then commit with the Commit
-    Trailers above and report what you changed and what you ran.
+    Trailers above and report what you changed, what you ran, and the
+    decisions you made.
 
     A finding about a rule (an invariant, a boundary, a format, a
     requirement's wording) names every place that states or applies the
@@ -185,6 +188,9 @@ Task tool (general-purpose):
       none) — never report a result you did not observe
     - Files changed (with git diff summary)
     - Self-review findings (if any)
+    - **Decisions I made:** each default you chose, requirement you
+      interpreted, edge case you left out, or scope you cut that the task
+      text did not dictate, with its reason ("none" if there were none)
     - Any issues or concerns
 
     Use DONE_WITH_CONCERNS if you completed the work but have doubts.

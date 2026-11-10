@@ -205,6 +205,28 @@ const statusOf = (r, id) => r.out.tasks.find((t) => t.id === String(id))?.status
   check('blocked: concerns carried', r.out.tasks[1].concerns.includes('database URL missing'))
 }
 
+// 8b. Implementer decisions reach the result over every round, a BLOCKED
+//     fix round included, and never change the status.
+{
+  const failing = verified(1, { checks: [{ command: 'pytest tests/test_t1.py', ran: true, exitCode: 1, outputTail: '1 failed' }] })
+  const r = await run(payload([task(1)]), {
+    'implement 1': [done({ decisions: ['default page size 20 -- the spec names none'] })], 'verify 1': [failing, verified(1)], 'check 1': [clean, clean],
+    'fix 1': [done({ summary: 'fixed', decisions: ['empty list returns 200 -- matches the list endpoint'] })],
+  })
+  check('decisions: implementer asked for them', r.calls[0].prompt.includes('decisions'))
+  check('decisions: both rounds carried, in order', JSON.stringify(r.out.tasks[0].decisions) === JSON.stringify(['default page size 20 -- the spec names none', 'empty list returns 200 -- matches the list endpoint']), JSON.stringify(r.out.tasks[0].decisions))
+  check('decisions: status stays DONE', statusOf(r, 1) === 'DONE')
+  const none = await run(payload([task(1)]), { 'implement 1': [done()], 'verify 1': [verified(1)], 'check 1': [clean] })
+  check('decisions: empty when none reported', JSON.stringify(none.out.tasks[0].decisions) === '[]')
+  const blockedFix = await run(payload([task(1)]), {
+    'implement 1': [done()], 'verify 1': [failing], 'check 1': [clean],
+    'fix 1': [{ status: 'BLOCKED', summary: 'no db', decisions: ['kept the old retry count'] }],
+  })
+  check('decisions: a BLOCKED fix round keeps its decisions', blockedFix.out.tasks[0].status === 'BLOCKED' && (blockedFix.out.tasks[0].decisions || []).includes('kept the old retry count'), JSON.stringify(blockedFix.out.tasks[0]))
+  const crashed = await run(payload([task(1)], { mode: 'parallel' }), { 'implement 1': [() => { throw new Error('boom') }] })
+  check('decisions: a crashed task reports an empty list', JSON.stringify(crashed.out.tasks[0].decisions) === '[]', JSON.stringify(crashed.out.tasks[0]))
+}
+
 // 9. Sequential bases chain: task 2 diffs from the head task 1's verify saw.
 {
   const r = await run(payload([task(1), task(2)]), {
