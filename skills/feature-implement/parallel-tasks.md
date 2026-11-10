@@ -30,4 +30,4 @@ The merge removes each task worktree; who works where in the fix loop: [fix-loop
 
 ## Resume
 
-At startup only, a parallel task left `[~]` by a stopped session: [resume.md](resume.md) step 1.
+At startup only, a parallel task left `[~]` by a stopped session: [resume.md](resume.md) steps 1–2.
