@@ -91,7 +91,9 @@ TMP=$(mktemp "${TMPDIR:-/tmp}/.myspec-nap.XXXXXX")
 trap 'rm -f "$TMP"' EXIT
 printf '%s\n' "$NEW_CONTENT" > "$TMP"
 
-MATCHES=$(absolute_path_findings "$TMP")
+# A check that could not run (status 2, lib/content-checks.sh) is read by its
+# output alone, as before it had a status.
+MATCHES=$(absolute_path_findings "$TMP") || true
 [ -n "$MATCHES" ] || exit 0
 
 # A Write's content maps line for line onto the file; an edit's new text

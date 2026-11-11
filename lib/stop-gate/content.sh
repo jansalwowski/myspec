@@ -194,8 +194,10 @@ lf_copy() {
 # later), a file git ignores (un-ignoring it brings it into scope), and a
 # pass that rests on a command that failed: a diff git could not take
 # (added_lines), an awk, cut or copy that failed, a pair the loop did not
-# read. Their empty output reads as "no line added", so the file passes this
-# Stop as it did before, but it is judged again at the next. A finding
+# read, a check that could not judge (status 2 from a function in
+# content-checks.sh: its grep, awk, sed or head failed). Their empty output
+# reads as "no line added" or "no finding", so the file passes this Stop as
+# it did before, but it is judged again at the next. A finding
 # records nothing, so a file that failed is judged at every Stop until it
 # passes. When a hash cannot be taken, nothing is skipped and nothing is
 # recorded.
@@ -361,16 +363,16 @@ content_gates() {
       # pair's after (read the same way) reuses that region.
       if [ "$fm_on" -eq 1 ]; then
         case "$before" in
-          -|\?|@) fm_before=$(frontmatter_region "$tmp/before") ;;
+          -|\?|@) fm_before=$(frontmatter_region "$tmp/before") || sure=0 ;;
           *)
             if [ "$before" = "$prev_after" ] && [ "$CONTENT_KEPT" = "$prev_kept" ]; then
               fm_before=$prev_fm
             else
-              fm_before=$(frontmatter_region "$tmp/before")
+              fm_before=$(frontmatter_region "$tmp/before") || sure=0
             fi
             ;;
         esac
-        fm_after=$(frontmatter_region "$tmp/after")
+        fm_after=$(frontmatter_region "$tmp/after") || sure=0
         prev_after=$after prev_kept=$CONTENT_KEPT prev_fm=$fm_after
         if [ "$fm_before" != "$fm_after" ]; then
           [ "$fm_seen" -eq 1 ] || fm_from=$fm_before
@@ -399,7 +401,7 @@ content_gates() {
       sure=0
     elif absolute_paths_scope_unignored "$root" "$rel" "$ai" && [ -s "$tmp/numbered" ]; then
       cut -f2- "$tmp/numbered" > "$tmp/text" || sure=0
-      matches=$(absolute_path_findings "$tmp/text")
+      matches=$(absolute_path_findings "$tmp/text") || sure=0
       if [ -n "$matches" ]; then
         findings=""
         while IFS=$'\t' read -r n m; do
@@ -414,7 +416,7 @@ content_gates() {
     # Frontmatter, on a doc the session created or whose frontmatter region
     # its writes changed on net.
     if [ "$fm_on" -eq 1 ] && [ $((created + fm_changed)) -gt 0 ]; then
-      lines=$(frontmatter_issues "$cur")
+      lines=$(frontmatter_issues "$cur") || sure=0
       [ -z "$lines" ] || reasons+=("$(frontmatter_reason "$rel" "$lines" "$ai")")
     fi
 
@@ -425,7 +427,7 @@ content_gates() {
       reuse_ai=$CONTENT_AI_DEFAULT
     fi
     if [ "$created" -eq 1 ] && reuse_audit_scope "$reuse_ai" "$rel"; then
-      lines=$(reuse_audit_issues "$cur")
+      lines=$(reuse_audit_issues "$cur") || sure=0
       [ -z "$lines" ] || reasons+=("$(reuse_audit_reason "$rel" "$lines")")
     fi
     if [ "$sure" -eq 1 ] && [ -n "$CONTENT_RULES" ] && [ "${#reasons[@]}" -eq "$found" ]; then

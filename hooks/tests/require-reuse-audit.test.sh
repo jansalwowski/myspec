@@ -309,5 +309,25 @@ for loc in ja_JP.SJIS zh_TW.Big5; do
     echo "SKIP  locale $loc is not installed"
   fi
 done
+
+# --- a check that could not run: the outcome is what it was ---------------------
+# reuse_audit_issues returns 2 when a command failed (lib/content-checks.sh).
+# Under set -e that status must not end the hook: with the row check's awk
+# failing a bad row is allowed in silence, as before the function had a status.
+mkdir -p "$ROOT/awkfail"
+# shellcheck disable=SC2016 # the wrapper's own $@ and $a, expanded when it runs
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in *"function trim"*) exit 2 ;; esac; done\nexec %s "$@"\n' "$(command -v awk)" > "$ROOT/awkfail/awk"
+chmod +x "$ROOT/awkfail/awk"
+rm -f "$SPEC"
+BAD_ROW="${HEADER}### Reuse audit
+
+| Candidate | Surface | Decision | Reason |
+|-----------|---------|----------|--------|
+| BaseDialog | packages/uikit | maybe | matches REQ-12 |
+${FOOTER}"
+write "$SPEC" "$BAD_ROW"
+expect_deny "fixture: the bad row is denied when awk works"
+OUT=$(jq -nc --arg c "$REPO" --arg f "$SPEC" --arg b "$BAD_ROW" '{cwd: $c, tool_name: "Write", tool_input: {file_path: $f, content: $b}}' | PATH="$ROOT/awkfail:$PATH" bash "$HOOK" 2>/dev/null); RC=$?
+expect_quiet "a failed row awk allows in silence, exit 0"
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -354,5 +354,18 @@ for loc in ja_JP.SJIS zh_TW.Big5; do
   fi
 done
 
+# --- a check that could not run: the outcome is what it was ---------------------
+# frontmatter_issues returns 2 when a command failed (lib/content-checks.sh).
+# Under set -e that status must not end the hook: with the temporal grep
+# failing a valid new doc is denied for the field, as before the function had
+# a status.
+mkdir -p "$ROOT/grepfail"
+# shellcheck disable=SC2016 # the wrapper's own $@ and $a, expanded when it runs
+printf '#!/bin/sh\nfor a in "$@"; do case "$a" in *"^(updated"*) exit 2 ;; esac; done\nexec %s "$@"\n' "$(command -v grep)" > "$ROOT/grepfail/grep"
+chmod +x "$ROOT/grepfail/grep"
+OUT=$(jq -nc --arg c "$REPO" --arg f "$REPO/.ai/features/x/failed-grep.md" '{cwd: $c, tool_name: "Write", tool_input: {file_path: $f, content: "---\ntitle: T\nupdated: 2026-01-01\n---\nbody\n"}}' | PATH="$ROOT/grepfail:$PATH" bash "$HOOK" 2>/dev/null); RC=$?
+expect_block "a failed temporal grep denies, exit 0"
+reason | grep -q 'missing temporal field' && ok || fail "the deny names the field the failed grep did not find"
+
 printf '%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -130,7 +130,9 @@ elif [ "$PROPOSED_KIND" != write ]; then
   exit 0
 fi
 
-ISSUES=$(frontmatter_issues "$TMP")
+# A check that could not run (status 2, lib/content-checks.sh) is read by its
+# output alone, as before it had a status.
+ISSUES=$(frontmatter_issues "$TMP") || true
 [ -n "$ISSUES" ] || exit 0
 
 pretool_deny "$(frontmatter_reason "$RELATIVE" "$ISSUES" "$AI_DIR")"

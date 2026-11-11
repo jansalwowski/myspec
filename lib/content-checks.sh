@@ -12,6 +12,15 @@
 # it adds or changes, a Bash write by the diff between its before and after
 # snapshots (#263). The
 # reasons both print are built here, so the two paths say the same thing.
+#
+# Exit status of a check (absolute_path_findings, frontmatter_region,
+# frontmatter_issues, reuse_audit_issues): 0 when it judged the file, and what
+# it printed is the verdict (nothing is "no finding"); 2 when one of its own
+# commands failed (grep exits 1 for no match and 2 or more for an error; awk,
+# sed and head exit non-zero), so it could not judge. It prints what it always
+# printed in that case, but that output is not a verdict: nothing printed is
+# not "clean". The Stop gate never records such a pass. A caller under
+# `set -e` reads the status (`|| ...`), or the assignment ends the script.
 # Sourced after lib/hook-core.sh (HOOK_LIB, ai_dir, physical paths); it
 # sources lib/markdown-section-check.sh beside it (the reuse-audit table
 # checks). bash 3.2 compatible (macOS /bin/bash).
@@ -123,12 +132,18 @@ absolute_paths_scope_unignored() {
 
 # absolute_path_findings <file> -> at most ten `<line>\t<match>` lines, the
 # line being the match's line in <file> and the match the path with its
-# boundary character stripped. Nothing when the file is clean.
+# boundary character stripped. Nothing when the file is clean. Status 2 when
+# grep failed (see "Exit status of a check" above).
 absolute_path_findings() {
-  local line n m
-  # awk, not head: it reads all of grep's output, so no SIGPIPE under pipefail.
+  local line n m out rc=0 i=0
+  # Ten matching lines hold at least ten matches. grep's output is taken
+  # whole and cut here, so nothing closes a pipe under it (no SIGPIPE under
+  # pipefail) and its status is its own.
+  out=$(grep -m 10 -noE "$ABSOLUTE_PATH_RE" "$1" 2>/dev/null) || rc=$?
   while IFS= read -r line; do
     [ -n "$line" ] || continue
+    [ "$i" -lt 10 ] || break
+    i=$((i + 1))
     n="${line%%:*}"
     m="${line#*:}"
     case "$m" in
@@ -136,7 +151,8 @@ absolute_path_findings() {
       *) m="${m#?}" ;;
     esac
     printf '%s\t%s\n' "$n" "$m"
-  done < <(grep -noE "$ABSOLUTE_PATH_RE" "$1" 2>/dev/null | awk 'NR <= 10' || true)
+  done <<< "$out"
+  [ "$rc" -le 1 ] || return 2
 }
 
 # absolute_path_hint <match> <repo root> -> the replacement to suggest.
@@ -214,10 +230,11 @@ frontmatter_scope() {
 # change its frontmatter: line 1 through the closing `---` when line 1 opens
 # a fence (through the end when it never closes), else nothing. A doc with no
 # fence has no region, so retitling its first line is not a frontmatter
-# change (PR #274 review); adding or removing a fence is.
+# change (PR #274 review); adding or removing a fence is. Status 2 when awk
+# failed: what it printed is then not the region.
 frontmatter_region() {
   [ -f "$1" ] || return 0
-  awk 'NR == 1 { if ($0 !~ /^---[ \t\r]*$/) exit; print; next } { print } /^---[ \t\r]*$/ { exit }' "$1" 2>/dev/null
+  awk 'NR == 1 { if ($0 !~ /^---[ \t\r]*$/) exit; print; next } { print } /^---[ \t\r]*$/ { exit }' "$1" 2>/dev/null || return 2
 }
 
 # frontmatter_issues <file> -> one issue per line; nothing when the
@@ -226,24 +243,41 @@ frontmatter_region() {
 # the framework's own templates) and a temporal one (any of updated/
 # last_updated/created/started/date). The file is read directly: echoing it
 # into grep -q/awk SIGPIPEs the writer past the 64 KiB pipe buffer, and
-# under pipefail that read as "no frontmatter" (#33).
+# under pipefail that read as "no frontmatter" (#33). Status 2 when a command
+# failed: the issues printed are then what the failure left, as before, not
+# the file's (a failed grep reads as a missing field).
 frontmatter_issues() {
-  local file="$1" first fm closed=1
-  first=$(head -n 1 "$file" | tr -d '\r')
-  if ! grep -qE '^---' "$file"; then
+  local file="$1" first fm closed=1 rc=0 failed=0
+  first=$(head -n 1 "$file") || failed=1
+  first=${first//$'\r'/}
+  grep -qE '^---' "$file" || rc=$?
+  [ "$rc" -le 1 ] || failed=1
+  if [ "$rc" -ne 0 ]; then
     printf 'missing frontmatter block entirely\n'
+    [ "$failed" -eq 0 ] || return 2
     return 0
   fi
   if ! [[ "$first" =~ ^---[[:space:]]*$ ]]; then
     printf "frontmatter must start on line 1 with '---' (a '---' block further down is not frontmatter)\n"
+    [ "$failed" -eq 0 ] || return 2
     return 0
   fi
-  fm=$(awk 'NR == 1 { next } /^---[ \t\r]*$/ { closed = 1; exit } { print } END { if (!closed) exit 3 }' "$file") || closed=0
+  # 3 is the program's own "never closed"; any other status is awk's failure.
+  fm=$(awk 'NR == 1 { next } /^---[ \t\r]*$/ { closed = 1; exit } { print } END { if (!closed) exit 3 }' "$file") || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    closed=0
+    [ "$rc" -eq 3 ] || failed=1
+  fi
   [ "$closed" = 1 ] || printf "frontmatter opened on line 1 is never closed with '---'\n"
-  grep -qE '^(title|name|topic|id|type):' <<< "$fm" \
-    || printf "missing identity field: one of 'title', 'name', 'topic', 'id', 'type'\n"
-  grep -qE '^(updated|last_updated|created|started|date):' <<< "$fm" \
-    || printf "missing temporal field: one of 'updated', 'last_updated', 'created', 'started', 'date'\n"
+  rc=0
+  grep -qE '^(title|name|topic|id|type):' <<< "$fm" || rc=$?
+  [ "$rc" -eq 0 ] || printf "missing identity field: one of 'title', 'name', 'topic', 'id', 'type'\n"
+  [ "$rc" -le 1 ] || failed=1
+  rc=0
+  grep -qE '^(updated|last_updated|created|started|date):' <<< "$fm" || rc=$?
+  [ "$rc" -eq 0 ] || printf "missing temporal field: one of 'updated', 'last_updated', 'created', 'started', 'date'\n"
+  [ "$rc" -le 1 ] || failed=1
+  [ "$failed" -eq 0 ] || return 2
 }
 
 # frontmatter_reason <rel path> <issues> <ai dir> -> the reason.
@@ -297,24 +331,31 @@ reuse_audit_state() {
 # reuse_audit_issues <file> -> the diagnostics, one per line; nothing when
 # the file carries a skip marker with a reason or a valid section: the
 # heading, a table after it with at least one data row, four cells per row,
-# Decision in {reuse, skip}, a Reason on every skip row.
+# Decision in {reuse, skip}, a Reason on every skip row. Status 2 when a
+# command failed, here or in an assert_* helper (which then returns 2 or
+# more, 1 being a failed assertion): a failed marker grep reads as no marker,
+# and a failed row check prints no row.
 reuse_audit_issues() {
-  local file="$1" marker reason out
-  if marker=$(grep -m1 -E "$REUSE_AUDIT_MARKER_RE" "$file" 2>/dev/null); then
-    reason=$(printf '%s' "$marker" | sed -E 's/.*myspec:reuse-audit[[:space:]]+skip:[[:space:]]*//; s/[[:space:]]*-->.*$//; s/[[:space:]]+$//')
-    if [ -n "$reason" ]; then
-      return 0
-    fi
-    printf 'the <!-- myspec:reuse-audit skip: ... --> marker needs a reason after "skip:"\n'
+  local file="$1" marker reason out="" rc=0 failed=0
+  marker=$(grep -m1 -E "$REUSE_AUDIT_MARKER_RE" "$file" 2>/dev/null) || rc=$?
+  if [ "$rc" -eq 0 ]; then
+    reason=$(printf '%s' "$marker" | sed -E 's/.*myspec:reuse-audit[[:space:]]+skip:[[:space:]]*//; s/[[:space:]]*-->.*$//; s/[[:space:]]+$//') || failed=1
+    [ -n "$reason" ] || printf 'the <!-- myspec:reuse-audit skip: ... --> marker needs a reason after "skip:"\n'
+    [ "$failed" -eq 0 ] || return 2
     return 0
   fi
-  if ! out=$(assert_section_present "$file" "$REUSE_AUDIT_HEADING"); then
-    printf '%s\n' "$out"
-  elif ! out=$(assert_table_after_heading "$file" "$REUSE_AUDIT_HEADING" 1); then
-    printf '%s\n' "$out"
-  elif ! out=$(assert_reuse_audit_rows "$file" "$REUSE_AUDIT_HEADING"); then
-    printf '%s\n' "$out"
+  [ "$rc" -le 1 ] || failed=1
+  rc=0
+  out=$(assert_section_present "$file" "$REUSE_AUDIT_HEADING") || rc=$?
+  if [ "$rc" -eq 0 ]; then
+    out=$(assert_table_after_heading "$file" "$REUSE_AUDIT_HEADING" 1) || rc=$?
   fi
+  if [ "$rc" -eq 0 ]; then
+    out=$(assert_reuse_audit_rows "$file" "$REUSE_AUDIT_HEADING") || rc=$?
+  fi
+  [ "$rc" -eq 0 ] || printf '%s\n' "$out"
+  [ "$rc" -le 1 ] || failed=1
+  [ "$failed" -eq 0 ] || return 2
 }
 
 # reuse_audit_reason <path> <diagnostics> -> the reason. When every

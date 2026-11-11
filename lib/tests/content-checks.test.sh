@@ -245,5 +245,89 @@ absolute_paths_scope "$REPO" .ai/x.json && ok || fail "no aiDir configured means
 rm -f "$REPO/.myspec.json"
 absolute_paths_scope "$REPO" .ai/x.json && fail "no .myspec.json means no aiDir tree" || ok
 
+# --- a check whose own command failed says so, apart from "no finding" ------------
+# Status 2 is "could not judge": the Stop gate recorded such a pass as judged
+# clean and never looked at the file again.
+# failing <dir> <tool> <needle>: a <tool> in $ROOT/<dir> that exits 2 when one
+# of its arguments holds <needle>, and is the real one otherwise.
+failing() {
+  mkdir -p "$ROOT/$1"
+  # shellcheck disable=SC2016 # the wrapper's own $@ and $a, expanded when it runs
+  printf '#!/bin/sh\nfor a in "$@"; do case "$a" in *"%s"*) exit 2 ;; esac; done\nexec %s "$@"\n' "$3" "$(command -v "$2")" > "$ROOT/$1/$2"
+  chmod +x "$ROOT/$1/$2"
+}
+# with <dir> <function> <file> -> ST, the function's status with $ROOT/<dir>
+# first on PATH, and GOT, what it printed.
+with() {
+  ST=0
+  GOT=$(PATH="$ROOT/$1:$PATH"; "$2" "$3") || ST=$?
+}
+failing f-paths grep 'A-Za-z0-9._/-'
+failing f-region awk 'NR == 1 { if ('
+failing f-head head '-n'
+failing f-fence grep '^---'
+failing f-fm awk 'closed = 1'
+failing f-identity grep '^(title'
+failing f-temporal grep '^(updated'
+failing f-marker grep 'myspec:reuse-audit'
+failing f-sed sed 'myspec:reuse-audit'
+failing f-heading awk 'tolower(h)'
+failing f-table awk 'intable'
+failing f-count grep '-c'
+failing f-rows awk 'function trim'
+
+printf 'see /Users/alice/work\n' > "$CUR"
+with f-paths absolute_path_findings "$CUR"
+expect "2:" "$ST:$GOT" "absolute_path_findings: a failed grep is status 2, not a clean file"
+with none absolute_path_findings "$CUR"
+expect "0:1	/Users/alice" "$ST:$GOT" "absolute_path_findings: a finding is status 0"
+printf 'clean\n' > "$CUR"
+with none absolute_path_findings "$CUR"
+expect "0:" "$ST:$GOT" "absolute_path_findings: no match (grep exits 1) is status 0"
+for i in 1 2 3 4 5 6 7 8 9 10 11 12; do printf 'a /Users/u%s/x b /home/h%s/y\n' "$i" "$i"; done > "$CUR"
+with none absolute_path_findings "$CUR"
+expect "0:10:5	/home/h5" "$ST:$(printf '%s\n' "$GOT" | wc -l | tr -d ' '):$(printf '%s\n' "$GOT" | tail -1)" "absolute_path_findings: the first ten matches, two to a line"
+
+printf -- '---\ntitle: T\nupdated: 2026-01-01\n---\nbody\n' > "$CUR"
+with f-region frontmatter_region "$CUR"
+expect "2:" "$ST:$GOT" "frontmatter_region: a failed awk is status 2, not a doc without a region"
+with none frontmatter_region "$CUR"
+expect 0 "$ST" "frontmatter_region: status 0 when awk ran"
+with f-region frontmatter_region "$ROOT/missing.md"
+expect "0:" "$ST:$GOT" "frontmatter_region: a missing file has no region and runs nothing"
+
+for d in f-head f-fence f-fm f-identity f-temporal; do
+  with "$d" frontmatter_issues "$CUR"
+  expect 2 "$ST" "frontmatter_issues: a failed command is status 2 ($d)"
+done
+with none frontmatter_issues "$CUR"
+expect "0:" "$ST:$GOT" "frontmatter_issues: valid frontmatter is status 0"
+printf -- '---\ntitle: T\nupdated: 2026-01-01\n' > "$CUR"
+with none frontmatter_issues "$CUR"
+expect "0:frontmatter opened on line 1 is never closed with '---'" "$ST:$GOT" "frontmatter_issues: an unclosed fence (the awk program's own exit 3) is a finding, status 0"
+printf 'body\n' > "$CUR"
+with none frontmatter_issues "$CUR"
+expect "0:missing frontmatter block entirely" "$ST:$GOT" "frontmatter_issues: no fence (grep exits 1) is a finding, status 0"
+
+printf '# T\n<!-- myspec:reuse-audit skip: nothing shared -->\n' > "$CUR"
+for d in f-marker f-sed; do
+  with "$d" reuse_audit_issues "$CUR"
+  expect 2 "$ST" "reuse_audit_issues: a failed command on a marker is status 2 ($d)"
+done
+with none reuse_audit_issues "$CUR"
+expect "0:" "$ST:$GOT" "reuse_audit_issues: a marker with a reason is status 0"
+printf '# T\n\n## Reuse audit\n\n| Candidate | Surface | Decision | Reason |\n|---|---|---|---|\n| a | b | maybe | c |\n' > "$CUR"
+for d in f-heading f-table f-count f-rows; do
+  with "$d" reuse_audit_issues "$CUR"
+  expect 2 "$ST" "reuse_audit_issues: a failed command in a section check is status 2 ($d)"
+done
+with f-rows reuse_audit_issues "$CUR"
+expect "2:" "$ST:$GOT" "reuse_audit_issues: a failed row check prints no row and is not a pass"
+with none reuse_audit_issues "$CUR"
+expect '0:row 1: Decision must be reuse or skip, got "maybe"; a component reused with changes is reuse, with the change in Reason' "$ST:$GOT" "reuse_audit_issues: a bad row is a finding, status 0"
+printf '# T\n' > "$CUR"
+with none reuse_audit_issues "$CUR"
+expect '0:missing required section: "## Reuse audit" (or ### )' "$ST:$GOT" "reuse_audit_issues: a missing section (assert status 1) is a finding, status 0"
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

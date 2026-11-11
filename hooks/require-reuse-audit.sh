@@ -124,7 +124,9 @@ elif [ "$PROPOSED_KIND" != write ] && [ ! -s "$TMP" ]; then
   exit 0
 fi
 
-DIAG=$(reuse_audit_issues "$TMP")
+# A check that could not run (status 2, lib/content-checks.sh) is read by its
+# output alone, as before it had a status.
+DIAG=$(reuse_audit_issues "$TMP") || true
 [ -n "$DIAG" ] || exit 0
 
 pretool_deny "$(reuse_audit_reason "$FILE_PATH" "$DIAG")"
