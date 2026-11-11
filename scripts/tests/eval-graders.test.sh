@@ -36,7 +36,7 @@ printf -- "---\ntype: tool_used\ntool: Skill\ninput_match: '\"skill\"\\\\s*:\\\\
 printf -- "---\ntype: llm\n---\n\nPASS if good.\n" > "$TMP/evals/judge-only/graders/judge.md"
 # An Agent grader whose pattern also matches an implementer prompt ("Verify at phase review").
 printf -- "---\ntype: tool_used\ntool: Agent\ninput_match: '(?i:phase review)'\n---\n" > "$TMP/evals/loose-agent/graders/reviewer.md"
-printf '{"reviewer": {"pass": [[{"tool": "Agent", "input": {"prompt": "You are reviewing Phase 1."}}]], "fail": [[{"tool": "Agent", "input": {"prompt": "You are implementing Task 1. Verify at phase review: pytest"}}]]}}\n' > "$TMP/evals/loose-agent/grader-samples.json"
+printf '{"reviewer": {"pass": [[{"tool": "Agent", "input": {"description": "Phase review for Phase 1", "prompt": "You are reviewing Phase 1."}}]], "fail": [[{"tool": "Agent", "input": {"prompt": "You are implementing Task 1. Verify at phase review: pytest"}}]]}}\n' > "$TMP/evals/loose-agent/grader-samples.json"
 # Graders of the other deterministic types with no samples: nothing shows they can fail.
 mkdir -p "$TMP/evals/no-samples-tools/graders" "$TMP/evals/loose-order/graders" "$TMP/evals/loose-file/graders"
 for c in no-samples-tools loose-order loose-file; do printf -- '---\ntags: [x]\n---\n\nprompt\n' > "$TMP/evals/$c/prompt.md"; done
@@ -70,8 +70,9 @@ for want in "no-samples/flags: grader-samples.json needs" \
   if printf '%s' "$out" | grep -qF -- "$want"; then ok "catches: $want"; else nok "catches: $want" "$out"; fi
 done
 
-# Exactly the planted problems: a sample the checker should accept is not reported.
-want_n=15
+# Exactly the planted problems, one per line of the loop above: a sample the
+# checker should accept is not reported.
+want_n=14
 got_n=$(printf '%s\n' "$out" | grep -c ': ')
 [ "$got_n" = "$want_n" ] && ok "broken suite: $want_n problems reported, no more" || nok "broken suite: $want_n problems reported (got $got_n)" "$out"
 

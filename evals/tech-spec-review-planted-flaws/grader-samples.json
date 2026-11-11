@@ -20,12 +20,15 @@
       "| High | Pattern Conformance | Hand-rolled CSV writer | tech-spec.md | 20, 32 | The reuse audit says the codebase has no shared CSV writer, but `app/reporting/tabular_export.py` provides `stream_csv`. |",
       "Step 3 duplicates `app/reporting/tabular_export.py`; use its `stream_csv` in the view.",
       "| High | Reuse | Reuse audit | tech-spec.md | 20 | `app/reporting/tabular_export.py` exists and already streams CSV. |",
-      "A shared CSV writer already exists at app/reporting/tabular_export.py. The audit row says otherwise."
+      "A shared CSV writer already exists at app/reporting/tabular_export.py. The audit row says otherwise.",
+      "- Step 3 does not reuse tabular_export (the shared CSV writer).",
+      "`app/reporting/tabular_export.py` already streams CSV, so the skip decision is not justified."
     ],
     "fail": [
       "The reuse audit has two rows with valid decisions and reasons.",
       "Reuse audit: both rows carry a decision and a reason. The CSV helper row skips `app/reporting/tabular_export.py`, which is reasonable because the invoice export has its own column set.",
-      "I read app/reporting/tabular_export.py and app/reporting/customer_report.py for context. The reuse audit is fine as written."
+      "I read app/reporting/tabular_export.py and app/reporting/customer_report.py for context. The reuse audit is fine as written.",
+      "The Reuse Audit already covers tabular_export. No issue."
     ]
   },
   "verdict-blocks-planning": {
@@ -34,7 +37,9 @@
       "### Critical\n- REQ-004 has no step",
       "1 Critical and 1 High remain, so feature-plan is blocked.",
       "| **Critical** | Spec Alignment | Uncovered requirement |",
-      "| Severity | Count |\n|---|---|\n| Critical | 1 |\n| High | 1 |"
+      "| Severity | Count |\n|---|---|\n| Critical | 1 |\n| High | 1 |",
+      "| Critical | High | Medium | Low |\n|---|---|---|---|\n| 1 | 1 | 1 | 0 |",
+      "| Critical | No step implements REQ-004 | spec.md |"
     ],
     "fail": [
       "| High | Pattern Conformance | Hand-rolled CSV | tech-spec.md | 34 | on the critical path |",
@@ -45,7 +50,11 @@
       "## Summary\n\n| Severity | Count |\n|---|---|\n| Critical | 0 |\n| High | 2 |\n\nNo blocking findings.",
       "| **Critical** | **0** |\n| High | 2 |",
       "| Critical | High | Medium | Low |\n|---|---|---|---|\n| 0 | 2 | 1 | 0 |",
-      "| Critical | — |"
+      "| Critical | — |",
+      "| Critical | 0 findings |\n| High | 2 findings |",
+      "| Critical | None found |",
+      "| Critical | – |\n| High | 2 |",
+      "| Critical | No findings |"
     ]
   },
   "verdict-not-passed": {
@@ -63,7 +72,8 @@
       "verification_mode is missing on a data-deriving export (Medium, does not block planning).",
       "### Medium\n\n| Dimension | Issue | File | Line(s) | Finding |\n|---|---|---|---|---|\n| Testability | No verification mode | tech-spec.md | 1-7 | Frontmatter sets no `verification_mode`, yet the export derives CSV rows from invoice data. |",
       "## Medium\n\n### M1. Empty customer name\n\nNo case for it.\n\n### M2. No verification mode\n\nThe design derives output from invoice data but the frontmatter has no `verification_mode`.",
-      "### Medium (does not block planning)\n- Edge cases: no case for an empty customer name.\n- `verification_mode` is absent on a data-deriving export; `verification_mode: data` would give each milestone a probe."
+      "### Medium (does not block planning)\n- Edge cases: no case for an empty customer name.\n- `verification_mode` is absent on a data-deriving export; `verification_mode: data` would give each milestone a probe.",
+      "#### 4. Missing verification_mode\n\n- **Severity:** Medium\n- **Dimension:** Testability"
     ],
     "fail": [
       "verification_mode is not set, so the verification-surface gate is skipped.",
@@ -72,7 +82,9 @@
       "### Medium\n\n- No case for an empty customer name.\n\n### Low\n\n- `verification_mode` could be added later.",
       "### Medium\n\nNone.\n\n## Checks skipped\n\nverification_mode is not set, so the verification-surface gate is skipped.",
       "### Medium\n\n| Severity | Dimension | Issue |\n|---|---|---|\n| Medium | Completeness | Edge cases |\n| Low | Testability | verification_mode not set |",
-      "### High\n\n- REQ-004 has no step.\n\nNotes: the frontmatter has no verification_mode.\n\n### Medium\n\n- Edge cases."
+      "### High\n\n- REQ-004 has no step.\n\nNotes: the frontmatter has no verification_mode.\n\n### Medium\n\n- Edge cases.",
+      "## Findings (1 Critical, 1 High, 1 Medium, 1 Low)\n\n- [Low] Frontmatter has no verification_mode",
+      "#### 3. Missing verification_mode\n- **Severity:** Low\n\n#### 4. Edge cases\n- **Severity:** Medium"
     ]
   }
 }

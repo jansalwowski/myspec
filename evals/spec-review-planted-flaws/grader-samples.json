@@ -17,7 +17,9 @@
       "| High | Testability | spec.md | 28 | AC-2 \"The export should be fast\" has no measurable threshold. |",
       "### AC-2 is untestable\n\n- \"The export should be fast\" names no number.\n- REQ-005 says \"immediately\", which has the same problem.",
       "**AC-2: \"The export should be fast.\"**\n\nThis is not measurable: there is no threshold in seconds or rows.",
-      "AC-2 says \"fast\"; unlike AC-1 and AC-3 it cannot be measured."
+      "AC-2 says \"fast\"; unlike AC-1 and AC-3 it cannot be measured.",
+      "> AC-2: The export should be fast.\n\nUnlike AC-1 and AC-3, it gives no threshold, so nobody can test it.",
+      "Three problems: REQ-002 contradicts REQ-004, AC-2 (\"fast\") is not measurable, and no error state is described."
     ],
     "fail": [
       "AC-2 is fine as written; REQ-002 contradicts REQ-004.",

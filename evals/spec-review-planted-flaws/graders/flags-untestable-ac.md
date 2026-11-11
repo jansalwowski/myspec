@@ -1,5 +1,5 @@
 ---
 type: regex
 flags: i
-pattern: 'fast(?:[^\n]{0,300}|(?:(?!\b(?:REQ-00[1-4]|AC-[13])\b)[\s\S]){0,300})(measur|testab|vague|subjective|quantif|threshold|seconds)|(measur|testab|vague|subjective|quantif|threshold)(?:[^\n]{0,300}|(?:(?!\b(?:REQ-00[1-4]|AC-[13])\b)[\s\S]){0,300})fast'
+pattern: 'fast[\s\S]{0,300}(?<!REQ-00[1-4]\b(?:(?!fast|AC-2)[^\n])*)(measur|testab|vague|subjective|quantif|threshold|seconds)|(?<!REQ-00[1-4]\b(?:(?!fast|AC-2)[^\n])*)(measur|testab|vague|subjective|quantif|threshold)[\s\S]{0,300}fast'
 ---

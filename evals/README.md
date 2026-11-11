@@ -201,7 +201,7 @@ Mechanisms that don't work on 2.1.284, so nobody retries them: copying the files
 
 ## Adding a case
 
-1. Create `evals/<case>/` with `case.yaml`, `prompt.md`, `fixture.sh`, `graders/`, and `grader-samples.json` if it has regex graders.
+1. Create `evals/<case>/` with `case.yaml`, `prompt.md`, `fixture.sh`, `graders/`, and `grader-samples.json` with samples for every deterministic grader except Skill `tool_used` graders ([Proving a grader can fail](#proving-a-grader-can-fail)).
 2. Phrase the prompt the way a user types it. Never name the skill. The one exception is a case that grades what a skill does once it runs, not whether it fires: it may start with the skill's command (`/myspec:<name> …`) and carries no right-skill grader, and a `trigger` case covers its routing. `brainstorm-visual-result` does this: when a prompt points at files, Sonnet reads them and answers itself, so brainstorm fired 1 run in 5 and the case measured routing instead of the Visual Buddy offer (#410). `trigger-brainstorm` grades routing on a prompt with nothing to read.
 3. Give it **at least one deterministic grader** (`tool_used`, `regex`, `file_exists`, `tool_order`). An `llm` grader may add to it but never replace it: a judge's verdict varies between runs, and the default Haiku judge voted FAIL three times on a review that plainly passed.
 4. Tag it: `skill:<name>` for every skill its graders name, the family (`trigger`, `near-miss`, `planted-flaw`, `artifact-contract`), and `capability`, with `runs: 1` beside the tags. Add `description-only` only for the opt-out in [Project instructions](#project-instructions).

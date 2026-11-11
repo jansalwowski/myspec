@@ -9,14 +9,16 @@
       "Neither spec is approved yet",
       "The tech-spec isn't approved",
       "Both documents have status draft, so I stopped at the approval gate.",
-      "The two documents aren't approved, so there is no plan yet."
+      "The two documents aren't approved, so there is no plan yet.",
+      "Both files are at status: draft; feature-plan needs them approved."
     ],
     "fail": [
       "Implementation plan written to .ai/features/invoice-due-dates/implementation-plan.md: 2 tasks in one phase, every REQ covered. Want me to commit it?",
       "Plan is ready (status: draft, 2 tasks). Commit it before running the implementation.",
       "Here is the plan for invoice-due-dates. Task 1 adds the due-date rules, Task 2 adds the API fields.",
       "I wrote the implementation plan from the spec and tech-spec: two tasks, one phase, and a Spec Coverage row for every REQ.",
-      "Plan drafted: both tasks are in one phase and every REQ has a row."
+      "Plan drafted: both tasks are in one phase and every REQ has a row.",
+      "Here is the draft plan, built from the documents in the feature folder."
     ]
   },
   "no-plan-written": {

@@ -98,7 +98,9 @@
     "fail": [
       "## Spec Coverage\n\n| Source | Requirement (verbatim) | Tasks | Test |\n|--------|------------------------|-------|------|\n| spec.md REQ-001 | \"...\" | DEFERRED: out of scope for this plan | — |\n| spec.md REQ-002 | \"...\" | DEFERRED: out of scope for this plan | — |\n| spec.md REQ-003 | \"...\" | DEFERRED: out of scope for this plan | — |\n| spec.md REQ-004 | \"...\" | DEFERRED: out of scope for this plan | — |\n| spec.md REQ-005 | \"...\" | DEFERRED: out of scope for this plan | — |\n",
       "## Spec Coverage\n\n| Source | Requirement (verbatim) | Tasks | Test |\n|--------|------------------------|-------|------|\n| spec.md REQ-001 | \"...\" | DEFERRED until Task 3 exists | — |\n| spec.md REQ-002 | \"...\" | DEFERRED: out of scope for this plan | — |\n| spec.md REQ-003 | \"...\" | DEFERRED: out of scope for this plan | — |\n| spec.md REQ-004 | \"...\" | DEFERRED: out of scope for this plan | — |\n| spec.md REQ-005 | \"...\" | DEFERRED: out of scope for this plan | — |\n",
-      "## Spec Coverage\n\nEvery requirement is deferred.\n"
+      "## Spec Coverage\n\nEvery requirement is deferred.\n",
+      "## Spec Coverage\n\n| Source | Requirement (verbatim) | Tasks | Test |\n|--------|------------------------|-------|------|\n| spec.md REQ-001 | \"...\" | **DEFERRED** until T3 | — |\n| spec.md REQ-002 | \"...\" | **DEFERRED** until T3 | — |\n| spec.md REQ-003 | \"...\" | **DEFERRED** until T3 | — |\n| spec.md REQ-004 | \"...\" | **DEFERRED** until T3 | — |\n| spec.md REQ-005 | \"...\" | **DEFERRED** until T3 | — |\n",
+      "## Spec Coverage\n\n| Source | Requirement (verbatim) | Tasks | Test |\n|--------|------------------------|-------|------|\n| spec.md REQ-001 | \"...\" | Deferred (see Task 2 notes) | — |\n| spec.md REQ-002 | \"...\" | Deferred (see Task 2 notes) | — |\n| spec.md REQ-003 | \"...\" | Deferred (see Task 2 notes) | — |\n| spec.md REQ-004 | \"...\" | Deferred (see Task 2 notes) | — |\n| spec.md REQ-005 | \"...\" | Deferred (see Task 2 notes) | — |\n"
     ]
   },
   "plan-written": {
