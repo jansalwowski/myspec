@@ -589,6 +589,88 @@ OUT=$(stop 51)
 [ "$(decision "$OUT")" = block ] && ok || fail "a leak written by a command that then fails blocks (got: ${OUT:0:200})"
 rm -f "$REPO/docs/failed.md"
 
+# --- a file judged clean is not judged again until something changes ---------------
+# A Stop re-judged every Bash-written doc of the session (9.5 s at 50 docs).
+# A file that passed gets a `checked` event; the next Stop skips it only
+# while its bytes, its pairs, the rules and the aiDir are what was judged.
+# checked <sid-suffix> -> the rel of each `checked` event, in order.
+checked() {
+  bash "$CLAUDE_PLUGIN_ROOT/lib/session-event.sh" --root "$REPO" events "$SID-$1" \
+    | jq -r 'select(.t == "checked") | .rel' | tr '\n' ' '
+}
+git -C "$REPO" checkout -q -- docs/notes.md
+bashcmd 160 "printf 'one more clean line\n' >> docs/notes.md"
+bashcmd 160 "printf '# Skip\nclean\n' > docs/skip.md"
+OUT=$(stop 160)
+[ "$(decision "$OUT")" = approve ] && ok || fail "fixture: two clean docs approve (got: ${OUT:0:200})"
+[ "$(checked 160)" = "docs/notes.md docs/skip.md " ] && ok || fail "each doc that passed is recorded as checked (got: $(checked 160))"
+OUT=$(stop 160)
+[ "$(decision "$OUT")" = approve ] && ok || fail "the same docs approve again (got: ${OUT:0:200})"
+[ "$(checked 160)" = "docs/notes.md docs/skip.md " ] && ok || fail "an unchanged doc is skipped, not judged and recorded again (got: $(checked 160))"
+# One of the two changes: only that one is judged again.
+bashcmd 160 "printf 'more\n' >> docs/skip.md"
+OUT=$(stop 160)
+[ "$(decision "$OUT")" = approve ] && ok || fail "a clean change approves (got: ${OUT:0:200})"
+[ "$(checked 160)" = "docs/notes.md docs/skip.md docs/skip.md " ] && ok || fail "only the changed doc is judged again (got: $(checked 160))"
+
+# The bytes changed with no new Bash write: the session's leak, taken out by
+# an Edit call before the Stop that passed, comes back the same way. The pairs
+# are the same, so only the content hash tells.
+bashcmd 161 "printf '# Back\nsee $LEAK\n' > docs/back.md"
+printf '# Back\n' > "$REPO/docs/back.md"
+editcall 161 docs/back.md
+OUT=$(stop 161)
+[ "$(decision "$OUT")" = approve ] && ok || fail "a leak an Edit call removed approves (got: ${OUT:0:200})"
+[ "$(checked 161)" = "docs/back.md " ] && ok || fail "fixture: the doc is recorded as checked (got: $(checked 161))"
+printf '# Back\nsee %s\n' "$LEAK" > "$REPO/docs/back.md"
+OUT=$(stop 161)
+[ "$(decision "$OUT")" = block ] && ok || fail "a checked doc whose bytes changed is judged again (got: ${OUT:0:200})"
+OUT=$(stop 161)
+[ "$(decision "$OUT")" = block ] && ok || fail "a doc that failed is judged at every Stop (got: ${OUT:0:200})"
+[ "$(checked 161)" = "docs/back.md " ] && ok || fail "a finding records nothing (got: $(checked 161))"
+rm -f "$REPO/docs/back.md"
+
+# The same bytes under more pairs: another writer's leak is in the doc when
+# it passes; the session then removes the line and writes it back, so the
+# bytes are the ones judged clean but the line is now the session's.
+bashcmd 162 "printf '# Same\n' > docs/same.md"
+printf 'see %s\n' "$LEAK" >> "$REPO/docs/same.md"
+OUT=$(stop 162)
+[ "$(decision "$OUT")" = approve ] && ok || fail "another writer's leak in the session's doc approves (got: ${OUT:0:200})"
+SAME=$(git -C "$REPO" hash-object -- docs/same.md)
+bashcmd 162 "printf '# Same\n' > docs/same.md"
+bashcmd 162 "printf 'see $LEAK\n' >> docs/same.md"
+[ "$(git -C "$REPO" hash-object -- docs/same.md)" = "$SAME" ] && ok || fail "fixture: the doc holds the bytes that were judged clean"
+OUT=$(stop 162)
+[ "$(decision "$OUT")" = block ] && ok || fail "the same bytes under later Bash writes are judged again (got: ${OUT:0:200})"
+rm -f "$REPO/docs/same.md"
+
+# The aiDir moves onto a doc judged outside it: the frontmatter gate now covers it.
+bashcmd 163 "mkdir -p notes && printf '# No frontmatter\n' > notes/n.md"
+OUT=$(stop 163)
+[ "$(decision "$OUT")" = approve ] && ok || fail "a doc outside the aiDir needs no frontmatter (got: ${OUT:0:200})"
+[ "$(checked 163)" = "notes/n.md " ] && ok || fail "fixture: the doc is recorded as checked (got: $(checked 163))"
+git -C "$REPO" add -A && git -C "$REPO" commit -q -m notes
+printf '{"aiDir":"notes","frameworkVersion":"3.0.0"}\n' > "$REPO/.myspec.json"
+git -C "$REPO" commit -q -a -m "aiDir moved"
+OUT=$(stop 163)
+[ "$(decision "$OUT")" = block ] && ok || fail "a checked doc is judged again under another aiDir (got: ${OUT:0:200})"
+expect_in "Frontmatter issue in notes/n.md" "$(reason "$OUT")" "the block is the frontmatter gate's"
+printf '{"aiDir":".ai","frameworkVersion":"3.0.0"}\n' > "$REPO/.myspec.json"
+git -C "$REPO" commit -q -a -m "aiDir back"
+
+# A verdict that read HEAD (a write with no pre event) is never recorded.
+jq -nc --arg s "$SID-164" --arg c "$REPO" '{hook_event_name: "PostToolUse", session_id: $s, tool_name: "Bash", cwd: $c, tool_input: {command: "printf x >> docs/notes.md"}}' > "$ROOT/post164"
+printf 'no snapshot before this\n' >> "$REPO/docs/notes.md"
+bash "$MARK" < "$ROOT/post164" >/dev/null 2>&1
+OUT=$(stop 164)
+[ "$(decision "$OUT")" = approve ] && ok || fail "fixture: a clean write with no pre event approves (got: ${OUT:0:200})"
+bash "$CLAUDE_PLUGIN_ROOT/lib/session-event.sh" --root "$REPO" events "$SID-164" | jq -e 'select(.t == "write" and .via == "bash")' >/dev/null \
+  && ok || fail "fixture: the write was recorded"
+[ "$(checked 164)" = "" ] && ok || fail "a verdict that read HEAD is not recorded (got: $(checked 164))"
+git -C "$REPO" checkout -q -- docs/notes.md
+rm -f "$REPO/docs/skip.md"
+
 # --- the continuation after a block is approved (R10) -----------------------------
 bashcmd 15 "printf 'see $LEAK\n' > docs/again.md"
 OUT=$(jq -nc --arg s "$SID-15" --arg c "$REPO" '{session_id: $s, cwd: $c, stop_hook_active: true}' | bash "$HOOK" 2>/dev/null)

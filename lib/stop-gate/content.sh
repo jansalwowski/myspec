@@ -43,7 +43,9 @@
 #
 # Each finding blocks the stop with the reason the PreToolUse hook would have
 # given. The checks are cheap, and they run inside the gate budget like
-# everything else (gate_budget_init runs first). They block during a
+# everything else (gate_budget_init runs first). A file whose checks passed is
+# not judged again while nothing its verdict read has changed (see "Skipping
+# what an earlier Stop judged" below). They block during a
 # feature-implement run too: a leaked path is session damage, not an
 # expected red, like the conformance gates.
 
@@ -58,6 +60,45 @@ content_root_ok() {
     "$ORIG_ROOT"/*) return 0 ;;
   esac
   return 1
+}
+
+# content_root_facts <root> -> sets CONTENT_ROOT_OK (1 when the gates own
+# <root>: a directory content_root_ok accepts) and CONTENT_AI (its aiDir,
+# empty without a .myspec.json), CONTENT_ROOT_I being the root's index in the
+# cache. Asked once per root, not once per file: ai_dir runs the settings
+# reader, about 60 ms, which at 50 files was a third of the gate's time.
+# Parallel arrays, as bash 3.2 has no associative ones.
+CONTENT_ROOTS=() CONTENT_ROOT_OKS=() CONTENT_ROOT_AIS=() CONTENT_ROOT_DEFAULTS=()
+CONTENT_ROOT_OK=0 CONTENT_AI="" CONTENT_ROOT_I=0
+content_root_facts() {
+  CONTENT_ROOT_I=0
+  while [ "$CONTENT_ROOT_I" -lt "${#CONTENT_ROOTS[@]}" ]; do
+    if [ "${CONTENT_ROOTS[CONTENT_ROOT_I]}" = "$1" ]; then
+      CONTENT_ROOT_OK=${CONTENT_ROOT_OKS[CONTENT_ROOT_I]}
+      CONTENT_AI=${CONTENT_ROOT_AIS[CONTENT_ROOT_I]}
+      return 0
+    fi
+    CONTENT_ROOT_I=$((CONTENT_ROOT_I + 1))
+  done
+  CONTENT_ROOT_OK=0 CONTENT_AI=""
+  if [ -d "$1" ] && content_root_ok "$1"; then
+    CONTENT_ROOT_OK=1
+    [ ! -f "$1/.myspec.json" ] || CONTENT_AI=$(ai_dir "$1")
+  fi
+  CONTENT_ROOTS+=("$1")
+  CONTENT_ROOT_OKS+=("$CONTENT_ROOT_OK")
+  CONTENT_ROOT_AIS+=("$CONTENT_AI")
+  CONTENT_ROOT_DEFAULTS+=("")
+}
+
+# content_root_default_ai -> the aiDir a root without a .myspec.json falls
+# back to (the schema default, through ai_dir), for the root
+# content_root_facts was last asked about. Read on first use, then cached.
+content_root_default_ai() {
+  if [ -z "${CONTENT_ROOT_DEFAULTS[CONTENT_ROOT_I]}" ]; then
+    CONTENT_ROOT_DEFAULTS[CONTENT_ROOT_I]=$(ai_dir "${CONTENT_ROOTS[CONTENT_ROOT_I]}")
+  fi
+  CONTENT_AI_DEFAULT=${CONTENT_ROOT_DEFAULTS[CONTENT_ROOT_I]}
 }
 
 # content_snapshot <root> <snapshot> <out file> -> writes a snapshot's
@@ -126,30 +167,125 @@ lf_copy() {
   LC_ALL=C awk '{ sub(/\r$/, "") } 1' "$1" > "$2" 2>/dev/null
 }
 
+# Skipping what an earlier Stop judged. A file whose checks passed gets a
+# `checked` event (lib/session-event.sh) naming what the verdict was a
+# function of: the blob id of the bytes judged (a copy taken before judging,
+# so no other bytes took part), the number of Bash-write pairs judged with
+# them (pairs are only ever appended, so the same number is the same pairs),
+# and a signature of the rules (the blob ids, cut to 12 hex digits, of the
+# lib files content_checked_load names, so a plugin update judges again) and
+# of the aiDir, which decides the frontmatter and reuse-audit scope. A later
+# Stop skips the file only when all of that is what it is now; anything else
+# is judged as before. A verdict that also read something else is never
+# recorded: a pair whose before or after fell back to HEAD or to the file
+# itself ("?", "@"), a snapshot that could not be read (it may be readable
+# later), a file git ignores (un-ignoring it brings it into scope). A finding
+# records nothing, so a file that failed is judged at every Stop until it
+# passes. When a hash cannot be taken, nothing is skipped and nothing is
+# recorded.
+
+# content_hashes <path>... -> sets CONTENT_HASHES to the blob id of each
+# file's bytes (unfiltered, nothing written to an object store), from one git
+# call. Fails unless git named every one.
+CONTENT_HASHES=()
+content_hashes() {
+  local id
+  CONTENT_HASHES=()
+  while IFS= read -r id; do
+    CONTENT_HASHES+=("$id")
+  done < <(printf '%s\n' "$@" | git hash-object --no-filters --stdin-paths 2>/dev/null || true)
+  [ "${#CONTENT_HASHES[@]}" -eq "$#" ]
+}
+
+# content_checked_load <tmp dir> -> sets CONTENT_RULES, the rules half of the
+# signature (empty when it cannot be taken: nothing is then skipped or
+# recorded), and writes <tmp dir>/checked: each `checked` record of a file
+# that still exists (session_content_checked), with the blob id of the file
+# as it is now appended. Reads STATE_HOME, SESSION_ID, HOOK_LIB.
+content_checked_load() {
+  local line root rest i rules
+  local -a paths=() recs=()
+  CONTENT_RULES=""
+  : > "$1/checked"
+  for rest in content-checks.sh markdown-section-check.sh stop-gate/content.sh session-event.sh \
+      hook-core.sh myspec-config.schema.json; do
+    paths+=("$HOOK_LIB/$rest")
+  done
+  rules=${#paths[@]}
+  while IFS= read -r line; do
+    root=${line%%$'\t'*}
+    rest=${line#*$'\t'}
+    [ -f "$root/${rest%%$'\t'*}" ] || continue
+    paths+=("$root/${rest%%$'\t'*}")
+    recs+=("$line")
+  done < <(session_content_checked "$STATE_HOME" "$SESSION_ID")
+  content_hashes "${paths[@]}" || return 0
+  for ((i = 0; i < rules; i++)); do
+    CONTENT_RULES+="${CONTENT_HASHES[i]:0:12}."
+  done
+  for ((i = 0; i < ${#recs[@]}; i++)); do
+    printf '%s\t%s\n' "${recs[i]}" "${CONTENT_HASHES[i + rules]}"
+  done > "$1/checked"
+}
+
+# content_checked_record <record>... -> appends a `checked` event for each
+# `<copy>\t<root>\t<rel>\t<pairs>\t<sig>` record, <copy> being the bytes that
+# were judged. Recording is an optimisation: a failure here records nothing
+# and the files are judged again.
+content_checked_record() {
+  local rec i=0
+  local -a copies=()
+  for rec in "$@"; do
+    copies+=("${rec%%$'\t'*}")
+  done
+  content_hashes "${copies[@]}" || return 0
+  for rec in "$@"; do
+    printf '%s\t%s\n' "${CONTENT_HASHES[i]}" "${rec#*$'\t'}"
+    i=$((i + 1))
+  done | jq -R -c 'split("\t") | select(length == 5)
+      | {t: "checked", root: .[1], rel: .[2], blob: .[0], pairs: (.[3] | tonumber), sig: .[4]}' 2>/dev/null \
+    | session_append_many "$STATE_HOME" "$SESSION_ID" || true
+}
+
 # content_gates -> runs the checks above over the session's Bash writes and
 # blocks (decision_block exits) when any fails. Reads STATE_HOME, SESSION_ID,
 # ORIG_ROOT (arm_init).
 content_gates() {
-  local root rel abs ai lines text findings matches n m where pairs file
+  local root rel abs ai lines text findings matches n m where pairs
   local before after created fm_changed tmp first fm_from fm_to fm_seen fm_before fm_after
-  local based readable fm_on prev_after prev_kept prev_fm
-  local -a reasons=()
+  local based readable fm_on prev_after prev_kept prev_fm reuse_ai
+  local count was cur sure found idx=0
+  local -a reasons=() passed=()
   [ -n "${SESSION_ID:-}" ] || return 0
   pairs=$(session_bash_writes "$STATE_HOME" "$SESSION_ID")
   [ -n "$pairs" ] || return 0
   tmp=$(mktemp -d "${TMPDIR:-/tmp}/.myspec-content.XXXXXX")
-  # Each file once, in first-written order; its pairs in order.
-  while IFS= read -r file; do
-    root="${file%%$'\t'*}"
-    rel="${file#*$'\t'}"
+  CONTENT_ROOTS=() CONTENT_ROOT_OKS=() CONTENT_ROOT_AIS=() CONTENT_ROOT_DEFAULTS=()
+  printf '%s\n' "$pairs" > "$tmp/pairs"
+  content_checked_load "$tmp"
+  # Each file once, in first-written order; its pairs in order. <count> is the
+  # number of its pairs, <was> the signature its bytes as they are now were
+  # last judged clean under with that many pairs, else "-".
+  while IFS=$'\t' read -r count was root rel; do
     [ -n "$root" ] || continue
     [ -n "$rel" ] || continue
-    [ -d "$root" ] || continue
-    content_root_ok "$root" || continue
+    content_root_facts "$root"
+    [ "$CONTENT_ROOT_OK" -eq 1 ] || continue
     abs="$root/$rel"
     [ -f "$abs" ] || continue
-    ai=""
-    [ ! -f "$root/.myspec.json" ] || ai=$(ai_dir "$root")
+    ai=$CONTENT_AI
+    # Judged clean already, as it is now, under these rules: nothing to do.
+    if [ -n "$CONTENT_RULES" ] && [ "$was" = "$CONTENT_RULES $ai" ]; then
+      continue
+    fi
+    # The checks read a copy, so the bytes judged are the bytes recorded.
+    idx=$((idx + 1))
+    cur="$tmp/cur.$idx"
+    sure=1 found=${#reasons[@]}
+    if ! cp -- "$abs" "$cur" 2>/dev/null; then
+      cur=$abs sure=0
+    fi
+    case "$ai" in *$'\t'*|*$'\n'*) sure=0 ;; esac
     created=0 fm_changed=0 first=1 based=0 fm_from="" fm_to="" fm_seen=0
     prev_after="" prev_kept="" prev_fm=""
     fm_on=0
@@ -160,7 +296,8 @@ content_gates() {
     while IFS=$'\t' read -r _ _ before after; do
       CONTENT_KEPT=0
       readable=1
-      content_before "$root" "$rel" "$before" "$tmp/before" || readable=0
+      content_before "$root" "$rel" "$before" "$tmp/before" || readable=0 sure=0
+      case "$before$after" in *\?*|*@*) sure=0 ;; esac
       # No file before and none after (a failed `sed -i` on a missing file):
       # no write to this file.
       if [ "$CONTENT_NEW" -eq 1 ] && [ "$after" = "-" ]; then
@@ -182,10 +319,11 @@ content_gates() {
         : > "$tmp/after"
       elif [ "$after" = "@" ]; then
         # Neither hashed nor kept: the file as it is now.
-        cat -- "$abs" > "$tmp/after" 2>/dev/null || continue
+        cat -- "$cur" > "$tmp/after" 2>/dev/null || continue
         CONTENT_KEPT=1
-      else
-        content_snapshot "$root" "$after" "$tmp/after" || continue
+      elif ! content_snapshot "$root" "$after" "$tmp/after"; then
+        sure=0
+        continue
       fi
       if [ "$CONTENT_KEPT" -eq 1 ]; then
         # A side that skipped git's line-ending conversion: CRs are dropped
@@ -217,18 +355,25 @@ content_gates() {
           fm_to=$fm_after fm_seen=1
         fi
       fi
-    done < <(printf '%s\n' "$pairs" | LC_ALL=C awk -F'\t' -v r="$root" -v p="$rel" '$1 == r && $2 == p')
+    done < <(LC_ALL=C awk -F'\t' -v r="$root" -v p="$rel" '$1 == r && $2 == p' "$tmp/pairs")
     [ "$fm_seen" -eq 0 ] || [ "$fm_from" = "$fm_to" ] || fm_changed=1
     # The lines the file gained since the session's first write that one of
     # its writes added.
     : > "$tmp/numbered"
-    if [ "$based" -eq 1 ] && lf_copy "$abs" "$tmp/now"; then
-      added_lines "$tmp/base" "$tmp/now" "$tmp/net"
-      session_lines "$tmp/net" "$tmp/added" "$tmp/numbered"
+    if [ "$based" -eq 1 ]; then
+      if lf_copy "$cur" "$tmp/now"; then
+        added_lines "$tmp/base" "$tmp/now" "$tmp/net"
+        session_lines "$tmp/net" "$tmp/added" "$tmp/numbered"
+      else
+        sure=0
+      fi
     fi
 
-    # Absolute homedir paths, on the lines the session added.
-    if absolute_paths_scope "$root" "$rel" "$ai" && [ -s "$tmp/numbered" ]; then
+    # Absolute homedir paths, on the lines the session added. Not in a file
+    # git ignores (absolute_paths_scope), which is then not recorded either.
+    if git -C "$root" check-ignore -q -- "$rel" 2>/dev/null; then
+      sure=0
+    elif absolute_paths_scope_unignored "$root" "$rel" "$ai" && [ -s "$tmp/numbered" ]; then
       cut -f2- "$tmp/numbered" > "$tmp/text"
       matches=$(absolute_path_findings "$tmp/text")
       if [ -n "$matches" ]; then
@@ -245,16 +390,33 @@ content_gates() {
     # Frontmatter, on a doc the session created or whose frontmatter region
     # its writes changed on net.
     if [ "$fm_on" -eq 1 ] && [ $((created + fm_changed)) -gt 0 ]; then
-      lines=$(frontmatter_issues "$abs")
+      lines=$(frontmatter_issues "$cur")
       [ -z "$lines" ] || reasons+=("$(frontmatter_reason "$rel" "$lines" "$ai")")
     fi
 
     # The reuse audit, on a tech-spec the session created.
-    if [ "$created" -eq 1 ] && reuse_audit_scope "${ai:-$(ai_dir "$root")}" "$rel"; then
-      lines=$(reuse_audit_issues "$abs")
+    reuse_ai=$ai
+    if [ "$created" -eq 1 ] && [ -z "$reuse_ai" ]; then
+      content_root_default_ai
+      reuse_ai=$CONTENT_AI_DEFAULT
+    fi
+    if [ "$created" -eq 1 ] && reuse_audit_scope "$reuse_ai" "$rel"; then
+      lines=$(reuse_audit_issues "$cur")
       [ -z "$lines" ] || reasons+=("$(reuse_audit_reason "$rel" "$lines")")
     fi
-  done < <(printf '%s\n' "$pairs" | LC_ALL=C awk -F'\t' '!seen[$1 "\t" $2]++ { print $1 "\t" $2 }')
+    if [ "$sure" -eq 1 ] && [ -n "$CONTENT_RULES" ] && [ "${#reasons[@]}" -eq "$found" ]; then
+      passed+=("$cur"$'\t'"$root"$'\t'"$rel"$'\t'"$count"$'\t'"$CONTENT_RULES $ai")
+    fi
+  done < <(LC_ALL=C awk -F'\t' '
+    FILENAME == ARGV[1] { if ($3 == $6 && $5 != "") { n[$1 FS $2] = $4; sig[$1 FS $2] = $5 } next }
+    { k = $1 FS $2; if (!(k in c)) order[++m] = k; c[k]++ }
+    END {
+      for (i = 1; i <= m; i++) {
+        k = order[i]
+        print c[k] FS ((k in n) && n[k] == c[k] ? sig[k] : "-") FS k
+      }
+    }' "$tmp/checked" "$tmp/pairs")
+  [ "${#passed[@]}" -eq 0 ] || content_checked_record "${passed[@]}"
   rm -rf "$tmp"
   [ "${#reasons[@]}" -gt 0 ] || return 0
   text=""

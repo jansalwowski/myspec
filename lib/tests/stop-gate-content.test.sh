@@ -180,6 +180,68 @@ expect "" "$(cat "$ROOT/fm-out")" "fixture: the clean writes pass"
 expect 3 "$(wc -l < "$ROOT/fm-calls" | tr -d ' ')" "frontmatter_region: not for a doc out of scope, once per pair after the first for chained pairs"
 eval "$(declare -f real_frontmatter_region | sed 's/^real_frontmatter_region/frontmatter_region/')"
 
+# --- content_gates: the aiDir is resolved once per root, not once per file ------
+# ai_dir runs the settings reader (about 60 ms): per file it was a third of
+# the gate's time at 50 docs. Two roots here, each with two written files; the
+# one without a .myspec.json asks only for the reuse-audit fallback, once.
+# fm_writes <session id> <root> <rel>...: a pre and two Bash writes per file.
+fm_writes() {
+  local sid="$1" root="$2" rel b
+  shift 2
+  for rel in "$@"; do
+    session_append "$STATE_HOME" "$sid" "$(jq -nc --arg r "$root" --arg p "$rel" --arg b "$A" '{t: "pre", root: $r, rel: $p, blob: $b}')"
+    for b in "$B" "$C"; do
+      session_append "$STATE_HOME" "$sid" "$(jq -nc --arg r "$root" --arg p "$rel" --arg b "$b" '{t: "write", root: $r, rel: $p, kind: "file", via: "bash", blob: $b}')"
+    done
+  done
+}
+NOCFG="$FM/vendor/nocfg"
+mkdir -p "$NOCFG/.ai/features/f" "$NOCFG/.ai/features/g"
+git init -q -b main "$NOCFG"
+for rel in .ai/features/f/tech-spec.md .ai/features/g/tech-spec.md; do
+  printf -- '---\ntitle: T\ncreated: 2026-01-01\n---\n<!-- myspec:reuse-audit skip: fixture -->\n' > "$NOCFG/$rel"
+  session_append "$STATE_HOME" sgc-ai "$(jq -nc --arg r "$NOCFG" --arg p "$rel" '{t: "pre", root: $r, rel: $p, blob: ""}')"
+  session_append "$STATE_HOME" sgc-ai "$(jq -nc --arg r "$NOCFG" --arg p "$rel" --arg b "$(git -C "$NOCFG" hash-object -w -- "$rel")" '{t: "write", root: $r, rel: $p, kind: "file", via: "bash", blob: $b}')"
+done
+fm_writes sgc-ai "$FM" docs/plain.md .ai/features/f/doc.md
+SESSION_ID="sgc-ai"
+eval "real_$(declare -f ai_dir)"
+ai_dir() { printf '%s\n' "$1" >> "$ROOT/ai-calls"; real_ai_dir "$@"; }
+: > "$ROOT/ai-calls"
+( arm_init "$FM"; content_gates ) > "$ROOT/fm-out" 2>&1
+expect "" "$(cat "$ROOT/fm-out")" "fixture: the clean writes in two roots pass"
+expect "$FM
+$NOCFG" "$(LC_ALL=C sort "$ROOT/ai-calls")" "ai_dir: once per root for four files, the root without a .myspec.json included"
+eval "$(declare -f real_ai_dir | sed 's/^real_ai_dir/ai_dir/')"
+
+# --- content_gates: which verdicts are recorded as checked -----------------------
+# Only a verdict that read nothing but the file's bytes, its pairs, the rules
+# and the aiDir. Not one for a file git ignores (un-ignoring it brings it
+# into scope), nor one that could not read a snapshot (it may be readable at
+# the next Stop). The end-to-end cases: verify-before-stop-content.test.sh.
+checked_rels() { session_content_checked "$STATE_HOME" "$SESSION_ID" | cut -f2 | LC_ALL=C sort | tr "\n" " "; }
+expect ".ai/features/f/doc.md .ai/features/f/tech-spec.md .ai/features/g/tech-spec.md docs/plain.md " "$(checked_rels)" \
+  "checked: every file of the clean run above is recorded, in both roots"
+printf 'docs/ignored.md\n' > "$FM/.gitignore"
+git -C "$FM" cat-file blob "$C" > "$FM/docs/ignored.md"
+git -C "$FM" cat-file blob "$C" > "$FM/docs/gone.md"
+SESSION_ID="sgc-sure"
+fm_writes sgc-sure "$FM" docs/plain.md docs/ignored.md
+session_append "$STATE_HOME" sgc-sure "$(jq -nc --arg r "$FM" --arg b "$A" '{t: "pre", root: $r, rel: "docs/gone.md", blob: $b}')"
+session_append "$STATE_HOME" sgc-sure "$(jq -nc --arg r "$FM" '{t: "write", root: $r, rel: "docs/gone.md", kind: "file", via: "bash", blob: "0000000000000000000000000000000000000000"}')"
+( arm_init "$FM"; content_gates ) > "$ROOT/fm-out" 2>&1
+expect "" "$(cat "$ROOT/fm-out")" "fixture: the clean writes pass"
+expect "docs/plain.md " "$(checked_rels)" "checked: not a file git ignores, nor one with a snapshot that could not be read"
+# The second run judges only what the first did not record.
+eval "real_$(declare -f added_lines)"
+added_lines() { printf 'x\n' >> "$ROOT/diff-calls"; real_added_lines "$@"; }
+: > "$ROOT/diff-calls"
+( arm_init "$FM"; content_gates ) > "$ROOT/fm-out" 2>&1
+expect "" "$(cat "$ROOT/fm-out")" "fixture: the second run passes"
+expect 4 "$(wc -l < "$ROOT/diff-calls" | tr -d " ")" "checked: the recorded file is not diffed again, the other two are (two pairs and the net diff for one, the net diff alone for the one with an unreadable pair)"
+eval "$(declare -f real_added_lines | sed 's/^real_added_lines/added_lines/')"
+rm -f "$FM/.gitignore" "$FM/docs/ignored.md" "$FM/docs/gone.md"
+
 # --- content_before: the blob, nothing, or HEAD's version ------------------------
 printf 'one\ntwo\n' > "$REPO/docs/a.md"
 content_before "$REPO" docs/a.md "?" "$OUT"
