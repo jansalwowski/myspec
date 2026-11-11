@@ -158,7 +158,7 @@ SET_IGNORE=()
 # .myspec.json (as worktree-provision.sh does). No .myspec.json, no reader or
 # an unreadable value: the defaults, and the reader names what it ignored.
 load_settings() {
-  local root="$1" src json ext exts="" g i re
+  local root="$1" src json ext exts="" g i re txt=""
   for ((i = 0; i < ${#SET_ROOTS[@]}; i++)); do
     if [ "${SET_ROOTS[$i]}" = "$root" ]; then
       CODE_RE="${SET_CODE_RE[$i]}"
@@ -174,8 +174,20 @@ load_settings() {
   fi
   if [ -n "$src" ] && [ -f "$src/.myspec.json" ]; then
     json=""
-    read_setting hooks.markCodeChanged "$src" && json="$SETTING"
-    [ -z "$SETTING_NOTES" ] || printf '%s\n' "$SETTING_NOTES" | sed 's/^/myspec-config: /' >&2
+    # The settings reader runs only when the file can set the key: it names
+    # it, or holds a \u escape, which can spell it. No other layer sets it,
+    # so any other file gives the schema's defaults, which are the ones
+    # above. This runs at every Edit and Write, and the reader costs a third
+    # of the call (as diff_enabled, for the same reason). What is skipped
+    # with it is the reader's note on a file that is not a JSON object and
+    # does not name the key; the value is the default either way.
+    { IFS= read -r -d '' txt < "$src/.myspec.json"; } 2>/dev/null || true
+    case "$txt" in
+      *markCodeChanged*|*\\u*)
+        read_setting hooks.markCodeChanged "$src" && json="$SETTING"
+        [ -z "$SETTING_NOTES" ] || printf '%s\n' "$SETTING_NOTES" | sed 's/^/myspec-config: /' >&2
+        ;;
+    esac
     if [ -n "$json" ]; then
       while IFS= read -r ext; do
         ext="${ext#.}"
@@ -627,7 +639,7 @@ implement_requests() {
 # beside the session's state file (session_home and session_dir in
 # lib/session-event.sh decide where both live), a myspec project only.
 write_session_log() {
-  local raw_root="$1" repo_root state_dir active_file worktree topic_seed started short_id p rel entry
+  local raw_root="$1" repo_root state_dir active_file worktree topic_seed started short_id p rel entry tmp
   shift
 
   # raw_root is the repository root as seen from the edit (a linked worktree
@@ -664,7 +676,14 @@ write_session_log() {
     started=$(date '+%Y-%m-%d %H:%M')
     short_id="${SESSION_ID:0:8}"
 
-    cat > "$active_file" <<SESSION
+    # The hooks of parallel tool calls run at once, and each of them finds no
+    # log. A `>` here would truncate the entries the others appended since
+    # the test above. So the header goes to a file of this process, and a
+    # hard link gives it the log's name: link(2) fails when the name exists,
+    # and the log appears whole, never empty or half written. The dot name
+    # keeps the temporary file out of every `*.md` listing.
+    tmp=$(mktemp "$state_dir/.${SESSION_ID}.md.XXXXXX") || return 0
+    cat > "$tmp" <<SESSION
 ---
 session_id: $SESSION_ID
 topic: "auto:$topic_seed"
@@ -700,6 +719,9 @@ $CONTEXT Refine topic, feature, and mode as the work crystallizes.
 ## Files touched
 <!-- Appended by mark-code-changed.sh; this is how a skill recognises its own session -->
 SESSION
+    # A filesystem without hard links: `mv -n` does not replace a log either.
+    ln "$tmp" "$active_file" 2>/dev/null || [ -f "$active_file" ] || mv -n "$tmp" "$active_file" 2>/dev/null || true
+    rm -f "$tmp"
   fi
 
   # Append every code path once. `## Files touched` is the LAST section of
