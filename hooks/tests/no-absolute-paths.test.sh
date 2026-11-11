@@ -185,10 +185,9 @@ expect_quiet "repo without .myspec.json has no aiDir tree in scope"
 # absolute_path_findings returns 2 when its grep failed (lib/content-checks.sh).
 # Under set -e that status must not end the hook: the call is allowed in
 # silence, as before the function had a status.
-mkdir -p "$ROOT/grepfail"
-# shellcheck disable=SC2016 # the wrapper's own $@ and $a, expanded when it runs
-printf '#!/bin/sh\nfor a in "$@"; do case "$a" in *"A-Za-z0-9._/-"*) exit 2 ;; esac; done\nexec %s "$@"\n' "$(command -v grep)" > "$ROOT/grepfail/grep"
-chmod +x "$ROOT/grepfail/grep"
+# shellcheck source=lib/tests/failing-tool.sh
+. "$CLAUDE_PLUGIN_ROOT/lib/tests/failing-tool.sh"
+failing_tool "$ROOT/grepfail" grep 'A-Za-z0-9._/-'
 OUT=$(printf '%s' "{\"tool_name\":\"Write\",\"cwd\":$(j "$REPO"),\"tool_input\":{\"file_path\":$(j "$REPO/docs/failed-grep.md"),\"content\":$(j "see $LEAK")}}" | PATH="$ROOT/grepfail:$PATH" bash "$HOOK" 2>/dev/null); RC=$?
 if [ "$RC" -eq 0 ] && [ -z "$OUT" ]; then ok; else fail "a failed grep allows in silence, exit 0 (exit $RC, output: ${OUT:0:200})"; fi
 

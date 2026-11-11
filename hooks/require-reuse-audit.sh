@@ -115,9 +115,12 @@ trap 'rm -f "$TMP"' EXIT
 proposed_content "$TOOL_INPUT" "$FILE_PATH" "$TMP" || exit 0
 
 # An existing tech-spec is judged only when the call changes the section or
-# the marker; a new one always is.
+# the marker; a new one always is. A state that could not be read (status 2)
+# is no proof the call left it alone, so the call is judged.
 if [ -f "$FILE_PATH" ]; then
-  [ "$(reuse_audit_state "$FILE_PATH")" != "$(reuse_audit_state "$TMP")" ] || exit 0
+  if OLD_STATE=$(reuse_audit_state "$FILE_PATH") && NEW_STATE=$(reuse_audit_state "$TMP"); then
+    [ "$OLD_STATE" != "$NEW_STATE" ] || exit 0
+  fi
 elif [ "$PROPOSED_KIND" != write ] && [ ! -s "$TMP" ]; then
   # An edit to a path that does not exist (a typo) creates nothing: the
   # tool reports the missing file, which is the right message.

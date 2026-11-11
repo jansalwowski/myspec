@@ -124,8 +124,12 @@ proposed_content "$TOOL_INPUT" "$FILE_PATH" "$TMP" || exit 0
 # A call to an existing doc, a Write included, is judged only when it changes
 # the frontmatter region: a Write that keeps an already-broken header and
 # rewrites the body adds no defect. A Write that creates the doc always is.
+# A region that could not be read (status 2) is no proof the call left it
+# alone, so the call is judged.
 if [ -f "$FILE_PATH" ]; then
-  [ "$(frontmatter_region "$FILE_PATH")" != "$(frontmatter_region "$TMP")" ] || exit 0
+  if OLD_REGION=$(frontmatter_region "$FILE_PATH") && NEW_REGION=$(frontmatter_region "$TMP"); then
+    [ "$OLD_REGION" != "$NEW_REGION" ] || exit 0
+  fi
 elif [ "$PROPOSED_KIND" != write ]; then
   exit 0
 fi

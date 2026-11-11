@@ -31,15 +31,15 @@ _heading_lineno() {
 # assert_section_present <file> <heading>
 # The heading must exist as `## <heading>` or `### <heading>`.
 assert_section_present() {
-  local file="$1" heading="$2" ln rc=1
+  local file="$1" heading="$2" ln failed=0
   if [ ! -f "$file" ]; then
     printf 'file not found: %s\n' "$file"
     return 1
   fi
-  ln="$(_heading_lineno "$file" "$heading")" || rc=2
+  ln="$(_heading_lineno "$file" "$heading")" || failed=1
   if [ -z "$ln" ]; then
     printf 'missing required section: "## %s" (or ### )\n' "$heading"
-    return "$rc"
+    return $((1 + failed))
   fi
   return 0
 }
@@ -79,13 +79,13 @@ _table_data_rows() {
 # A markdown table must follow the heading with at least <min_rows> data rows.
 assert_table_after_heading() {
   local file="$1" heading="$2" min_rows="${3:-1}"
-  local ln rows count rc=1
-  ln="$(_heading_lineno "$file" "$heading")" || rc=2
+  local ln rows count failed=0
+  ln="$(_heading_lineno "$file" "$heading")" || failed=1
   if [ -z "$ln" ]; then
     printf 'missing required section: "## %s"\n' "$heading"
-    return "$rc"
+    return $((1 + failed))
   fi
-  rows="$(_table_data_rows "$file" "$ln")" || rc=2
+  rows="$(_table_data_rows "$file" "$ln")" || failed=1
   if [ -z "$rows" ]; then
     count=0
   else
@@ -95,9 +95,9 @@ assert_table_after_heading() {
   fi
   if [ "$count" -lt "$min_rows" ]; then
     printf 'section "%s" has %d data row(s); need >= %d\n' "$heading" "$count" "$min_rows"
-    return "$rc"
+    return $((1 + failed))
   fi
-  [ "$rc" -eq 1 ] || return 2
+  [ "$failed" -eq 0 ] || return 2
   return 0
 }
 
@@ -109,16 +109,16 @@ assert_table_after_heading() {
 # generic; this one knows the table shape.
 assert_reuse_audit_rows() {
   local file="$1" heading="$2"
-  local ln rows rc=1
-  ln="$(_heading_lineno "$file" "$heading")" || rc=2
+  local ln rows failed=0
+  ln="$(_heading_lineno "$file" "$heading")" || failed=1
   if [ -z "$ln" ]; then
     printf 'missing required section: "## %s"\n' "$heading"
-    return "$rc"
+    return $((1 + failed))
   fi
-  rows="$(_table_data_rows "$file" "$ln")" || rc=2
+  rows="$(_table_data_rows "$file" "$ln")" || failed=1
   if [ -z "$rows" ]; then
     printf 'section "%s" has no data rows\n' "$heading"
-    return "$rc"
+    return $((1 + failed))
   fi
 
   local failure
@@ -151,12 +151,12 @@ assert_reuse_audit_rows() {
         }
       }
     }
-  ' <<< "$rows")" || rc=2
+  ' <<< "$rows")" || failed=1
 
   if [ -n "$failure" ]; then
     printf '%s\n' "$failure"
-    return "$rc"
+    return $((1 + failed))
   fi
-  [ "$rc" -eq 1 ] || return 2
+  [ "$failed" -eq 0 ] || return 2
   return 0
 }

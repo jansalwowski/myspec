@@ -690,58 +690,55 @@ rm -f "$REPO/docs/difffail.md"
 # The same for a command inside a check function (lib/content-checks.sh): its
 # empty output read as "no finding" and was recorded. One doc per check, each
 # holding a real finding, the check's own grep or awk failing at the first
-# Stop only.
-# failing <dir> <tool> <needle>: a <tool> in $ROOT/<dir> that exits 2 when one
-# of its arguments holds <needle>, and is the real one otherwise.
-failing() {
-  mkdir -p "$ROOT/$1"
-  # shellcheck disable=SC2016 # the wrapper's own $@ and $a, expanded when it runs
-  printf '#!/bin/sh\nfor a in "$@"; do case "$a" in *"%s"*) exit 2 ;; esac; done\nexec %s "$@"\n' "$3" "$(command -v "$2")" > "$ROOT/$1/$2"
-  chmod +x "$ROOT/$1/$2"
-}
+# Stop only. A check that could not judge blocks with a reason that says so,
+# never with what it printed, and records nothing.
+# shellcheck source=lib/tests/failing-tool.sh
+. "$CLAUDE_PLUGIN_ROOT/lib/tests/failing-tool.sh"
 # stop_with <sid-suffix> <dir> -> hook stdout, $ROOT/<dir> first on PATH
 stop_with() {
   jq -nc --arg s "$SID-$1" --arg c "$REPO" '{session_id: $s, cwd: $c}' | PATH="$ROOT/$2:$PATH" bash "$HOOK" 2>/dev/null
 }
 # absolute_path_findings: its grep.
-failing pathsfail grep 'A-Za-z0-9._/-'
+failing_tool "$ROOT/pathsfail" grep 'A-Za-z0-9._/-'
 bashcmd 166 "printf '# Grep\nsee $LEAK\n' > docs/grepfail.md"
 OUT=$(stop_with 166 pathsfail)
-[ "$(decision "$OUT")" = approve ] && ok || fail "fixture: with the path grep failing the leak is not seen (got: ${OUT:0:200})"
-[ "$(checked 166)" = "" ] && ok || fail "a pass that rests on a failed path grep is not recorded (got: $(checked 166))"
+[ "$(decision "$OUT")" = block ] && ok || fail "a path check that could not run blocks (got: ${OUT:0:200})"
+expect_in "Could not check absolute homedir paths in docs/grepfail.md" "$(reason "$OUT")" "the block says the path check could not run"
+[ "$(checked 166)" = "" ] && ok || fail "nothing is recorded for it (got: $(checked 166))"
 OUT=$(stop 166)
 [ "$(decision "$OUT")" = block ] && ok || fail "the leak blocks at the next Stop, once grep works (got: ${OUT:0:200})"
 expect_in "line 2: /Users/alice" "$(reason "$OUT")" "the block names the leak"
 rm -f "$REPO/docs/grepfail.md"
 # frontmatter_region: its awk. A doc from before the session whose temporal
-# field the write drops: with no region read, the frontmatter looks untouched.
-failing regionfail awk 'NR == 1 { if ('
+# field the write drops: a region that could not be read counts as changed,
+# so the frontmatter check runs and finds the dropped field at once.
+failing_tool "$ROOT/regionfail" awk 'NR == 1 { if ('
 printf -- '---\ntitle: Region\nupdated: 2026-01-01\n---\nbody\n' > "$REPO/.ai/region.md"
 bashcmd 167 "printf -- '---\ntitle: Region\n---\nbody\n' > .ai/region.md"
 OUT=$(stop_with 167 regionfail)
-[ "$(decision "$OUT")" = approve ] && ok || fail "fixture: with the region awk failing the changed frontmatter is not seen (got: ${OUT:0:200})"
-[ "$(checked 167)" = "" ] && ok || fail "a pass that rests on a failed region awk is not recorded (got: $(checked 167))"
-OUT=$(stop 167)
-[ "$(decision "$OUT")" = block ] && ok || fail "the frontmatter blocks at the next Stop, once awk works (got: ${OUT:0:200})"
+[ "$(decision "$OUT")" = block ] && ok || fail "with the region awk failing the frontmatter is still judged (got: ${OUT:0:200})"
 expect_in "missing temporal field" "$(reason "$OUT")" "the block names the dropped field"
+[ "$(checked 167)" = "" ] && ok || fail "nothing is recorded for it (got: $(checked 167))"
 rm -f "$REPO/.ai/region.md"
 # reuse_audit_issues: the row check's awk (lib/markdown-section-check.sh).
-failing rowsfail awk 'function trim'
+failing_tool "$ROOT/rowsfail" awk 'function trim'
 bashcmd 168 "mkdir -p .ai/features/rows && printf -- '---\ntitle: Rows\nupdated: 2026-01-01\n---\n\n## Reuse audit\n\n| Candidate | Surface | Decision | Reason |\n|---|---|---|---|\n| a | b | maybe | c |\n' > .ai/features/rows/tech-spec.md"
 OUT=$(stop_with 168 rowsfail)
-[ "$(decision "$OUT")" = approve ] && ok || fail "fixture: with the row awk failing the bad row is not seen (got: ${OUT:0:200})"
-[ "$(checked 168)" = "" ] && ok || fail "a pass that rests on a failed row awk is not recorded (got: $(checked 168))"
+[ "$(decision "$OUT")" = block ] && ok || fail "a reuse-audit check that could not run blocks (got: ${OUT:0:200})"
+expect_in "Could not check the reuse audit in .ai/features/rows/tech-spec.md" "$(reason "$OUT")" "the block says the reuse-audit check could not run"
+[ "$(checked 168)" = "" ] && ok || fail "nothing is recorded for it (got: $(checked 168))"
 OUT=$(stop 168)
 [ "$(decision "$OUT")" = block ] && ok || fail "the bad row blocks at the next Stop, once awk works (got: ${OUT:0:200})"
 expect_in 'row 1: Decision must be reuse or skip, got "maybe"' "$(reason "$OUT")" "the block names the row"
 rm -rf "$REPO/.ai/features/rows"
-# frontmatter_issues: a failed command there always leaves an issue, so the
-# Stop blocks as it did and nothing is recorded; a valid doc is judged again
-# and recorded once the command works.
-failing temporalfail grep '^(updated'
+# frontmatter_issues: a failed grep reads as a missing field. On a valid doc
+# the block says the check could not run, not that the field is missing.
+failing_tool "$ROOT/temporalfail" grep '^(updated'
 bashcmd 169 "printf -- '---\ntitle: Valid\nupdated: 2026-01-01\n---\nbody\n' > .ai/valid.md"
 OUT=$(stop_with 169 temporalfail)
-[ "$(decision "$OUT")" = block ] && ok || fail "a frontmatter check that could not run blocks as before (got: ${OUT:0:200})"
+[ "$(decision "$OUT")" = block ] && ok || fail "a frontmatter check that could not run blocks (got: ${OUT:0:200})"
+expect_in "Could not check the frontmatter in .ai/valid.md" "$(reason "$OUT")" "the block says the frontmatter check could not run"
+case "$(reason "$OUT")" in *"missing temporal field"*) fail "the block repeats the failed grep's invented finding" ;; *) ok ;; esac
 [ "$(checked 169)" = "" ] && ok || fail "nothing is recorded for it (got: $(checked 169))"
 OUT=$(stop 169)
 [ "$(decision "$OUT")" = approve ] && ok || fail "the valid doc approves once grep works (got: ${OUT:0:200})"

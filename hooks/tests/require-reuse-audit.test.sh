@@ -314,10 +314,9 @@ done
 # reuse_audit_issues returns 2 when a command failed (lib/content-checks.sh).
 # Under set -e that status must not end the hook: with the row check's awk
 # failing a bad row is allowed in silence, as before the function had a status.
-mkdir -p "$ROOT/awkfail"
-# shellcheck disable=SC2016 # the wrapper's own $@ and $a, expanded when it runs
-printf '#!/bin/sh\nfor a in "$@"; do case "$a" in *"function trim"*) exit 2 ;; esac; done\nexec %s "$@"\n' "$(command -v awk)" > "$ROOT/awkfail/awk"
-chmod +x "$ROOT/awkfail/awk"
+# shellcheck source=lib/tests/failing-tool.sh
+. "$CLAUDE_PLUGIN_ROOT/lib/tests/failing-tool.sh"
+failing_tool "$ROOT/awkfail" awk 'function trim'
 rm -f "$SPEC"
 BAD_ROW="${HEADER}### Reuse audit
 
@@ -329,5 +328,15 @@ write "$SPEC" "$BAD_ROW"
 expect_deny "fixture: the bad row is denied when awk works"
 OUT=$(jq -nc --arg c "$REPO" --arg f "$SPEC" --arg b "$BAD_ROW" '{cwd: $c, tool_name: "Write", tool_input: {file_path: $f, content: $b}}' | PATH="$ROOT/awkfail:$PATH" bash "$HOOK" 2>/dev/null); RC=$?
 expect_quiet "a failed row awk allows in silence, exit 0"
+# The pre-check: an Edit to an existing tech-spec is judged only when it
+# changes the section, read by reuse_audit_state. With the heading awk failing
+# on both sides, both states read empty and equal; a state that could not be
+# read must not let the edit through unjudged.
+failing_tool "$ROOT/headingfail" awk 'tolower(h)'
+rm -f "$SPEC"
+printf '%s' "${HEADER}${VALID_SECTION}${FOOTER}" > "$SPEC"
+OUT=$(jq -nc --arg c "$REPO" --arg f "$SPEC" '{cwd: $c, tool_name: "Edit", tool_input: {file_path: $f, old_string: "| reuse |", new_string: "| maybe |"}}' | PATH="$ROOT/headingfail:$PATH" bash "$HOOK" 2>/dev/null); RC=$?
+expect_deny "a section edit is judged when the heading awk fails, not skipped as unchanged"
+rm -f "$SPEC"
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

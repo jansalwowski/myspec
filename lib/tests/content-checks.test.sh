@@ -248,19 +248,14 @@ absolute_paths_scope "$REPO" .ai/x.json && fail "no .myspec.json means no aiDir 
 # --- a check whose own command failed says so, apart from "no finding" ------------
 # Status 2 is "could not judge": the Stop gate recorded such a pass as judged
 # clean and never looked at the file again.
-# failing <dir> <tool> <needle>: a <tool> in $ROOT/<dir> that exits 2 when one
-# of its arguments holds <needle>, and is the real one otherwise.
-failing() {
-  mkdir -p "$ROOT/$1"
-  # shellcheck disable=SC2016 # the wrapper's own $@ and $a, expanded when it runs
-  printf '#!/bin/sh\nfor a in "$@"; do case "$a" in *"%s"*) exit 2 ;; esac; done\nexec %s "$@"\n' "$3" "$(command -v "$2")" > "$ROOT/$1/$2"
-  chmod +x "$ROOT/$1/$2"
-}
+# shellcheck source=lib/tests/failing-tool.sh
+. "$LIB/tests/failing-tool.sh"
+failing() { failing_tool "$ROOT/$1" "$2" "$3"; }
 # with <dir> <function> <file> -> ST, the function's status with $ROOT/<dir>
 # first on PATH, and GOT, what it printed.
 with() {
   ST=0
-  GOT=$(PATH="$ROOT/$1:$PATH"; "$2" "$3") || ST=$?
+  GOT=$(PATH="$ROOT/$1:$PATH" "$2" "$3") || ST=$?
 }
 failing f-paths grep 'A-Za-z0-9._/-'
 failing f-region awk 'NR == 1 { if ('
@@ -325,6 +320,16 @@ with f-rows reuse_audit_issues "$CUR"
 expect "2:" "$ST:$GOT" "reuse_audit_issues: a failed row check prints no row and is not a pass"
 with none reuse_audit_issues "$CUR"
 expect '0:row 1: Decision must be reuse or skip, got "maybe"; a component reused with changes is reuse, with the change in Reason' "$ST:$GOT" "reuse_audit_issues: a bad row is a finding, status 0"
+# $() strips the newline the bug printed, so count the bytes in the pipe.
+N=$(PATH="$ROOT/f-rows:$PATH" reuse_audit_issues "$CUR" | wc -c | tr -d ' ')
+expect 0 "$N" "reuse_audit_issues: a failed check that printed nothing prints no blank line"
+printf '# T\n\n## Reuse audit\n\n| a | b | reuse | c |\n' > "$CUR"
+with f-heading reuse_audit_state "$CUR"
+expect 2 "$ST" "reuse_audit_state: a failed heading awk is status 2, not a file without the section"
+with f-marker reuse_audit_state "$CUR"
+expect 2 "$ST" "reuse_audit_state: a failed marker grep is status 2"
+with none reuse_audit_state "$CUR"
+expect 0 "$ST" "reuse_audit_state: status 0 when its commands ran, no marker included"
 printf '# T\n' > "$CUR"
 with none reuse_audit_issues "$CUR"
 expect '0:missing required section: "## Reuse audit" (or ### )' "$ST:$GOT" "reuse_audit_issues: a missing section (assert status 1) is a finding, status 0"

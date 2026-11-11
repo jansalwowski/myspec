@@ -359,13 +359,24 @@ done
 # Under set -e that status must not end the hook: with the temporal grep
 # failing a valid new doc is denied for the field, as before the function had
 # a status.
-mkdir -p "$ROOT/grepfail"
-# shellcheck disable=SC2016 # the wrapper's own $@ and $a, expanded when it runs
-printf '#!/bin/sh\nfor a in "$@"; do case "$a" in *"^(updated"*) exit 2 ;; esac; done\nexec %s "$@"\n' "$(command -v grep)" > "$ROOT/grepfail/grep"
-chmod +x "$ROOT/grepfail/grep"
+# shellcheck source=lib/tests/failing-tool.sh
+. "$CLAUDE_PLUGIN_ROOT/lib/tests/failing-tool.sh"
+failing_tool "$ROOT/grepfail" grep '^(updated'
 OUT=$(jq -nc --arg c "$REPO" --arg f "$REPO/.ai/features/x/failed-grep.md" '{cwd: $c, tool_name: "Write", tool_input: {file_path: $f, content: "---\ntitle: T\nupdated: 2026-01-01\n---\nbody\n"}}' | PATH="$ROOT/grepfail:$PATH" bash "$HOOK" 2>/dev/null); RC=$?
 expect_block "a failed temporal grep denies, exit 0"
 reason | grep -q 'missing temporal field' && ok || fail "the deny names the field the failed grep did not find"
+# The pre-check: an Edit to an existing doc is judged only when it changes the
+# frontmatter region. With the region awk failing on both sides, both regions
+# read empty and equal; a region that could not be read must not let the edit
+# through unjudged.
+failing_tool "$ROOT/regionfail" awk 'NR == 1 { if ('
+DOC="$REPO/.ai/features/x/region.md"
+mkdir -p "$(dirname "$DOC")"
+printf -- '---\ntitle: T\nupdated: 2026-01-01\n---\nbody\n' > "$DOC"
+OUT=$(jq -nc --arg c "$REPO" --arg f "$DOC" '{cwd: $c, tool_name: "Edit", tool_input: {file_path: $f, old_string: "updated: 2026-01-01\n", new_string: ""}}' | PATH="$ROOT/regionfail:$PATH" bash "$HOOK" 2>/dev/null); RC=$?
+expect_block "an edit dropping the temporal field is judged when the region awk fails"
+reason | grep -q 'missing temporal field' && ok || fail "the deny names the dropped field"
+rm -f "$DOC"
 
 printf '%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

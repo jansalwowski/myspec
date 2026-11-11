@@ -263,21 +263,25 @@ frontmatter_issues() {
     return 0
   fi
   # 3 is the program's own "never closed"; any other status is awk's failure.
+  rc=0
   fm=$(awk 'NR == 1 { next } /^---[ \t\r]*$/ { closed = 1; exit } { print } END { if (!closed) exit 3 }' "$file") || rc=$?
   if [ "$rc" -ne 0 ]; then
     closed=0
     [ "$rc" -eq 3 ] || failed=1
   fi
   [ "$closed" = 1 ] || printf "frontmatter opened on line 1 is never closed with '---'\n"
-  rc=0
-  grep -qE '^(title|name|topic|id|type):' <<< "$fm" || rc=$?
-  [ "$rc" -eq 0 ] || printf "missing identity field: one of 'title', 'name', 'topic', 'id', 'type'\n"
-  [ "$rc" -le 1 ] || failed=1
-  rc=0
-  grep -qE '^(updated|last_updated|created|started|date):' <<< "$fm" || rc=$?
-  [ "$rc" -eq 0 ] || printf "missing temporal field: one of 'updated', 'last_updated', 'created', 'started', 'date'\n"
-  [ "$rc" -le 1 ] || failed=1
+  _need_line '^(title|name|topic|id|type):' "$fm" "missing identity field: one of 'title', 'name', 'topic', 'id', 'type'" || failed=1
+  _need_line '^(updated|last_updated|created|started|date):' "$fm" "missing temporal field: one of 'updated', 'last_updated', 'created', 'started', 'date'" || failed=1
   [ "$failed" -eq 0 ] || return 2
+}
+
+# _need_line <ERE> <text> <message> -> <message> when no line of <text>
+# matches. Status 2 when grep failed (1 is its "no match").
+_need_line() {
+  local rc=0
+  grep -qE "$1" <<< "$2" || rc=$?
+  [ "$rc" -eq 0 ] || printf '%s\n' "$3"
+  [ "$rc" -le 1 ] || return 2
 }
 
 # frontmatter_reason <rel path> <issues> <ai dir> -> the reason.
@@ -315,17 +319,20 @@ reuse_audit_scope() {
 # `## Reuse audit` (or ###) section, heading through the line before the
 # next heading of its level or higher, plus every marker line. Two files
 # with the same state would get the same verdict, so an edit that leaves it
-# unchanged is never judged.
+# unchanged is never judged. Status 2 when its awk or grep failed: what it
+# printed is then not the state.
 reuse_audit_state() {
-  local ln
+  local ln rc=0 failed=0
   [ -f "$1" ] || return 0
-  ln=$(_heading_lineno "$1" "$REUSE_AUDIT_HEADING")
+  ln=$(_heading_lineno "$1" "$REUSE_AUDIT_HEADING") || failed=1
   if [ -n "$ln" ]; then
     awk -v start="$ln" '
       NR == start { match($0, /^#+/); lvl = RLENGTH; print; next }
-      NR > start { if ($0 ~ /^#+[ \t]/) { match($0, /^#+/); if (RLENGTH <= lvl) exit } print }' "$1" 2>/dev/null
+      NR > start { if ($0 ~ /^#+[ \t]/) { match($0, /^#+/); if (RLENGTH <= lvl) exit } print }' "$1" 2>/dev/null || failed=1
   fi
-  grep -E "$REUSE_AUDIT_MARKER_RE" "$1" 2>/dev/null || true
+  grep -E "$REUSE_AUDIT_MARKER_RE" "$1" 2>/dev/null || rc=$?
+  [ "$rc" -le 1 ] || failed=1
+  [ "$failed" -eq 0 ] || return 2
 }
 
 # reuse_audit_issues <file> -> the diagnostics, one per line; nothing when
@@ -353,7 +360,7 @@ reuse_audit_issues() {
   if [ "$rc" -eq 0 ]; then
     out=$(assert_reuse_audit_rows "$file" "$REUSE_AUDIT_HEADING") || rc=$?
   fi
-  [ "$rc" -eq 0 ] || printf '%s\n' "$out"
+  [ "$rc" -eq 0 ] || [ -z "$out" ] || printf '%s\n' "$out"
   [ "$rc" -le 1 ] || failed=1
   [ "$failed" -eq 0 ] || return 2
 }
