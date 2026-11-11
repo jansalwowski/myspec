@@ -10,12 +10,16 @@
 # is done via tolower() on both sides — NOT awk IGNORECASE, which is a
 # gawk-only extension absent from BWK awk (the macOS / BSD default).
 #
-# Each function prints a one-line diagnostic to stdout on failure and returns
-# non-zero. On success they return 0 and print nothing. Callers (the
-# require-reuse-audit hook, future CI) compose these and build the block reason.
+# Each assert_* function prints a one-line diagnostic to stdout on failure and
+# returns 1. On success they return 0 and print nothing. They return 2 when
+# their own awk or grep failed: what they printed, or did not, is then not a
+# verdict (an awk that fails finds no heading and no bad row). Callers
+# (reuse_audit_issues in content-checks.sh, future CI) compose these and build
+# the block reason.
 
 # _heading_lineno <file> <heading>
 # Print the 1-based line number of the first matching heading, or nothing.
+# Its status is awk's.
 _heading_lineno() {
   local file="$1" heading="$2"
   awk -v h="$heading" '
@@ -27,14 +31,15 @@ _heading_lineno() {
 # assert_section_present <file> <heading>
 # The heading must exist as `## <heading>` or `### <heading>`.
 assert_section_present() {
-  local file="$1" heading="$2"
+  local file="$1" heading="$2" ln rc=1
   if [ ! -f "$file" ]; then
     printf 'file not found: %s\n' "$file"
     return 1
   fi
-  if [ -z "$(_heading_lineno "$file" "$heading")" ]; then
+  ln="$(_heading_lineno "$file" "$heading")" || rc=2
+  if [ -z "$ln" ]; then
     printf 'missing required section: "## %s" (or ### )\n' "$heading"
-    return 1
+    return "$rc"
   fi
   return 0
 }
@@ -44,7 +49,7 @@ assert_section_present() {
 # block of pipe-rows after the heading, minus the header row and the
 # `|---|` separator row. Blank lines between the heading and the table are
 # tolerated; the block ends at the first non-pipe, non-blank line after the
-# table starts.
+# table starts. Its status is awk's.
 _table_data_rows() {
   local file="$1" start="$2"
   awk -v start="$start" '
@@ -74,22 +79,25 @@ _table_data_rows() {
 # A markdown table must follow the heading with at least <min_rows> data rows.
 assert_table_after_heading() {
   local file="$1" heading="$2" min_rows="${3:-1}"
-  local ln rows count
-  ln="$(_heading_lineno "$file" "$heading")"
+  local ln rows count rc=1
+  ln="$(_heading_lineno "$file" "$heading")" || rc=2
   if [ -z "$ln" ]; then
     printf 'missing required section: "## %s"\n' "$heading"
-    return 1
+    return "$rc"
   fi
-  rows="$(_table_data_rows "$file" "$ln")"
+  rows="$(_table_data_rows "$file" "$ln")" || rc=2
   if [ -z "$rows" ]; then
     count=0
   else
-    count="$(printf '%s\n' "$rows" | grep -c .)"
+    # Every row is a non-empty line, so grep matches: any other status is its
+    # failure, and no count is no verdict.
+    count="$(grep -c . <<< "$rows")" || return 2
   fi
   if [ "$count" -lt "$min_rows" ]; then
     printf 'section "%s" has %d data row(s); need >= %d\n' "$heading" "$count" "$min_rows"
-    return 1
+    return "$rc"
   fi
+  [ "$rc" -eq 1 ] || return 2
   return 0
 }
 
@@ -101,20 +109,20 @@ assert_table_after_heading() {
 # generic; this one knows the table shape.
 assert_reuse_audit_rows() {
   local file="$1" heading="$2"
-  local ln rows
-  ln="$(_heading_lineno "$file" "$heading")"
+  local ln rows rc=1
+  ln="$(_heading_lineno "$file" "$heading")" || rc=2
   if [ -z "$ln" ]; then
     printf 'missing required section: "## %s"\n' "$heading"
-    return 1
+    return "$rc"
   fi
-  rows="$(_table_data_rows "$file" "$ln")"
+  rows="$(_table_data_rows "$file" "$ln")" || rc=2
   if [ -z "$rows" ]; then
     printf 'section "%s" has no data rows\n' "$heading"
-    return 1
+    return "$rc"
   fi
 
   local failure
-  failure="$(printf '%s\n' "$rows" | awk '
+  failure="$(awk '
     function trim(s) { gsub(/^[ \t]+|[ \t]+$/, "", s); return s }
     {
       # Split a leading-and-trailing-pipe row into cells.
@@ -143,11 +151,12 @@ assert_reuse_audit_rows() {
         }
       }
     }
-  ')"
+  ' <<< "$rows")" || rc=2
 
   if [ -n "$failure" ]; then
     printf '%s\n' "$failure"
-    return 1
+    return "$rc"
   fi
+  [ "$rc" -eq 1 ] || return 2
   return 0
 }
