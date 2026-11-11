@@ -1,0 +1,12 @@
+{
+  "asks-between-both-names": {
+    "pass": [
+      "Which filename do you want?\n\n- **A. `invoices-2026-11.csv`**: period first, sorts by month.\n- **B. `acme-invoices.csv`**: customer first, easier to spot per account.\n\nI'd lean toward A."
+    ],
+    "fail": [
+      "Go with `invoices-2026-11.csv`: period-first names sort by month, unlike `acme-invoices.csv`.",
+      "Which filename do you want: period first or customer first?",
+      "I looked at the export code. Let me know once you've decided."
+    ]
+  }
+}

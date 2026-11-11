@@ -4,13 +4,11 @@ This project set `.myspec.json` `visualQuestions` to `auto` (`/myspec:setup visu
 
 ## Options
 
-A choice between looks (layout, spacing, color, typography, a screen or UI state) is asked through `/myspec:visualize-options`, never as a text question.
-
-Whenever you are about to ask the user to choose between options, whether through AskUserQuestion or as a question in your reply ("Which do you want: A or B?", approaches, designs, alternatives a skill proposes), first decide whether the options are visual. They are visual when they are layouts, screens, UI states, colors, spacing, typography, density, motion or other look-and-feel or UX choices; when they differ in a structure a diagram shows better than words (architecture, data flow, a state machine, a sequence, entity relationships); or when an option would need ASCII art or a `preview` to explain it.
+Before every choice you put to the user, whether through AskUserQuestion or as a question in your reply ("Which do you want: A or B?", approaches, designs, alternatives a skill proposes), sort the options with the table below: a clearly visual choice is asked through `/myspec:visualize-options`, not as text. They are visual when they are layouts, screens, UI states, colors, spacing, typography, density, motion or other look-and-feel or UX choices; when they differ in a structure a diagram shows better than words (architecture, data flow, a state machine, a sequence, entity relationships); or when an option would need ASCII art or a `preview` to explain it.
 
 | The options are | Do |
 |---|---|
-| Clearly visual | Ask through `/myspec:visualize-options`, not AskUserQuestion or prose, with the same questions, options and recommended order. A preview may be a diagram |
+| Clearly visual | Ask through `/myspec:visualize-options`, not AskUserQuestion or a question in prose, with the same questions, options and recommended order. A preview may be a diagram |
 | Partly visual: words can decide it, but seeing the options could help | Keep AskUserQuestion and add a last option, `Show in Visual Buddy`, when the question has 3 options or fewer; if the user picks it, ask the same question again through `/myspec:visualize-options`. Options in prose: end with one line offering to show them side by side in Visual Buddy |
 | Not visual (scope, naming, trade-offs in words) | AskUserQuestion or prose as usual |
 
@@ -20,4 +18,4 @@ Show, don't link or describe. When something visual is on the table (an image, a
 
 Inside `/myspec:brainstorm`, its own offer (a message of its own) replaces these one-line offers.
 
-When the user cannot open a local URL (a remote session, no browser), stay in the terminal for all of this.
+When the user cannot open a local URL (a remote session, no browser), stay in the terminal for all of this, clearly visual choices included.
