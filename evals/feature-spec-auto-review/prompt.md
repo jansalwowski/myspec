@@ -1,7 +1,6 @@
 ---
 description: "The user asks for the spec to be reviewed before they see it. feature-spec must run feature-spec-review with --from-author, whose analysis runs in a reviewer subagent, and spec.md must stay draft: no user said yes to approval, and AskUserQuestion is not granted (#356)."
-tags: [skill:feature-spec, skill:feature-spec-review, orchestration, capability]
-runs: 1
+tags: [skill:feature-spec, skill:feature-spec-review, orchestration, regression]
 max_turns: 24
 timeout_seconds: 480
 allowed_tools: [Read, Glob, Grep, Skill, Write, Edit, Agent]

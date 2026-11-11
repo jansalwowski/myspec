@@ -1,8 +1,7 @@
 ---
 description: "Two layouts to pick between in the browser: visualize-options, not feature-mockup or brainstorm."
-tags: [skill:visualize-options, skill:feature-mockup, skill:brainstorm, trigger, capability]
+tags: [skill:visualize-options, skill:feature-mockup, skill:brainstorm, trigger, regression]
 max_turns: 2
-runs: 1
 timeout_seconds: 300
 allowed_tools: [Read, Glob, Grep, Skill]
 ---

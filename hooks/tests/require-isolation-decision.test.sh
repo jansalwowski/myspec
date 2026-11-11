@@ -412,5 +412,72 @@ check allow "protectedBranches not a list: dropped, aiDir doc" pb-rel "$REPO/.ai
 git -C "$REPO" symbolic-ref HEAD refs/heads/feat/x
 cp "$ROOT/myspec.saved" "$REPO/.myspec.json"
 
+# --- the decision is read before the settings ---------------------------------
+# The hook runs on every Write and Edit. A develop session, a file in a linked
+# worktree and a file outside the repo are approved whatever the settings
+# say, so they must not pay for the settings reader (two thirds of the hook's
+# time). Observed through a bash on PATH that logs what it is started with:
+# read_setting starts the reader as `bash <lib>/myspec-config.sh`.
+SHIM="$ROOT/shim"
+BASH_LOG="$ROOT/bash.log"
+mkdir -p "$SHIM"
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s"\nexec "%s" "$@"\n' "$BASH_LOG" "$(command -v bash)" > "$SHIM/bash"
+chmod +x "$SHIM/bash"
+setting_reads() {  # setting_reads <session-id> <file-path> -> how often the hook started the settings reader
+  : > "$BASH_LOG"
+  PATH="$SHIM:$PATH" run_hook "$REPO" "$1" "$2" >/dev/null 2>&1
+  grep -c 'myspec-config\.sh' "$BASH_LOG"
+}
+expect_reads() {  # expect_reads <none|some> <desc> <session-id> <file-path>
+  local n
+  n=$(setting_reads "$3" "$4")
+  if { [ "$1" = none ] && [ "$n" -eq 0 ]; } || { [ "$1" = some ] && [ "$n" -gt 0 ]; }; then
+    PASS=$((PASS + 1))
+  else
+    FAIL=$((FAIL + 1)); echo "FAIL  $2: want $1 settings reads, got $n" >&2
+  fi
+}
+rm -f "$STATE/"*.jsonl
+mark fast-dev develop 60
+mark fast-wt worktree 60
+# The control: the log sees the reader when the hook does need a setting.
+expect_reads some "no decision, source file (the ask names worktreeRoot)" fast-none "$REPO/components/Foo.vue"
+expect_reads some "worktree mode, main-checkout source (the block names worktreeRoot)" fast-wt "$REPO/components/Foo.vue"
+expect_reads none "develop mode, source file"          fast-dev "$REPO/components/Foo.vue"
+expect_reads none "develop mode, aiDir doc"            fast-dev "$REPO/.ai/features/x/spec.md"
+expect_reads none "worktree mode, file in the linked worktree" fast-wt "$REPO/.claude/worktrees/wt-a/components/Foo.vue"
+expect_reads none "no decision, file outside the repo" fast-none "/tmp/scratch/notes.md"
+# No setting the develop exit skips can turn its allow into a block: every
+# isolation setting at its strictest, on the default branch.
+cp "$REPO/.myspec.json" "$ROOT/myspec.saved"
+printf '{"aiDir":"docs/ai","frameworkVersion":"3.0.0","isolation":{"gateDocs":true,"protectedBranches":["*"],"worktreeRoot":"wt"}}\n' > "$REPO/.myspec.json"
+git -C "$REPO" symbolic-ref HEAD refs/heads/main
+check allow "develop, strictest settings, source file" fast-dev "$REPO/components/Foo.vue"
+check allow "develop, strictest settings, aiDir doc"   fast-dev "$REPO/docs/ai/features/x/spec.md"
+check allow "develop, strictest settings, old aiDir"   fast-dev "$REPO/.ai/features/x/spec.md"
+check allow "develop, strictest settings, CLAUDE.md"   fast-dev "$REPO/CLAUDE.md"
+check block "worktree, strictest settings, aiDir doc"  fast-wt "$REPO/docs/ai/features/x/spec.md"
+check allow "worktree, strictest settings, session archive under the configured aiDir" fast-wt "$REPO/docs/ai/memory/sessions/archive/x.md"
+check block "no decision, strictest settings, aiDir doc" fast-none "$REPO/docs/ai/features/x/spec.md"
+# A settings file the reader rejects changes nothing for a develop session,
+# and the others are still asked or blocked.
+printf '{not json\n' > "$REPO/.myspec.json"
+check allow "develop, unreadable settings, source file"  fast-dev "$REPO/components/Foo.vue"
+check block "worktree, unreadable settings, source file" fast-wt "$REPO/components/Foo.vue"
+check block "no decision, unreadable settings, source file" fast-none "$REPO/components/Foo.vue"
+# The worktree block still names the configured root and the default branch,
+# which are now read after the decision.
+printf '{"aiDir":".ai","frameworkVersion":"3.0.0","isolation":{"worktreeRoot":"wt/"}}\n' > "$REPO/.myspec.json"
+git -C "$REPO" symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/develop
+R=$(run_hook "$REPO" fast-wt "$REPO/components/Foo.vue" | jq -r '.hookSpecificOutput.permissionDecisionReason')
+if printf '%s' "$R" | grep -qF '/wt/<slug>" origin/develop' && printf '%s' "$R" | grep -qF 'Full procedure: .ai/work-isolation.md'; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); echo "FAIL  the worktree block names the configured root, the default branch and the procedure (got: ${R:0:300})" >&2
+fi
+git -C "$REPO" symbolic-ref --delete refs/remotes/origin/HEAD
+git -C "$REPO" symbolic-ref HEAD refs/heads/feat/x
+cp "$ROOT/myspec.saved" "$REPO/.myspec.json"
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

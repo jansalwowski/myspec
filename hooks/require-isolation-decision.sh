@@ -72,68 +72,15 @@ REPO_ROOT="$CF_MAIN"
 # Only a myspec project carries the isolation contract.
 [ -f "$REPO_ROOT/.myspec.json" ] || exit 0
 
-# Both through the one settings reader (lib/myspec-config.sh), whose schema
-# holds the defaults.
-AI_DIR=$(ai_dir "$REPO_ROOT")
-WORKTREE_ROOT=""
-if read_setting isolation.worktreeRoot "$REPO_ROOT"; then
-  WORKTREE_ROOT=$(printf '%s' "$SETTING" | jq -r 'if type == "string" then . else empty end' 2>/dev/null || printf '')
-  [ -z "$SETTING_NOTES" ] || printf '%s\n' "$SETTING_NOTES" | sed 's/^/myspec-config: /' >&2
-fi
-WORKTREE_ROOT="${WORKTREE_ROOT%/}"
-# An empty value, or a reader that failed, never opens the gate: the value
-# only names where worktrees go, so the schema default stands in for it.
-if [ -z "$WORKTREE_ROOT" ]; then
-  WORKTREE_ROOT=$(jq -r '.keys["isolation.worktreeRoot"].default // empty' "$HOOK_LIB/myspec-config.schema.json" 2>/dev/null || printf '')
-  WORKTREE_ROOT="${WORKTREE_ROOT:-.claude/worktrees}"
-fi
-# Installed by init/update from the manifest `files` entry work-isolation.md.
-PROCEDURE="$AI_DIR/work-isolation.md"
-
-# Paths that never need an isolation decision: agent infrastructure and docs.
-# Everything else (source, config, tests, package.json, …) is gated.
-EXEMPT_PREFIXES=(
-  "$AI_DIR/"
-  ".claude/"
-  "docs/"
-)
-
-# Root-level agent configuration — same category as .claude/, not shipped code.
-EXEMPT_FILES=(
-  "CLAUDE.md"
-  "AGENTS.md"
-  ".mcp.json"
-)
-
-# Paths that must resolve to the MAIN CHECKOUT whatever the session answered.
-#
-# Distinct from EXEMPT_PREFIXES, which only suppress the prompt (branch 2) and
-# are still subject to a worktree answer. These bypass the worktree block
-# itself, so the list stays narrow: per-checkout state that another rule pins
-# to the main checkout.
-#
-#   .claude/state/           gitignored harness state — live session logs,
-#                            session-state files, the memory ID registry
-#   <aiDir>/memory/sessions/ the session archive, written by session-complete
-#                            in the main checkout whatever mode the session
-#                            chose; a worktree session would otherwise have no
-#                            legitimate place to archive itself
-MAIN_CHECKOUT_ONLY_PREFIXES=(
-  ".claude/state/"
-  "$AI_DIR/memory/sessions/"
-)
-
-# Plugin-owned scratch that is never gated, whatever the session answered and
-# on any branch, protected ones included (#360). Nothing here is shipped
-# source: it is session output a plugin tool writes and a browser reads.
-#
-#   .myspec/brainstorm/  the visual companion's --project-dir session
-#              directory (screens under <session>/content/). Asking
-#              develop-vs-worktree for a throwaway screen, or blocking it
-#              after a worktree answer, only pushes the agent to /tmp.
-SCRATCH_PREFIXES=(
-  ".myspec/brainstorm/"
-)
+# The session's decision, read before any setting: a subagent's is its
+# parent's, by the shared session id (subagents cannot prompt, so they follow
+# the parent). A develop answer allows every edit: from here to the two
+# blocks at the end the hook only finds more reasons to approve, so no
+# setting or path can turn that answer into a block. That session leaves
+# here, before the settings reads and git calls, which cost it two thirds of
+# the hook's time on every edit.
+session_isolation "$REPO_ROOT" "$SESSION_ID"
+[ "$ISO_MODE" != develop ] || exit 0
 
 case "$FILE_PATH" in
   /*) ABS_PATH="$FILE_PATH" ;;
@@ -164,8 +111,61 @@ REL_PATH="${ABS_PATH#"$REPO_ROOT"/}"
 # Prefix strip was a no-op → the file lives outside the repo (scratchpad, /tmp).
 [ "$REL_PATH" != "$ABS_PATH" ] || exit 0
 
-# Checked BEFORE any mode logic: these paths have exactly one correct location,
-# so no isolation answer can redirect them; the scratch paths are never gated.
+# The settings come through the one reader (lib/myspec-config.sh), whose schema
+# holds the defaults. Each is read where it is first needed: aiDir here, for
+# the path lists; isolation.worktreeRoot only for a block message.
+AI_DIR=$(ai_dir "$REPO_ROOT")
+# Installed by init/update from the manifest `files` entry work-isolation.md.
+PROCEDURE="$AI_DIR/work-isolation.md"
+
+# Paths that never need an isolation decision: agent infrastructure and docs.
+# Everything else (source, config, tests, package.json, …) is gated.
+EXEMPT_PREFIXES=(
+  "$AI_DIR/"
+  ".claude/"
+  "docs/"
+)
+
+# Root-level agent configuration — same category as .claude/, not shipped code.
+EXEMPT_FILES=(
+  "CLAUDE.md"
+  "AGENTS.md"
+  ".mcp.json"
+)
+
+# Paths that must resolve to the MAIN CHECKOUT whatever the session answered.
+#
+# Distinct from EXEMPT_PREFIXES, which only suppress the ask (no decision) and
+# are still subject to a worktree answer. These bypass the worktree block
+# itself, so the list stays narrow: per-checkout state that another rule pins
+# to the main checkout.
+#
+#   .claude/state/           gitignored harness state — live session logs,
+#                            session-state files, the memory ID registry
+#   <aiDir>/memory/sessions/ the session archive, written by session-complete
+#                            in the main checkout whatever mode the session
+#                            chose; a worktree session would otherwise have no
+#                            legitimate place to archive itself
+MAIN_CHECKOUT_ONLY_PREFIXES=(
+  ".claude/state/"
+  "$AI_DIR/memory/sessions/"
+)
+
+# Plugin-owned scratch that is never gated, whatever the session answered and
+# on any branch, protected ones included (#360). Nothing here is shipped
+# source: it is session output a plugin tool writes and a browser reads.
+#
+#   .myspec/brainstorm/  the visual companion's --project-dir session
+#              directory (screens under <session>/content/). Asking
+#              develop-vs-worktree for a throwaway screen, or blocking it
+#              after a worktree answer, only pushes the agent to /tmp.
+SCRATCH_PREFIXES=(
+  ".myspec/brainstorm/"
+)
+
+# Checked before the worktree block and the ask (a develop session has left
+# already): these paths have exactly one correct location, so no isolation
+# answer can redirect them; the scratch paths are never gated.
 # See the lists' comments above. A `..` segment is never matched: the part of
 # the path below the nearest existing directory stays unresolved, so
 # .myspec/brainstorm/../../src/foo.ts would pass a prefix test.
@@ -181,7 +181,7 @@ case "/$REL_PATH/" in
 esac
 
 # Exemption is about the PROMPT, not about the tree. A doc edit never triggers
-# the isolation question (branch 2 below), but once a session has answered
+# the isolation question (the ask at the end), but once a session has answered
 # "worktree", docs obey that answer like everything else — otherwise the guard
 # is off for exactly the file types a docs-PR session edits.
 IS_EXEMPT=0
@@ -207,11 +207,37 @@ if [ "$IS_EXEMPT" -eq 1 ] && read_setting isolation.gateDocs "$REPO_ROOT"; then
   [ "$SETTING" != "true" ] || IS_EXEMPT=0
 fi
 
+# No decision: ask, unless the file is exempt from prompting. On a protected
+# HEAD (#348: a detached HEAD, the default branch, an
+# isolation.protectedBranches entry) nothing is exempt from the question: a
+# doc written there lands on the integration branch unasked. Asked only here,
+# so a session with a decision never pays for the git calls. A worktree
+# answer skips this: the exemption is about the prompt, and that session is
+# blocked below whatever the path.
+WHAT="source files"
+if [ "$ISO_MODE" != worktree ] && [ "$IS_EXEMPT" -eq 1 ]; then
+  protected_checkout "$REPO_ROOT" || exit 0
+  WHAT="files on $PROTECTED_HEAD"
+fi
+
+# Every path from here ends in a block, and only its message needs these.
+WORKTREE_ROOT=""
+if read_setting isolation.worktreeRoot "$REPO_ROOT"; then
+  WORKTREE_ROOT=$(printf '%s' "$SETTING" | jq -r 'if type == "string" then . else empty end' 2>/dev/null || printf '')
+  [ -z "$SETTING_NOTES" ] || printf '%s\n' "$SETTING_NOTES" | sed 's/^/myspec-config: /' >&2
+fi
+WORKTREE_ROOT="${WORKTREE_ROOT%/}"
+# An empty value, or a reader that failed, never opens the gate: the value
+# only names where worktrees go, so the schema default stands in for it.
+if [ -z "$WORKTREE_ROOT" ]; then
+  WORKTREE_ROOT=$(jq -r '.keys["isolation.worktreeRoot"].default // empty' "$HOOK_LIB/myspec-config.schema.json" 2>/dev/null || printf '')
+  WORKTREE_ROOT="${WORKTREE_ROOT:-.claude/worktrees}"
+fi
 DEFAULT_BRANCH=$(git -C "$REPO_ROOT" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || printf '')
 DEFAULT_BRANCH="${DEFAULT_BRANCH#origin/}"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
 
-WORKTREE_REASON="BLOCKED: this session chose WORKTREE isolation, but the edit targets the main checkout.
+[ "$ISO_MODE" != worktree ] || pretool_deny "BLOCKED: this session chose WORKTREE isolation, but the edit targets the main checkout.
 
 Create the worktree if you have not already, then make every edit inside it:
   git worktree add -b <type>/<slug> \"\$(git rev-parse --show-toplevel)/$WORKTREE_ROOT/<slug>\" origin/$DEFAULT_BRANCH
@@ -220,25 +246,6 @@ Create the worktree if you have not already, then make every edit inside it:
 Use absolute paths and \`git -C <worktree>\` for all git operations. Full procedure: $PROCEDURE
 
 Blocked edit: $REL_PATH"
-
-# 1. This session's decision; a subagent's is its parent's, by the shared
-#    session id (subagents cannot prompt, so they follow the parent).
-session_isolation "$REPO_ROOT" "$SESSION_ID"
-case "$ISO_MODE" in
-  develop) exit 0 ;;
-  worktree) pretool_deny "$WORKTREE_REASON" ;;
-esac
-
-# 2. No decision — ask, unless the file is exempt from prompting. On a
-#    protected HEAD (#348: a detached HEAD, the default branch, an
-#    isolation.protectedBranches entry) nothing is exempt from the question:
-#    a doc written there lands on the integration branch unasked. Asked only
-#    here, so a session with a decision never pays for the git calls.
-WHAT="source files"
-if [ "$IS_EXEMPT" -eq 1 ]; then
-  protected_checkout "$REPO_ROOT" || exit 0
-  WHAT="files on $PROTECTED_HEAD"
-fi
 
 pretool_deny "BLOCKED: no work-isolation decision recorded for this session.
 
