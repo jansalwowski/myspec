@@ -67,7 +67,18 @@ PAYLOAD="" CHUNK=""
 while IFS= read -r -d '' CHUNK; do PAYLOAD+=$CHUNK; done
 PAYLOAD+=$CHUNK
 FAST_RE='\.md(\\n)*"|\\u'
-[[ $PAYLOAD =~ $FAST_RE ]] || exit 0
+# Matched as bytes (LC_ALL=C): in the hook's own locale [[ =~ ]] decodes the
+# payload first, and bytes that locale cannot decode (a UTF-8 path under an
+# SJIS or Big5 locale, a stray byte in the content) make the match fail on a
+# payload that does hold the path. Only a plain no-match (1) exits: a status
+# of 2, a pattern that did not compile, goes on to the full check.
+fast_match() {
+  local LC_ALL=C
+  [[ $PAYLOAD =~ $FAST_RE ]]
+}
+FAST_RC=0
+fast_match || FAST_RC=$?
+[ "$FAST_RC" -ne 1 ] || exit 0
 
 # shellcheck source=lib/hook-core.sh
 . "$HOOK_CORE"

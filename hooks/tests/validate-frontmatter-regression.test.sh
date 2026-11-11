@@ -321,5 +321,38 @@ expect_quiet "a NotebookEdit carries no file_path and passes"
 raw "{\"cwd\":\"$REPO\",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$REPO/.ai/features/x/UPPER.MD\",\"content\":\"no frontmatter\\n\"}}"
 expect_quiet "an upper-case .MD is outside the scope, as it was before the filter"
 
+# The filter matches bytes, not characters of the hook's locale (PR #449
+# review): [[ =~ ]] decodes the payload in the locale first, and where the
+# bytes before the path are not valid there the match failed and a write the
+# full check denies was skipped. A raw invalid byte in a UTF-8 locale, and a
+# valid UTF-8 payload from a project in a non-ASCII directory under a locale
+# with another encoding. The second needs the locale installed.
+raw_in() {  # raw_in <locale> <payload file> -> OUT, RC
+  OUT=$(LC_ALL="$1" bash "$HOOK" < "$2" 2>/dev/null); RC=$?
+}
+# Read once and matched with case: under pipefail `locale -a | grep -q` fails
+# when grep leaves early and locale dies of SIGPIPE.
+LOCALES=$(locale -a 2>/dev/null || true)
+UTF8_LOCALE=$(printf '%s\n' "$LOCALES" | grep -iE '^(C|en_US)\.utf-?8$' | head -1)
+printf '{"note":"caf\351","cwd":"%s","tool_name":"Write","tool_input":{"file_path":"%s","content":"no frontmatter\\n"}}' "$REPO" "$DOC" > "$ROOT/invalid-byte.json"
+raw_in "${UTF8_LOCALE:-en_US.UTF-8}" "$ROOT/invalid-byte.json"
+expect_block "a payload with a raw invalid byte before the path is still denied"
+NREPO="$ROOT/プロジェクト"
+mkdir -p "$NREPO/.ai/features/x"
+git init -q -b main "$NREPO"
+printf '{"aiDir":".ai"}\n' > "$NREPO/.myspec.json"
+printf '{"cwd":"%s","tool_name":"Write","tool_input":{"file_path":"%s/.ai/features/x/spec.md","content":"no frontmatter\\n"}}' "$NREPO" "$NREPO" > "$ROOT/non-ascii-dir.json"
+raw_in "${UTF8_LOCALE:-en_US.UTF-8}" "$ROOT/non-ascii-dir.json"
+expect_block "a doc in a non-ASCII directory is denied in a UTF-8 locale"
+for loc in ja_JP.SJIS zh_TW.Big5; do
+  case $'\n'"$LOCALES"$'\n' in *$'\n'"$loc"$'\n'*) HAVE=1 ;; *) HAVE=0 ;; esac
+  if [ "$HAVE" = 1 ]; then
+    raw_in "$loc" "$ROOT/non-ascii-dir.json"
+    expect_block "a doc in a non-ASCII directory is still denied under LC_ALL=$loc"
+  else
+    echo "SKIP  locale $loc is not installed"
+  fi
+done
+
 printf '%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

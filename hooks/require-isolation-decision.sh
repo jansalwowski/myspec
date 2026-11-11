@@ -135,7 +135,7 @@ EXEMPT_FILES=(
 
 # Paths that must resolve to the MAIN CHECKOUT whatever the session answered.
 #
-# Distinct from EXEMPT_PREFIXES, which only suppress the prompt (branch 2) and
+# Distinct from EXEMPT_PREFIXES, which only suppress the ask (no decision) and
 # are still subject to a worktree answer. These bypass the worktree block
 # itself, so the list stays narrow: per-checkout state that another rule pins
 # to the main checkout.
@@ -163,8 +163,9 @@ SCRATCH_PREFIXES=(
   ".myspec/brainstorm/"
 )
 
-# Checked BEFORE any mode logic: these paths have exactly one correct location,
-# so no isolation answer can redirect them; the scratch paths are never gated.
+# Checked before the worktree block and the ask (a develop session has left
+# already): these paths have exactly one correct location, so no isolation
+# answer can redirect them; the scratch paths are never gated.
 # See the lists' comments above. A `..` segment is never matched: the part of
 # the path below the nearest existing directory stays unresolved, so
 # .myspec/brainstorm/../../src/foo.ts would pass a prefix test.
@@ -180,7 +181,7 @@ case "/$REL_PATH/" in
 esac
 
 # Exemption is about the PROMPT, not about the tree. A doc edit never triggers
-# the isolation question (branch 2 below), but once a session has answered
+# the isolation question (the ask at the end), but once a session has answered
 # "worktree", docs obey that answer like everything else — otherwise the guard
 # is off for exactly the file types a docs-PR session edits.
 IS_EXEMPT=0
