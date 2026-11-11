@@ -627,7 +627,7 @@ implement_requests() {
 # beside the session's state file (session_home and session_dir in
 # lib/session-event.sh decide where both live), a myspec project only.
 write_session_log() {
-  local raw_root="$1" repo_root state_dir active_file worktree topic_seed started short_id p rel entry
+  local raw_root="$1" repo_root state_dir active_file worktree topic_seed started short_id p rel entry tmp
   shift
 
   # raw_root is the repository root as seen from the edit (a linked worktree
@@ -664,7 +664,14 @@ write_session_log() {
     started=$(date '+%Y-%m-%d %H:%M')
     short_id="${SESSION_ID:0:8}"
 
-    cat > "$active_file" <<SESSION
+    # The hooks of parallel tool calls run at once, and each of them finds no
+    # log. A `>` here would truncate the entries the others appended since
+    # the test above. So the header goes to a file of this process, and a
+    # hard link gives it the log's name: link(2) fails when the name exists,
+    # and the log appears whole, never empty or half written. The dot name
+    # keeps the temporary file out of every `*.md` listing.
+    tmp=$(mktemp "$state_dir/.${SESSION_ID}.md.XXXXXX") || return 0
+    cat > "$tmp" <<SESSION
 ---
 session_id: $SESSION_ID
 topic: "auto:$topic_seed"
@@ -700,6 +707,9 @@ $CONTEXT Refine topic, feature, and mode as the work crystallizes.
 ## Files touched
 <!-- Appended by mark-code-changed.sh; this is how a skill recognises its own session -->
 SESSION
+    # A filesystem without hard links: `mv -n` does not replace a log either.
+    ln "$tmp" "$active_file" 2>/dev/null || [ -f "$active_file" ] || mv -n "$tmp" "$active_file" 2>/dev/null || true
+    rm -f "$tmp"
   fi
 
   # Append every code path once. `## Files touched` is the LAST section of
