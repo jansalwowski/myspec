@@ -1,7 +1,7 @@
 # Blueprint: Visual questions
 
 ## Purpose
-Turn Visual Buddy, the browser tab beside the conversation, on or off for this project. When on (`visualQuestions: "auto"`), the agent puts visual questions (layouts, UI states, colors, spacing, typography, designs a diagram shows better than words, anything that would need ASCII art) to the user through `/myspec:visualize-options` instead of AskUserQuestion or a question in the reply, offers "Show in Visual Buddy" on questions that are only partly visual, and shows diagrams, graphs and visual results there instead of linking files. The behaviour lives in one always-loaded rule, installed only while the setting is on, so a project that keeps it off pays nothing for it.
+Turn Visual Buddy, the browser tab beside the conversation, on or off for this project. When on (`visualQuestions: "auto"`), the agent puts visual questions (layouts, UI states, colors, spacing, typography, designs a diagram shows better than words, anything that would need ASCII art) to the user through `/myspec:visualize-options` instead of AskUserQuestion or a question in its reply, offers "Show in Visual Buddy" on questions that are only partly visual, and shows diagrams, graphs and visual results there instead of linking files. The behaviour lives in one always-loaded rule, installed only while the setting is on, so a project that keeps it off pays nothing for it.
 
 ## Recon (before asking)
 

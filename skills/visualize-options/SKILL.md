@@ -19,6 +19,8 @@ It also has a show mode, for a diagram, a graph or a visual result that needs no
 | A 40-column ASCII preview would misstate the option | An ASCII preview (the `preview` field) shows it well enough |
 | Seeing it at phone width matters | One question with no visual payload |
 
+In a project with `visualQuestions: "auto"`, its rule `.claude/rules/visual-questions.md` sorts questions instead of this table: a question it calls clearly visual comes here, a partly visual one stays in AskUserQuestion with a `Show in Visual Buddy` option.
+
 A question *about* UI is not automatically visual: "what kind of wizard?" is words; "which of these wizard layouts?" is visual. Options without a preview are fine on the same screen.
 
 ## Inputs

@@ -8,9 +8,9 @@ Before every choice you put to the user, whether through AskUserQuestion, as a q
 
 | The options are | Do |
 |---|---|
-| Clearly visual | Ask through `/myspec:visualize-options`, not AskUserQuestion or a question in prose, with the same questions, options and recommended order. A preview may be a diagram |
-| Partly visual: words can decide it, but seeing the options could help | Keep AskUserQuestion and add a last option, `Show in Visual Buddy`, when the question has 3 options or fewer; if the user picks it, ask the same question again through `/myspec:visualize-options`. Options in prose: end with one line offering to show them side by side in Visual Buddy |
-| Not visual (scope, naming, trade-offs in words) | AskUserQuestion or prose as usual |
+| Clearly visual | Ask through `/myspec:visualize-options`, which starts Visual Buddy itself, so it need not be running already, with the same questions, options and recommended order. A preview may be a diagram |
+| Partly visual: words can decide it, but seeing the options could help | Keep AskUserQuestion and add a last option, `Show in Visual Buddy`, when the question has 3 options or fewer; if the user picks it, ask the same question again through `/myspec:visualize-options`. A question or options in your reply: end with one line offering to show them side by side in Visual Buddy |
+| Not visual (scope, naming, trade-offs in words) | AskUserQuestion or a question in your reply, as usual |
 
 ## Results
 
