@@ -1,5 +1,5 @@
 ---
-description: "visualQuestions off: the same spacing-scale choice stays out of visualize-options (the rule, not the skill description, routes it)."
+description: "visualQuestions off: the same spacing-scale choice stays out of visualize-options (the rule, not the skill description, routes it) and is put to the user as a plain question in the reply."
 tags: [skill:visualize-options, near-miss, capability]
 max_turns: 3
 runs: 1
