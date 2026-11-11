@@ -4,7 +4,7 @@ This project set `.myspec.json` `visualQuestions` to `auto` (`/myspec:setup visu
 
 ## Options
 
-Before every choice you put to the user, whether through AskUserQuestion or as a question in your reply ("Which do you want: A or B?", approaches, designs, alternatives a skill proposes), sort the options with the table below: a clearly visual choice is asked through `/myspec:visualize-options`, not as text. They are visual when they are layouts, screens, UI states, colors, spacing, typography, density, motion or other look-and-feel or UX choices; when they differ in a structure a diagram shows better than words (architecture, data flow, a state machine, a sequence, entity relationships); or when an option would need ASCII art or a `preview` to explain it.
+Before every choice you put to the user, whether through AskUserQuestion, as a question in your reply ("Which do you want: A or B?") or as options you lay out in a reply (approaches, designs, alternatives a skill proposes), sort the options with the table below: a clearly visual choice is asked through `/myspec:visualize-options`, not as text. They are visual when they are layouts, screens, UI states, colors, spacing, typography, density, motion or other look-and-feel or UX choices; when they differ in a structure a diagram shows better than words (architecture, data flow, a state machine, a sequence, entity relationships); or when an option would need ASCII art or a `preview` to explain it.
 
 | The options are | Do |
 |---|---|

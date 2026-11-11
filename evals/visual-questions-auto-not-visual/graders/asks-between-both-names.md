@@ -1,4 +1,5 @@
 ---
 type: regex
-pattern: '^(?=[\s\S]*\?)(?=[\s\S]*invoices-2026-11\.csv)(?=[\s\S]*acme-invoices\.csv)'
+flags: i
+pattern: '^(?=[\s\S]*(?:which|prefer|choose|pick)[^\n.?]*\?)(?=[\s\S]*export csv)(?=[\s\S]*download invoices)'
 ---

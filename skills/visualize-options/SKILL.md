@@ -15,7 +15,7 @@ It also has a show mode, for a diagram, a graph or a visual result that needs no
 | Use it | Use AskUserQuestion |
 |---|---|
 | Options differ in layout, density, IA, or which UI states exist | Options are words: approaches, scopes, names, trade-offs |
-| Designs differ in structure a diagram shows: architecture, data flow, states, sequence | The difference fits in one sentence, and seeing the options adds nothing |
+| Designs differ in structure a diagram shows: architecture, data flow, states, sequence | The difference fits in one sentence |
 | A 40-column ASCII preview would misstate the option | An ASCII preview (the `preview` field) shows it well enough |
 | Seeing it at phone width matters | One question with no visual payload |
 
