@@ -72,21 +72,49 @@ REPO_ROOT="$CF_MAIN"
 # Only a myspec project carries the isolation contract.
 [ -f "$REPO_ROOT/.myspec.json" ] || exit 0
 
-# Both through the one settings reader (lib/myspec-config.sh), whose schema
-# holds the defaults.
+# The session's decision, read before any setting: a subagent's is its
+# parent's, by the shared session id (subagents cannot prompt, so they follow
+# the parent). A develop answer allows every edit: from here to the two
+# blocks at the end the hook only finds more reasons to approve, so no
+# setting or path can turn that answer into a block. That session leaves
+# here, before the settings reads and git calls, which cost it two thirds of
+# the hook's time on every edit.
+session_isolation "$REPO_ROOT" "$SESSION_ID"
+[ "$ISO_MODE" != develop ] || exit 0
+
+case "$FILE_PATH" in
+  /*) ABS_PATH="$FILE_PATH" ;;
+  *)  ABS_PATH="$CWD_ROOT/$FILE_PATH" ;;
+esac
+
+# Compare physical paths. The tool's file_path is the path as the session
+# spelled it, which can run through a symlink (a linked home directory,
+# macOS /tmp), while git reports the physical toplevel: the prefix strip
+# below then failed and the edit was approved as outside the repo. An
+# ancestor that cannot be entered keeps the path as spelled: under set -e an
+# unguarded failure would exit 1, which the harness reads as allow.
+if P=$(physical_path "$ABS_PATH"); then
+  ABS_PATH="$P"
+fi
+
+# A linked worktree lives INSIDE the repo (<worktreeRoot>/<slug>/), so a file
+# there is reached by a main-checkout-relative path and would otherwise be
+# judged a main-checkout edit. Resolve the checkout from the FILE's own
+# directory: a linked worktree there is the whole point of the session's
+# isolation choice — approve it. So is a submodule.
+if checkout_facts "$ABS_PATH" && { [ "$CF_LINKED" = 1 ] || [ "$CF_SUBMODULE" = 1 ]; }; then
+  exit 0
+fi
+
+REL_PATH="${ABS_PATH#"$REPO_ROOT"/}"
+
+# Prefix strip was a no-op → the file lives outside the repo (scratchpad, /tmp).
+[ "$REL_PATH" != "$ABS_PATH" ] || exit 0
+
+# The settings come through the one reader (lib/myspec-config.sh), whose schema
+# holds the defaults. Each is read where it is first needed: aiDir here, for
+# the path lists; isolation.worktreeRoot only for a block message.
 AI_DIR=$(ai_dir "$REPO_ROOT")
-WORKTREE_ROOT=""
-if read_setting isolation.worktreeRoot "$REPO_ROOT"; then
-  WORKTREE_ROOT=$(printf '%s' "$SETTING" | jq -r 'if type == "string" then . else empty end' 2>/dev/null || printf '')
-  [ -z "$SETTING_NOTES" ] || printf '%s\n' "$SETTING_NOTES" | sed 's/^/myspec-config: /' >&2
-fi
-WORKTREE_ROOT="${WORKTREE_ROOT%/}"
-# An empty value, or a reader that failed, never opens the gate: the value
-# only names where worktrees go, so the schema default stands in for it.
-if [ -z "$WORKTREE_ROOT" ]; then
-  WORKTREE_ROOT=$(jq -r '.keys["isolation.worktreeRoot"].default // empty' "$HOOK_LIB/myspec-config.schema.json" 2>/dev/null || printf '')
-  WORKTREE_ROOT="${WORKTREE_ROOT:-.claude/worktrees}"
-fi
 # Installed by init/update from the manifest `files` entry work-isolation.md.
 PROCEDURE="$AI_DIR/work-isolation.md"
 
@@ -135,35 +163,6 @@ SCRATCH_PREFIXES=(
   ".myspec/brainstorm/"
 )
 
-case "$FILE_PATH" in
-  /*) ABS_PATH="$FILE_PATH" ;;
-  *)  ABS_PATH="$CWD_ROOT/$FILE_PATH" ;;
-esac
-
-# Compare physical paths. The tool's file_path is the path as the session
-# spelled it, which can run through a symlink (a linked home directory,
-# macOS /tmp), while git reports the physical toplevel: the prefix strip
-# below then failed and the edit was approved as outside the repo. An
-# ancestor that cannot be entered keeps the path as spelled: under set -e an
-# unguarded failure would exit 1, which the harness reads as allow.
-if P=$(physical_path "$ABS_PATH"); then
-  ABS_PATH="$P"
-fi
-
-# A linked worktree lives INSIDE the repo (<worktreeRoot>/<slug>/), so a file
-# there is reached by a main-checkout-relative path and would otherwise be
-# judged a main-checkout edit. Resolve the checkout from the FILE's own
-# directory: a linked worktree there is the whole point of the session's
-# isolation choice — approve it. So is a submodule.
-if checkout_facts "$ABS_PATH" && { [ "$CF_LINKED" = 1 ] || [ "$CF_SUBMODULE" = 1 ]; }; then
-  exit 0
-fi
-
-REL_PATH="${ABS_PATH#"$REPO_ROOT"/}"
-
-# Prefix strip was a no-op → the file lives outside the repo (scratchpad, /tmp).
-[ "$REL_PATH" != "$ABS_PATH" ] || exit 0
-
 # Checked BEFORE any mode logic: these paths have exactly one correct location,
 # so no isolation answer can redirect them; the scratch paths are never gated.
 # See the lists' comments above. A `..` segment is never matched: the part of
@@ -207,11 +206,37 @@ if [ "$IS_EXEMPT" -eq 1 ] && read_setting isolation.gateDocs "$REPO_ROOT"; then
   [ "$SETTING" != "true" ] || IS_EXEMPT=0
 fi
 
+# No decision: ask, unless the file is exempt from prompting. On a protected
+# HEAD (#348: a detached HEAD, the default branch, an
+# isolation.protectedBranches entry) nothing is exempt from the question: a
+# doc written there lands on the integration branch unasked. Asked only here,
+# so a session with a decision never pays for the git calls. A worktree
+# answer skips this: the exemption is about the prompt, and that session is
+# blocked below whatever the path.
+WHAT="source files"
+if [ "$ISO_MODE" != worktree ] && [ "$IS_EXEMPT" -eq 1 ]; then
+  protected_checkout "$REPO_ROOT" || exit 0
+  WHAT="files on $PROTECTED_HEAD"
+fi
+
+# Every path from here ends in a block, and only its message needs these.
+WORKTREE_ROOT=""
+if read_setting isolation.worktreeRoot "$REPO_ROOT"; then
+  WORKTREE_ROOT=$(printf '%s' "$SETTING" | jq -r 'if type == "string" then . else empty end' 2>/dev/null || printf '')
+  [ -z "$SETTING_NOTES" ] || printf '%s\n' "$SETTING_NOTES" | sed 's/^/myspec-config: /' >&2
+fi
+WORKTREE_ROOT="${WORKTREE_ROOT%/}"
+# An empty value, or a reader that failed, never opens the gate: the value
+# only names where worktrees go, so the schema default stands in for it.
+if [ -z "$WORKTREE_ROOT" ]; then
+  WORKTREE_ROOT=$(jq -r '.keys["isolation.worktreeRoot"].default // empty' "$HOOK_LIB/myspec-config.schema.json" 2>/dev/null || printf '')
+  WORKTREE_ROOT="${WORKTREE_ROOT:-.claude/worktrees}"
+fi
 DEFAULT_BRANCH=$(git -C "$REPO_ROOT" symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || printf '')
 DEFAULT_BRANCH="${DEFAULT_BRANCH#origin/}"
 DEFAULT_BRANCH="${DEFAULT_BRANCH:-main}"
 
-WORKTREE_REASON="BLOCKED: this session chose WORKTREE isolation, but the edit targets the main checkout.
+[ "$ISO_MODE" != worktree ] || pretool_deny "BLOCKED: this session chose WORKTREE isolation, but the edit targets the main checkout.
 
 Create the worktree if you have not already, then make every edit inside it:
   git worktree add -b <type>/<slug> \"\$(git rev-parse --show-toplevel)/$WORKTREE_ROOT/<slug>\" origin/$DEFAULT_BRANCH
@@ -220,25 +245,6 @@ Create the worktree if you have not already, then make every edit inside it:
 Use absolute paths and \`git -C <worktree>\` for all git operations. Full procedure: $PROCEDURE
 
 Blocked edit: $REL_PATH"
-
-# 1. This session's decision; a subagent's is its parent's, by the shared
-#    session id (subagents cannot prompt, so they follow the parent).
-session_isolation "$REPO_ROOT" "$SESSION_ID"
-case "$ISO_MODE" in
-  develop) exit 0 ;;
-  worktree) pretool_deny "$WORKTREE_REASON" ;;
-esac
-
-# 2. No decision — ask, unless the file is exempt from prompting. On a
-#    protected HEAD (#348: a detached HEAD, the default branch, an
-#    isolation.protectedBranches entry) nothing is exempt from the question:
-#    a doc written there lands on the integration branch unasked. Asked only
-#    here, so a session with a decision never pays for the git calls.
-WHAT="source files"
-if [ "$IS_EXEMPT" -eq 1 ]; then
-  protected_checkout "$REPO_ROOT" || exit 0
-  WHAT="files on $PROTECTED_HEAD"
-fi
 
 pretool_deny "BLOCKED: no work-isolation decision recorded for this session.
 
