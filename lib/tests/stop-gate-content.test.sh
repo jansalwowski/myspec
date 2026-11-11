@@ -234,7 +234,9 @@ expect "" "$(cat "$ROOT/fm-out")" "fixture: the clean writes pass"
 expect "docs/plain.md " "$(checked_rels)" "checked: not a file git ignores, nor one with a snapshot that could not be read"
 # The second run judges only what the first did not record.
 eval "real_$(declare -f added_lines)"
-added_lines() { printf 'x\n' >> "$ROOT/diff-calls"; real_added_lines "$@"; }
+# Defined through eval: the direct calls above run the real function, and
+# ShellCheck would read a plain definition here as theirs (SC2218).
+eval 'added_lines() { printf "x\n" >> "$ROOT/diff-calls"; real_added_lines "$@"; }'
 : > "$ROOT/diff-calls"
 ( arm_init "$FM"; content_gates ) > "$ROOT/fm-out" 2>&1
 expect "" "$(cat "$ROOT/fm-out")" "fixture: the second run passes"
