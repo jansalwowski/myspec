@@ -1,8 +1,7 @@
 ---
 description: "visualQuestions auto: a spacing-scale choice goes through visualize-options, not a plain AskUserQuestion."
-tags: [skill:visualize-options, trigger, capability]
+tags: [skill:visualize-options, trigger, regression]
 max_turns: 3
-runs: 1
 timeout_seconds: 300
 allowed_tools: [Read, Glob, Grep, Skill, AskUserQuestion]
 ---

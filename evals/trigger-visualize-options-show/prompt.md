@@ -1,8 +1,7 @@
 ---
 description: "A diagram to look at, no decision to submit: visualize-options (show mode), not brainstorm."
-tags: [skill:visualize-options, skill:brainstorm, trigger, capability]
+tags: [skill:visualize-options, skill:brainstorm, trigger, regression]
 max_turns: 2
-runs: 1
 timeout_seconds: 300
 allowed_tools: [Read, Glob, Grep, Skill]
 ---
