@@ -222,5 +222,92 @@ printf '%s' "${HEADER}"'<!-- myspec:reuse-audit skip: legacy -->
 write "$SPEC" "${HEADER}${FOOTER}"
 expect_deny "a Write that removes the marker without adding the section is denied"
 
+
+# --- the pre-filter: a call that cannot concern the hook starts no process -----
+# The hook runs on every Write and Edit, and only a path ending in
+# tech-spec.md can be its business. The raw payload is matched with a builtin
+# before jq starts or a lib is sourced. Observed through a jq on PATH that
+# logs each start. The filter must never skip what the full check would deny,
+# so each payload shape that hides the name from a raw match is shown to
+# reach the check: the payloads are written by hand, as jq would not escape
+# them this way.
+SHIM="$ROOT/shim"
+JQ_LOG="$ROOT/jq.log"
+mkdir -p "$SHIM"
+printf '#!/bin/sh\necho jq >> "%s"\nexec "%s" "$@"\n' "$JQ_LOG" "$(command -v jq)" > "$SHIM/jq"
+chmod +x "$SHIM/jq"
+raw() {  # raw <json> -> OUT, RC for the payload exactly as given; JQ_RUNS, how often the hook started jq
+  : > "$JQ_LOG"
+  OUT=$(printf '%s' "$1" | PATH="$SHIM:$PATH" bash "$HOOK" 2>/dev/null); RC=$?
+  JQ_RUNS=$(wc -l < "$JQ_LOG" | tr -d ' ')
+}
+no_jq() { [ "$JQ_RUNS" -eq 0 ] && ok || fail "$1 (jq started $JQ_RUNS times)"; }
+BODY=$(printf '%s' "${HEADER}${FOOTER}" | jq -Rs .)
+rm -f "$SPEC"
+raw "{\"cwd\":\"$REPO\",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$REPO/src/a.ts\",\"content\":\"export const a = 1;\\n\"}}"
+expect_quiet "a source write passes"
+no_jq "a source write exits before jq starts"
+raw "{\"cwd\":\"$REPO\",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$REPO/.ai/features/pay/spec.md\",\"content\":$BODY}}"
+expect_quiet "another feature doc passes"
+no_jq "a write to another feature doc exits before jq starts"
+# The control: the same shape with the tech-spec path reaches the check, and the log sees it.
+raw "{\"cwd\":\"$REPO\",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$SPEC\",\"content\":$BODY}}"
+expect_deny "creating a tech-spec without the section is still denied"
+[ "$JQ_RUNS" -gt 0 ] && ok || fail "the jq log sees the full check run"
+raw "{\"cwd\":\"$REPO\",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"${SPEC//\//\\/}\",\"content\":$BODY}}"
+expect_deny "a path with escaped slashes (\\/) is still denied"
+raw "{\"cwd\":\"$REPO\",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"${SPEC%tech-spec.md}tech\\u002dspec.md\",\"content\":$BODY}}"
+expect_deny "a name carrying a unicode escape (tech\\u002dspec.md) is still denied"
+raw "{\"cwd\":\"$REPO\",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"${SPEC%.md}.\\u006dd\",\"content\":$BODY}}"
+expect_deny "an extension carrying a unicode escape (.\\u006dd) is still denied"
+# payload_parse strips trailing newlines from the path, so the full check sees a tech-spec.
+raw "{\"cwd\":\"$REPO\",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$SPEC\\n\",\"content\":$BODY}}"
+expect_deny "a path with a trailing newline is still denied"
+raw "{
+  \"tool_input\" : { \"content\" : $BODY, \"file_path\" : \"$SPEC\" },
+  \"cwd\" : \"$REPO\"
+}"
+expect_deny "a pretty-printed payload with the path last is still denied"
+# What the full check has always let pass stays quiet: the filter follows the
+# check, it does not widen it.
+raw "{\"cwd\":\"$REPO\",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$REPO/src/a.ts\",\"content\":\"// see .ai/features/pay/tech-spec.md\"}}"
+expect_quiet "a tech-spec path that appears only in the content passes"
+raw "{\"cwd\":\"$REPO\",\"tool_name\":\"NotebookEdit\",\"tool_input\":{\"notebook_path\":\"$SPEC\",\"new_source\":\"x\"}}"
+expect_quiet "a NotebookEdit carries no file_path and passes"
+raw "{\"cwd\":\"$REPO\",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$REPO/.ai/features/pay/TECH-SPEC.MD\",\"content\":$BODY}}"
+expect_quiet "an upper-case TECH-SPEC.MD is outside the scope, as it was before the filter"
+
+# The filter matches bytes, not characters of the hook's locale (PR #449
+# review): [[ =~ ]] decodes the payload in the locale first, and where the
+# bytes before the path are not valid there the match failed and a write the
+# full check denies was skipped. A raw invalid byte in a UTF-8 locale, and a
+# valid UTF-8 payload from a project in a non-ASCII directory under a locale
+# with another encoding. The second needs the locale installed.
+raw_in() {  # raw_in <locale> <payload file> -> OUT, RC
+  OUT=$(LC_ALL="$1" bash "$HOOK" < "$2" 2>/dev/null); RC=$?
+}
+# Read once and matched with case: under pipefail `locale -a | grep -q` fails
+# when grep leaves early and locale dies of SIGPIPE.
+LOCALES=$(locale -a 2>/dev/null || true)
+UTF8_LOCALE=$(printf '%s\n' "$LOCALES" | grep -iE '^(C|en_US)\.utf-?8$' | head -1)
+printf '{"note":"caf\351","cwd":"%s","tool_name":"Write","tool_input":{"file_path":"%s","content":%s}}' "$REPO" "$SPEC" "$BODY" > "$ROOT/invalid-byte.json"
+raw_in "${UTF8_LOCALE:-en_US.UTF-8}" "$ROOT/invalid-byte.json"
+expect_deny "a payload with a raw invalid byte before the path is still denied"
+NREPO="$ROOT/プロジェクト"
+mkdir -p "$NREPO/.ai/features/pay"
+git init -q -b main "$NREPO"
+printf '{"aiDir":".ai"}\n' > "$NREPO/.myspec.json"
+printf '{"cwd":"%s","tool_name":"Write","tool_input":{"file_path":"%s/.ai/features/pay/tech-spec.md","content":%s}}' "$NREPO" "$NREPO" "$BODY" > "$ROOT/non-ascii-dir.json"
+raw_in "${UTF8_LOCALE:-en_US.UTF-8}" "$ROOT/non-ascii-dir.json"
+expect_deny "a doc in a non-ASCII directory is denied in a UTF-8 locale"
+for loc in ja_JP.SJIS zh_TW.Big5; do
+  case $'\n'"$LOCALES"$'\n' in *$'\n'"$loc"$'\n'*) HAVE=1 ;; *) HAVE=0 ;; esac
+  if [ "$HAVE" = 1 ]; then
+    raw_in "$loc" "$ROOT/non-ascii-dir.json"
+    expect_deny "a doc in a non-ASCII directory is still denied under LC_ALL=$loc"
+  else
+    echo "SKIP  locale $loc is not installed"
+  fi
+done
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
