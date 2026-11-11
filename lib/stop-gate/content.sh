@@ -139,14 +139,23 @@ content_before() {
 
 # added_lines <old file> <new file> <out file> -> writes `<line>\t<text>` for
 # each line of <new file> that is not in <old file>: the `+` lines of
-# `git diff --no-index -U0`, numbered from the hunk headers.
+# `git diff --no-index -U0`, numbered from the hunk headers. Fails, writing
+# no line, when the diff could not be taken: git exits 0 for equal files and
+# 1 for a difference, so anything else (128) is no diff, and its empty output
+# is not "no line added". The caller then never records the verdict.
 added_lines() {
+  local rc=0
+  git diff --no-index --no-color --no-ext-diff -U0 -- "$1" "$2" > "$3.diff" 2>/dev/null || rc=$?
+  if [ "$rc" -gt 1 ]; then
+    : > "$3"
+    return 1
+  fi
   # The `---`/`+++` header lines precede the first hunk, so only lines after
   # a hunk header count; a line in the body starting with +++ is content.
-  git diff --no-index --no-color --no-ext-diff -U0 -- "$1" "$2" 2>/dev/null | LC_ALL=C awk '
+  LC_ALL=C awk '
     /^@@/ { match($0, /\+[0-9]+/); n = substr($0, RSTART + 1, RLENGTH - 1) + 0; hunk = 1; next }
     hunk && /^\+/ { printf "%d\t%s\n", n, substr($0, 2); n++; next }
-    hunk && /^ / { n++ }' > "$3" || true
+    hunk && /^ / { n++ }' "$3.diff" > "$3"
 }
 
 # session_lines <net> <added> <out file> -> writes the <net> lines (the file's
@@ -155,11 +164,14 @@ added_lines() {
 # pair's added_lines): what the session added that the file still holds.
 # A trailing CR is dropped on both sides: the blobs went through git's
 # line-ending conversion (core.autocrlf, `text eol=crlf`), the working file
-# did not, so a CRLF line would otherwise never match its added text.
+# did not, so a CRLF line would otherwise never match its added text. Fails,
+# writing no line, when awk does.
 session_lines() {
   LC_ALL=C awk 'FILENAME == ARGV[1] { t = substr($0, index($0, "\t") + 1); sub(/\r$/, "", t); seen[t] = 1; next }
     { t = substr($0, index($0, "\t") + 1); sub(/\r$/, "", t) }
-    (t in seen) { printf "%d\t%s\n", $0 + 0, t }' "$2" "$1" > "$3" 2>/dev/null || : > "$3"
+    (t in seen) { printf "%d\t%s\n", $0 + 0, t }' "$2" "$1" > "$3" 2>/dev/null && return 0
+  : > "$3"
+  return 1
 }
 
 # lf_copy <file> <out file> -> <file> with each line's trailing CR dropped.
@@ -179,7 +191,11 @@ lf_copy() {
 # is judged as before. A verdict that also read something else is never
 # recorded: a pair whose before or after fell back to HEAD or to the file
 # itself ("?", "@"), a snapshot that could not be read (it may be readable
-# later), a file git ignores (un-ignoring it brings it into scope). A finding
+# later), a file git ignores (un-ignoring it brings it into scope), and a
+# pass that rests on a command that failed: a diff git could not take
+# (added_lines), an awk, cut or copy that failed, a pair the loop did not
+# read. Their empty output reads as "no line added", so the file passes this
+# Stop as it did before, but it is judged again at the next. A finding
 # records nothing, so a file that failed is judged at every Stop until it
 # passes. When a hash cannot be taken, nothing is skipped and nothing is
 # recorded.
@@ -254,7 +270,7 @@ content_gates() {
   local root rel abs ai lines text findings matches n m where pairs
   local before after created fm_changed tmp first fm_from fm_to fm_seen fm_before fm_after
   local based readable fm_on prev_after prev_kept prev_fm reuse_ai
-  local count was cur sure found idx=0
+  local count was cur sure found read idx=0
   local -a reasons=() passed=()
   [ -n "${SESSION_ID:-}" ] || return 0
   pairs=$(session_bash_writes "$STATE_HOME" "$SESSION_ID")
@@ -293,7 +309,9 @@ content_gates() {
       fm_on=1
     fi
     : > "$tmp/added"
+    read=0
     while IFS=$'\t' read -r _ _ before after; do
+      read=$((read + 1))
       CONTENT_KEPT=0
       readable=1
       content_before "$root" "$rel" "$before" "$tmp/before" || readable=0 sure=0
@@ -312,7 +330,11 @@ content_gates() {
       [ "$readable" -eq 1 ] || continue
       # The baseline of the net diff: the first content read.
       if [ "$based" -eq 0 ]; then
-        lf_copy "$tmp/before" "$tmp/base" && based=1
+        if lf_copy "$tmp/before" "$tmp/base"; then
+          based=1
+        else
+          sure=0
+        fi
       fi
       if [ "$after" = "-" ]; then
         # The write removed the file.
@@ -328,11 +350,11 @@ content_gates() {
       if [ "$CONTENT_KEPT" -eq 1 ]; then
         # A side that skipped git's line-ending conversion: CRs are dropped
         # on both, as the conversion may have dropped them from a blob.
-        lf_copy "$tmp/after" "$tmp/lf" && mv "$tmp/lf" "$tmp/after"
-        lf_copy "$tmp/before" "$tmp/lf" && mv "$tmp/lf" "$tmp/before"
+        { lf_copy "$tmp/after" "$tmp/lf" && mv "$tmp/lf" "$tmp/after"; } || sure=0
+        { lf_copy "$tmp/before" "$tmp/lf" && mv "$tmp/lf" "$tmp/before"; } || sure=0
       fi
-      added_lines "$tmp/before" "$tmp/after" "$tmp/pair"
-      cat "$tmp/pair" >> "$tmp/added"
+      added_lines "$tmp/before" "$tmp/after" "$tmp/pair" || sure=0
+      cat "$tmp/pair" >> "$tmp/added" || sure=0
       # The frontmatter region before the first write that changed it, and
       # after the last one: equal when the session restored it. Only for a
       # doc the frontmatter gate covers; a pair whose before is the previous
@@ -356,14 +378,16 @@ content_gates() {
         fi
       fi
     done < <(LC_ALL=C awk -F'\t' -v r="$root" -v p="$rel" '$1 == r && $2 == p' "$tmp/pairs")
+    # Fewer pairs read than the file has: the filter above failed.
+    [ "$read" = "$count" ] || sure=0
     [ "$fm_seen" -eq 0 ] || [ "$fm_from" = "$fm_to" ] || fm_changed=1
     # The lines the file gained since the session's first write that one of
     # its writes added.
     : > "$tmp/numbered"
     if [ "$based" -eq 1 ]; then
       if lf_copy "$cur" "$tmp/now"; then
-        added_lines "$tmp/base" "$tmp/now" "$tmp/net"
-        session_lines "$tmp/net" "$tmp/added" "$tmp/numbered"
+        added_lines "$tmp/base" "$tmp/now" "$tmp/net" || sure=0
+        session_lines "$tmp/net" "$tmp/added" "$tmp/numbered" || sure=0
       else
         sure=0
       fi
@@ -374,7 +398,7 @@ content_gates() {
     if git -C "$root" check-ignore -q -- "$rel" 2>/dev/null; then
       sure=0
     elif absolute_paths_scope_unignored "$root" "$rel" "$ai" && [ -s "$tmp/numbered" ]; then
-      cut -f2- "$tmp/numbered" > "$tmp/text"
+      cut -f2- "$tmp/numbered" > "$tmp/text" || sure=0
       matches=$(absolute_path_findings "$tmp/text")
       if [ -n "$matches" ]; then
         findings=""

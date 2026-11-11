@@ -188,7 +188,7 @@ U_INDEX=$(git -C "$U" rev-parse --path-format=absolute --git-path index)
 cp "$U_INDEX" "$ROOT/index.keep"
 printf 'not an index\n' > "$U_INDEX"
 git -C "$U" status --porcelain >/dev/null 2>&1 && fail "unseen: fixture: git status fails on the corrupt index" || ok
-eq "$(unseen_verdict "$U")" run "unseen: a git status that fails runs the check"
+eq "$(unseen_verdict "$U")" unknown "unseen: a git status that fails runs the check, as unknown"
 eq "$(REPO_ROOT="$U" CHECKOUT_FILES_ROOT=""; known_failures_verdict '{"knownFailures":[{"path":"api/legacy/**","reason":"red on main"}]}'; printf '%s|%s' "$KNOWN_STATE" "$KNOWN_WHY")" \
   "ignored|git ls-files failed in this checkout, so its entries could not be measured against the checkout's files" \
   "knownFailures: a file list git cannot give ignores the setting"
@@ -268,6 +268,13 @@ lacks "$(f "$out" .scope)" "Opt" "a check that is not required is neither run no
 out=$(gate "$REPO" "{\"checks\":[$(check B true '{"paths":[1]}')]}" code:web/a.ts)
 eq "$(ran B)" yes "paths unusable: the check runs"
 has "$(f "$out" .scope)" "B: its paths setting was ignored" "paths unusable: the message names it"
+# A check that runs only because git could not list the changes says so.
+cp "$REPO/.git/index" "$ROOT/repo-index.keep"
+printf 'not an index\n' > "$REPO/.git/index"
+out=$(gate "$REPO" "{\"checks\":[$(check G 'exit 1' '{"paths":["nowhere/**"]}')]}" code:api/a.php)
+cp "$ROOT/repo-index.keep" "$REPO/.git/index"
+eq "$(ran G)" yes "paths, git failed: the check runs"
+has "$(f "$out" .scope)" "G: no file this session wrote matches its paths (nowhere/**), but git status or git diff failed in this checkout" "paths, git failed: the message names the failed git"
 
 out=$(gate "$NESTED" "{\"checks\":[$(check C 'pwd -P > '"$RAN"'/C.pwd' '{"cwd":"api"}'),$(check D 'pwd -P > '"$RAN"'/D.pwd' '{"cwd":"/tmp"}')]}" code:api/a.php)
 eq "$(cat "$RAN/C.pwd")" "$NESTED/api" "cwd: under the verified checkout, not the main one"

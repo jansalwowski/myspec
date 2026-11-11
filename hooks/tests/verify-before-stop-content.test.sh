@@ -671,6 +671,22 @@ bash "$CLAUDE_PLUGIN_ROOT/lib/session-event.sh" --root "$REPO" events "$SID-164"
 git -C "$REPO" checkout -q -- docs/notes.md
 rm -f "$REPO/docs/skip.md"
 
+# A pass that rests on a failed command is never recorded (PR #448 review). A
+# git on PATH that exits 128 for `diff --no-index` gives the gate no added
+# line at the first Stop, so the leak passes there, as it did before the
+# `checked` event existed. Recorded, that pass would hide the leak for good.
+mkdir -p "$ROOT/gitfail"
+# shellcheck disable=SC2016 # the wrapper's own $@ and $a, expanded when it runs
+printf '#!/bin/sh\nfor a in "$@"; do [ "$a" = --no-index ] && exit 128; done\nexec %s "$@"\n' "$(command -v git)" > "$ROOT/gitfail/git"
+chmod +x "$ROOT/gitfail/git"
+bashcmd 165 "printf '# Diff\nsee $LEAK\n' > docs/difffail.md"
+OUT=$(jq -nc --arg s "$SID-165" --arg c "$REPO" '{session_id: $s, cwd: $c}' | PATH="$ROOT/gitfail:$PATH" bash "$HOOK" 2>/dev/null)
+[ "$(decision "$OUT")" = approve ] && ok || fail "fixture: with git diff failing the leak is not seen (got: ${OUT:0:200})"
+[ "$(checked 165)" = "" ] && ok || fail "a pass that rests on a failed git diff is not recorded (got: $(checked 165))"
+OUT=$(stop 165)
+[ "$(decision "$OUT")" = block ] && ok || fail "the leak blocks at the next Stop, once git diff works (got: ${OUT:0:200})"
+rm -f "$REPO/docs/difffail.md"
+
 # --- the continuation after a block is approved (R10) -----------------------------
 bashcmd 15 "printf 'see $LEAK\n' > docs/again.md"
 OUT=$(jq -nc --arg s "$SID-15" --arg c "$REPO" '{session_id: $s, cwd: $c, stop_hook_active: true}' | bash "$HOOK" 2>/dev/null)

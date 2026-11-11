@@ -305,8 +305,9 @@ check_cwd() {
 # names the ignored setting (fail closed).
 
 # paths_verdict <check json> -> sets PATHS_VERDICT to run (no paths, or a
-# file matches), skip (no file matches) or ignored (unusable; the check
-# runs), and PATHS_GLOBS to the globs joined with ", ".
+# file matches), skip (no file matches), ignored (unusable; the check runs)
+# or unknown (no written file matches and git could not list the other
+# changes; the check runs), and PATHS_GLOBS to the globs joined with ", ".
 paths_verdict() {
   local state glob re alt="" f
   PATHS_VERDICT=run
@@ -338,8 +339,11 @@ paths_verdict() {
   # under the globs that git reports changed, uncommitted or against the
   # base, runs the check (fail closed).
   unseen_files
-  # git could not say what changed: the check runs.
-  [ "$UNSEEN_UNKNOWN" -eq 0 ] || return 0
+  # git could not say what changed: the check runs, and the message says why.
+  if [ "$UNSEEN_UNKNOWN" -eq 1 ]; then
+    PATHS_VERDICT=unknown
+    return 0
+  fi
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     [[ "$f" =~ $alt ]] && return 0
@@ -606,6 +610,8 @@ run_checks() {
         continue ;;
       ignored)
         SCOPE_NOTES+=("$name: its paths setting was ignored, so the check ran. paths must be a non-empty list of repo-relative globs, none absolute or with a .. segment${PATHS_GLOBS:+ (got $PATHS_GLOBS)}.") ;;
+      unknown)
+        SCOPE_NOTES+=("$name: no file this session wrote matches its paths ($PATHS_GLOBS), but git status or git diff failed in this checkout, so the gate could not tell whether another change does, and the check ran. Run git status there to see why.") ;;
     esac
     [ -z "$CWD_IGNORED" ] || SCOPE_NOTES+=("$name: its cwd setting was ignored, so the check ran from the checkout root. cwd must be a repo-relative directory, not absolute and without a .. segment (got $CWD_IGNORED).")
     known_failures_verdict "$check"
