@@ -195,10 +195,21 @@ lf_copy() {
 # pass that rests on a command that failed: a diff git could not take
 # (added_lines), an awk, cut or copy that failed, a pair the loop did not
 # read. Their empty output reads as "no line added", so the file passes this
-# Stop as it did before, but it is judged again at the next. A finding
+# Stop as it did before, but it is judged again at the next. A check that
+# could not judge (status 2 from a function in content-checks.sh: its grep,
+# awk, sed or head failed) blocks with a reason that says so, never with what
+# it printed, which is no finding the file holds. A frontmatter region that
+# could not be read counts as changed, so the frontmatter check runs. A finding
 # records nothing, so a file that failed is judged at every Stop until it
 # passes. When a hash cannot be taken, nothing is skipped and nothing is
 # recorded.
+
+# unchecked_reason <rel path> <what> -> the reason for a check that could not
+# judge the file (status 2): one of its own commands failed, so what it
+# printed is no finding the file holds.
+unchecked_reason() {
+  printf 'Could not check %s in %s: a grep, awk, sed or head command inside the check failed, so the file was not judged. This is not a finding in the file. Check that those tools on PATH work; the file is judged again at the next Stop.\n' "$2" "$1"
+}
 
 # content_hashes <path>... -> sets CONTENT_HASHES to the blob id of each
 # file's bytes (unfiltered, nothing written to an object store), from one git
@@ -269,7 +280,7 @@ content_checked_record() {
 content_gates() {
   local root rel abs ai lines text findings matches n m where pairs
   local before after created fm_changed tmp first fm_from fm_to fm_seen fm_before fm_after
-  local based readable fm_on prev_after prev_kept prev_fm reuse_ai
+  local based readable fm_on fm_unread prev_after prev_kept prev_fm reuse_ai
   local count was cur sure found read idx=0
   local -a reasons=() passed=()
   [ -n "${SESSION_ID:-}" ] || return 0
@@ -304,7 +315,7 @@ content_gates() {
     case "$ai" in *$'\t'*|*$'\n'*) sure=0 ;; esac
     created=0 fm_changed=0 first=1 based=0 fm_from="" fm_to="" fm_seen=0
     prev_after="" prev_kept="" prev_fm=""
-    fm_on=0
+    fm_on=0 fm_unread=0
     if [ -n "$ai" ] && frontmatter_scope "$ai" "$rel"; then
       fm_on=1
     fi
@@ -361,16 +372,16 @@ content_gates() {
       # pair's after (read the same way) reuses that region.
       if [ "$fm_on" -eq 1 ]; then
         case "$before" in
-          -|\?|@) fm_before=$(frontmatter_region "$tmp/before") ;;
+          -|\?|@) fm_before=$(frontmatter_region "$tmp/before") || fm_unread=1 ;;
           *)
             if [ "$before" = "$prev_after" ] && [ "$CONTENT_KEPT" = "$prev_kept" ]; then
               fm_before=$prev_fm
             else
-              fm_before=$(frontmatter_region "$tmp/before")
+              fm_before=$(frontmatter_region "$tmp/before") || fm_unread=1
             fi
             ;;
         esac
-        fm_after=$(frontmatter_region "$tmp/after")
+        fm_after=$(frontmatter_region "$tmp/after") || fm_unread=1
         prev_after=$after prev_kept=$CONTENT_KEPT prev_fm=$fm_after
         if [ "$fm_before" != "$fm_after" ]; then
           [ "$fm_seen" -eq 1 ] || fm_from=$fm_before
@@ -381,6 +392,10 @@ content_gates() {
     # Fewer pairs read than the file has: the filter above failed.
     [ "$read" = "$count" ] || sure=0
     [ "$fm_seen" -eq 0 ] || [ "$fm_from" = "$fm_to" ] || fm_changed=1
+    # A region that could not be read is no proof the writes left it alone.
+    if [ "$fm_unread" -eq 1 ]; then
+      fm_changed=1 sure=0
+    fi
     # The lines the file gained since the session's first write that one of
     # its writes added.
     : > "$tmp/numbered"
@@ -399,7 +414,10 @@ content_gates() {
       sure=0
     elif absolute_paths_scope_unignored "$root" "$rel" "$ai" && [ -s "$tmp/numbered" ]; then
       cut -f2- "$tmp/numbered" > "$tmp/text" || sure=0
-      matches=$(absolute_path_findings "$tmp/text")
+      if ! matches=$(absolute_path_findings "$tmp/text"); then
+        matches=""
+        reasons+=("$(unchecked_reason "$rel" "absolute homedir paths")")
+      fi
       if [ -n "$matches" ]; then
         findings=""
         while IFS=$'\t' read -r n m; do
@@ -414,8 +432,11 @@ content_gates() {
     # Frontmatter, on a doc the session created or whose frontmatter region
     # its writes changed on net.
     if [ "$fm_on" -eq 1 ] && [ $((created + fm_changed)) -gt 0 ]; then
-      lines=$(frontmatter_issues "$cur")
-      [ -z "$lines" ] || reasons+=("$(frontmatter_reason "$rel" "$lines" "$ai")")
+      if ! lines=$(frontmatter_issues "$cur"); then
+        reasons+=("$(unchecked_reason "$rel" "the frontmatter")")
+      elif [ -n "$lines" ]; then
+        reasons+=("$(frontmatter_reason "$rel" "$lines" "$ai")")
+      fi
     fi
 
     # The reuse audit, on a tech-spec the session created.
@@ -425,8 +446,11 @@ content_gates() {
       reuse_ai=$CONTENT_AI_DEFAULT
     fi
     if [ "$created" -eq 1 ] && reuse_audit_scope "$reuse_ai" "$rel"; then
-      lines=$(reuse_audit_issues "$cur")
-      [ -z "$lines" ] || reasons+=("$(reuse_audit_reason "$rel" "$lines")")
+      if ! lines=$(reuse_audit_issues "$cur"); then
+        reasons+=("$(unchecked_reason "$rel" "the reuse audit")")
+      elif [ -n "$lines" ]; then
+        reasons+=("$(reuse_audit_reason "$rel" "$lines")")
+      fi
     fi
     if [ "$sure" -eq 1 ] && [ -n "$CONTENT_RULES" ] && [ "${#reasons[@]}" -eq "$found" ]; then
       passed+=("$cur"$'\t'"$root"$'\t'"$rel"$'\t'"$count"$'\t'"$CONTENT_RULES $ai")
