@@ -14,10 +14,17 @@
   },
   "flags-untestable-ac": {
     "pass": [
-      "| High | Testability | spec.md | 28 | AC-2 \"The export should be fast\" has no measurable threshold. |"
+      "| High | Testability | spec.md | 28 | AC-2 \"The export should be fast\" has no measurable threshold. |",
+      "### AC-2 is untestable\n\n- \"The export should be fast\" names no number.\n- REQ-005 says \"immediately\", which has the same problem.",
+      "**AC-2: \"The export should be fast.\"**\n\nThis is not measurable: there is no threshold in seconds or rows.",
+      "AC-2 says \"fast\"; unlike AC-1 and AC-3 it cannot be measured.",
+      "> AC-2: The export should be fast.\n\nUnlike AC-1 and AC-3, it gives no threshold, so nobody can test it.",
+      "Three problems: REQ-002 contradicts REQ-004, AC-2 (\"fast\") is not measurable, and no error state is described."
     ],
     "fail": [
-      "AC-2 is fine as written; REQ-002 contradicts REQ-004."
+      "AC-2 is fine as written; REQ-002 contradicts REQ-004.",
+      "AC-2 (\"The export should be fast\") is acceptable for a first version.\n\n| Medium | Completeness | spec.md | 22 | REQ-001 sets no threshold for the longest allowed date range. |",
+      "| Medium | Completeness | spec.md | 22 | REQ-001 gives no threshold for the range. |\n| Low | Wording | spec.md | 30 | AC-1 could name the file. |\n\nAC-2 (fast export) reads fine."
     ]
   },
   "verdict-not-passed": {
@@ -26,6 +33,68 @@
     ],
     "fail": [
       "Review passed — mark spec.md status: approved?"
+    ]
+  },
+  "dispatched-reviewer": {
+    "pass": [
+      [
+        {
+          "tool": "Skill",
+          "input": {
+            "skill": "myspec:feature-spec-review",
+            "args": ""
+          }
+        },
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Independent review of .ai/features/invoice-export",
+            "subagent_type": "general-purpose",
+            "prompt": "You are an independent reviewer. You did not write the documents you are\nabout to review and know nothing about how they were written.\n\nRead /plugin/skills/feature-spec-review/SKILL.md and carry out its Workflow steps 1–6 for the\nfeature in .ai/features/invoice-export.\n\nPrior review: none"
+          }
+        }
+      ]
+    ],
+    "fail": [
+      [
+        {
+          "tool": "Skill",
+          "input": {
+            "skill": "myspec:feature-spec-review",
+            "args": ""
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Read the feature docs",
+            "subagent_type": "Explore",
+            "prompt": "Read .ai/features/invoice-export/ and summarise spec.md and tech-spec.md."
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Review the document",
+            "subagent_type": "general-purpose",
+            "prompt": "Review the documents in .ai/features/invoice-export and list every problem. You are an independent reviewer."
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Independent review of .ai/features/invoice-export",
+            "subagent_type": "general-purpose",
+            "prompt": "You are an independent reviewer. You did not write the documents you are\nabout to review and know nothing about how they were written.\n\nRead /plugin/skills/feature-tech-spec-review/SKILL.md and carry out its Workflow steps 1–6 for the\nfeature in .ai/features/invoice-export.\n\nPrior review: none"
+          }
+        }
+      ]
     ]
   }
 }

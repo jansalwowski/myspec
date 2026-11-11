@@ -9,5 +9,128 @@
       "I couldn't finish the health check. The tier 0 script was denied, and I stopped there.",
       "I could not complete the surface E audit: setup-doctor.mjs was refused."
     ]
+  },
+  "no-dispatch": {
+    "pass": [
+      [
+        {
+          "tool": "Skill",
+          "input": {
+            "skill": "myspec:doctor",
+            "args": "E"
+          }
+        },
+        {
+          "tool": "Bash",
+          "input": {
+            "command": "node \"/plugin/lib/setup-doctor.mjs\" --json --plugin-root \"/plugin\""
+          }
+        }
+      ]
+    ],
+    "fail": [
+      [
+        {
+          "tool": "Skill",
+          "input": {
+            "skill": "myspec:doctor",
+            "args": "E"
+          }
+        },
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Doctor surface E",
+            "subagent_type": "general-purpose",
+            "prompt": "Audit surface E (hooks and harness config) and report findings."
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Skill",
+          "input": {
+            "skill": "myspec:doctor",
+            "args": "E"
+          }
+        },
+        {
+          "tool": "Bash",
+          "input": {
+            "command": "node \"/plugin/lib/setup-doctor.mjs\" --json --plugin-root \"/plugin\""
+          }
+        },
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Read hook scripts",
+            "subagent_type": "Explore",
+            "prompt": "List the hooks registered in .claude/settings.json."
+          }
+        }
+      ]
+    ]
+  },
+  "ran-tier0": {
+    "pass": [
+      [
+        {
+          "tool": "Skill",
+          "input": {
+            "skill": "myspec:doctor",
+            "args": "E"
+          }
+        },
+        {
+          "tool": "Bash",
+          "input": {
+            "command": "node \"/plugin/lib/setup-doctor.mjs\" --json --plugin-root \"/plugin\""
+          }
+        }
+      ]
+    ],
+    "fail": [
+      [
+        {
+          "tool": "Skill",
+          "input": {
+            "skill": "myspec:doctor",
+            "args": "E"
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Skill",
+          "input": {
+            "skill": "myspec:doctor",
+            "args": "E"
+          }
+        },
+        {
+          "tool": "Bash",
+          "input": {
+            "command": "cat .claude/settings.json"
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Skill",
+          "input": {
+            "skill": "myspec:doctor",
+            "args": "E"
+          }
+        },
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Doctor tier 0",
+            "subagent_type": "general-purpose",
+            "prompt": "Run node /plugin/lib/setup-doctor.mjs --json and report its output."
+          }
+        }
+      ]
+    ]
   }
 }

@@ -1,0 +1,27 @@
+{
+  "spec-written": {
+    "pass": [
+      [
+        ".ai/features/invoice-reminders/spec.md"
+      ],
+      [
+        ".ai/features/index.yaml",
+        ".ai/features/payment-reminders/spec.md"
+      ]
+    ],
+    "fail": [
+      [
+        ".ai/features/index.yaml"
+      ],
+      [
+        ".ai/features/billing/invoice-reminders/spec.md"
+      ],
+      [
+        ".ai/features/spec.md"
+      ],
+      [
+        "docs/invoice-reminders/spec.md"
+      ]
+    ]
+  }
+}

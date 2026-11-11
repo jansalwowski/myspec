@@ -13,9 +13,12 @@
 //   names Claude Code also ships as built-in skills, the grader must reject
 //   the bare built-in call; a name only the built-in has is called bare, and
 //   the grader is checked against that call.
-// - other tool_used graders (Agent, Read, ...) with samples in
-//   grader-samples.json: each sample is one run's calls, [{tool, input}, ...];
-//   the grader must pass every `pass` run and fail every `fail` run.
+// - other tool_used graders (Agent, Read, ...) and tool_order graders:
+//   grader-samples.json must hold `pass` and `fail` samples. Each sample is one
+//   run's calls in order, [{tool, input}, ...]; the grader must pass every
+//   `pass` run and fail every `fail` run.
+// - file_exists graders: `pass` and `fail` samples too. Each sample is the
+//   list of workspace-relative files one run left behind.
 // - every case has at least one deterministic grader.
 //
 // Exit 0 when every check holds, 1 otherwise.
@@ -36,11 +39,16 @@ function frontmatter(file) {
   const m = fs.readFileSync(file, 'utf8').match(/^---\n([\s\S]*?)\n---/);
   const o = {};
   if (!m) return o;
+  const value = (v) => (/^'.*'$/.test(v) || /^".*"$/.test(v) ? v.slice(1, -1).replace(/''/g, "'") : v);
+  let parent = null;
   for (const line of m[1].split('\n')) {
+    // One level of nesting: `before:` / `after:` (tool_order) and `target:`.
+    const sub = line.match(/^\s+(\w+):\s*(.*)$/);
+    if (sub && parent) { o[parent][sub[1]] = value(sub[2]); continue; }
     const kv = line.match(/^(\w+):\s*(.*)$/);
     if (!kv) continue;
-    const v = kv[2];
-    o[kv[1]] = /^'.*'$/.test(v) || /^".*"$/.test(v) ? v.slice(1, -1).replace(/''/g, "'") : v;
+    parent = kv[2] === '' ? kv[1] : null;
+    o[kv[1]] = parent ? {} : value(kv[2]);
   }
   return o;
 }
@@ -58,12 +66,28 @@ const compile = (src) => {
     return new RegExp(src.replace(/\(\?i:/g, '(?:'), 'i');
   }
 };
-const toolPasses = (g, calls) => {
+const matcher = (g) => {
   const re = g.input_match ? compile(g.input_match) : null;
-  const n = calls.filter((c) => c.tool === g.tool && (!re || re.test(JSON.stringify(c.input)))).length;
+  return (c) => c.tool === g.tool && (!re || re.test(JSON.stringify(c.input)));
+};
+const toolPasses = (g, calls) => {
+  const n = calls.filter(matcher(g)).length;
   const min = g.min === undefined ? 1 : Number(g.min);
   const max = g.max === undefined ? Infinity : Number(g.max);
   return n >= min && n <= max;
+};
+// As the harness reports it ("Agent@9 precedes Write@11", '"before" tool Agent
+// never called'): both calls must happen, the first `before` ahead of the
+// first `after`.
+const orderPasses = (g, calls) => {
+  const b = calls.findIndex(matcher(g.before ?? {}));
+  const a = calls.findIndex(matcher(g.after ?? {}));
+  return b >= 0 && a >= 0 && b < a;
+};
+// `path` is a glob in which `*` stays inside one path segment.
+const filePasses = (g, files) => {
+  const re = new RegExp('^' + g.path.split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('[^/]*') + '$');
+  return files.some((f) => re.test(f)) === (g.exists !== 'false');
 };
 
 const problems = [];
@@ -92,15 +116,17 @@ for (const name of fs.readdirSync(E).sort()) {
       }
       for (const t of s.pass) expect(regexPasses(g, t), `${id}: rejects its pass sample: ${JSON.stringify(t.slice(0, 80))}`);
       for (const t of s.fail) expect(!regexPasses(g, t), `${id}: accepts its fail sample: ${JSON.stringify(t.slice(0, 80))}`);
-    } else if (g.type === 'tool_used' && g.tool !== 'Skill' && samples[g.name]) {
-      // A sample is one run's tool calls, in order: [{tool, input}, ...].
+    } else if ((g.type === 'tool_used' && g.tool !== 'Skill') || g.type === 'tool_order' || g.type === 'file_exists') {
+      // A sample is one run: its tool calls in order, [{tool, input}, ...],
+      // or for file_exists the files it left behind, ["path", ...].
+      const passes = g.type === 'tool_used' ? toolPasses : g.type === 'tool_order' ? orderPasses : filePasses;
       const s = samples[g.name];
-      if (!(s.pass ?? []).length || !(s.fail ?? []).length) {
+      if (!s || !(s.pass ?? []).length || !(s.fail ?? []).length) {
         expect(false, `${id}: grader-samples.json needs at least one "pass" and one "fail" sample`);
         continue;
       }
-      for (const calls of s.pass) expect(toolPasses(g, calls), `${id}: rejects its pass sample`);
-      for (const calls of s.fail) expect(!toolPasses(g, calls), `${id}: accepts its fail sample`);
+      for (const run of s.pass) expect(passes(g, run), `${id}: rejects its pass sample`);
+      for (const run of s.fail) expect(!passes(g, run), `${id}: accepts its fail sample`);
     } else if (g.type === 'tool_used' && g.tool === 'Skill' && g.input_match) {
       const skill = (g.input_match.match(/([A-Za-z0-9_-]+)"?$/) ?? [])[1];
       if (!skill) { expect(false, `${id}: cannot read the skill name from input_match`); continue; }

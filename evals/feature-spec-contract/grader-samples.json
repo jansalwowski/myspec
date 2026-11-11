@@ -58,5 +58,41 @@
       "features: []\n",
       "features:\n  - name: invoice-reminders-v2\n"
     ]
+  },
+  "spec-written": {
+    "pass": [
+      [
+        ".ai/features/invoice-reminders/spec.md",
+        ".ai/features/invoice-reminders/dependencies.md"
+      ]
+    ],
+    "fail": [
+      [
+        ".ai/features/invoice-reminders/dependencies.md"
+      ],
+      [
+        ".ai/features/reminders/spec.md"
+      ],
+      [
+        ".ai/ideas/invoice-reminders.md"
+      ]
+    ]
+  },
+  "dependencies-written": {
+    "pass": [
+      [
+        ".ai/features/invoice-reminders/spec.md",
+        ".ai/features/invoice-reminders/dependencies.md"
+      ]
+    ],
+    "fail": [
+      [
+        ".ai/features/invoice-reminders/spec.md"
+      ],
+      [
+        ".ai/features/invoice-reminders/spec.md",
+        ".ai/features/reminders/dependencies.md"
+      ]
+    ]
   }
 }

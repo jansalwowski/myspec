@@ -11,6 +11,28 @@
             "model": "opus"
           }
         }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Fix round 4: overdue boundary",
+            "subagent_type": "general-purpose",
+            "prompt": "## Open Findings\n- Important: is_overdue treats an invoice as overdue on its due date (app/invoices/due_dates.py:15).\n\nA prior implementer attempted this fix 3 times; you own it now.",
+            "model": "fable"
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Fix round 4: overdue boundary",
+            "subagent_type": "general-purpose",
+            "prompt": "## Open Findings\n- Important: is_overdue treats an invoice as overdue on its due date (app/invoices/due_dates.py:15).\n\nA prior implementer attempted this fix 3 times; you own it now.",
+            "model": "claude-opus-4-8"
+          }
+        }
       ]
     ],
     "fail": [
@@ -32,6 +54,39 @@
             "description": "Fix round 4: overdue boundary",
             "subagent_type": "general-purpose",
             "prompt": "## Open Findings\n- Important: is_overdue treats an invoice as overdue on its due date (app/invoices/due_dates.py:15).\n\nFix it."
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Fix round 4: overdue boundary",
+            "subagent_type": "general-purpose",
+            "prompt": "## Open Findings\n- Important: is_overdue treats an invoice as overdue on its due date (app/invoices/due_dates.py:15).\n\nA prior implementer attempted this fix 3 times; you own it now.",
+            "model": "haiku"
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Fix round 4: overdue boundary",
+            "subagent_type": "general-purpose",
+            "prompt": "## Open Findings\n- Important: is_overdue treats an invoice as overdue on its due date (app/invoices/due_dates.py:15).\n\nA prior implementer attempted this fix 3 times; you own it now.",
+            "model": "claude-sonnet-5-2"
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Fix round 4: overdue boundary",
+            "subagent_type": "general-purpose",
+            "prompt": "## Open Findings\n- Important: is_overdue treats an invoice as overdue on its due date (app/invoices/due_dates.py:15).\n\nA prior implementer attempted this fix 3 times; you own it now.",
+            "model": "inherit"
           }
         }
       ]
@@ -86,6 +141,26 @@
             "prompt": "Fix: is_overdue uses >= (due_dates.py:15).\n\nA finding about a rule (an invariant, a boundary, a format, a requirement's wording) names every place that states or applies the rule, not only the cited line."
           }
         }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Fix Phase 1 finding: overdue boundary",
+            "subagent_type": "general-purpose",
+            "prompt": "## Open Findings\n- Important: is_overdue treats an invoice as overdue on its due date (app/invoices/due_dates.py:15).\n\nCorrect all four occurrences of the boundary: the comparison, its docstring, the test and docs/invoices-api.md."
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Fix Phase 1 finding: overdue boundary",
+            "subagent_type": "general-purpose",
+            "prompt": "## Open Findings\n- Important: is_overdue treats an invoice as overdue on its due date (app/invoices/due_dates.py:15).\n\nFix it in every place the boundary is written down, and list them."
+          }
+        }
       ]
     ],
     "fail": [
@@ -106,6 +181,26 @@
             "description": "Explore",
             "subagent_type": "Explore",
             "prompt": "Find every place the overdue rule is stated."
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Fix Phase 1 finding: overdue boundary",
+            "subagent_type": "general-purpose",
+            "prompt": "## Open Findings\n- Important: is_overdue treats an invoice as overdue on its due date (app/invoices/due_dates.py:15).\n\nChange the comparison at the cited line to `>` and run each test in tests/invoices/."
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Fix Phase 1 finding: overdue boundary",
+            "subagent_type": "general-purpose",
+            "prompt": "## Open Findings\n- Important: is_overdue treats an invoice as overdue on its due date (app/invoices/due_dates.py:15).\n\nFix only the cited line. Report each place you changed."
           }
         }
       ]

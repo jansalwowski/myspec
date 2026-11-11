@@ -8,5 +8,67 @@
       "---\ntitle: \"Invoice Reminders\"\nstatus: approved\nphase: 1\npriority: P2\nspec_version: 2\n---\n\n# Invoice Reminders\n",
       "---\ntitle: \"Invoice Reminders\"\nstatus: approved\nspec_version: 2\n---\n\n## Example\n\nstatus: draft\n"
     ]
+  },
+  "dispatched-reviewer": {
+    "pass": [
+      [
+        {
+          "tool": "Skill",
+          "input": {
+            "skill": "myspec:feature-spec-review",
+            "args": ""
+          }
+        },
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Independent review of .ai/features/invoice-export",
+            "subagent_type": "general-purpose",
+            "prompt": "You are an independent reviewer. You did not write the documents you are\nabout to review and know nothing about how they were written.\n\nRead /plugin/skills/feature-spec-review/SKILL.md and carry out its Workflow steps 1–6 for the\nfeature in .ai/features/invoice-export.\n\nPrior review: none"
+          }
+        }
+      ]
+    ],
+    "fail": [
+      [
+        {
+          "tool": "Skill",
+          "input": {
+            "skill": "myspec:feature-spec-review",
+            "args": ""
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Read the feature docs",
+            "subagent_type": "Explore",
+            "prompt": "Read .ai/features/invoice-export/ and summarise spec.md and tech-spec.md."
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Review the document",
+            "subagent_type": "general-purpose",
+            "prompt": "Review the documents in .ai/features/invoice-export and list every problem. You are an independent reviewer."
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Independent review of .ai/features/invoice-export",
+            "subagent_type": "general-purpose",
+            "prompt": "You are an independent reviewer. You did not write the documents you are\nabout to review and know nothing about how they were written.\n\nRead /plugin/skills/feature-tech-spec-review/SKILL.md and carry out its Workflow steps 1–6 for the\nfeature in .ai/features/invoice-export.\n\nPrior review: none"
+          }
+        }
+      ]
+    ]
   }
 }
