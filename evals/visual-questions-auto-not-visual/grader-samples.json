@@ -1,0 +1,11 @@
+{
+  "no-visual-buddy-offer": {
+    "pass": [
+      "Which label do you want on the button: \"Export CSV\" or \"Download invoices\"? I'd lean toward the second: it names the outcome."
+    ],
+    "fail": [
+      "Which label do you want: \"Export CSV\" or \"Download invoices\"? I can also show both side by side in Visual Buddy if that helps.",
+      "Which label do you want: \"Export CSV\" or \"Download invoices\"? Want me to open Visual Buddy to compare them?"
+    ]
+  }
+}
