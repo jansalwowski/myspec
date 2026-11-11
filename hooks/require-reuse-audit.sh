@@ -51,7 +51,7 @@ fi
 # rather than approve in silence.
 LIB_MISSING=""
 for f in content-checks.sh markdown-section-check.sh; do
-  [ -f "$(dirname "$HOOK_CORE")/$f" ] || LIB_MISSING="${LIB_MISSING:+$LIB_MISSING, }$f"
+  [ -f "${HOOK_CORE%/*}/$f" ] || LIB_MISSING="${LIB_MISSING:+$LIB_MISSING, }$f"
 done
 if [ -n "$LIB_MISSING" ]; then
   LIB_MISSING="myspec lib missing: $LIB_MISSING not found under \${CLAUDE_PLUGIN_ROOT}/lib (${CLAUDE_PLUGIN_ROOT}), so require-reuse-audit.sh checked nothing. The hook runs from the plugin's hooks.json since 3.0; a copy wired in .claude/settings.json is retired by /myspec:update."
@@ -59,12 +59,32 @@ if [ -n "$LIB_MISSING" ]; then
   jq -nc --arg r "$LIB_MISSING" '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: $r}}'
   exit 0
 fi
+# COST: the hook runs on every Write and Edit, and only a tech-spec can be
+# its business (reuse_audit_scope wants file_path to end in /tech-spec.md).
+# The payload is read with a builtin and matched with [[ =~ ]], so any other
+# call exits here, before jq starts or a lib is sourced. The checks above
+# start no process either and stay first: a missing lib is still reported on
+# every call. The filter reads the raw JSON, where the path ends at its
+# closing quote: `tech-spec.md"`. It also lets through what could hide that
+# ending from a raw match: trailing `\n` in the path (payload_parse strips
+# them) and any `\u` escape (a letter of the name may be written as one). A
+# match in the content only costs the full check below, which reads the real
+# file_path. The name is matched as reuse_audit_scope matches it, case and
+# all.
+# The loop is `$(cat)` without the process: read stops at a NUL, which
+# `$(cat)` drops.
+PAYLOAD="" CHUNK=""
+while IFS= read -r -d '' CHUNK; do PAYLOAD+=$CHUNK; done
+PAYLOAD+=$CHUNK
+FAST_RE='tech-spec\.md(\\n)*"|\\u'
+[[ $PAYLOAD =~ $FAST_RE ]] || exit 0
+
 # shellcheck source=lib/hook-core.sh
 . "$HOOK_CORE"
 # shellcheck source=lib/content-checks.sh
 . "$HOOK_LIB/content-checks.sh"
 
-payload_parse "$(cat)" FILE_PATH=.tool_input.file_path TOOL_INPUT=.tool_input CWDS="$HOOK_CWDS"
+payload_parse "$PAYLOAD" FILE_PATH=.tool_input.file_path TOOL_INPUT=.tool_input CWDS="$HOOK_CWDS"
 [ -n "$FILE_PATH" ] || exit 0
 
 REPO_ROOT=$(hook_repo_root "$CWDS" myspec) || exit 0
