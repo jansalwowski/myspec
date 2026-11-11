@@ -1,5 +1,5 @@
 {
-  "frameworkVersion": "3.6.0",
+  "frameworkVersion": "3.7.0",
   "upgradeFrom": "2.12.0",
   "upgradeChain": [
     "1.28.0"
