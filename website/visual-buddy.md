@@ -26,7 +26,7 @@ There are two ways in.
 - **Brainstorm offers it on its own.** In `/myspec:brainstorm`, the agent offers Visual Buddy the first time seeing would beat reading. That happens with options that look different, a structure that is easier to see than read, numbers whose shape matters, or a visual result: one the agent just produced, or one you brought or pointed it at. The offer comes as a message of its own. If you say no, the session stays text-only.
 - **The project setting turns it on everywhere.** `/myspec:setup visual-questions` sets `visualQuestions` to `"auto"` in `.myspec.json` and installs `.claude/rules/visual-questions.md`. From the next session on, in every skill:
     - clearly visual questions are asked through `/myspec:visualize-options`, whether the agent would have used AskUserQuestion or asked in its reply;
-    - partly visual questions get a last option, `Show in Visual Buddy`. When a reply lays out options, such as approaches or designs a skill proposes, it ends with one line offering to show them side by side;
+    - partly visual questions get a last option, `Show in Visual Buddy`. When a reply asks such a question or lays out options, such as approaches or designs a skill proposes, it ends with one line offering to show them side by side;
     - diagrams, graphs and visual results go on screen when Visual Buddy is running, and are offered when it is not.
 
     `update` asks about this setting once per project. Switch it off the same way: `"off"` removes the rule.
