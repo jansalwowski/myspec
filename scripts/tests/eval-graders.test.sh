@@ -23,6 +23,13 @@ nok() { fail=$((fail + 1)); echo "FAIL $1"; [ -n "${2:-}" ] && printf '%s\n' "$2
 out=$(node "$CHECK" "$SRC_ROOT/evals" 2>&1); rc=$?
 if [ "$rc" = 0 ]; then ok "real evals/: every deterministic grader passes its pass samples and fails its fail samples"; else nok "real evals/ grader checks" "$out"; fi
 
+# The five feature-plan-coverage requirement graders carry one pattern each,
+# copied per REQ ID: a fix that reaches only some of them reopens the gap for
+# the others. They must be identical once the REQ ID is blanked.
+cov="$SRC_ROOT/evals/feature-plan-coverage/graders"
+cov_diff=$(for i in 2 3 4 5; do diff <(sed 's/REQ-001/REQ-00N/g' "$cov/coverage-req-001.md") <(sed "s/REQ-00$i/REQ-00N/g" "$cov/coverage-req-00$i.md"); done)
+[ -z "$cov_diff" ] && ok "coverage-req-001..005 differ only in their REQ ID" || nok "coverage-req-001..005 differ only in their REQ ID" "$cov_diff"
+
 # A synthetic suite with four broken cases.
 mkdir -p "$TMP/evals/loose-agent/graders" "$TMP/evals/no-samples/graders" "$TMP/evals/loose-regex/graders" "$TMP/evals/loose-skill/graders" "$TMP/evals/stale-sibling/graders" "$TMP/evals/judge-only/graders"
 for c in loose-agent no-samples loose-regex loose-skill stale-sibling judge-only; do printf -- '---\ntags: [x]\n---\n\nprompt\n' > "$TMP/evals/$c/prompt.md"; done
