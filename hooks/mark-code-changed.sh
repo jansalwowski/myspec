@@ -158,7 +158,7 @@ SET_IGNORE=()
 # .myspec.json (as worktree-provision.sh does). No .myspec.json, no reader or
 # an unreadable value: the defaults, and the reader names what it ignored.
 load_settings() {
-  local root="$1" src json ext exts="" g i re
+  local root="$1" src json ext exts="" g i re txt=""
   for ((i = 0; i < ${#SET_ROOTS[@]}; i++)); do
     if [ "${SET_ROOTS[$i]}" = "$root" ]; then
       CODE_RE="${SET_CODE_RE[$i]}"
@@ -174,8 +174,20 @@ load_settings() {
   fi
   if [ -n "$src" ] && [ -f "$src/.myspec.json" ]; then
     json=""
-    read_setting hooks.markCodeChanged "$src" && json="$SETTING"
-    [ -z "$SETTING_NOTES" ] || printf '%s\n' "$SETTING_NOTES" | sed 's/^/myspec-config: /' >&2
+    # The settings reader runs only when the file can set the key: it names
+    # it, or holds a \u escape, which can spell it. No other layer sets it,
+    # so any other file gives the schema's defaults, which are the ones
+    # above. This runs at every Edit and Write, and the reader costs a third
+    # of the call (as diff_enabled, for the same reason). What is skipped
+    # with it is the reader's note on a file that is not a JSON object and
+    # does not name the key; the value is the default either way.
+    { IFS= read -r -d '' txt < "$src/.myspec.json"; } 2>/dev/null || true
+    case "$txt" in
+      *markCodeChanged*|*\\u*)
+        read_setting hooks.markCodeChanged "$src" && json="$SETTING"
+        [ -z "$SETTING_NOTES" ] || printf '%s\n' "$SETTING_NOTES" | sed 's/^/myspec-config: /' >&2
+        ;;
+    esac
     if [ -n "$json" ]; then
       while IFS= read -r ext; do
         ext="${ext#.}"
