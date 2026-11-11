@@ -6,6 +6,9 @@
       ],
       [
         { "tool": "Agent", "input": { "description": "Fix overdue boundary", "subagent_type": "general-purpose", "prompt": "Fix: is_overdue uses >= (due_dates.py:15).\n\nA finding about a rule (an invariant, a boundary, a format, a requirement's wording) names every place that states or applies the rule, not only the cited line." } }
+      ],
+      [
+        { "tool": "Agent", "input": { "description": "Fix Phase 1 finding: overdue boundary", "subagent_type": "general-purpose", "prompt": "## Open Findings\n- Important: is_overdue treats an invoice as overdue on its due date (app/invoices/due_dates.py:15).\n\nCorrect all four occurrences of the boundary: the comparison, its docstring, the test and docs/invoices-api.md." } }
       ]
     ],
     "fail": [
@@ -14,6 +17,9 @@
       ],
       [
         { "tool": "Agent", "input": { "description": "Explore", "subagent_type": "Explore", "prompt": "Find every place the overdue rule is stated." } }
+      ],
+      [
+        { "tool": "Agent", "input": { "description": "Fix Phase 1 finding: overdue boundary", "subagent_type": "general-purpose", "prompt": "## Open Findings\n- Important: is_overdue treats an invoice as overdue on its due date (app/invoices/due_dates.py:15).\n\nChange the comparison at the cited line to `>` and run each test in tests/invoices/." } }
       ]
     ]
   }

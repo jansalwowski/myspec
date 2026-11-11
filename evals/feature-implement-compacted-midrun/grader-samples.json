@@ -10,6 +10,16 @@
             "prompt": "You are reviewing Phase 1 of invoice-due-dates. Phase review: read the package at .claude/state/implement/invoice-due-dates/phase-1-review.diff. Plan checkboxes are controller-managed."
           }
         }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Phase review for Phase 1: due dates",
+            "subagent_type": "general-purpose",
+            "prompt": "You are reviewing Phase 1 of the invoice-due-dates implementation.\n\n## Phase Summary\n\nThis phase included the following tasks:\n- Task 1: Due-date rules (DONE)\n- Task 2: API fields (DONE)\n\n## Diff Under Review\n\n**Package file:** .claude/state/implement/invoice-due-dates/phase-1-review.diff"
+          }
+        }
       ]
     ],
     "fail": [
@@ -20,6 +30,26 @@
             "description": "Implement Task 1",
             "subagent_type": "general-purpose",
             "prompt": "You are implementing Task 1: due-date rules.\n\nReport one of DONE, DONE_WITH_CONCERNS, NEEDS_CONTEXT, BLOCKED."
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Implement Task 1",
+            "subagent_type": "general-purpose",
+            "prompt": "You are implementing Task 1: due-date rules. The user asked to stop once the phase reviewer reports back."
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Implement Task 2: API fields",
+            "subagent_type": "general-purpose",
+            "prompt": "You are implementing Task 2: API fields\n\n## Checks You May Run\n\n- `pytest tests/invoices/test_serializers.py` (Verify at phase review)"
           }
         }
       ]
@@ -74,6 +104,16 @@
             "prompt": "You are reviewing Phase 1 of invoice-due-dates. Phase review: read the package at .claude/state/implement/invoice-due-dates/phase-1-review.diff. Plan checkboxes are controller-managed."
           }
         }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Phase review for Phase 1: due dates",
+            "subagent_type": "general-purpose",
+            "prompt": "You are reviewing Phase 1 of the invoice-due-dates implementation.\n\n## Phase Summary\n\nThis phase included the following tasks:\n- Task 1: Due-date rules (DONE)\n- Task 2: API fields (DONE)\n\n## Diff Under Review\n\n**Package file:** .claude/state/implement/invoice-due-dates/phase-1-review.diff"
+          }
+        }
       ]
     ],
     "fail": [
@@ -92,6 +132,34 @@
             "description": "Phase 1 review",
             "subagent_type": "general-purpose",
             "prompt": "You are reviewing Phase 1 of invoice-due-dates. Phase review: read the package at .claude/state/implement/invoice-due-dates/phase-1-review.diff. Plan checkboxes are controller-managed."
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Implement Task 1: Due-date rules",
+            "subagent_type": "general-purpose",
+            "prompt": "You are implementing Task 1: Due-date rules\n\n## Task Description\n...\n\nReport DONE or BLOCKED."
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Re-implement Task 2 (API fields)",
+            "subagent_type": "general-purpose",
+            "prompt": "Task 2 is still marked [~]. Add due_date and is_overdue to the serializer and report back when the tests pass."
+          }
+        },
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Phase review for Phase 1: due dates",
+            "subagent_type": "general-purpose",
+            "prompt": "You are reviewing Phase 1 of the invoice-due-dates implementation.\n\n## Phase Summary\n\nThis phase included the following tasks:\n- Task 1: Due-date rules (DONE)\n- Task 2: API fields (DONE)\n\n## Diff Under Review\n\n**Package file:** .claude/state/implement/invoice-due-dates/phase-1-review.diff"
           }
         }
       ]

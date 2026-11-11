@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # Every deterministic grader in evals/ must be able to fail:
-# scripts/evals/check-graders.mjs runs each regex grader against its case's
-# grader-samples.json, each other tool_used grader against its samples when
-# it has some, and each Skill grader against synthetic calls.
+# scripts/evals/check-graders.mjs runs each regex, tool_order, file_exists and
+# non-Skill tool_used grader against its case's grader-samples.json, and each
+# Skill grader against synthetic calls.
 # This suite runs it on the real evals/ and proves the checker itself
-# catches a grader with no samples and a grader that accepts its fail sample.
+# catches a grader of each type with no samples and a grader that accepts its
+# fail sample.
 #
 # Usage: scripts/tests/eval-graders.test.sh
 
@@ -36,10 +37,30 @@ printf -- "---\ntype: llm\n---\n\nPASS if good.\n" > "$TMP/evals/judge-only/grad
 # An Agent grader whose pattern also matches an implementer prompt ("Verify at phase review").
 printf -- "---\ntype: tool_used\ntool: Agent\ninput_match: '(?i:phase review)'\n---\n" > "$TMP/evals/loose-agent/graders/reviewer.md"
 printf '{"reviewer": {"pass": [[{"tool": "Agent", "input": {"prompt": "You are reviewing Phase 1."}}]], "fail": [[{"tool": "Agent", "input": {"prompt": "You are implementing Task 1. Verify at phase review: pytest"}}]]}}\n' > "$TMP/evals/loose-agent/grader-samples.json"
+# Graders of the other deterministic types with no samples: nothing shows they can fail.
+mkdir -p "$TMP/evals/no-samples-tools/graders" "$TMP/evals/loose-order/graders" "$TMP/evals/loose-file/graders"
+for c in no-samples-tools loose-order loose-file; do printf -- '---\ntags: [x]\n---\n\nprompt\n' > "$TMP/evals/$c/prompt.md"; done
+printf -- "---\ntype: tool_used\ntool: Agent\nmin: 0\nmax: 0\n---\n" > "$TMP/evals/no-samples-tools/graders/no-dispatch.md"
+printf -- "---\ntype: file_exists\npath: \"docs/plan.md\"\n---\n" > "$TMP/evals/no-samples-tools/graders/written.md"
+printf -- "---\ntype: tool_order\nbefore:\n  tool: Agent\nafter:\n  tool: Write\n---\n" > "$TMP/evals/no-samples-tools/graders/order.md"
+# A tool_order grader whose `before` also matches an Explore dispatch, and one run with the calls reversed.
+printf -- "---\ntype: tool_order\nbefore:\n  tool: Agent\nafter:\n  tool: Write\n  input_match: 'app/'\n---\n" > "$TMP/evals/loose-order/graders/order.md"
+printf '{"order": {"pass": [[{"tool": "Agent", "input": {"prompt": "You are implementing Task 1"}}, {"tool": "Write", "input": {"file_path": "app/a.py"}}], [{"tool": "Write", "input": {"file_path": "app/a.py"}}, {"tool": "Agent", "input": {"prompt": "You are implementing Task 1"}}]], "fail": [[{"tool": "Agent", "input": {"subagent_type": "Explore"}}, {"tool": "Write", "input": {"file_path": "app/a.py"}}], [{"tool": "Agent", "input": {"prompt": "You are implementing Task 1"}}, {"tool": "Write", "input": {"file_path": "docs/a.md"}}]]}}\n' > "$TMP/evals/loose-order/grader-samples.json"
+# A file_exists glob that also accepts a spec outside a feature folder, and an `exists: false` grader.
+printf -- "---\ntype: file_exists\npath: \".ai/*/spec.md\"\n---\n" > "$TMP/evals/loose-file/graders/spec.md"
+printf -- "---\ntype: file_exists\npath: \".ai/features/a/plan.md\"\nexists: false\n---\n" > "$TMP/evals/loose-file/graders/no-plan.md"
+printf '{"spec": {"pass": [[".ai/features/spec.md"]], "fail": [[".ai/ideas/spec.md"], [".ai/features/a/spec.md"]]}, "no-plan": {"pass": [[".ai/features/a/spec.md"]], "fail": [[".ai/features/a/plan.md"], [".ai/features/b/plan.md"]]}}\n' > "$TMP/evals/loose-file/grader-samples.json"
 
 out=$(node "$CHECK" "$TMP/evals" 2>&1); rc=$?
 [ "$rc" = 1 ] && ok "broken suite: exit 1" || nok "broken suite: exit 1 (got $rc)" "$out"
 for want in "no-samples/flags: grader-samples.json needs" \
+            "no-samples-tools/no-dispatch: grader-samples.json needs" \
+            "no-samples-tools/written: grader-samples.json needs" \
+            "no-samples-tools/order: grader-samples.json needs" \
+            "loose-order/order: rejects its pass sample" \
+            "loose-order/order: accepts its fail sample" \
+            "loose-file/spec: accepts its fail sample" \
+            "loose-file/no-plan: accepts its fail sample" \
             "loose-agent/reviewer: accepts its fail sample" \
             "loose-regex/entry: accepts its fail sample" \
             "loose-skill/fired: accepts a skill that only shares the prefix" \
@@ -48,6 +69,11 @@ for want in "no-samples/flags: grader-samples.json needs" \
             "judge-only: no deterministic grader"; do
   if printf '%s' "$out" | grep -qF -- "$want"; then ok "catches: $want"; else nok "catches: $want" "$out"; fi
 done
+
+# Exactly the planted problems: a sample the checker should accept is not reported.
+want_n=15
+got_n=$(printf '%s\n' "$out" | grep -c ': ')
+[ "$got_n" = "$want_n" ] && ok "broken suite: $want_n problems reported, no more" || nok "broken suite: $want_n problems reported (got $got_n)" "$out"
 
 echo
 echo "$pass passed, $fail failed"

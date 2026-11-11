@@ -1,0 +1,32 @@
+{
+  "scenarios-have-steps": {
+    "pass": [
+      "# Invoice Due Dates: Scenarios\n\n### Scenario: Due date from payment terms\n\n**Given** a customer with 30-day payment terms\n**When** an invoice is issued on 2026-09-01\n**Then** its due date is 2026-10-01\n",
+      "```gherkin\nFeature: Invoice due dates\n  Scenario Outline: Default terms\n    Given a customer without payment terms\n    When an invoice is issued on <issued>\n    Then its due date is <due>\n```\n"
+    ],
+    "fail": [
+      "",
+      "# Invoice Due Dates: Scenarios\n\nTODO\n",
+      "# Scenarios\n\n### Scenario: Due date from payment terms\n\n### Scenario: Paid invoice is never overdue\n"
+    ]
+  },
+  "scenarios-written": {
+    "pass": [
+      [
+        ".ai/features/invoice-due-dates/scenarios.md",
+        ".ai/features/invoice-due-dates/spec.md"
+      ]
+    ],
+    "fail": [
+      [
+        ".ai/features/invoice-due-dates/spec.md"
+      ],
+      [
+        ".ai/features/invoice-due-dates/scenarios/happy-path.md"
+      ],
+      [
+        "scenarios.md"
+      ]
+    ]
+  }
+}

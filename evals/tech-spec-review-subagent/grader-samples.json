@@ -16,22 +16,35 @@
   },
   "flags-ignored-reuse": {
     "pass": [
-      "The reuse audit skips CSV serialisation, but .ai/conventions/backend.md requires app/reporting/tabular_export.py for every tabular download."
+      "The reuse audit skips CSV serialisation, but .ai/conventions/backend.md requires app/reporting/tabular_export.py for every tabular download.",
+      "| High | Pattern Conformance | Hand-rolled CSV writer | tech-spec.md | 20, 32 | The reuse audit says the codebase has no shared CSV writer, but `app/reporting/tabular_export.py` provides `stream_csv`. |",
+      "Step 3 duplicates `app/reporting/tabular_export.py`; use its `stream_csv` in the view.",
+      "| High | Reuse | Reuse audit | tech-spec.md | 20 | `app/reporting/tabular_export.py` exists and already streams CSV. |",
+      "A shared CSV writer already exists at app/reporting/tabular_export.py. The audit row says otherwise."
     ],
     "fail": [
-      "The reuse audit has two rows with valid decisions and reasons."
+      "The reuse audit has two rows with valid decisions and reasons.",
+      "Reuse audit: both rows carry a decision and a reason. The CSV helper row skips `app/reporting/tabular_export.py`, which is reasonable because the invoice export has its own column set.",
+      "I read app/reporting/tabular_export.py and app/reporting/customer_report.py for context. The reuse audit is fine as written."
     ]
   },
   "flags-no-verification-mode": {
     "pass": [
       "| Medium | Testability | No verification mode | tech-spec.md | 1 | The export derives CSV rows from invoice data but sets no `verification_mode`; `verification_mode: data` with Real inputs would add a probe per milestone. |",
       "**Medium** — frontmatter has no verification_mode although the design derives output from invoice data.",
-      "verification_mode is missing on a data-deriving export (Medium, does not block planning)."
+      "verification_mode is missing on a data-deriving export (Medium, does not block planning).",
+      "### Medium\n\n| Dimension | Issue | File | Line(s) | Finding |\n|---|---|---|---|---|\n| Testability | No verification mode | tech-spec.md | 1-7 | Frontmatter sets no `verification_mode`, yet the export derives CSV rows from invoice data. |",
+      "## Medium\n\n### M1. Empty customer name\n\nNo case for it.\n\n### M2. No verification mode\n\nThe design derives output from invoice data but the frontmatter has no `verification_mode`.",
+      "### Medium (does not block planning)\n- Edge cases: no case for an empty customer name.\n- `verification_mode` is absent on a data-deriving export; `verification_mode: data` would give each milestone a probe."
     ],
     "fail": [
       "verification_mode is not set, so the verification-surface gate is skipped.",
       "| Medium | Completeness | Edge cases | tech-spec.md | 40 | No case for an empty customer name. |",
-      "No Test Hooks section; none is required without a verification mode."
+      "No Test Hooks section; none is required without a verification mode.",
+      "### Medium\n\n- No case for an empty customer name.\n\n### Low\n\n- `verification_mode` could be added later.",
+      "### Medium\n\nNone.\n\n## Checks skipped\n\nverification_mode is not set, so the verification-surface gate is skipped.",
+      "### Medium\n\n| Severity | Dimension | Issue |\n|---|---|---|\n| Medium | Completeness | Edge cases |\n| Low | Testability | verification_mode not set |",
+      "### High\n\n- REQ-004 has no step.\n\nNotes: the frontmatter has no verification_mode.\n\n### Medium\n\n- Edge cases."
     ]
   },
   "verdict-blocks-planning": {
@@ -39,14 +52,19 @@
       "| Critical | Spec Alignment | Uncovered requirement | spec.md | 24 | ... |",
       "### Critical\n- REQ-004 has no step",
       "1 Critical and 1 High remain, so feature-plan is blocked.",
-      "| **Critical** | Spec Alignment | Uncovered requirement |"
+      "| **Critical** | Spec Alignment | Uncovered requirement |",
+      "| Severity | Count |\n|---|---|\n| Critical | 1 |\n| High | 1 |"
     ],
     "fail": [
       "| High | Pattern Conformance | Hand-rolled CSV | tech-spec.md | 34 | on the critical path |",
       "No **Critical** findings; 2 High.",
       "### Critical\nNone.",
       "### Critical\n\n- none",
-      "0 Critical, 2 High."
+      "0 Critical, 2 High.",
+      "## Summary\n\n| Severity | Count |\n|---|---|\n| Critical | 0 |\n| High | 2 |\n\nNo blocking findings.",
+      "| **Critical** | **0** |\n| High | 2 |",
+      "| Critical | High | Medium | Low |\n|---|---|---|---|\n| 0 | 2 | 1 | 0 |",
+      "| Critical | — |"
     ]
   },
   "verdict-not-passed": {
@@ -55,6 +73,68 @@
     ],
     "fail": [
       "Review passed — mark tech-spec.md status: approved?"
+    ]
+  },
+  "dispatched-reviewer": {
+    "pass": [
+      [
+        {
+          "tool": "Skill",
+          "input": {
+            "skill": "myspec:feature-tech-spec-review",
+            "args": ""
+          }
+        },
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Independent review of .ai/features/invoice-export",
+            "subagent_type": "general-purpose",
+            "prompt": "You are an independent reviewer. You did not write the documents you are\nabout to review and know nothing about how they were written.\n\nRead /plugin/skills/feature-tech-spec-review/SKILL.md and carry out its Workflow steps 1–6 for the\nfeature in .ai/features/invoice-export.\n\nPrior review: none"
+          }
+        }
+      ]
+    ],
+    "fail": [
+      [
+        {
+          "tool": "Skill",
+          "input": {
+            "skill": "myspec:feature-tech-spec-review",
+            "args": ""
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Read the feature docs",
+            "subagent_type": "Explore",
+            "prompt": "Read .ai/features/invoice-export/ and summarise spec.md and tech-spec.md."
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Review the document",
+            "subagent_type": "general-purpose",
+            "prompt": "Review the documents in .ai/features/invoice-export and list every problem. You are an independent reviewer."
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Independent review of .ai/features/invoice-export",
+            "subagent_type": "general-purpose",
+            "prompt": "You are an independent reviewer. You did not write the documents you are\nabout to review and know nothing about how they were written.\n\nRead /plugin/skills/feature-spec-review/SKILL.md and carry out its Workflow steps 1–6 for the\nfeature in .ai/features/invoice-export.\n\nPrior review: none"
+          }
+        }
+      ]
     ]
   }
 }
