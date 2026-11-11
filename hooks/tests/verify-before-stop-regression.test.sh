@@ -255,6 +255,34 @@ if command -v node >/dev/null 2>&1; then
     [ "$(decision "$OUT")" = block ] && ok || fail "a $bytes-byte status under $dir still runs its conformance doctor (got: ${OUT:0:200})"
     find "$CONF/$dir" -maxdepth 1 -name "$pad-*" -delete
   done
+
+  # --- a git status that fails still runs the conformance doctors -------------
+  # A corrupt index: git status exits 128 with nothing on stdout, which read
+  # as a clean tree and skipped both doctors. The trigger cannot be read, so
+  # the doctor runs and the block says why.
+  cp "$CONF/.git/index" "$ROOT/index.keep"
+  printf 'not an index\n' > "$CONF/.git/index"
+  git -C "$CONF" status --porcelain >/dev/null 2>&1 && fail "fixture: git status fails on the corrupt index" || ok
+  [ -z "$(git -C "$CONF" status --porcelain 2>/dev/null)" ] && ok || fail "fixture: the failed status prints nothing"
+  OUT=$(conf_run)
+  [ "$(decision "$OUT")" = block ] && ok || fail "a failed git status still runs the memory doctor (got: ${OUT:0:200})"
+  case "$(printf '%s' "$OUT" | jq -r '.reason')" in
+    "Memory conformance check failed"*"git status failed in this checkout"*) ok ;;
+    *) fail "the block names the failed git status (got: ${OUT:0:300})" ;;
+  esac
+  rm -f "$STUBBED/lib/memory-doctor.mjs"
+  OUT=$(conf_run)
+  case "$(printf '%s' "$OUT" | jq -r '.reason')" in
+    "Setup conformance check failed"*"git status failed in this checkout"*) ok ;;
+    *) fail "a failed git status still runs the setup doctor (got: ${OUT:0:300})" ;;
+  esac
+  cp "$ROOT/index.keep" "$CONF/.git/index"
+  # A project without git has no status to read: the gates stay off.
+  NOGIT="$ROOT/nogit"
+  mkdir -p "$NOGIT/.ai/memory"
+  printf '{"aiDir":".ai"}\n' > "$NOGIT/.myspec.json"
+  OUT=$(printf '{"session_id":"%s","cwd":"%s"}' "$SID" "$NOGIT" | GIT_CEILING_DIRECTORIES="$ROOT" CLAUDE_PLUGIN_ROOT="$STUBBED" bash "$HOOK" 2>/dev/null)
+  [ "$(decision "$OUT")" = approve ] && ok || fail "a project without git runs no conformance doctor (got: ${OUT:0:200})"
 else
   printf 'SKIP  conformance pipefail cases: node not found\n' >&2
 fi

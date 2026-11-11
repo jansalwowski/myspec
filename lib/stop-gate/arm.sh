@@ -105,9 +105,13 @@ session_files() {
 }
 
 # changed_files -> uncommitted and untracked paths in REPO_ROOT, both sides of
-# a rename.
+# a rename. Fails, after printing what git printed, when `git status` fails:
+# its output alone reads as a clean tree then (a corrupt index: exit 128,
+# nothing on stdout).
 changed_files() {
-  local entry second=0
+  local entry second=0 list rc=0
+  list=$(mktemp "${TMPDIR:-/tmp}/.myspec-status.XXXXXX") || return 1
+  git -C "$REPO_ROOT" status --porcelain=v1 -z --untracked-files=all > "$list" 2>/dev/null || rc=1
   while IFS= read -r -d '' entry; do
     if [ "$second" -eq 1 ]; then
       second=0
@@ -118,7 +122,9 @@ changed_files() {
     case "${entry:0:2}" in
       *R*|*C*) second=1 ;;
     esac
-  done < <(git -C "$REPO_ROOT" status --porcelain=v1 -z --untracked-files=all 2>/dev/null)
+  done < "$list"
+  rm -f "$list"
+  return "$rc"
 }
 
 # base_ref -> sets MYSPEC_BASE_REF for REPO_ROOT (R5). A repo whose lint or

@@ -180,6 +180,23 @@ rm "$U/api/gen.php"
 printf '<?php // v2\n' > "$U/api/a.php"
 git_ -C "$U" commit -q -am "api change"
 eq "$(unseen_verdict "$U")" run "unseen: a commit against the base (git revert) runs the check"
+# A git that fails says nothing, which is not "nothing changed": with a
+# corrupt index git status and git diff exit 128 with empty output.
+git_ -C "$U" checkout -q -B feat-unseen main
+eq "$(unseen_verdict "$U")" skip "unseen: fixture: back on the base, a clean api/ skips"
+U_INDEX=$(git -C "$U" rev-parse --path-format=absolute --git-path index)
+cp "$U_INDEX" "$ROOT/index.keep"
+printf 'not an index\n' > "$U_INDEX"
+git -C "$U" status --porcelain >/dev/null 2>&1 && fail "unseen: fixture: git status fails on the corrupt index" || ok
+eq "$(unseen_verdict "$U")" run "unseen: a git status that fails runs the check"
+eq "$(REPO_ROOT="$U" CHECKOUT_FILES_ROOT=""; known_failures_verdict '{"knownFailures":[{"path":"api/legacy/**","reason":"red on main"}]}'; printf '%s|%s' "$KNOWN_STATE" "$KNOWN_WHY")" \
+  "ignored|git ls-files failed in this checkout, so its entries could not be measured against the checkout's files" \
+  "knownFailures: a file list git cannot give ignores the setting"
+cp "$ROOT/index.keep" "$U_INDEX"
+eq "$(unseen_verdict "$U")" skip "unseen: the index restored, a clean api/ skips again"
+NOGIT_DIR="$ROOT/nogit"
+mkdir -p "$NOGIT_DIR"
+eq "$(GIT_CEILING_DIRECTORIES="$ROOT"; export GIT_CEILING_DIRECTORIES; unseen_verdict "$NOGIT_DIR")" skip "unseen: outside a work tree there is no view to ask for"
 
 # --- check_workdir and main_checkout (R12) -------------------------------------------------------
 CONTAINERS_JSON='{"app":{"mountSource":".","mountTarget":"/var/www/html"},"apionly":{"mountSource":"./api/","mountTarget":"/srv/api/"}}'
