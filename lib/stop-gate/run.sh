@@ -305,8 +305,9 @@ check_cwd() {
 # names the ignored setting (fail closed).
 
 # paths_verdict <check json> -> sets PATHS_VERDICT to run (no paths, or a
-# file matches), skip (no file matches) or ignored (unusable; the check
-# runs), and PATHS_GLOBS to the globs joined with ", ".
+# file matches), skip (no file matches), ignored (unusable; the check runs)
+# or unknown (no written file matches and git could not list the other
+# changes; the check runs), and PATHS_GLOBS to the globs joined with ", ".
 paths_verdict() {
   local state glob re alt="" f
   PATHS_VERDICT=run
@@ -338,6 +339,11 @@ paths_verdict() {
   # under the globs that git reports changed, uncommitted or against the
   # base, runs the check (fail closed).
   unseen_files
+  # git could not say what changed: the check runs, and the message says why.
+  if [ "$UNSEEN_UNKNOWN" -eq 1 ]; then
+    PATHS_VERDICT=unknown
+    return 0
+  fi
   while IFS= read -r f; do
     [ -n "$f" ] || continue
     [[ "$f" =~ $alt ]] && return 0
@@ -357,12 +363,18 @@ paths_verdict() {
 # checkout_files -> sets CHECKOUT_FILES to a file listing the files of
 # REPO_ROOT, tracked and untracked but not ignored, one per line. Listed once
 # per checkout and kept until exit (run_cleanup_files). Call it directly, not
-# in $( ): the cache lives in the caller's shell.
+# in $( ): the cache lives in the caller's shell. Sets CHECKOUT_FILES_FAILED=1
+# when git could not list them in a work tree (a corrupt index): the list is
+# then empty, not the checkout's.
+CHECKOUT_FILES_FAILED=0
 checkout_files() {
   if [ "${CHECKOUT_FILES_ROOT:-}" != "$REPO_ROOT" ] || [ ! -f "${CHECKOUT_FILES:-}" ]; then
     [ -z "${CHECKOUT_FILES:-}" ] || rm -f "$CHECKOUT_FILES"
     CHECKOUT_FILES=$(mktemp "${TMPDIR:-/tmp}/.myspec-files.XXXXXX")
-    git -C "$REPO_ROOT" ls-files -co --exclude-standard 2>/dev/null > "$CHECKOUT_FILES" || true
+    CHECKOUT_FILES_FAILED=0
+    if ! git -C "$REPO_ROOT" ls-files -co --exclude-standard 2>/dev/null > "$CHECKOUT_FILES" && checkout_facts "$REPO_ROOT"; then
+      CHECKOUT_FILES_FAILED=1
+    fi
     CHECKOUT_FILES_ROOT=$REPO_ROOT
   fi
 }
@@ -396,6 +408,13 @@ known_failures_verdict() {
     return 0
   fi
   checkout_files
+  # Without the file list a catch-all entry cannot be told from a narrow one.
+  if [ "$CHECKOUT_FILES_FAILED" -eq 1 ]; then
+    KNOWN_STATE=ignored
+    KNOWN_GOT=$(printf '%s' "$1" | jq -c '.knownFailures' | LC_ALL=C cut -c1-200)
+    KNOWN_WHY="git ls-files failed in this checkout, so its entries could not be measured against the checkout's files"
+    return 0
+  fi
   total=$(LC_ALL=C awk 'END { print NR }' "$CHECKOUT_FILES")
   for ((k = 1; k < ${#lines[@]}; k += 2)); do
     glob=${lines[$k]}
@@ -424,18 +443,28 @@ known_failures_verdict() {
 # unseen_files -> sets UNSEEN_FILES, once per checkout (arm_root resets it):
 # the paths git reports changed there, uncommitted or untracked
 # (changed_files) and, when a base ref resolved, against MYSPEC_BASE_REF,
-# both sides of a rename included.
+# both sides of a rename included. Sets UNSEEN_UNKNOWN=1 when git failed at
+# either in a work tree (a corrupt index): the list is then not git's view,
+# and reading it as "nothing changed" would skip the check. Outside a work
+# tree (a project without git) there is no view to ask for, as before.
 UNSEEN_READY=0
 UNSEEN_FILES=""
+UNSEEN_UNKNOWN=0
 unseen_files() {
+  local list
   [ "$UNSEEN_READY" -eq 0 ] || return 0
   UNSEEN_READY=1
-  UNSEEN_FILES=$({
-    changed_files
-    if [ -n "$MYSPEC_BASE_REF" ]; then
-      git -C "$REPO_ROOT" diff --name-only --no-renames "$MYSPEC_BASE_REF" -- 2>/dev/null || true
-    fi
-  } | grep -v '^\.claude/state/' | sort -u || true)
+  UNSEEN_UNKNOWN=0
+  list=$(mktemp "${TMPDIR:-/tmp}/.myspec-unseen.XXXXXX")
+  changed_files > "$list" || UNSEEN_UNKNOWN=1
+  if [ -n "$MYSPEC_BASE_REF" ]; then
+    git -C "$REPO_ROOT" diff --name-only --no-renames "$MYSPEC_BASE_REF" -- >> "$list" 2>/dev/null || UNSEEN_UNKNOWN=1
+  fi
+  UNSEEN_FILES=$(grep -v '^\.claude/state/' "$list" | sort -u || true)
+  rm -f "$list"
+  if [ "$UNSEEN_UNKNOWN" -eq 1 ] && ! checkout_facts "$REPO_ROOT"; then
+    UNSEEN_UNKNOWN=0
+  fi
 }
 
 # Containers (R12, #221). A container that bind-mounts part of the repository
@@ -581,6 +610,8 @@ run_checks() {
         continue ;;
       ignored)
         SCOPE_NOTES+=("$name: its paths setting was ignored, so the check ran. paths must be a non-empty list of repo-relative globs, none absolute or with a .. segment${PATHS_GLOBS:+ (got $PATHS_GLOBS)}.") ;;
+      unknown)
+        SCOPE_NOTES+=("$name: no file this session wrote matches its paths ($PATHS_GLOBS), but git status or git diff failed in this checkout, so the gate could not tell whether another change does, and the check ran. Run git status there to see why.") ;;
     esac
     [ -z "$CWD_IGNORED" ] || SCOPE_NOTES+=("$name: its cwd setting was ignored, so the check ran from the checkout root. cwd must be a repo-relative directory, not absolute and without a .. segment (got $CWD_IGNORED).")
     known_failures_verdict "$check"

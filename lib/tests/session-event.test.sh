@@ -182,6 +182,19 @@ ev '{"t":"write","rel":"f.md","kind":"file"}'
 eq "$(session_bash_writes "$REPO" $S | cut -f2- | tr '\t\n' ' |')" "d.md - b1|d.md b1 b2|d.md b2x b3|d.md ? b4|e.md ? -|" \
   "bash writes: before is the pre snapshot, else the previous after, else unknown after a tool write; a removal is a pair whose after is \"-\"; a write without a blob is left out"
 
+# --- checked: what the Stop gate's content checks last passed, per file ------------------
+S=s5c
+eq "$(session_content_checked "$REPO" $S)" "" "content checked: nothing without an event"
+ev '{"t":"checked","rel":"d.md","blob":"b1","pairs":1,"sig":"r1 .ai"}'
+ev '{"t":"checked","rel":"e.md","blob":"b9","pairs":2,"sig":"r1 "}'
+ev '{"t":"checked","rel":"d.md","blob":"b2","pairs":3,"sig":"r1 .ai"}'
+ev '{"t":"checked","rel":"f.md","blob":"b1","pairs":"1","sig":"r1 .ai"}'
+ev '{"t":"checked","rel":"g.md","blob":"b1","pairs":1}'
+ev '{"t":"checked","rel":"h.md","blob":"b1","pairs":1,"sig":"r1\t.ai"}'
+ev '{"t":"write","rel":"i.md","kind":"file","via":"bash","blob":"b1"}'
+eq "$(session_content_checked "$REPO" $S | cut -f2- | LC_ALL=C sort | tr '\t\n' '~|')" "d.md~b2~3~r1 .ai|e.md~b9~2~r1 |" \
+  "content checked: the last event per file; one with a field missing, of the wrong type or holding a tab is dropped"
+
 # --- TTLs --------------------------------------------------------------------------------
 
 NOW=$(date +%s)

@@ -180,6 +180,23 @@ rm "$U/api/gen.php"
 printf '<?php // v2\n' > "$U/api/a.php"
 git_ -C "$U" commit -q -am "api change"
 eq "$(unseen_verdict "$U")" run "unseen: a commit against the base (git revert) runs the check"
+# A git that fails says nothing, which is not "nothing changed": with a
+# corrupt index git status and git diff exit 128 with empty output.
+git_ -C "$U" checkout -q -B feat-unseen main
+eq "$(unseen_verdict "$U")" skip "unseen: fixture: back on the base, a clean api/ skips"
+U_INDEX=$(git -C "$U" rev-parse --path-format=absolute --git-path index)
+cp "$U_INDEX" "$ROOT/index.keep"
+printf 'not an index\n' > "$U_INDEX"
+git -C "$U" status --porcelain >/dev/null 2>&1 && fail "unseen: fixture: git status fails on the corrupt index" || ok
+eq "$(unseen_verdict "$U")" unknown "unseen: a git status that fails runs the check, as unknown"
+eq "$(REPO_ROOT="$U" CHECKOUT_FILES_ROOT=""; known_failures_verdict '{"knownFailures":[{"path":"api/legacy/**","reason":"red on main"}]}'; printf '%s|%s' "$KNOWN_STATE" "$KNOWN_WHY")" \
+  "ignored|git ls-files failed in this checkout, so its entries could not be measured against the checkout's files" \
+  "knownFailures: a file list git cannot give ignores the setting"
+cp "$ROOT/index.keep" "$U_INDEX"
+eq "$(unseen_verdict "$U")" skip "unseen: the index restored, a clean api/ skips again"
+NOGIT_DIR="$ROOT/nogit"
+mkdir -p "$NOGIT_DIR"
+eq "$(GIT_CEILING_DIRECTORIES="$ROOT"; export GIT_CEILING_DIRECTORIES; unseen_verdict "$NOGIT_DIR")" skip "unseen: outside a work tree there is no view to ask for"
 
 # --- check_workdir and main_checkout (R12) -------------------------------------------------------
 CONTAINERS_JSON='{"app":{"mountSource":".","mountTarget":"/var/www/html"},"apionly":{"mountSource":"./api/","mountTarget":"/srv/api/"}}'
@@ -251,6 +268,13 @@ lacks "$(f "$out" .scope)" "Opt" "a check that is not required is neither run no
 out=$(gate "$REPO" "{\"checks\":[$(check B true '{"paths":[1]}')]}" code:web/a.ts)
 eq "$(ran B)" yes "paths unusable: the check runs"
 has "$(f "$out" .scope)" "B: its paths setting was ignored" "paths unusable: the message names it"
+# A check that runs only because git could not list the changes says so.
+cp "$REPO/.git/index" "$ROOT/repo-index.keep"
+printf 'not an index\n' > "$REPO/.git/index"
+out=$(gate "$REPO" "{\"checks\":[$(check G 'exit 1' '{"paths":["nowhere/**"]}')]}" code:api/a.php)
+cp "$ROOT/repo-index.keep" "$REPO/.git/index"
+eq "$(ran G)" yes "paths, git failed: the check runs"
+has "$(f "$out" .scope)" "G: no file this session wrote matches its paths (nowhere/**), but git status or git diff failed in this checkout" "paths, git failed: the message names the failed git"
 
 out=$(gate "$NESTED" "{\"checks\":[$(check C 'pwd -P > '"$RAN"'/C.pwd' '{"cwd":"api"}'),$(check D 'pwd -P > '"$RAN"'/D.pwd' '{"cwd":"/tmp"}')]}" code:api/a.php)
 eq "$(cat "$RAN/C.pwd")" "$NESTED/api" "cwd: under the verified checkout, not the main one"

@@ -16,6 +16,12 @@
 #       mark-code-changed.sh at PreToolUse, the file before a Bash write
 #   {"t":"verified","root":<checkout>}
 #       verify-before-stop.sh, per checkout it ran the checks in
+#   {"t":"checked","root":<checkout>,"rel":<repo-relative path>,"blob":<id>,"pairs":<n>,"sig":<text>}
+#       verify-before-stop.sh (stop-gate/content.sh), per file whose content
+#       checks passed: "blob" the id of the bytes judged, "pairs" how many
+#       Bash-write pairs of the file were judged with them, "sig" the rules
+#       and aiDir it was judged under. The next Stop skips the file only
+#       while all three still hold
 #   {"t":"isolation","mode":"develop|worktree|","path":<worktree>,"note":<text>}
 #       set-isolation.sh; an empty mode is a --reset
 #   {"t":"implement","state":"start|stop"}
@@ -287,6 +293,19 @@ session_bash_writes() {
           | .last[$k] = $a | del(.pre[$k])
         else del(.pre[$k]) | del(.last[$k]) end)
     | .out[]'
+}
+
+# session_content_checked <home> <session id> -> one
+# `<root>\t<rel>\t<blob>\t<pairs>\t<sig>` line per file with a `checked`
+# event, from its last one: what the Stop gate's content checks last passed
+# (lib/stop-gate/content.sh). An event with a field of the wrong type, or a
+# tab or newline in one, is dropped, so the file is judged again.
+session_content_checked() {
+  session_query "$1" "$2" '
+    reduce ($ev[] | select(.t == "checked" and (.pairs | type) == "number"
+        and ([.root, .rel, .blob, .sig] | all(type == "string" and (test("[\t\n]") | not))))) as $e ({};
+      .[$e.root + "\t" + $e.rel] = $e.blob + "\t" + ($e.pairs | tostring) + "\t" + $e.sig)
+    | to_entries[] | .key + "\t" + .value'
 }
 
 # session_seen <home> <session id> <kind> <root> <rel> <agent> [via] -> 0 when

@@ -27,9 +27,31 @@
 # is excluded (its usual cause is a pending /myspec:update), and so is the
 # features group, which reads a file outside the trigger below. Gated on
 # uncommitted changes to the harness config, as the memory check is.
-# Both use $(...) and -n, not `| grep -q .`: grep exits on the first line, a
-# status longer than a pipe buffer then kills git with SIGPIPE, and under
-# pipefail the `if` read false and skipped the gate.
+# tree_changed <repo root> <path>... -> 0 when git reports uncommitted changes
+# under the paths, or cannot say in a work tree. `git status` that fails (a
+# corrupt index: exit 128, nothing on stdout) printed what a clean tree
+# prints, so reading its output alone skipped the doctor and approved. A
+# trigger that cannot be read runs its doctor, as an unusable `paths` runs
+# its check (fail closed), and TREE_NOTE then says so in the block. Outside
+# a work tree (a project without git) there is no trigger to read and the
+# gates stay off, as before.
+# $(...) and -n, not `| grep -q .`: grep exits on the first line, a status
+# longer than a pipe buffer then kills git with SIGPIPE, and under pipefail
+# the `if` read false and skipped the gate.
+TREE_NOTE=""
+tree_changed() {
+  local root="$1" out
+  shift
+  TREE_NOTE=""
+  if out=$(git -C "$root" status --porcelain -- "$@" 2>/dev/null); then
+    [ -n "$out" ]
+    return
+  fi
+  checkout_facts "$root" || return 1
+  TREE_NOTE=" git status failed in this checkout, so the check ran without knowing what changed; run git status to see why."
+  return 0
+}
+
 conformance_gates() {
   # Both doctors are the plugin's (HOOK_LIB, the directory hook-core.sh was
   # found in), run against the checkout.
@@ -39,15 +61,15 @@ conformance_gates() {
     # aiDir is required since 2.0; .ai is the documented default when absent,
     # the same resolution memory-files.mjs uses.
     ai=$(ai_dir "$root")
-    if [ -n "$ai" ] && [ -n "$(git -C "$root" status --porcelain -- "$ai/memory" 2>/dev/null)" ]; then
+    if [ -n "$ai" ] && tree_changed "$root" "$ai/memory"; then
       if ! out=$(cd "$root" && node "$doctor" --quiet 2>&1); then
-        decision_block 'Memory conformance check failed for changes under %s/memory. Fix these before stopping (node "%s/memory-index.mjs" regenerates the tables; the doctor names the rest):\n\n%s' "$ai" "$HOOK_LIB" "$(printf '%s' "$out" | tail -30)"
+        decision_block 'Memory conformance check failed for changes under %s/memory.%s Fix these before stopping (node "%s/memory-index.mjs" regenerates the tables; the doctor names the rest):\n\n%s' "$ai" "$TREE_NOTE" "$HOOK_LIB" "$(printf '%s' "$out" | tail -30)"
       fi
     fi
   fi
-  if [ -f "$setup" ] && [ -n "$(git -C "$root" status --porcelain -- .claude .myspec.json 2>/dev/null)" ]; then
+  if [ -f "$setup" ] && tree_changed "$root" .claude .myspec.json; then
     if ! out=$(cd "$root" && node "$setup" --quiet wiring schema 2>&1); then
-      decision_block 'Setup conformance check failed for changes under .claude/ or .myspec.json. Each of these makes a hook or a gate silently stop working, so fix them before stopping:\n\n%s' "$(printf '%s' "$out" | tail -30)"
+      decision_block 'Setup conformance check failed for changes under .claude/ or .myspec.json.%s Each of these makes a hook or a gate silently stop working, so fix them before stopping:\n\n%s' "$TREE_NOTE" "$(printf '%s' "$out" | tail -30)"
     fi
   fi
 }
