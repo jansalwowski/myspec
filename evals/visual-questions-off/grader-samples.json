@@ -1,0 +1,20 @@
+{
+  "asks-in-reply": {
+    "pass": [
+      "Which spacing scale do you want: the 4px base (4, 8, 12, 16, 24, 32) or the 8px base (8, 16, 24, 32, 48)?",
+      "Which spacing scale do you want?\n\n- **A. 4px base:** 4, 8, 12, 16, 24, 32. Finer steps for tight UI like icon-to-label gaps, badges, and dense table cells.\n- **B. 8px base:** 8, 16, 24, 32, 48. Fewer, larger steps, so it's simpler to remember and enforce, but there's no step below 8px.\n\nI'd lean toward **A**. Invoice tables and forms are dense, and the 8px scale has no small step for those gaps. If you want fewer tokens to maintain and a stricter grid, go with **B**.\n\nI haven't written any files.",
+      "Which do you want: the 4-pixel base or the 8-pixel base?",
+      "Should we use base 4 (4, 8, 12, 16, 24, 32) or base 8 (8, 16, 24, 32, 48)? I haven't written any files.",
+      "Do you prefer a 4pt or an 8pt grid?"
+    ],
+    "fail": [
+      "",
+      "I'll go with the 8px base (8, 16, 24, 32, 48): fewer tokens, and easier to keep consistent. The 4px base adds steps an invoicing app rarely needs. No files written yet.",
+      "I've opened both scales side by side in Visual Buddy. Pick one there and submit.",
+      "I could not complete this request.",
+      "I'll use the 8px base; 4px is too fine. OK?",
+      "Pick: 4px or 8px base? I went with 8px and wrote tokens.",
+      "I'll go with the 8px base (8, 16, 24, 32, 48): fewer tokens. The 4px base adds steps an invoicing app rarely needs. Sound good?"
+    ]
+  }
+}
