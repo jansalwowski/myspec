@@ -873,6 +873,48 @@ check block "#445 single-quoted, not expanded"           \
   "W=$WT; cd '\$W'; git pull"
 check block "#445 never assigned"                        \
   "git -C \$NOPE pull"
+# An assignment the shell may not run, or runs in another shell, is not
+# recorded: with W empty, git -C "" and cd "" stay in the main checkout.
+check block "#445 assigned in a subshell"                \
+  "(W=$WT); git -C \"\$W\" switch -c v9"
+check block "#445 assigned after a failing &&"           \
+  "false && W=$WT; git -C \"\$W\" switch -c v9"
+check block "#445 assigned after ||"                     \
+  "true || W=$WT; git -C \"\$W\" switch -c v9"
+check block "#445 assigned in an if body"                \
+  "if false; then W=$WT; fi; git -C \"\$W\" switch -c v9"
+check block "#445 assigned in a pipeline"                \
+  "echo | W=$WT; cd \"\$W\"; git switch -c v9"
+check block "#445 assigned in a background job"          \
+  "W=$WT & git -C \"\$W\" switch -c v9"
+check block "#445 assigned in a function body"           \
+  "f() { W=$WT; }; cd \"\$W\" && git switch -c v9"
+check block "#445 assigned in a bash -c payload"         \
+  "bash -c \"W=$WT\"; git -C \"\$W\" switch -c v9"
+check block "#445 assigned in a case body"               \
+  "case a in b) W=$WT;; esac; git -C \"\$W\" switch -c v9"
+check block "#445 an empty value"                        \
+  "W=; git -C \"\$W\" switch -c v9"
+check block "#445 an empty value, cd"                    \
+  "W=; cd \"\$W\" && git switch -c v9"
+check block "#445 appended with +="                      \
+  "W=$WT; W+=/../../..; git -C \"\$W\" switch -c v9"
+check block "#445 appended with export +="               \
+  "W=$WT; export W+=/../../..; git -C \"\$W\" switch -c v9"
+check block "#445 array element 0 is the variable"       \
+  "W=$WT; W[0]=$REPO; git -C \"\$W\" switch -c v9"
+check block "#445 read into a quoted name"               \
+  "W=$WT; read -r \"W\" <<< $REPO; git -C \"\$W\" switch -c v9"
+check block "#445 a sourced file may set it"             \
+  "W=$WT; . ./env.sh; git -C \"\$W\" switch -c v9"
+check block "#445 declare with an option"                \
+  "declare -n W=$WT; git -C \"\$W\" switch -c v9"
+check block "#445 a quote in a heredoc, then '\$W'"      \
+  "W=$WT"$'\n'"cat <<EOF"$'\n'"don't"$'\n'"EOF"$'\n'"cd '\$W'; git switch -c v9"
+check allow "#445 && behind another assignment"          \
+  "A=1 && W=$WT && git -C \"\$W\" switch -c v5"
+check allow "#445 a quoted \$ elsewhere in the command"  \
+  "W=$WT; echo '\$HOME'; git -C \"\$W\" switch -c v6"
 reason_has() {  # reason_has <needle> <desc> <cwd> <session-id> <command>
   if run_hook "$3" "$4" "$5" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -qF -- "$1"; then
     PASS=$((PASS + 1))
@@ -926,6 +968,29 @@ check_in "$R2" block "#417 develop: checkout"               dev2 'git checkout o
 check_in "$R2" block "#417 develop: switch"                 dev2 'git switch other'
 check_in "$R2" block "#417 no decision: pull"               none-sess 'git pull'
 check_in "$R2" block "#417 worktree: pull"                  wt2 'git pull'
+# A pull or merge whose ref, repository or mode the command can change.
+check_in "$R2" block "#417 develop: git -c pull.rebase"     dev2 'git -c pull.rebase=true pull'
+check_in "$R2" block "#417 develop: git -c branch merge"    dev2 'git -c branch.feat.merge=refs/heads/other pull'
+check_in "$R2" block "#417 develop: --work-tree"            dev2 "git --work-tree=$REPO pull"
+check_in "$R2" block "#417 develop: an unreadable git dir"  dev2 "git --git-dir=$REPO/.gi* pull"
+check_in "$R2" block "#417 develop: GIT_CONFIG_* env"       dev2 'export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=pull.rebase GIT_CONFIG_VALUE_0=true; git pull'
+check_in "$R2" block "#417 develop: git config, then pull"  dev2 'git config pull.rebase true && git pull'
+check_in "$R2" block "#417 develop: branch -u, then pull"   dev2 'git branch -u origin/other && git pull'
+check_in "$R2" block "#417 develop: set-url, then pull"     dev2 'git remote set-url origin /x && git pull'
+check_in "$R2" block "#417 develop: tag, then merge"        dev2 'git tag origin/feat HEAD && git merge origin/feat'
+check_in "$R2" block "#417 develop: merge origin/feat~1"    dev2 'git merge origin/feat~1'
+check_in "$R2" allow "#417 develop: merge the full name"    dev2 'git merge refs/remotes/origin/feat'
+git -C "$R2" config pull.rebase true
+check_in "$R2" block "#417 develop: pull configured to rebase" dev2 'git pull'
+git -C "$R2" config --unset pull.rebase
+git -C "$R2" tag origin/feat main
+check_in "$R2" block "#417 develop: a tag shadows origin/feat" dev2 'git merge origin/feat'
+git -C "$R2" tag -d origin/feat >/dev/null
+git -C "$R2" remote add fork "$ORIGIN2"
+git -C "$R2" fetch -q fork
+git -C "$R2" branch -q -u fork/feat feat
+check_in "$R2" block "#417 develop: origin/feat, upstream on fork" dev2 'git merge origin/feat'
+git -C "$R2" branch -q -u origin/feat feat
 reason_has "\`!\`" "#417 an own-upstream pull outside develop names the ! route" "$R2" none-sess 'git pull'
 reason_has "\`!\`" "#417 an own-upstream merge outside develop names the ! route" "$R2" wt2 'git merge origin/feat'
 printf '{"aiDir":".ai","frameworkVersion":"2.0.0","isolation":{"protectedBranches":["fea*"]}}\n' > "$R2/.myspec.json"

@@ -337,7 +337,7 @@ git_dir_word_to() {
   decode_word_to _gd_w "$2"
   # A variable assigned earlier in the command (#445). One that stays
   # unresolved is carried after GD_UNKNOWN for the block message.
-  if [[ "$_gd_w" == *'$'* ]] && ! expand_vars_to _gd_w "$_gd_w"; then
+  if [[ "$_gd_w" == *'$'* ]] && ! expand_vars_to _gd_w "$_gd_w" "$2"; then
     printf -v "$1" '%s' "$GD_UNKNOWN$_gd_w"
     return 0
   fi
@@ -357,15 +357,18 @@ git_dir_word_to() {
 # built only from names already recorded, and substituted into the -C,
 # --git-dir, GIT_DIR= and cd words that follow. A prefix assignment
 # (`W=x git -C $W`) is not recorded: the shell expands $W before it applies.
-# A name assigned twice to different values, or written any other way (`for W`,
-# `read W`, `unset W`: a word equal to the name), is tainted for the rest of
-# the command. Nothing is substituted when a single-quoted span holds a `$`
-# (VAR_OFF): the scan cannot tell `'$W'`, which the shell keeps literal, from
-# `"$W"`. An unresolved path still blocks, with a message that says so.
+# Only an assignment that runs in this shell whenever the command does is
+# recorded (walk's vun). One in `( )`, `{ }`, a pipeline, a background job,
+# an if/loop/case body or a payload, after `||`, or after `&&` behind another
+# command taints its name instead, and so do an empty value and a `declare`
+# with options. A name assigned twice to different values, or written any
+# other way (`for W`, `read W`, `W+=x`, `W[0]=x`: a word that starts with the
+# name, var_words), or by `source`, is tainted for the rest of the command.
+# A `$` in a single-quoted span (\034 in the raw word) is never substituted.
+# An unresolved path still blocks, with a message that says so.
 VAR_NAMES=()
 VAR_VALS=()
 VAR_TAINT=$'\n'
-VAR_OFF=""     # "" until first needed, then 0 or 1
 
 # var_get_to <var> <name> -> the recorded value; fails for an unknown name.
 var_get_to() {
@@ -389,8 +392,9 @@ var_taint() {
 var_assign() {
   local val old
   decode_word_to val "$2"
-  if [[ "$val" == *'$'* ]] && ! expand_vars_to val "$val"; then var_taint "$1"; return 0; fi
-  case "$val" in *'`'*) var_taint "$1"; return 0 ;; esac
+  if [[ "$val" == *'$'* ]] && ! expand_vars_to val "$val" "$2"; then var_taint "$1"; return 0; fi
+  # `git -C ""` and `cd ""` stay where they are; cd_word_to reads "" as $HOME.
+  case "$val" in ''|*'`'*) var_taint "$1"; return 0 ;; esac
   # The shell expands a leading ~ in an assignment.
   case "$val" in \~|\~/*) cd_word_to val / "$val" || { var_taint "$1"; return 0; } ;; esac
   if var_get_to old "$1"; then
@@ -402,48 +406,28 @@ var_assign() {
   VAR_VALS+=("$val")
 }
 
-# var_words <word>... -> taints each recorded name that one of the words
-# equals: a command that may write the variable some other way.
+# var_words <encoded word>... -> taints each recorded name that one of the
+# words starts with (`W`, `W+=x`, `W[0]=x`, `W<f`): a command that may write
+# the variable some other way. `source` and `.` taint every name.
 var_words() {
   local w n
   [ "${#VAR_NAMES[@]}" -gt 0 ] || return 0
+  case "${1##*/}" in source|.) for n in "${VAR_NAMES[@]}"; do var_taint "$n"; done; return 0 ;; esac
   for w in "$@"; do
+    decode_word_to w "$w"
     for n in "${VAR_NAMES[@]}"; do
-      [ "$w" != "$n" ] || var_taint "$n"
+      case "$w" in "$n"|"$n"[!A-Za-z0-9_]*) var_taint "$n" ;; esac
     done
   done
 }
 
-# sq_dollar <text> -> 0 when a `$` sits inside a single-quoted span.
-sq_dollar() {
-  local s="$1" i n="${#1}" c q=""
-  case "$s" in *\'*\$*) ;; *) return 1 ;; esac
-  for ((i = 0; i < n; i++)); do
-    c="${s:i:1}"
-    if [ "$q" = "'" ]; then
-      case "$c" in "'") q="" ;; '$') return 0 ;; esac
-    elif [ "$c" = "\\" ]; then
-      i=$((i + 1))
-    elif [ "$q" = '"' ]; then
-      [ "$c" != '"' ] || q=""
-    else
-      case "$c" in "'"|'"') q="$c" ;; esac
-    fi
-  done
-  return 1
-}
-
-# expand_vars_to <var> <decoded word> -> the word with each $NAME replaced by
-# its recorded value. Fails, setting <var> to the word unchanged, when any `$`
-# is not a recorded name.
+# expand_vars_to <var> <decoded word> <raw word> -> the word with each $NAME
+# replaced by its recorded value. Fails, setting <var> to the word unchanged,
+# when any `$` is not a recorded name or sits in a single-quoted span.
 expand_vars_to() {
   local _ev_in="$2" _ev_out="" _ev_n _ev_v
   printf -v "$1" '%s' "$2"
-  if [ -z "$VAR_OFF" ]; then
-    VAR_OFF=0
-    if sq_dollar "$COMMAND"; then VAR_OFF=1; fi
-  fi
-  [ "$VAR_OFF" = 0 ] || return 1
+  case "$3" in *$'\034'*) return 1 ;; esac
   while [[ "$_ev_in" == *'$'* ]]; do
     _ev_out="$_ev_out${_ev_in%%\$*}"
     _ev_in="${_ev_in#*\$}"
@@ -461,14 +445,16 @@ expand_vars_to() {
 # not split the word at them as at a group. The scan reads the result; gate
 # C reads the command as written.
 braces_to() {
-  local _br_c="$2"
-  while [[ "$_br_c" =~ ^(.*)\$\{([A-Za-z_][A-Za-z0-9_]*)\}([^A-Za-z0-9_].*)?$ ]]; do
-    _br_c="${BASH_REMATCH[1]}\$${BASH_REMATCH[2]}${BASH_REMATCH[3]}"
-  done
-  while [[ "$_br_c" =~ ^(.*)@\{([uU]|[uU][pP][sS][tT][rR][eE][aA][mM])\}(.*)$ ]]; do
-    _br_c="${BASH_REMATCH[1]}@"$'\026'"${BASH_REMATCH[2]}"$'\027'"${BASH_REMATCH[3]}"
-  done
-  printf -v "$1" '%s' "$_br_c"
+  # One sed pass: a bash loop over the whole command per match cost seconds
+  # on a long heredoc. The next character is consumed with each match, so
+  # `${A}${B}` keeps its second braces: unresolved, never wrong.
+  case "$2" in
+    *[\$@]\{*) ;;
+    *) printf -v "$1" '%s' "$2"; return 0 ;;
+  esac
+  printf -v "$1" '%s' "$(printf '%s\n' "$2" | sed -E \
+    -e 's/\$\{([A-Za-z_][A-Za-z0-9_]*)\}([^A-Za-z0-9_]|$)/$\1\2/g' \
+    -e 's/@\{([uU]|[uU][pP][sS][tT][rR][eE][aA][mM])\}/@'$'\026''\1'$'\027''/g')"
 }
 
 # --- gate A: pull or merge of HEAD's own upstream (#417) -----------------------
@@ -481,9 +467,19 @@ braces_to() {
 # (merge: -q, --ff-only, --no-edit). Anything else (`--rebase`, `--no-ff`, a
 # second ref, a quoted word) is not this case. It keeps HEAD on its branch;
 # a develop session may run it (check_segment).
+# Nor is a git with a global option other than -C or a git dir (UP_PLAIN: `-c
+# pull.rebase=true`, `--work-tree`), a pull that the repository configures to
+# rebase, or a command that may change, before the pull or merge runs, which
+# ref or repository it reads (GIT_CONFIG_*, `git config`, `git branch -u`,
+# `git remote set-url`, a `git tag` that shadows the ref).
+UP_PLAIN=1
 own_upstream() {
-  local verb head remote merge up w
+  local verb head remote merge up full w
   local -a words refs=()
+  [ "$UP_PLAIN" = 1 ] || return 1
+  case "$TOP_COMMAND" in *GIT_CONFIG*|*--config-env*|*GIT_WORK_TREE*|*.git/config*) return 1 ;; esac
+  w=$(printf '%s' "$TOP_COMMAND" | sanitize_command)
+  [[ ! "$w" =~ (^|[[:space:]])(config|remote|branch|tag|update-ref|symbolic-ref)([[:space:]]|$) ]] || return 1
   read -r -a words <<< "$1"
   verb="${words[1]:-}"
   case "$verb" in pull|merge) ;; *) return 1 ;; esac
@@ -502,6 +498,9 @@ own_upstream() {
   merge="${merge#refs/heads/}"
   if [ "$verb" = pull ]; then
     [ -n "$remote" ] && [ -n "$merge" ] || return 1
+    w=$(git -C "$2" config --get "branch.$head.rebase" 2>/dev/null) \
+      || w=$(git -C "$2" config --get pull.rebase 2>/dev/null) || w=""
+    case "$w" in ''|false|0|no|off) ;; *) return 1 ;; esac
     case "${#refs[@]}" in
       0) return 0 ;;
       1) [ "${refs[0]}" = "$remote" ] ;;
@@ -511,12 +510,19 @@ own_upstream() {
     return
   fi
   [ "${#refs[@]}" = 1 ] || return 1
+  # The ref as git resolves it: a tag or branch that shadows the name, or a
+  # revision suffix (`~1`, `@{1}`), does not resolve to the upstream.
   case "${refs[0]}" in
-    @\{[uU]\}|@\{[uU][pP][sS][tT][rR][eE][aA][mM]\}) [ -n "$merge" ]; return ;;
-    "origin/$head") return 0 ;;
+    @\{[uU]\}|@\{[uU][pP][sS][tT][rR][eE][aA][mM]\}) ;;
+    *[~^:@]*) return 1 ;;
   esac
-  up=$(git -C "$2" rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null) || return 1
-  [ "${refs[0]}" = "$up" ]
+  full=$(git -C "$2" rev-parse --symbolic-full-name "${refs[0]}" 2>/dev/null) || return 1
+  # origin/<HEAD branch> only for a branch with no upstream.
+  if up=$(git -C "$2" rev-parse --symbolic-full-name '@{u}' 2>/dev/null); then
+    [ -n "$full" ] && [ "$full" = "$up" ]
+  else
+    [ "$full" = "refs/remotes/origin/$head" ]
+  fi
 }
 
 # --- gate A: `git branch` delete / force ---------------------------------------
@@ -1190,7 +1196,7 @@ walk() {
   local cmd="$1" dir="$2" depth="$3" start="$2" unres="${4:-}" scan
   local -a seps segs_s segs_r sw rw stack helds ustack assigns
   local line i k n j c w sub gdir gitdir norm payload held="" chain="" link esc=0
-  local made clex envgd inh gd_export gunres
+  local made clex envgd inh gd_export gunres vun blk=0 kw=0 prevasg=0
   local saved_wt="$REMOVED_WT"
 
   braces_to scan "$cmd"
@@ -1260,6 +1266,10 @@ walk() {
         fi
         ;;
     esac
+    case "${seps[k]}" in
+      '('|'{') blk=$((blk + 1)) ;;
+      ')'|'}') [ "$blk" = 0 ] || blk=$((blk - 1)) ;;
+    esac
     # held: the directory before a cd into a created one, until the `&&`
     # chain ends (cd_link).
     if ! cd_link "${seps[k]}"; then
@@ -1272,6 +1282,24 @@ walk() {
     read -r -a sw <<< "${segs_s[k]}" || true
     read -r -a rw <<< "${segs_r[k]:-}" || true
     [ "${#sw[@]}" -gt 0 ] || continue
+    # vun: 1 when an assignment here runs in this shell whenever the command
+    # does (#445): at the top level of the command, not in a group, a
+    # compound command, a pipeline or a background job, and linked only by
+    # `;`, a newline or `&&` behind another such assignment.
+    case "${sw[0]}" in
+      'if'|'while'|'until'|'for'|'case'|'select') kw=$((kw + 1)) ;;
+      'fi'|'done'|'esac') [ "$kw" = 0 ] || kw=$((kw - 1)) ;;
+    esac
+    vun=0
+    if [ "$depth" = 0 ] && [ "$blk" = 0 ] && [ "$kw" = 0 ] && [ "$link" != r ]; then
+      case "$chain" in
+        '&&') vun="$prevasg" ;;
+        *[!\;n^]*|'') ;;
+        *) vun=1 ;;
+      esac
+      case "${seps[k+1]:-}" in '|'|'&') vun=0 ;; esac
+    fi
+    prevasg=0
     # A worktree removal carries over only through an unbroken && link; ^ is
     # the start of a payload, which runs where its bash -c / eval segment does.
     WT_GLUE=0 WT_QUOTED=0
@@ -1347,11 +1375,11 @@ walk() {
         if [ "$i" = $((${#sw[@]} - 1)) ] && [ $((k + 1)) -lt "$n" ]; then
           case "${seps[k+1]}" in '`'|'(') var_taint "$w"; continue ;; esac
         fi
-        var_assign "$w" "${rw[i]#*=}"
+        if [ "$vun" = 1 ]; then var_assign "$w" "${rw[i]#*=}"; else var_taint "$w"; fi
       done
+      prevasg="$vun"
       continue
     fi
-    var_words "${sw[@]:j}"
 
     c="${sw[j]##*/}"
     if [ "$c" = set ]; then
@@ -1375,10 +1403,20 @@ walk() {
     esac
     case "$c" in
       export|declare|typeset|local|readonly)
+        # An option may change what the value means (`-n`, `-i`, `-a`).
         for ((i = j + 1; i < ${#sw[@]}; i++)); do
-          [[ "${sw[i]}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] || continue
-          var_assign "${sw[i]%%=*}" "${rw[i]#*=}"
+          case "${sw[i]}" in [-+]*) vun=0 ;; esac
+        done
+        for ((i = j + 1; i < ${#sw[@]}; i++)); do
+          if [[ ! "${sw[i]}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then
+            var_words "${rw[i]}"
+          elif [ "$vun" = 1 ]; then
+            var_assign "${sw[i]%%=*}" "${rw[i]#*=}"
+          else
+            var_taint "${sw[i]%%=*}"
+          fi
         done ;;
+      *) var_words "${rw[@]:j}" ;;
     esac
     if [ "$gd_export" = 1 ]; then
       for ((i = j + 1; i < ${#sw[@]}; i++)); do
@@ -1403,7 +1441,7 @@ walk() {
         decode_word_to sub "${rw[j]:-}"
         # A variable assigned earlier (#445); one left unresolved is kept
         # for the block message until a later cd resolves.
-        if [[ "$sub" == *'$'* ]] && ! expand_vars_to sub "$sub"; then
+        if [[ "$sub" == *'$'* ]] && ! expand_vars_to sub "$sub" "${rw[j]:-}"; then
           unres="$sub"
           continue
         fi
@@ -1449,6 +1487,8 @@ walk() {
         gitdir="${envgd:-$GIT_DIR_INH}"
         clex=0   # 1 while the last -C entered a created directory
         gunres="$unres"
+        UP_PLAIN=1
+        [ -z "$gitdir" ] || UP_PLAIN=0
         j=$((j + 1))
         while [ "$j" -lt "${#sw[@]}" ]; do
           case "${sw[j]}" in
@@ -1457,7 +1497,7 @@ walk() {
               # git ignores an empty -C; cd_word_to would read it as $HOME.
               if [ -z "$sub" ]; then
                 :
-              elif [[ "$sub" == *'$'* ]] && ! expand_vars_to sub "$sub"; then
+              elif [[ "$sub" == *'$'* ]] && ! expand_vars_to sub "$sub" "${rw[j+1]:-}"; then
                 gunres="$sub" clex=0
               elif w="$sub" && git_c_target_to sub "$gdir" "$sub"; then
                 gdir="$sub" clex="$CD_LEXICAL"
@@ -1468,14 +1508,17 @@ walk() {
               fi
               j=$((j + 2)) ;;
             -c|--namespace|--config-env|--work-tree|--attr-source)
+              UP_PLAIN=0
               j=$((j + 2)) ;;
             --git-dir)
               git_dir_word_to gitdir "${rw[j+1]:-}" 1
+              UP_PLAIN=0
               j=$((j + 2)) ;;
             --git-dir=*)
               git_dir_word_to gitdir "${rw[j]#--git-dir=}" 0
+              UP_PLAIN=0
               j=$((j + 1)) ;;
-            -*) j=$((j + 1)) ;;
+            -*) UP_PLAIN=0; j=$((j + 1)) ;;
             *) break ;;
           esac
         done
@@ -1516,5 +1559,7 @@ walk() {
   gate_c "$cmd" "$start"
 }
 
+# gate_c sets COMMAND to each payload; own_upstream reads the whole command.
+TOP_COMMAND="$COMMAND"
 walk "$COMMAND" "$START_DIR" 0
 exit 0
