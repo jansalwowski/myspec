@@ -10,8 +10,9 @@
 #
 # Decision: the session's last `isolation` event in
 # .claude/state/sessions/<session_id>.jsonl (gitignored), written by
-# lib/set-isolation.sh and read through lib/session-event.sh. The block
-# messages print the lib's resolved path: the model runs them through Bash,
+# lib/set-isolation.sh and read through lib/session-event.sh. It has no age
+# limit: only a recorded worktree that is gone ends it, and the ask then
+# names the old decision (#416). The block messages print the lib's resolved path: the model runs them through Bash,
 # where CLAUDE_PLUGIN_ROOT is not set.
 #
 # Subagents cannot call AskUserQuestion. They share their parent's session_id
@@ -247,7 +248,17 @@ Use absolute paths and \`git -C <worktree>\` for all git operations. Full proced
 
 Blocked edit: $REL_PATH"
 
-pretool_deny "BLOCKED: no work-isolation decision recorded for this session.
+# A decision that no longer holds (its worktree is gone, session_isolation)
+# is named, so the ask does not claim nothing was recorded (#416).
+WHY="BLOCKED: no work-isolation decision recorded for this session."
+if [ -n "$ISO_GONE_MODE" ]; then
+  WHEN=$(date -u -d "@$ISO_GONE_AT" '+%Y-%m-%d %H:%M UTC' 2>/dev/null \
+    || date -u -r "$ISO_GONE_AT" '+%Y-%m-%d %H:%M UTC' 2>/dev/null \
+    || printf 'epoch %s' "$ISO_GONE_AT")
+  WHY="BLOCKED: this session chose $ISO_GONE_MODE at $WHEN, with the worktree $ISO_GONE_PATH, which no longer exists, so that decision no longer holds. Ask again."
+fi
+
+pretool_deny "$WHY
 
 Before editing $WHAT in the main checkout, ask where the work should happen. Call AskUserQuestion with ONE question:
 

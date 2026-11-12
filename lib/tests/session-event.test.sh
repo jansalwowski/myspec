@@ -6,8 +6,9 @@
 #
 # Covers: append and read, a truncated last line, concurrent appends, where
 # the file lives (main checkout, submodule's superproject, no git), the
-# arming and attribution queries, TTL expiry of the isolation decision and the
-# implement state, per-session isolation (a subagent shares its parent's id;
+# arming and attribution queries, TTL expiry of the implement state, an
+# isolation decision that holds until its worktree is gone (#416),
+# per-session isolation (a subagent shares its parent's id;
 # another session's decision is never read), and that the 2.x /tmp ledger and
 # markers are not imported (#266).
 #
@@ -200,12 +201,27 @@ eq "$(session_content_checked "$REPO" $S | cut -f2- | LC_ALL=C sort | tr '\t\n' 
 NOW=$(date +%s)
 raw() { printf '%s\n' "$2" >> "$FILE/$1.jsonl"; }  # an event with its own "at"
 
-raw iso1 "{\"t\":\"isolation\",\"mode\":\"worktree\",\"path\":\"/wt/p\",\"at\":$((NOW - 60))}"
+mkdir -p "$ROOT/wt-alive"
+raw iso1 "{\"t\":\"isolation\",\"mode\":\"worktree\",\"path\":\"$ROOT/wt-alive\",\"at\":$((NOW - 60))}"
 session_isolation "$REPO" iso1
-eq "$ISO_MODE|$ISO_PATH" "worktree|/wt/p" "isolation: the session's decision"
-raw iso2 "{\"t\":\"isolation\",\"mode\":\"develop\",\"at\":$((NOW - HOOK_DECISION_TTL - 5))}"
+eq "$ISO_MODE|$ISO_PATH" "worktree|$ROOT/wt-alive" "isolation: the session's decision"
+# #416: inside one session id a decision has no age limit. A session resumed
+# the next day keeps its answer; only a checkout it named that is gone ends it.
+raw iso2 "{\"t\":\"isolation\",\"mode\":\"develop\",\"at\":$((NOW - 3 * 86400))}"
 session_isolation "$REPO" iso2
-eq "$ISO_MODE" "" "isolation: a decision past the TTL decides nothing"
+eq "$ISO_MODE|$ISO_GONE_MODE" "develop|" "isolation: a days-old decision of the same session still decides (#416)"
+raw iso5 "{\"t\":\"isolation\",\"mode\":\"worktree\",\"path\":\"$ROOT/wt-alive\",\"at\":$((NOW - 3 * 86400))}"
+session_isolation "$REPO" iso5
+eq "$ISO_MODE|$ISO_PATH" "worktree|$ROOT/wt-alive" "isolation: an old worktree decision whose worktree exists still decides"
+raw iso6 "{\"t\":\"isolation\",\"mode\":\"worktree\",\"path\":\"$ROOT/wt-gone\",\"at\":$((NOW - 60))}"
+session_isolation "$REPO" iso6
+eq "$ISO_MODE|$ISO_PATH" "|" "isolation: a worktree decision whose worktree is gone decides nothing"
+eq "$ISO_GONE_MODE|$ISO_GONE_PATH|$ISO_GONE_AT" "worktree|$ROOT/wt-gone|$((NOW - 60))" "isolation: the decision that no longer holds is reported"
+session_isolation "$REPO" iso1
+eq "$ISO_GONE_MODE$ISO_GONE_PATH$ISO_GONE_AT" "" "isolation: a decision that holds reports nothing gone"
+raw iso7 "{\"t\":\"isolation\",\"mode\":\"develop\",\"path\":\"$ROOT/wt-gone\",\"at\":$((NOW - 60))}"
+session_isolation "$REPO" iso7
+eq "$ISO_MODE|$ISO_GONE_MODE" "develop|" "isolation: a missing path never ends a develop decision"
 raw iso3 "{\"t\":\"isolation\",\"mode\":\"develop\",\"at\":$((NOW - 60))}"
 raw iso3 "{\"t\":\"isolation\",\"mode\":\"\",\"path\":\"\",\"at\":$((NOW - 30))}"
 session_isolation "$REPO" iso3

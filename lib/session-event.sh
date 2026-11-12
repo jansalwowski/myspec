@@ -336,12 +336,16 @@ session_seen_many() {
 }
 
 # session_isolation <home> <session id> -> sets ISO_MODE (develop, worktree,
-# or empty) and ISO_PATH from the session's last isolation event, while it is
-# younger than HOOK_DECISION_TTL. A subagent reads its parent's, by the
-# shared session id.
+# or empty) and ISO_PATH from the session's last isolation event. A subagent
+# reads its parent's, by the shared session id. The decision has no age
+# limit: a session resumed the next day under the same id keeps its answer,
+# and no other session's answer is ever read (#146, #416). A worktree
+# decision ends when the worktree it names (an absolute path) no longer
+# exists; ISO_GONE_MODE, ISO_GONE_PATH and ISO_GONE_AT then describe it, so
+# a block can say what was chosen. A path never ends a develop decision.
 session_isolation() {
   local out mode path at
-  ISO_MODE="" ISO_PATH=""
+  ISO_MODE="" ISO_PATH="" ISO_GONE_MODE="" ISO_GONE_PATH="" ISO_GONE_AT=""
   # \037, not a tab: IFS whitespace collapses, so an empty mode would shift
   # the fields.
   out=$(session_query "$1" "$2" '
@@ -350,7 +354,12 @@ session_isolation() {
   [ -n "$out" ] || return 0
   IFS=$'\037' read -r mode path at <<< "$out"
   case "$at" in ''|*[!0-9]*) return 0 ;; esac
-  [ $(( $(date +%s) - at )) -lt "$HOOK_DECISION_TTL" ] || return 0
+  # Only an absolute path is checked: a relative one would be judged against
+  # whatever directory the reader runs in.
+  if [ "$mode" = worktree ] && [ "${path#/}" != "$path" ] && [ ! -d "$path" ]; then
+    ISO_GONE_MODE="$mode" ISO_GONE_PATH="$path" ISO_GONE_AT="$at"
+    return 0
+  fi
   ISO_MODE="$mode" ISO_PATH="$path"
 }
 
