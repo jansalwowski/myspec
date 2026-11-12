@@ -12,7 +12,3 @@ git_commit_all "chore: invoice-due-dates spec and tech-spec approved"
 git checkout -q -b feat/invoice-due-dates
 cp -R "$(dirname "${BASH_SOURCE[0]}")/workspace/." .
 git_commit_all "feat(invoice-due-dates): due-date rules and API fields"
-# The prompt says this directory exists. Without it the controller checks,
-# finds it missing, tries mkdir under .claude/ (denied) and stops (#442).
-# .gitignore covers .claude/state/, so no commit picks it up.
-mkdir -p .claude/state/implement/invoice-due-dates/probes/milestone-1/run-1
