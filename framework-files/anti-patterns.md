@@ -1,7 +1,7 @@
 ---
 title: Anti-Pattern Index
-purpose: Framework + project anti-patterns, read before any work (CLAUDE.md and index.md route here). Distinct from ${aiDir}/memory/index.md, the Layer 1 index of typed memories.
-updated: 2026-10-07
+purpose: Framework + project anti-patterns, read before any work (the CLAUDE.md and INDEX.md that the setup blueprints generate route here). Distinct from ${aiDir}/memory/index.md, the Layer 1 index of typed memories.
+updated: 2026-11-12
 ---
 
 # Anti-Pattern Index
