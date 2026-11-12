@@ -21,8 +21,9 @@
 
 HOOK_LIB=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-# A session's isolation decision, and its feature-implement run, stay valid
-# this long (8h; lib/session-event.sh).
+# A session's feature-implement run stays valid this long (8h;
+# session_implement_active in lib/session-event.sh). The isolation decision
+# has no age limit (#416).
 HOOK_DECISION_TTL=28800
 
 # jq expression for payload_parse: the payload's cwd candidates, one per line.

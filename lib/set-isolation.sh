@@ -51,16 +51,15 @@ if [ "${1:-}" = "--show" ]; then
   for f in "$STATE_DIR"/*.jsonl; do
     [ -f "$f" ] || continue
     ID=$(basename "$f" .jsonl)
+    # A reset, or a decision whose worktree is gone, decides nothing
+    # (session_isolation); age alone ends none (#416).
+    session_isolation "$REPO_ROOT" "$ID"
+    [ -n "$ISO_MODE" ] || continue
     # shellcheck disable=SC2016 # a jq program: $ev is a jq variable
     LAST=$(session_query "$REPO_ROOT" "$ID" '[$ev[] | select(.t == "isolation")] | last // empty
       | [(.mode // "" | tostring), (.at // 0 | tostring), (.note // "" | tostring), (.path // "" | tostring)] | join("\u001f")')
-    [ -n "$LAST" ] || continue
     IFS=$'\037' read -r MODE AT NOTE WT_PATH <<< "$LAST"
     case "$AT" in ''|*[!0-9]*) AT=0 ;; esac
-    # A reset, or a decision past HOOK_DECISION_TTL, decides nothing.
-    if [ -z "$MODE" ] || [ $(( NOW - AT )) -ge "$HOOK_DECISION_TTL" ]; then
-      continue
-    fi
     FOUND=1
     printf '%s  mode=%-8s age=%dmin  %s%s\n' \
       "${ID:0:8}" "$MODE" "$(( (NOW - AT) / 60 ))" "$NOTE" \

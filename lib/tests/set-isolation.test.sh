@@ -59,17 +59,19 @@ assert_eq() {  # assert_eq <want> <got> <desc>
   fi
 }
 
+# A recorded worktree path exists: one that is gone ends the decision (#416).
+mkdir -p "$ROOT/wt-a" "$ROOT/wt-b"
 expect 0 "first decision is recorded"            sess-a worktree
 assert_eq worktree "$(field sess-a mode)" "first decision mode"
-expect 0 "same answer, worktree path added later" sess-a worktree --worktree-path /wt/a
-assert_eq /wt/a "$(field sess-a path)" "path added by a re-run"
+expect 0 "same answer, worktree path added later" sess-a worktree --worktree-path "$ROOT/wt-a"
+assert_eq "$ROOT/wt-a" "$(field sess-a path)" "path added by a re-run"
 expect 0 "same answer re-run without the path"   sess-a worktree
-assert_eq /wt/a "$(field sess-a path)" "re-run without a path keeps the recorded one"
+assert_eq "$ROOT/wt-a" "$(field sess-a path)" "re-run without a path keeps the recorded one"
 
 expect 1 "another session flips the mode"        sess-a develop
 assert_eq worktree "$(field sess-a mode)" "a refused flip leaves the decision alone"
-expect 1 "another session repoints the worktree" sess-a worktree --worktree-path /wt/b
-assert_eq /wt/a "$(field sess-a path)" "a refused repoint leaves the path alone"
+expect 1 "another session repoints the worktree" sess-a worktree --worktree-path "$ROOT/wt-b"
+assert_eq "$ROOT/wt-a" "$(field sess-a path)" "a refused repoint leaves the path alone"
 
 OUT=$( (cd "$REPO" && "$LIB" sess-a develop) 2>&1 >/dev/null)
 case "$OUT" in
@@ -81,10 +83,13 @@ expect 0 "reset"                                 --reset sess-a
 expect 0 "after a reset the answer can change"   sess-a develop
 assert_eq develop "$(field sess-a mode)" "mode after reset"
 
-# An expired decision never blocks a new answer.
-printf '{"t":"isolation","mode":"worktree","path":"","at":%d}\n' "$(( $(date +%s) - 30000 ))" > "$STATE/sess-old.jsonl"
-expect 0 "expired decision is replaced"          sess-old develop
-assert_eq develop "$(field sess-old mode)" "mode after replacing an expired decision"
+# Age alone ends nothing inside one session id (#416): a day-old decision
+# still refuses a flip. One whose worktree is gone never blocks a new answer.
+printf '{"t":"isolation","mode":"worktree","path":"","at":%d}\n' "$(( $(date +%s) - 86400 ))" > "$STATE/sess-old.jsonl"
+expect 1 "a day-old decision still refuses a flip" sess-old develop
+printf '{"t":"isolation","mode":"worktree","path":"%s","at":%d}\n' "$ROOT/wt-gone" "$(( $(date +%s) - 60 ))" > "$STATE/sess-gone.jsonl"
+expect 0 "a decision whose worktree is gone is replaced" sess-gone develop
+assert_eq develop "$(field sess-gone mode)" "mode after replacing a decision whose worktree is gone"
 
 # Other sessions' decisions are untouched by a new id.
 expect 0 "a new id records its own decision"     sess-b worktree
@@ -103,6 +108,16 @@ SHOW=$( (cd "$REPO" && "$LIB" --show) 2>&1)
 case "$SHOW" in
   *"sess-a"*"mode=develop"*) PASS=$((PASS + 1)) ;;
   *) FAIL=$((FAIL + 1)); printf 'FAIL  --show lists a live decision: %s\n' "$SHOW" >&2 ;;
+esac
+case "$SHOW" in
+  *"sess-old"*"mode=worktree"*) PASS=$((PASS + 1)) ;;
+  *) FAIL=$((FAIL + 1)); printf 'FAIL  --show lists a day-old decision that still holds: %s\n' "$SHOW" >&2 ;;
+esac
+printf '{"t":"isolation","mode":"worktree","path":"%s","at":%d}\n' "$ROOT/wt-gone" "$(( $(date +%s) - 60 ))" > "$STATE/zzgone-2.jsonl"
+SHOW=$( (cd "$REPO" && "$LIB" --show) 2>&1)
+case "$SHOW" in
+  *zzgone-2*) FAIL=$((FAIL + 1)); printf 'FAIL  --show leaves out a decision whose worktree is gone: %s\n' "$SHOW" >&2 ;;
+  *) PASS=$((PASS + 1)) ;;
 esac
 case "$SHOW" in
   *sess-b*) FAIL=$((FAIL + 1)); printf 'FAIL  --show leaves out a reset decision: %s\n' "$SHOW" >&2 ;;
