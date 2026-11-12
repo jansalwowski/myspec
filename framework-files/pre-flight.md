@@ -2,7 +2,7 @@
 title: "Global Pre-flight Checklist"
 purpose: "Preventive checks before starting any work"
 feature: "global"
-updated: 2026-03-24
+updated: 2026-11-12
 ---
 
 # Pre-flight Checklist (Global)
@@ -22,8 +22,6 @@ Run these checks before starting work on any feature or task.
   - If unrelated sessions are dangling: 1–6h stale → report them and route to `/myspec:session-clean`; > 6h → bootstrap sweeps them as abandoned (age policy: Session Lifecycle table in `.claude/rules/memory-system.md`)
   - Never touch another agent's fresh session (multi-agent workflows keep several active files)
   → **Verify**: No conflicting active session
-- [ ] Read feature-specific `${aiDir}/features/{feature}/pre-flight.md` (if exists)
-  → **Verify**: Completed feature-specific checks
 
 ## Before Implementation
 
