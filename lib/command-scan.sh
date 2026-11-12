@@ -36,7 +36,8 @@
 # control bytes and prefixes the span with \035. Both modes therefore split
 # into the same segments and the same words, so word N of a segment in one
 # stream is word N in the other; decode_word turns an encoded word back into
-# its text.
+# its text. A `$` inside a single-quoted span is encoded as \034, so a
+# reader of the raw word can tell it from a `$` the shell expands.
 #
 # Past MAXLVL nested quotes and substitutions the scan stops and prints the
 # command with its quote characters blanked, every word exposed: it fails
@@ -82,6 +83,8 @@ sanitize_command() {
         c = substr(buf, i, 1)
         if (c == "'"'"'") { i++; break }
         if (esc && c == "\\") { addspan(c); i++; c = substr(buf, i, 1) }
+        # A $ the shell keeps literal: \034, which decode_word turns back.
+        if (c == "$" && keep != "") { span = span "\034"; i++; continue }
         addspan(c)
         i++
       }
@@ -331,6 +334,7 @@ decode_word_to() {
   _dw_w=${_dw_w//$'\027'/'}'}
   _dw_w=${_dw_w//$'\030'/'`'}
   _dw_w=${_dw_w//$'\035'/}
+  _dw_w=${_dw_w//$'\034'/'$'}
   printf -v "$1" '%s' "$_dw_w"
 }
 

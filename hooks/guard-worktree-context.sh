@@ -17,6 +17,11 @@
 #      tree. A name the hook cannot resolve (quoted, `$VAR`, `@{-1}`) blocks.
 #      Blocking those deletes unconditionally only taught agents to reach for
 #      the bypass (issue #126).
+#      A session whose recorded decision is develop, on a branch that is not
+#      protected (protected_checkout), may `git pull` and `git merge` the
+#      branch's own upstream (own_upstream, #417): the branch stays checked
+#      out, and the user chose this checkout. Outside that case the block
+#      names the `!` route, a command the user runs themselves.
 #   B. When the session has chosen WORKTREE isolation, tree-specific commands
 #      are blocked as well: builds, installs, e2e runs, `lint:fix`,
 #      `docker compose exec`, `git push` and `git worktree prune` (not its
@@ -61,7 +66,10 @@
 # add` creates counts as a linked worktree; one the hook cannot resolve (a
 # variable, a substitution, a missing path nothing before it creates) leaves
 # the directory unchanged. A `git -C` into a created directory is followed
-# under stricter rules (C_MADE).
+# under stricter rules (C_MADE). A path in a variable that a plain NAME=value
+# statement earlier in the command assigns is followed too (#445, VAR_NAMES);
+# a branch mutation whose path stays unresolved is blocked with a message
+# that asks for a literal path.
 #
 # Escape hatches:
 #   MYSPEC_ALLOW_BRANCH_OPS=1    gate A. Deliberately NOT mentioned in the block
@@ -276,7 +284,7 @@ classify() {
 classify_at() {
   local abs
   CLS_ROOT=""
-  if [ "$2" = "$GD_UNKNOWN" ]; then
+  if [ "${2:0:1}" = "$GD_UNKNOWN" ]; then
     # A git dir the hook cannot read (#407) may be any repository's: judge
     # it as the main checkout of the directory's repository, else of the
     # command's starting one.
@@ -327,11 +335,194 @@ GD_ALLEXPORT=0
 git_dir_word_to() {
   local _gd_w
   decode_word_to _gd_w "$2"
+  # A variable assigned earlier in the command (#445). One that stays
+  # unresolved is carried after GD_UNKNOWN for the block message.
+  if [[ "$_gd_w" == *'$'* ]] && ! expand_vars_to _gd_w "$_gd_w" "$2"; then
+    printf -v "$1" '%s' "$GD_UNKNOWN$_gd_w"
+    return 0
+  fi
   case "$_gd_w" in
     *'$'*|*'`'*|*[\*\?\[]*) _gd_w="$GD_UNKNOWN" ;;
     \~|\~/*) [ "$3" = 0 ] || cd_word_to _gd_w / "$_gd_w" || _gd_w="$GD_UNKNOWN" ;;
   esac
   printf -v "$1" '%s' "$_gd_w"
+}
+
+# --- variables assigned earlier in the command (#445) --------------------------
+
+# `W=<worktree>; git -C $W pull` is how agents write multi-step commands, and
+# judging $W as unreadable sent a worktree session to the worktree procedure
+# it was already following. A plain NAME=value statement (or `export`,
+# `declare`, `local`, ... NAME=value) is recorded when its value is literal or
+# built only from names already recorded, and substituted into the -C,
+# --git-dir, GIT_DIR= and cd words that follow. A prefix assignment
+# (`W=x git -C $W`) is not recorded: the shell expands $W before it applies.
+# Only an assignment that runs in this shell whenever the command does is
+# recorded (walk's vun). One in `( )`, `{ }`, a pipeline, a background job,
+# an if/loop/case body or a payload, after `||`, or after `&&` behind another
+# command taints its name instead, and so do an empty value and a `declare`
+# with options. A name assigned twice to different values, or written any
+# other way (`for W`, `read W`, `W+=x`, `W[0]=x`: a word that starts with the
+# name, var_words), or by `source`, is tainted for the rest of the command.
+# A `$` in a single-quoted span (\034 in the raw word) is never substituted.
+# An unresolved path still blocks, with a message that says so.
+VAR_NAMES=()
+VAR_VALS=()
+VAR_TAINT=$'\n'
+
+# var_get_to <var> <name> -> the recorded value; fails for an unknown name.
+var_get_to() {
+  local _vg_i
+  case "$VAR_TAINT" in *$'\n'"$2"$'\n'*) return 1 ;; esac
+  for ((_vg_i = 0; _vg_i < ${#VAR_NAMES[@]}; _vg_i++)); do
+    if [ "${VAR_NAMES[_vg_i]}" = "$2" ]; then
+      printf -v "$1" '%s' "${VAR_VALS[_vg_i]}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# var_taint <name> -> the name stays unknown for the rest of the command.
+var_taint() {
+  case "$VAR_TAINT" in *$'\n'"$1"$'\n'*) ;; *) VAR_TAINT="$VAR_TAINT$1"$'\n' ;; esac
+}
+
+# var_assign <name> <encoded value> -> records NAME=value, or taints NAME.
+var_assign() {
+  local val old
+  decode_word_to val "$2"
+  if [[ "$val" == *'$'* ]] && ! expand_vars_to val "$val" "$2"; then var_taint "$1"; return 0; fi
+  # `git -C ""` and `cd ""` stay where they are; cd_word_to reads "" as $HOME.
+  case "$val" in ''|*'`'*) var_taint "$1"; return 0 ;; esac
+  # The shell expands a leading ~ in an assignment.
+  case "$val" in \~|\~/*) cd_word_to val / "$val" || { var_taint "$1"; return 0; } ;; esac
+  if var_get_to old "$1"; then
+    [ "$old" = "$val" ] || var_taint "$1"
+    return 0
+  fi
+  case "$VAR_TAINT" in *$'\n'"$1"$'\n'*) return 0 ;; esac
+  VAR_NAMES+=("$1")
+  VAR_VALS+=("$val")
+}
+
+# var_words <encoded word>... -> taints each recorded name that one of the
+# words starts with (`W`, `W+=x`, `W[0]=x`, `W<f`): a command that may write
+# the variable some other way. `source` and `.` taint every name.
+var_words() {
+  local w n
+  [ "${#VAR_NAMES[@]}" -gt 0 ] || return 0
+  case "${1##*/}" in source|.) for n in "${VAR_NAMES[@]}"; do var_taint "$n"; done; return 0 ;; esac
+  for w in "$@"; do
+    decode_word_to w "$w"
+    for n in "${VAR_NAMES[@]}"; do
+      case "$w" in "$n"|"$n"[!A-Za-z0-9_]*) var_taint "$n" ;; esac
+    done
+  done
+}
+
+# expand_vars_to <var> <decoded word> <raw word> -> the word with each $NAME
+# replaced by its recorded value. Fails, setting <var> to the word unchanged,
+# when any `$` is not a recorded name or sits in a single-quoted span.
+expand_vars_to() {
+  local _ev_in="$2" _ev_out="" _ev_n _ev_v
+  printf -v "$1" '%s' "$2"
+  case "$3" in *$'\034'*) return 1 ;; esac
+  while [[ "$_ev_in" == *'$'* ]]; do
+    _ev_out="$_ev_out${_ev_in%%\$*}"
+    _ev_in="${_ev_in#*\$}"
+    [[ "$_ev_in" =~ ^([A-Za-z_][A-Za-z0-9_]*)(.*)$ ]] || return 1
+    _ev_n="${BASH_REMATCH[1]}" _ev_in="${BASH_REMATCH[2]}"
+    var_get_to _ev_v "$_ev_n" || return 1
+    _ev_out="$_ev_out$_ev_v"
+  done
+  printf -v "$1" '%s' "$_ev_out$_ev_in"
+}
+
+# braces_to <var> <command> -> the command with `${NAME}` written `$NAME`
+# where no name character follows (the same expansion), and the braces of
+# `@{u}` / `@{upstream}` encoded as a quoted span's are, so the scanner does
+# not split the word at them as at a group. The scan reads the result; gate
+# C reads the command as written.
+braces_to() {
+  # One sed pass: a bash loop over the whole command per match cost seconds
+  # on a long heredoc. The next character is consumed with each match, so
+  # `${A}${B}` keeps its second braces: unresolved, never wrong.
+  case "$2" in
+    *[\$@]\{*) ;;
+    *) printf -v "$1" '%s' "$2"; return 0 ;;
+  esac
+  printf -v "$1" '%s' "$(printf '%s\n' "$2" | sed -E \
+    -e 's/\$\{([A-Za-z_][A-Za-z0-9_]*)\}([^A-Za-z0-9_]|$)/$\1\2/g' \
+    -e 's/@\{([uU]|[uU][pP][sS][tT][rR][eE][aA][mM])\}/@'$'\026''\1'$'\027''/g')"
+}
+
+# --- gate A: pull or merge of HEAD's own upstream (#417) -----------------------
+
+# own_upstream <normalized segment> <main root> -> 0 for a `git pull` or
+# `git merge` that only brings HEAD's own upstream into HEAD: `git pull`
+# (bare, `<remote>` or `<remote> <branch>` of the upstream) and
+# `git merge <ref>` where <ref> is `@{u}`, `@{upstream}`, the upstream's name,
+# or origin/<HEAD branch>. Allowed flags: -q, -v, --ff-only and --no-edit
+# (merge: -q, --ff-only, --no-edit). Anything else (`--rebase`, `--no-ff`, a
+# second ref, a quoted word) is not this case. It keeps HEAD on its branch;
+# a develop session may run it (check_segment).
+# Nor is a git with a global option other than -C or a git dir (UP_PLAIN: `-c
+# pull.rebase=true`, `--work-tree`), a pull that the repository configures to
+# rebase, or a command that may change, before the pull or merge runs, which
+# ref or repository it reads (GIT_CONFIG_*, `git config`, `git branch -u`,
+# `git remote set-url`, a `git tag` that shadows the ref).
+UP_PLAIN=1
+own_upstream() {
+  local verb head remote merge up full w
+  local -a words refs=()
+  [ "$UP_PLAIN" = 1 ] || return 1
+  case "$TOP_COMMAND" in *GIT_CONFIG*|*--config-env*|*GIT_WORK_TREE*|*.git/config*) return 1 ;; esac
+  w=$(printf '%s' "$TOP_COMMAND" | sanitize_command)
+  [[ ! "$w" =~ (^|[[:space:]])(config|remote|branch|tag|update-ref|symbolic-ref)([[:space:]]|$) ]] || return 1
+  read -r -a words <<< "$1"
+  verb="${words[1]:-}"
+  case "$verb" in pull|merge) ;; *) return 1 ;; esac
+  for w in ${words[@]+"${words[@]:2}"}; do
+    decode_word_to w "$w"
+    case "$verb:$w" in
+      pull:-q|pull:--quiet|pull:-v|pull:--verbose|pull:--ff-only|pull:--no-edit) ;;
+      merge:-q|merge:--quiet|merge:--ff-only|merge:--no-edit) ;;
+      *:-*) return 1 ;;
+      *) refs+=("$w") ;;
+    esac
+  done
+  head=$(git -C "$2" symbolic-ref --quiet --short HEAD 2>/dev/null) || return 1
+  remote=$(git -C "$2" config --get "branch.$head.remote" 2>/dev/null) || remote=""
+  merge=$(git -C "$2" config --get "branch.$head.merge" 2>/dev/null) || merge=""
+  merge="${merge#refs/heads/}"
+  if [ "$verb" = pull ]; then
+    [ -n "$remote" ] && [ -n "$merge" ] || return 1
+    w=$(git -C "$2" config --get "branch.$head.rebase" 2>/dev/null) \
+      || w=$(git -C "$2" config --get pull.rebase 2>/dev/null) || w=""
+    case "$w" in ''|false|0|no|off) ;; *) return 1 ;; esac
+    case "${#refs[@]}" in
+      0) return 0 ;;
+      1) [ "${refs[0]}" = "$remote" ] ;;
+      2) [ "${refs[0]}" = "$remote" ] && [ "${refs[1]}" = "$merge" ] ;;
+      *) return 1 ;;
+    esac
+    return
+  fi
+  [ "${#refs[@]}" = 1 ] || return 1
+  # The ref as git resolves it: a tag or branch that shadows the name, or a
+  # revision suffix (`~1`, `@{1}`), does not resolve to the upstream.
+  case "${refs[0]}" in
+    @\{[uU]\}|@\{[uU][pP][sS][tT][rR][eE][aA][mM]\}) ;;
+    *[~^:@]*) return 1 ;;
+  esac
+  full=$(git -C "$2" rev-parse --symbolic-full-name "${refs[0]}" 2>/dev/null) || return 1
+  # origin/<HEAD branch> only for a branch with no upstream.
+  if up=$(git -C "$2" rev-parse --symbolic-full-name '@{u}' 2>/dev/null); then
+    [ -n "$full" ] && [ "$full" = "$up" ]
+  else
+    [ "$full" = "refs/remotes/origin/$head" ]
+  fi
 }
 
 # --- gate A: `git branch` delete / force ---------------------------------------
@@ -734,9 +925,40 @@ git_c_target_to() {
   return "$_gc_rc"
 }
 
-# check_segment <normalized segment> <dir> <git-dir> — applies both gates.
+# branch_op_verdict <normalized segment> <main root> <unresolved word> -> the
+# gate A block reason for a branch mutation on the main checkout, or nothing.
+branch_op_verdict() {
+  local segment="$1" root="$2" why shown
+  # Printed as typed: the scan encodes the braces of @{u} (braces_to).
+  decode_word_to shown "${segment:0:200}"
+  if [ -z "$3" ] && own_upstream "$segment" "$root"; then
+    session_mode "$root"
+    if [ "$ISO_MODE" = develop ]; then
+      protected_checkout "$root" || return 0
+      why="it runs on $PROTECTED_HEAD, which is protected"
+    else
+      why="this session has not chosen develop isolation for this checkout"
+    fi
+    # shellcheck disable=SC2016 # literal backticks: the message quotes a command
+    printf 'BLOCKED: this pull or merge only brings the own upstream of the current branch into it, but %s. If the main checkout really should be updated here, ask the user to run the command themselves with the `!` prefix (`! %s`). Otherwise do the work in a linked worktree (procedure: %s). Blocked: %s' \
+      "$why" "$shown" "$(procedure_doc "$root")" "$shown"
+    return 0
+  fi
+  if [ -n "$3" ]; then
+    printf 'BLOCKED: the guard could not resolve the path %s, so it judges this branch-mutating git command as run on the main checkout. A variable resolves only when the same command assigns it earlier, once, as NAME=value with a literal value or one built from such variables, and uses it outside single quotes. Otherwise use a literal path for git -C, --git-dir or cd. Blocked: %s' \
+      "$3" "$shown"
+    return 0
+  fi
+  # shellcheck disable=SC2016 # literal backticks: the message quotes a command
+  printf 'BLOCKED: Branch-mutating git commands are not allowed on the main checkout. Do the work in a linked worktree (procedure: %s) or pass isolation: "worktree" in your Agent tool call. If you need to restore a file, use `git restore <file>` not `git checkout`. Blocked: %s' \
+    "$(procedure_doc "$root")" "$shown"
+}
+
+# check_segment <normalized segment> <dir> <git-dir> [<unresolved word>] —
+# applies both gates. <unresolved word> is the variable path the segment's
+# directory could not be resolved from (#445), if any.
 check_segment() {
-  local segment="$1" dir="$2" gitdir="$3" verdict
+  local segment="$1" dir="$2" gitdir="$3" unres="${4:-}" verdict
 
   note_segment "$segment" "$dir"
   if [ "$WT_GLUE" = 1 ]; then
@@ -750,7 +972,8 @@ check_segment() {
         && ! grep -qE -- "$BRANCH_CARVE_OUT" <<< "$segment"; then
       classify "$dir" "$gitdir"
       if [ -n "$CLS_ROOT" ]; then
-        pretool_deny "BLOCKED: Branch-mutating git commands are not allowed on the main checkout. Do the work in a linked worktree (procedure: $(procedure_doc "$CLS_ROOT")) or pass isolation: \"worktree\" in your Agent tool call. If you need to restore a file, use \`git restore <file>\` not \`git checkout\`. Blocked: ${segment:0:200}"
+        verdict=$(branch_op_verdict "$segment" "$CLS_ROOT" "$unres")
+        [ -z "$verdict" ] || pretool_deny "$verdict"
       fi
     fi
 
@@ -970,24 +1193,26 @@ c_note_made() {
 # walk <command> <start dir> <depth> — checks every segment of <command>.
 # Blocks (and exits) on the first offending segment; returns when clean.
 walk() {
-  local cmd="$1" dir="$2" depth="$3" start="$2"
-  local -a seps segs_s segs_r sw rw stack helds
+  local cmd="$1" dir="$2" depth="$3" start="$2" unres="${4:-}" scan
+  local -a seps segs_s segs_r sw rw stack helds ustack assigns
   local line i k n j c w sub gdir gitdir norm payload held="" chain="" link esc=0
-  local made clex envgd inh gd_export
+  local made clex envgd inh gd_export gunres vun blk=0 kw=0 prevasg=0
   local saved_wt="$REMOVED_WT"
+
+  braces_to scan "$cmd"
 
   k=0
   while IFS= read -r line; do
     seps[k]="${line%%$'\t'*}"
     segs_s[k]="${line#*$'\t'}"
     k=$((k + 1))
-  done < <(printf '%s' "$cmd" | sanitize_command | split_segments)
+  done < <(printf '%s' "$scan" | sanitize_command | split_segments)
   n=$k
   k=0
   while IFS= read -r line; do
     segs_r[k]="${line#*$'\t'}"
     k=$((k + 1))
-  done < <(printf '%s' "$cmd" | sanitize_command keep | split_segments)
+  done < <(printf '%s' "$scan" | sanitize_command keep | split_segments)
   # A backslash in a removal's text: the scanner blanked it, so the path it
   # reads is not the one git gets (note_segment).
   # shellcheck disable=SC1003 # an ERE: the backslashes are literal
@@ -1020,8 +1245,11 @@ walk() {
   done
 
   # A payload (`bash -c`) sees what the command around it creates.
-  if [ "$depth" = 0 ]; then CD_MADE=() CD_NEW_WT=() C_MADE=() C_NEW_WT=() GONE=() READDED=() GIT_DIR_INH="" GD_ALLEXPORT=0; fi
-  stack=() helds=()
+  if [ "$depth" = 0 ]; then
+    CD_MADE=() CD_NEW_WT=() C_MADE=() C_NEW_WT=() GONE=() READDED=() GIT_DIR_INH="" GD_ALLEXPORT=0
+    VAR_NAMES=() VAR_VALS=() VAR_TAINT=$'\n'
+  fi
+  stack=() helds=() ustack=()
   for ((k = 0; k < n; k++)); do
     link="${seps[k]}"
     case "$link" in
@@ -1029,13 +1257,18 @@ walk() {
       *) chain="$chain$link" ;;
     esac
     case "${seps[k]}" in
-      '(') stack+=("$dir") helds+=("$held") ;;
+      '(') stack+=("$dir") helds+=("$held") ustack+=("$unres") ;;
       ')')
         if [ "${#stack[@]}" -gt 0 ]; then
           dir="${stack[${#stack[@]}-1]}" held="${helds[${#helds[@]}-1]}"
-          unset "stack[${#stack[@]}-1]" "helds[${#helds[@]}-1]"
+          unres="${ustack[${#ustack[@]}-1]}"
+          unset "stack[${#stack[@]}-1]" "helds[${#helds[@]}-1]" "ustack[${#ustack[@]}-1]"
         fi
         ;;
+    esac
+    case "${seps[k]}" in
+      '('|'{') blk=$((blk + 1)) ;;
+      ')'|'}') [ "$blk" = 0 ] || blk=$((blk - 1)) ;;
     esac
     # held: the directory before a cd into a created one, until the `&&`
     # chain ends (cd_link).
@@ -1049,6 +1282,24 @@ walk() {
     read -r -a sw <<< "${segs_s[k]}" || true
     read -r -a rw <<< "${segs_r[k]:-}" || true
     [ "${#sw[@]}" -gt 0 ] || continue
+    # vun: 1 when an assignment here runs in this shell whenever the command
+    # does (#445): at the top level of the command, not in a group, a
+    # compound command, a pipeline or a background job, and linked only by
+    # `;`, a newline or `&&` behind another such assignment.
+    case "${sw[0]}" in
+      'if'|'while'|'until'|'for'|'case'|'select') kw=$((kw + 1)) ;;
+      'fi'|'done'|'esac') [ "$kw" = 0 ] || kw=$((kw - 1)) ;;
+    esac
+    vun=0
+    if [ "$depth" = 0 ] && [ "$blk" = 0 ] && [ "$kw" = 0 ] && [ "$link" != r ]; then
+      case "$chain" in
+        '&&') vun="$prevasg" ;;
+        *[!\;n^]*|'') ;;
+        *) vun=1 ;;
+      esac
+      case "${seps[k+1]:-}" in '|'|'&') vun=0 ;; esac
+    fi
+    prevasg=0
     # A worktree removal carries over only through an unbroken && link; ^ is
     # the start of a payload, which runs where its bash -c / eval segment does.
     WT_GLUE=0 WT_QUOTED=0
@@ -1070,6 +1321,7 @@ walk() {
     # Launchers and prefixes that do not change which command runs.
     j=0
     envgd=""
+    assigns=()
     while [ "$j" -lt "${#sw[@]}" ]; do
       w="${sw[j]}"
       case "$w" in
@@ -1106,6 +1358,7 @@ walk() {
         *)
           if [[ "$w" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then
             case "$w" in GIT_DIR=?*) git_dir_word_to envgd "${rw[j]#GIT_DIR=}" 1 ;; esac
+            assigns+=("$j")
             j=$((j + 1))
           else
             break
@@ -1115,6 +1368,16 @@ walk() {
     if [ "$j" -ge "${#sw[@]}" ]; then
       # A bare assignment under `set -a` is exported.
       [ "$GD_ALLEXPORT" = 0 ] || [ -z "$envgd" ] || GIT_DIR_INH="$envgd"
+      # A statement of assignments sets shell variables (#445). A value cut
+      # off by a substitution (`W=`pwd``) is not the whole value.
+      for i in ${assigns[@]+"${assigns[@]}"}; do
+        w="${sw[i]%%=*}"
+        if [ "$i" = $((${#sw[@]} - 1)) ] && [ $((k + 1)) -lt "$n" ]; then
+          case "${seps[k+1]}" in '`'|'(') var_taint "$w"; continue ;; esac
+        fi
+        if [ "$vun" = 1 ]; then var_assign "$w" "${rw[i]#*=}"; else var_taint "$w"; fi
+      done
+      prevasg="$vun"
       continue
     fi
 
@@ -1138,6 +1401,23 @@ walk() {
           case "${sw[i]}" in --*) ;; -*x*) gd_export=1 ;; esac
         done ;;
     esac
+    case "$c" in
+      export|declare|typeset|local|readonly)
+        # An option may change what the value means (`-n`, `-i`, `-a`).
+        for ((i = j + 1; i < ${#sw[@]}; i++)); do
+          case "${sw[i]}" in [-+]*) vun=0 ;; esac
+        done
+        for ((i = j + 1; i < ${#sw[@]}; i++)); do
+          if [[ ! "${sw[i]}" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]]; then
+            var_words "${rw[i]}"
+          elif [ "$vun" = 1 ]; then
+            var_assign "${sw[i]%%=*}" "${rw[i]#*=}"
+          else
+            var_taint "${sw[i]%%=*}"
+          fi
+        done ;;
+      *) var_words "${rw[@]:j}" ;;
+    esac
     if [ "$gd_export" = 1 ]; then
       for ((i = j + 1; i < ${#sw[@]}; i++)); do
         case "${sw[i]}" in
@@ -1159,10 +1439,16 @@ walk() {
         j=$((j + 1))
         while [ "$j" -lt "${#sw[@]}" ] && [[ "${sw[j]}" == -?* ]]; do j=$((j + 1)); done
         decode_word_to sub "${rw[j]:-}"
+        # A variable assigned earlier (#445); one left unresolved is kept
+        # for the block message until a later cd resolves.
+        if [[ "$sub" == *'$'* ]] && ! expand_vars_to sub "$sub" "${rw[j]:-}"; then
+          unres="$sub"
+          continue
+        fi
         # `pushd +N` rotates the stack: no literal directory.
         if [[ "$sub" != +* ]] && cd_target_to sub "$dir" "$sub"; then
           [ "$CD_LEXICAL" = 0 ] || [ -n "$held" ] || held="$dir"
-          dir="$sub"
+          dir="$sub" unres=""
         fi
         continue ;;
       bash|sh|zsh|dash|ksh)
@@ -1179,7 +1465,7 @@ walk() {
           # A child shell: what it exports stays in it.
           inh="$GIT_DIR_INH"
           GIT_DIR_INH="${envgd:-$GIT_DIR_INH}"
-          walk "$(decode_word "${rw[j]}")" "$dir" $((depth + 1))
+          walk "$(decode_word "${rw[j]}")" "$dir" $((depth + 1)) "$unres"
           GIT_DIR_INH="$inh"
         else
           REMOVED_WT=$'\n'; c_forget   # a script, or a payload not scanned (#384)
@@ -1189,7 +1475,7 @@ walk() {
         if [ "$depth" -lt "$MAX_DEPTH" ]; then
           inh="$GIT_DIR_INH"
           GIT_DIR_INH="${envgd:-$GIT_DIR_INH}"
-          walk "$(decode_word "$(join_words $((j + 1)) "${rw[@]}")")" "$dir" $((depth + 1))
+          walk "$(decode_word "$(join_words $((j + 1)) "${rw[@]}")")" "$dir" $((depth + 1)) "$unres"
           # Only what the payload exports outlives it; the prefix does not.
           [ -z "$envgd" ] || [ "$GIT_DIR_INH" != "$envgd" ] || GIT_DIR_INH="$inh"
         else
@@ -1200,6 +1486,9 @@ walk() {
         gdir="$dir"
         gitdir="${envgd:-$GIT_DIR_INH}"
         clex=0   # 1 while the last -C entered a created directory
+        gunres="$unres"
+        UP_PLAIN=1
+        [ -z "$gitdir" ] || UP_PLAIN=0
         j=$((j + 1))
         while [ "$j" -lt "${#sw[@]}" ]; do
           case "${sw[j]}" in
@@ -1208,21 +1497,28 @@ walk() {
               # git ignores an empty -C; cd_word_to would read it as $HOME.
               if [ -z "$sub" ]; then
                 :
-              elif git_c_target_to sub "$gdir" "$sub"; then
+              elif [[ "$sub" == *'$'* ]] && ! expand_vars_to sub "$sub" "${rw[j+1]:-}"; then
+                gunres="$sub" clex=0
+              elif w="$sub" && git_c_target_to sub "$gdir" "$sub"; then
                 gdir="$sub" clex="$CD_LEXICAL"
+                # An absolute -C does not depend on an unresolved cd before it.
+                case "$w" in /*|\~|\~/*) gunres="" ;; esac
               else
                 clex=0
               fi
               j=$((j + 2)) ;;
             -c|--namespace|--config-env|--work-tree|--attr-source)
+              UP_PLAIN=0
               j=$((j + 2)) ;;
             --git-dir)
               git_dir_word_to gitdir "${rw[j+1]:-}" 1
+              UP_PLAIN=0
               j=$((j + 2)) ;;
             --git-dir=*)
               git_dir_word_to gitdir "${rw[j]#--git-dir=}" 0
+              UP_PLAIN=0
               j=$((j + 1)) ;;
-            -*) j=$((j + 1)) ;;
+            -*) UP_PLAIN=0; j=$((j + 1)) ;;
             *) break ;;
           esac
         done
@@ -1241,16 +1537,18 @@ walk() {
             note_removal "$gdir" git "${rw[@]:j}"
           fi
         fi
-        check_segment "$norm" "$gdir" "$gitdir"
+        # A git dir left unresolved by a variable (git_dir_word_to).
+        [ "${gitdir:0:1}" != "$GD_UNKNOWN" ] || [ -z "${gitdir:1}" ] || gunres="${gitdir:1}"
+        check_segment "$norm" "$gdir" "$gitdir" "$gunres"
         ;;
       make|mvn|mvnw|gradle|gradlew)
         case "$c" in mvnw) c=mvn ;; gradlew) c=gradle ;; esac
         build_dir "$dir" "$c" "${sw[@]:j+1}" -- "${rw[@]:j+1}"
         [ "$BUILD_DRY" = 0 ] || continue
-        check_segment "$(join_words "$j" "${sw[@]}")" "$BUILD_DIR" ""
+        check_segment "$(join_words "$j" "${sw[@]}")" "$BUILD_DIR" "" "$unres"
         ;;
       *)
-        check_segment "$(join_words "$j" "${sw[@]}")" "$dir" ""
+        check_segment "$(join_words "$j" "${sw[@]}")" "$dir" "" "$unres"
         ;;
     esac
   done
@@ -1261,5 +1559,7 @@ walk() {
   gate_c "$cmd" "$start"
 }
 
+# gate_c sets COMMAND to each payload; own_upstream reads the whole command.
+TOP_COMMAND="$COMMAND"
 walk "$COMMAND" "$START_DIR" 0
 exit 0

@@ -844,5 +844,168 @@ check allow "#407 set -e is not allexport"               \
 check block "#408 unlink counts as a removal"            \
   "unlink $WT/.git && cd $WT && git switch -c rv10"
 
+# --- #445: a path held in a variable assigned earlier in the command ---------
+# A plain NAME=value statement before the use is substituted into -C,
+# --git-dir, GIT_DIR= and cd targets; anything else stays unresolvable.
+check allow "#445 git -C \$W, W assigned before"         \
+  "W1=$WT; git -C \$W1 pull -q --ff-only"
+check allow "#445 cd \$R/<rel>, R assigned before"       \
+  "R=$REPO; cd \$R/.claude/worktrees/wt-a && git pull -q --ff-only"
+check allow "#445 built from a tracked variable, quoted" \
+  "R=$REPO; W=\$R/.claude/worktrees/wt-a; git -C \"\$W\" pull"
+check allow "#445 \${W} braces"                          \
+  "W=$WT; cd \${W} && git switch -c v1"
+check allow "#445 linked by &&"                          \
+  "W=$WT && cd \$W && git switch -c v2"
+check allow "#445 export W="                             \
+  "export W=$WT; git -C \$W pull"
+check allow "#445 GIT_DIR= from a variable"              \
+  "G=$REPO/.git/worktrees/wt-a; GIT_DIR=\$G git -C $WT switch -c v3"
+check allow "#445 --git-dir from a variable"             \
+  "G=$REPO/.git/worktrees/wt-a; git --git-dir=\$G -C $WT switch -c v4"
+check block "#445 the variable names the main checkout"  \
+  "W=$REPO; git -C \$W pull"
+check block "#445 cd into the main checkout by variable" \
+  "R=$REPO; cd \$R && git pull"
+check block "#445 a prefix assignment does not reach its own words" \
+  "W=$WT git -C \$W pull"
+check block "#445 assigned twice"                        \
+  "W=$WT; W=$REPO; git -C \$W pull"
+check block "#445 also set by for"                       \
+  "W=$WT; for W in $REPO; do git -C \$W pull; done"
+check block "#445 a substituted value"                   \
+  "W=\$(pwd); git -C \$W pull"
+check block "#445 single-quoted, not expanded"           \
+  "W=$WT; cd '\$W'; git pull"
+check block "#445 never assigned"                        \
+  "git -C \$NOPE pull"
+# An assignment the shell may not run, or runs in another shell, is not
+# recorded: with W empty, git -C "" and cd "" stay in the main checkout.
+check block "#445 assigned in a subshell"                \
+  "(W=$WT); git -C \"\$W\" switch -c v9"
+check block "#445 assigned after a failing &&"           \
+  "false && W=$WT; git -C \"\$W\" switch -c v9"
+check block "#445 assigned after ||"                     \
+  "true || W=$WT; git -C \"\$W\" switch -c v9"
+check block "#445 assigned in an if body"                \
+  "if false; then W=$WT; fi; git -C \"\$W\" switch -c v9"
+check block "#445 assigned in a pipeline"                \
+  "echo | W=$WT; cd \"\$W\"; git switch -c v9"
+check block "#445 assigned in a background job"          \
+  "W=$WT & git -C \"\$W\" switch -c v9"
+check block "#445 assigned in a function body"           \
+  "f() { W=$WT; }; cd \"\$W\" && git switch -c v9"
+check block "#445 assigned in a bash -c payload"         \
+  "bash -c \"W=$WT\"; git -C \"\$W\" switch -c v9"
+check block "#445 assigned in a case body"               \
+  "case a in b) W=$WT;; esac; git -C \"\$W\" switch -c v9"
+check block "#445 an empty value"                        \
+  "W=; git -C \"\$W\" switch -c v9"
+check block "#445 an empty value, cd"                    \
+  "W=; cd \"\$W\" && git switch -c v9"
+check block "#445 appended with +="                      \
+  "W=$WT; W+=/../../..; git -C \"\$W\" switch -c v9"
+check block "#445 appended with export +="               \
+  "W=$WT; export W+=/../../..; git -C \"\$W\" switch -c v9"
+check block "#445 array element 0 is the variable"       \
+  "W=$WT; W[0]=$REPO; git -C \"\$W\" switch -c v9"
+check block "#445 read into a quoted name"               \
+  "W=$WT; read -r \"W\" <<< $REPO; git -C \"\$W\" switch -c v9"
+check block "#445 a sourced file may set it"             \
+  "W=$WT; . ./env.sh; git -C \"\$W\" switch -c v9"
+check block "#445 declare with an option"                \
+  "declare -n W=$WT; git -C \"\$W\" switch -c v9"
+check block "#445 a quote in a heredoc, then '\$W'"      \
+  "W=$WT"$'\n'"cat <<EOF"$'\n'"don't"$'\n'"EOF"$'\n'"cd '\$W'; git switch -c v9"
+check allow "#445 && behind another assignment"          \
+  "A=1 && W=$WT && git -C \"\$W\" switch -c v5"
+check allow "#445 a quoted \$ elsewhere in the command"  \
+  "W=$WT; echo '\$HOME'; git -C \"\$W\" switch -c v6"
+reason_has() {  # reason_has <needle> <desc> <cwd> <session-id> <command>
+  if run_hook "$3" "$4" "$5" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -qF -- "$1"; then
+    PASS=$((PASS + 1))
+  else
+    FAIL=$((FAIL + 1))
+    echo "FAIL  $2: reason lacks $1" >&2
+  fi
+}
+reason_has 'use a literal path' "#445 an unresolved -C says so" "$REPO" none-sess "git -C \$NOPE pull"
+reason_has 'use a literal path' "#445 an unresolved cd says so" "$REPO" none-sess "cd \$NOPE && git pull"
+
+# --- #417: a develop session may update its branch from its own upstream -----
+# A second checkout on a non-protected branch with an upstream.
+R2=$(dirname "$REPO")/r2
+ORIGIN2=$(dirname "$REPO")/r2-origin.git
+git init -q --bare -b main "$ORIGIN2"
+git init -q -b main "$R2"
+git -C "$R2" config user.email t@t
+git -C "$R2" config user.name t
+git -C "$R2" commit -q --allow-empty -m init
+git -C "$R2" remote add origin "$ORIGIN2"
+git -C "$R2" push -q -u origin main
+git -C "$R2" remote set-head origin main
+git -C "$R2" push -q origin main:other
+git -C "$R2" checkout -q -b feat
+git -C "$R2" push -q -u origin feat
+mkdir -p "$R2/.claude/state/sessions"
+printf '{"aiDir":".ai","frameworkVersion":"2.0.0"}\n' > "$R2/.myspec.json"
+mark2() {  # mark2 <session-id> <mode>: a fresh isolation event in R2
+  printf '{"t":"isolation","mode":"%s","path":"","note":"","at":%d}\n' \
+    "$2" "$(date +%s)" >> "$R2/.claude/state/sessions/$1.jsonl"
+}
+mark2 dev2 develop
+mark2 wt2 worktree
+check_in "$R2" allow "#417 develop: pull"                   dev2 'git pull'
+check_in "$R2" allow "#417 develop: pull --ff-only"         dev2 'git pull --ff-only'
+check_in "$R2" allow "#417 develop: pull -q --ff-only"      dev2 'git pull -q --ff-only'
+check_in "$R2" allow "#417 develop: pull <remote> <own>"    dev2 'git pull origin feat'
+check_in "$R2" allow "#417 develop: merge origin/<HEAD>"    dev2 'git merge --no-edit origin/feat'
+check_in "$R2" allow "#417 develop: merge @{u}"             dev2 'git merge @{u}'
+check_in "$R2" allow "#417 develop: merge --ff-only @{upstream}" dev2 'git merge --ff-only @{upstream}'
+check_in "$R2" allow "#417 develop: fetch && merge"         dev2 'git fetch -q && git merge --no-edit origin/feat'
+check_in "$R2" block "#417 develop: pull --rebase"          dev2 'git pull --rebase'
+check_in "$R2" block "#417 develop: pull another ref"       dev2 'git pull origin other'
+check_in "$R2" block "#417 develop: merge another ref"      dev2 'git merge origin/other'
+check_in "$R2" block "#417 develop: merge the default"      dev2 'git merge origin/main'
+check_in "$R2" block "#417 develop: merge two refs"         dev2 'git merge origin/feat origin/other'
+check_in "$R2" block "#417 develop: merge --no-ff"          dev2 'git merge --no-ff origin/feat'
+check_in "$R2" block "#417 develop: rebase @{u}"            dev2 'git rebase @{u}'
+check_in "$R2" block "#417 develop: checkout"               dev2 'git checkout other'
+check_in "$R2" block "#417 develop: switch"                 dev2 'git switch other'
+check_in "$R2" block "#417 no decision: pull"               none-sess 'git pull'
+check_in "$R2" block "#417 worktree: pull"                  wt2 'git pull'
+# A pull or merge whose ref, repository or mode the command can change.
+check_in "$R2" block "#417 develop: git -c pull.rebase"     dev2 'git -c pull.rebase=true pull'
+check_in "$R2" block "#417 develop: git -c branch merge"    dev2 'git -c branch.feat.merge=refs/heads/other pull'
+check_in "$R2" block "#417 develop: --work-tree"            dev2 "git --work-tree=$REPO pull"
+check_in "$R2" block "#417 develop: an unreadable git dir"  dev2 "git --git-dir=$REPO/.gi* pull"
+check_in "$R2" block "#417 develop: GIT_CONFIG_* env"       dev2 'export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=pull.rebase GIT_CONFIG_VALUE_0=true; git pull'
+check_in "$R2" block "#417 develop: git config, then pull"  dev2 'git config pull.rebase true && git pull'
+check_in "$R2" block "#417 develop: branch -u, then pull"   dev2 'git branch -u origin/other && git pull'
+check_in "$R2" block "#417 develop: set-url, then pull"     dev2 'git remote set-url origin /x && git pull'
+check_in "$R2" block "#417 develop: tag, then merge"        dev2 'git tag origin/feat HEAD && git merge origin/feat'
+check_in "$R2" block "#417 develop: merge origin/feat~1"    dev2 'git merge origin/feat~1'
+check_in "$R2" allow "#417 develop: merge the full name"    dev2 'git merge refs/remotes/origin/feat'
+git -C "$R2" config pull.rebase true
+check_in "$R2" block "#417 develop: pull configured to rebase" dev2 'git pull'
+git -C "$R2" config --unset pull.rebase
+git -C "$R2" tag origin/feat main
+check_in "$R2" block "#417 develop: a tag shadows origin/feat" dev2 'git merge origin/feat'
+git -C "$R2" tag -d origin/feat >/dev/null
+git -C "$R2" remote add fork "$ORIGIN2"
+git -C "$R2" fetch -q fork
+git -C "$R2" branch -q -u fork/feat feat
+check_in "$R2" block "#417 develop: origin/feat, upstream on fork" dev2 'git merge origin/feat'
+git -C "$R2" branch -q -u origin/feat feat
+reason_has "\`!\`" "#417 an own-upstream pull outside develop names the ! route" "$R2" none-sess 'git pull'
+reason_has "\`!\`" "#417 an own-upstream merge outside develop names the ! route" "$R2" wt2 'git merge origin/feat'
+printf '{"aiDir":".ai","frameworkVersion":"2.0.0","isolation":{"protectedBranches":["fea*"]}}\n' > "$R2/.myspec.json"
+check_in "$R2" block "#417 develop on a protectedBranches branch" dev2 'git pull'
+reason_has "\`!\`" "#417 a protected branch names the ! route" "$R2" dev2 'git pull'
+printf '{"aiDir":".ai","frameworkVersion":"2.0.0"}\n' > "$R2/.myspec.json"
+git -C "$R2" checkout -q main
+check_in "$R2" block "#417 develop on the default branch"  dev2 'git pull --ff-only'
+git -C "$R2" checkout -q feat
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
