@@ -44,7 +44,7 @@ HEAD is the default branch, so the recommendation is a new branch. The skill ask
 > - **Current branch main** → continue on main
 > - **Main branch** → not recommended; only for trivial fixes
 
-User picks **New branch**. The skill runs `git checkout -b feat/favorite-reports`, then records `BASE_SHA` (`git rev-parse HEAD`) and logs it as `Base (feature): <sha>` in the plan's Execution Log. Run files go in the gitignored state directory `.claude/state/implement/favorite-reports/`, which outlives the session.
+User picks **New branch**. The skill runs `git checkout -b feat/favorite-reports`, then records `BASE_SHA` (`git rev-parse HEAD`) and logs it as `Base (feature): <sha>` in the plan's Execution Log. Run files go in the gitignored state directory `.claude/state/implement/favorite-reports/` of the main checkout, which outlives the session and any worktree.
 
 #### Step 1 — Parse plan → DAG
 
@@ -294,7 +294,7 @@ The skill never silently flips [~] → [x]; the only path to [x] is
 "task completes + phase review passes" in this run.
 ```
 
-Before re-executing T5 and T6, the skill reads Phase 4's stage stamps, `.claude/state/implement/scheduled-reports/phase-4.times`. It holds only an `implement` stamp, so the barrier never started and the work never reached the feature branch. Had its last stamp been `barrier`, Phase 4 would resume at its barrier (4a) instead, merging the task worktrees rather than discarding them; had it been `review` or a fix round, at a fresh phase review (Step 4, item b — not the Step 4b milestone checkpoint); had it been `done`, the review had passed and only the `[x]` flip remained. In every case the committed tasks are not re-implemented.
+Before re-executing T5 and T6, the skill reads Phase 4's stage stamps, `.claude/state/implement/scheduled-reports/phase-4.times`. It holds only an `implement` stamp, so the barrier never started. T5 and T6 are parallel tasks: their commits sit in their task worktrees until the barrier merge, so `git log --format=%H --grep='^Plan-Task: 5$' <PHASE_BASE>..HEAD` exits 0 with no output, and so does the same check for T6. A serial task commits straight onto the feature branch, so there the check would print its commit, and that task would go to the barrier with the rest instead of being re-dispatched (resume.md step 4). Had its last stamp been `barrier`, Phase 4 would resume at its barrier (4a) instead, merging the task worktrees rather than discarding them; had it been `review` or a fix round, at a fresh phase review (Step 4, item b — not the Step 4b milestone checkpoint); had it been `done`, the review had passed and only the `[x]` flip remained. In every case the committed tasks are not re-implemented.
 
 The first milestone with a non-`[x]` task is Milestone 1, Phase 4 — resume there.
 
@@ -383,7 +383,7 @@ The project opted in with `.myspec.json` → `"orchestration": {"featureImplemen
    ```
    Workflow({ name: "myspec:implement-phase",
               args: { feature: "invoice-due-dates", phase: 1, mode: "sequential",
-                      phaseBase: "<PHASE_BASE>", stateDir: "<checkout>/.claude/state/implement/invoice-due-dates",
+                      phaseBase: "<PHASE_BASE>", stateDir: "<main checkout>/.claude/state/implement/invoice-due-dates",
                       planPath: ".ai/features/invoice-due-dates/implementation-plan.md",
                       models: { cheap: "<small model>", mid: "<mid model>", premium: "<top model>" },
                       reviewDiff: "<plugin>/lib/review-diff.sh", standards: [".claude/rules/conventions.md"],

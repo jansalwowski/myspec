@@ -2,7 +2,7 @@
 # implement-state.sh
 # The run-state directory feature-implement keeps per feature, which survives a
 # restarted session and is never committed:
-# <checkout>/.claude/state/implement/<feature>/.
+# <main checkout>/.claude/state/implement/<feature>/.
 #
 # Usage:
 #   "${CLAUDE_PLUGIN_ROOT}"/lib/implement-state.sh init <feature>
@@ -25,6 +25,9 @@
 
 set -euo pipefail
 
+# shellcheck source=lib/session-event.sh
+. "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/session-event.sh"
+
 die() { echo "implement-state: $*" >&2; exit 1; }
 usage() { die "usage: implement-state.sh init <feature> | stamp <feature> <phase> <stage> | probe-run <feature> <milestone>"; }
 
@@ -35,13 +38,30 @@ segment() { [[ "$2" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "invalid $1: '$2'"
 CMD="$1" FEATURE="$2"
 segment feature "$FEATURE"
 TOP=$(git rev-parse --show-toplevel 2>/dev/null) || die "not inside a git checkout"
-STATE="$TOP/.claude/state/implement/$FEATURE"
+HOME_DIR=$(session_home "$TOP") || die "cannot resolve the main checkout of $TOP"
+SESSIONS=$(session_dir "$HOME_DIR")
+STATE="${SESSIONS%/sessions}/implement/$FEATURE"
+OLD="$TOP/.claude/state/implement/$FEATURE"
 
 ensure() {
+  if [ "$OLD" != "$STATE" ] && [ -d "$OLD" ]; then
+    if [ -e "$STATE" ]; then
+      echo "implement-state: $OLD also holds state for $FEATURE; using $STATE" >&2
+    else
+      mkdir -p "$(dirname "$STATE")"
+      mv "$OLD" "$STATE"
+      echo "implement-state: moved $OLD to $STATE" >&2
+    fi
+  fi
   mkdir -p "$STATE"
-  if ! git -C "$TOP" check-ignore -q "$STATE"; then
+  # Only a checkout's .claude/state/ needs ignoring; the common dir is git's own.
+  case "$STATE" in
+    "$HOME_DIR/.claude/state/"*) ;;
+    *) return 0 ;;
+  esac
+  if ! git -C "$HOME_DIR" check-ignore -q "$STATE"; then
     local exclude
-    exclude=$(git -C "$TOP" rev-parse --path-format=absolute --git-path info/exclude)
+    exclude=$(git -C "$HOME_DIR" rev-parse --path-format=absolute --git-path info/exclude)
     mkdir -p "$(dirname "$exclude")"
     printf '%s\n' '.claude/state/' >> "$exclude"
   fi

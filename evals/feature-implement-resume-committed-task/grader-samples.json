@@ -1,0 +1,74 @@
+{
+  "dispatched-task-2": {
+    "pass": [
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Implement Task 2: API fields",
+            "subagent_type": "general-purpose",
+            "prompt": "You are implementing Task 2: API fields\n\n## Commit Trailers\n\nEnd every commit message you write with these lines, verbatim:\n\nPlan-Task: 2\n\nReport DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT."
+          }
+        }
+      ]
+    ],
+    "fail": [
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Implement Task 1: Due-date rules",
+            "subagent_type": "general-purpose",
+            "prompt": "You are implementing Task 1: Due-date rules\n\n## Commit Trailers\n\nEnd every commit message you write with these lines, verbatim:\n\nPlan-Task: 1\n\nReport DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT."
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Phase review for Phase 1: due dates",
+            "subagent_type": "general-purpose",
+            "prompt": "You are reviewing Phase 1 of the invoice-due-dates implementation. Task 2 was never implemented."
+          }
+        }
+      ]
+    ]
+  },
+  "no-task-1-redispatch": {
+    "pass": [
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Implement Task 2: API fields",
+            "subagent_type": "general-purpose",
+            "prompt": "You are implementing Task 2: API fields\n\n## Context\n\nTask 1 (due-date rules) is already committed on this branch; build on `due_date` and `is_overdue` from app/invoices/due_dates.py.\n\nReport DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT."
+          }
+        }
+      ]
+    ],
+    "fail": [
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Implement Task 1: Due-date rules",
+            "subagent_type": "general-purpose",
+            "prompt": "You are implementing Task 1: Due-date rules\n\nReport DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT."
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Re-implement Task 1",
+            "subagent_type": "general-purpose",
+            "prompt": "Task 1 was in progress when the last session stopped. Redo it from scratch.\n\nReport DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT."
+          }
+        }
+      ]
+    ]
+  }
+}
