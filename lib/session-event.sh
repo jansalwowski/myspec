@@ -339,9 +339,10 @@ session_seen_many() {
 # or empty) and ISO_PATH from the session's last isolation event. A subagent
 # reads its parent's, by the shared session id. The decision has no age
 # limit: a session resumed the next day under the same id keeps its answer,
-# and no other session's answer is ever read (#146, #416). It ends when the
-# worktree it names (an absolute path) no longer exists; ISO_GONE_MODE, ISO_GONE_PATH and
-# ISO_GONE_AT then describe it, so a block can say what was chosen.
+# and no other session's answer is ever read (#146, #416). A worktree
+# decision ends when the worktree it names (an absolute path) no longer
+# exists; ISO_GONE_MODE, ISO_GONE_PATH and ISO_GONE_AT then describe it, so
+# a block can say what was chosen. A path never ends a develop decision.
 session_isolation() {
   local out mode path at
   ISO_MODE="" ISO_PATH="" ISO_GONE_MODE="" ISO_GONE_PATH="" ISO_GONE_AT=""
@@ -355,7 +356,7 @@ session_isolation() {
   case "$at" in ''|*[!0-9]*) return 0 ;; esac
   # Only an absolute path is checked: a relative one would be judged against
   # whatever directory the reader runs in.
-  if [ -n "$mode" ] && [ "${path#/}" != "$path" ] && [ ! -d "$path" ]; then
+  if [ "$mode" = worktree ] && [ "${path#/}" != "$path" ] && [ ! -d "$path" ]; then
     ISO_GONE_MODE="$mode" ISO_GONE_PATH="$path" ISO_GONE_AT="$at"
     return 0
   fi

@@ -219,6 +219,9 @@ eq "$ISO_MODE|$ISO_PATH" "|" "isolation: a worktree decision whose worktree is g
 eq "$ISO_GONE_MODE|$ISO_GONE_PATH|$ISO_GONE_AT" "worktree|$ROOT/wt-gone|$((NOW - 60))" "isolation: the decision that no longer holds is reported"
 session_isolation "$REPO" iso1
 eq "$ISO_GONE_MODE$ISO_GONE_PATH$ISO_GONE_AT" "" "isolation: a decision that holds reports nothing gone"
+raw iso7 "{\"t\":\"isolation\",\"mode\":\"develop\",\"path\":\"$ROOT/wt-gone\",\"at\":$((NOW - 60))}"
+session_isolation "$REPO" iso7
+eq "$ISO_MODE|$ISO_GONE_MODE" "develop|" "isolation: a missing path never ends a develop decision"
 raw iso3 "{\"t\":\"isolation\",\"mode\":\"develop\",\"at\":$((NOW - 60))}"
 raw iso3 "{\"t\":\"isolation\",\"mode\":\"\",\"path\":\"\",\"at\":$((NOW - 30))}"
 session_isolation "$REPO" iso3

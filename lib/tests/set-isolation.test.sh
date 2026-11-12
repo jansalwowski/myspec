@@ -91,6 +91,21 @@ printf '{"t":"isolation","mode":"worktree","path":"%s","at":%d}\n' "$ROOT/wt-gon
 expect 0 "a decision whose worktree is gone is replaced" sess-gone develop
 assert_eq develop "$(field sess-gone mode)" "mode after replacing a decision whose worktree is gone"
 
+# A worktree path that does not exist yet would end the decision at once, so
+# it is refused; the decision is recorded once the worktree is made.
+expect 1 "a worktree path that does not exist is refused" sess-plan worktree --worktree-path "$ROOT/wt-planned"
+assert_eq "" "$(field sess-plan mode)" "a refused path records nothing"
+
+# --reset clears a decision whose worktree is gone: it must not hold again
+# when a worktree is made at the same path.
+mkdir -p "$ROOT/wt-re"
+expect 0 "decision with a worktree"             sess-re worktree --worktree-path "$ROOT/wt-re"
+rmdir "$ROOT/wt-re"
+expect 0 "reset after the worktree is gone"     --reset sess-re
+mkdir -p "$ROOT/wt-re"
+expect 0 "a new answer after the reset"         sess-re develop
+assert_eq develop "$(field sess-re mode)" "the reset held when the path came back"
+
 # Other sessions' decisions are untouched by a new id.
 expect 0 "a new id records its own decision"     sess-b worktree
 assert_eq develop "$(field sess-a mode)" "a new id leaves another decision alone"
