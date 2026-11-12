@@ -40,6 +40,8 @@ Do not ask about a PR here. That question belongs at the end, when the size of t
 
 Edits land in the user's checkout so they can test immediately. **Do not commit** unless asked: end-of-work promotion moves an uncommitted working-tree diff, and commits on the base branch cannot be promoted without rewriting the user's local branch — `promote-to-worktree.sh` refuses rather than doing that silently.
 
+Branch mutations stay blocked in develop mode, with one exception. On a branch that is not protected, the session may bring in the branch's own upstream: `git pull` or `git pull --ff-only` (optionally naming that upstream's remote and branch), or `git merge` of `@{u}`, the upstream's name, or `origin/<current branch>` (`--no-edit`, `--ff-only` and `-q` allowed). `git pull --rebase`, a merge of any other ref, `checkout`, `switch` and `rebase` are still blocked. When a block names the `!` route, ask the user to run the command themselves.
+
 ## worktree mode
 
 ```
