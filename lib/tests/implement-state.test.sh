@@ -6,7 +6,8 @@
 # does); stamp appends one "<stage> <epoch>" line per call; probe-run hands out
 # run-1, run-2, ... without reusing one; every checkout of a repository gets
 # the main checkout's state (#441), and a state directory left in a linked
-# worktree by an older version moves there; a bad argument or a directory outside git creates nothing.
+# worktree by an older version moves there, from whichever checkout runs
+# first; a bad argument or a directory outside git creates nothing.
 #
 # Usage: implement-state.test.sh [path-to-script]
 
@@ -76,7 +77,7 @@ git -C "$REPO" worktree remove "$WT"
 git -C "$REPO" worktree add -q "$ROOT/wt" wt
 expect_eq "a worktree created again finds the stamps" "$(cd "$WT" && "$SCRIPT" init f >/dev/null && cut -d' ' -f1 "$MS/phase-1.times" | tr '\n' ' ')" "implement barrier "
 
-echo "# a worktree's state from before #441 moves to the main checkout"
+echo "# state from before #441 in any checkout moves to the main checkout"
 mkdir -p "$WT/.claude/state/implement/g" && printf 'implement 1\n' > "$WT/.claude/state/implement/g/phase-1.times"
 err=$(cd "$WT" && "$SCRIPT" init g 2>&1 >/dev/null)
 expect_eq "the stamps are moved" "$(cat "$REPO/.claude/state/implement/g/phase-1.times" 2>/dev/null)" "implement 1"
@@ -87,6 +88,12 @@ err=$(cd "$WT" && "$SCRIPT" init g 2>&1 >/dev/null)
 expect_eq "when both exist, the main checkout's stays" "$(cat "$REPO/.claude/state/implement/g/phase-1.times")" "implement 1"
 [ -f "$WT/.claude/state/implement/g/phase-1.times" ] && ok "and the old one is left alone" || nok "and the old one is left alone"
 case "$err" in *"also holds state"*) ok "with a warning naming it" ;; *) nok "with a warning naming it" "$err" ;; esac
+mkdir -p "$WT/.claude/state/implement/h" && printf 'implement 1\n' > "$WT/.claude/state/implement/h/phase-1.times"
+(cd "$REPO" && "$SCRIPT" init h >/dev/null 2>&1)
+expect_eq "init from the main checkout finds a worktree's old state" "$(cat "$REPO/.claude/state/implement/h/phase-1.times" 2>/dev/null)" "implement 1"
+mkdir -p "$REPO/.claude/state/implement/k" "$WT/.claude/state/implement/k" && printf 'implement 1\n' > "$WT/.claude/state/implement/k/phase-1.times"
+(cd "$WT" && "$SCRIPT" init k >/dev/null 2>&1)
+expect_eq "an empty state directory does not block the move" "$(cat "$REPO/.claude/state/implement/k/phase-1.times" 2>/dev/null)" "implement 1"
 
 echo "# a bare clone with worktrees keeps it in the common dir"
 git clone -q --bare "$REPO" "$ROOT/bare.git"
