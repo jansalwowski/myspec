@@ -49,6 +49,8 @@ emit_target() {
     ''|Q|-|*'$'*|*'`'*|*:*|/dev/*) return 0 ;;
   esac
   if [ -z "${3:-}" ] && [[ "$w" == *[\*\?\[]* ]]; then
+    # compgen -G does not expand a tilde.
+    tilde_to w "$w" || return 0
     # A failed cd or an empty glob both mean no targets.
     while IFS= read -r p; do
       emit_target "$p" "${2:-}" no-glob
@@ -65,6 +67,36 @@ emit_target() {
   printf '%s\n' "$p"
 }
 
+# operand_to <var> <keep-scan word> -> decode_word_to into <var>. A word that
+# decodes to a leading `~` the shell would not expand, because a character up
+# to the first unquoted `/` was quoted ('~/x', "~"/x, ~"/x"), gets a `./` so
+# target_path_to keeps it relative. The keep scan marks a quoted span with
+# \035 (lib/command-scan.sh).
+operand_to() {
+  local _op_w _op_pre="${2%%/*}"
+  decode_word_to _op_w "$2"
+  if [[ "$_op_w" == '~'* ]] && [[ "$2" != '~'* || "$_op_pre" == *$'\035'* ]]; then
+    _op_w="./$_op_w"
+  fi
+  printf -v "$1" '%s' "$_op_w"
+}
+
+# tilde_to <var> <word> -> <word> with an unquoted leading `~` or `~/`
+# expanded to $HOME, as bash does, into <var>. Returns 1 for a tilde this
+# hook cannot resolve: `~user/...` (another home), `~+`, `~-`, or no $HOME.
+# Any other word is copied as is.
+tilde_to() {
+  local _tt_w="$2"
+  case "$_tt_w" in
+    \~|\~/*)
+      [ -n "${HOME:-}" ] || return 1
+      _tt_w="$HOME${_tt_w#\~}"
+      ;;
+    \~*) return 1 ;;
+  esac
+  printf -v "$1" '%s' "$_tt_w"
+}
+
 # Directories target_path_to resolved, for this run: RES_DIRS[i] is
 # RES_PHYS[i] physically.
 RES_DIRS=()
@@ -74,9 +106,11 @@ RES_PHYS=()
 # <var>, with each directory resolved once per run: a long command names the
 # same few directories over and over, and the subshells physical_path spends
 # per call cost seconds on one (#277). A path ending in / takes physical_path
-# itself.
+# itself. A leading `~` is $HOME (tilde_to; #451), and returns 1 when it names
+# a home this hook cannot resolve.
 target_path_to() {
-  local _tp_p="$2" _tp_dir _tp_rest _tp_phys="" _tp_i
+  local _tp_p _tp_dir _tp_rest _tp_phys="" _tp_i
+  tilde_to _tp_p "$2" || return 1
   case "$_tp_p" in
     /*) ;;
     *) _tp_p="${BASE_DIR:-$PWD}/$_tp_p" ;;
@@ -200,14 +234,14 @@ bash_write_targets() {
     while [ "${#words[@]}" -gt 0 ] && [[ "${words[0]}" =~ ^[0-9]*\>{1,2} ]]; do
       if [[ "${words[0]}" =~ ^[0-9]*\>{1,2}$ ]]; then
         if [ "${#words[@]}" -ge 2 ]; then
-          decode_word_to dw "${kwords[1]}"
+          operand_to dw "${kwords[1]}"
           emit_target "$dw"
         fi
         words=("${words[@]:2}")
         kwords=("${kwords[@]:2}")
       else
         [[ "${kwords[0]}" =~ ^[0-9]*\>{1,2}(.*)$ ]]
-        decode_word_to dw "${BASH_REMATCH[1]}"
+        operand_to dw "${BASH_REMATCH[1]}"
         emit_target "$dw"
         words=("${words[@]:1}")
         kwords=("${kwords[@]:1}")
@@ -255,7 +289,7 @@ bash_write_targets() {
       # get here with a target: the split on `&` leaves nothing after `>`.
       if [[ "$word" =~ ^[0-9]*\>{1,2}$ ]]; then
         if [ $((i + 1)) -lt "${#words[@]}" ]; then
-          decode_word_to dw "${kwords[$((i + 1))]}"
+          operand_to dw "${kwords[$((i + 1))]}"
           emit_target "$dw"
         fi
         skip=1
@@ -263,7 +297,7 @@ bash_write_targets() {
       fi
       if [[ "$word" =~ ^[0-9]*\>{1,2}(.+)$ ]]; then
         [[ "${kwords[$i]}" =~ ^[0-9]*\>{1,2}(.*)$ ]]
-        decode_word_to dw "${BASH_REMATCH[1]}"
+        operand_to dw "${BASH_REMATCH[1]}"
         emit_target "$dw"
         continue
       fi
@@ -287,7 +321,7 @@ bash_write_targets() {
             # the file it writes.
             patch:-o|patch:--output)
               if [ $((i + 1)) -lt "${#words[@]}" ]; then
-                decode_word_to dw "${kwords[$((i + 1))]}"
+                operand_to dw "${kwords[$((i + 1))]}"
                 emit_target "$dw"
               fi
               skip=1
@@ -297,7 +331,7 @@ bash_write_targets() {
           continue
           ;;
       esac
-      decode_word_to dw "${kwords[$i]}"
+      operand_to dw "${kwords[$i]}"
       ops+=("$dw")
     done
     [ "${#ops[@]}" -gt 0 ] || continue
