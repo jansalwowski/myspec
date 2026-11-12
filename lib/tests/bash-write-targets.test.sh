@@ -60,7 +60,8 @@ eq "$(targets 'rm ~"/d/q.txt"')" "$REPO/~/d/q.txt" "~ then quoted /x stays relat
 eq "$(targets 'rm ~/"d/q.txt"')" "$HOME/d/q.txt" "tilde-slash then a quoted rest is under HOME"
 eq "$(targets "echo x > '~/d/r.txt'")" "$REPO/~/d/r.txt" "redirect to quoted ~/x stays relative"
 eq "$(targets 'rm x~/y.txt')" "$REPO/x~/y.txt" "a ~ inside a word is literal"
-eq "$(targets 'rm *')" "$REPO/a.txt
+# Sorted: compgen's order follows the locale's collation.
+eq "$(targets 'rm *' | LC_ALL=C sort)" "$REPO/a.txt
 $REPO/~bak" "a glob match named ~bak is a file in the directory"
 eq "$(targets 'ln -s /opt/~cfg')" "$REPO/~cfg" "one-operand ln links ~cfg into the directory"
 eq "$(targets 'rm ~+/b.txt')" "$REPO/b.txt" "~+ is the current directory"
