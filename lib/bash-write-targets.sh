@@ -49,10 +49,13 @@ emit_target() {
     ''|Q|-|*'$'*|*'`'*|*:*|/dev/*) return 0 ;;
   esac
   if [ -z "${3:-}" ] && [[ "$w" == *[\*\?\[]* ]]; then
-    # compgen -G does not expand a tilde.
-    tilde_to w "$w" || return 0
-    # A failed cd or an empty glob both mean no targets.
+    # compgen -G does not expand a tilde. The home it names is a name, not a
+    # pattern: bash does not glob the text a tilde expands to.
+    tilde_to w "$w" glob || return 0
+    # A failed cd or an empty glob both mean no targets. A match is a name
+    # in the directory, ~bak included: `./` keeps it from reading as a tilde.
     while IFS= read -r p; do
+      case "$p" in \~*) p="./$p" ;; esac
       emit_target "$p" "${2:-}" no-glob
     done < <(cd "$BASE_DIR" 2>/dev/null && { compgen -G "$w" || true; })
     return 0
@@ -81,20 +84,31 @@ operand_to() {
   printf -v "$1" '%s' "$_op_w"
 }
 
-# tilde_to <var> <word> -> <word> with an unquoted leading `~` or `~/`
-# expanded to $HOME, as bash does, into <var>. Returns 1 for a tilde this
-# hook cannot resolve: `~user/...` (another home), `~+`, `~-`, or no $HOME.
-# Any other word is copied as is.
+# tilde_to <var> <word> [glob] -> <word> with an unquoted leading tilde
+# expanded as bash does, into <var>: `~` and `~/` to $HOME, `~+` and `~+/` to
+# BASE_DIR. With glob, the expanded directory's glob characters are escaped
+# for compgen -G. Returns 1 for a tilde this hook cannot resolve: `~user/...`
+# (another home), `~-` ($OLDPWD), or no $HOME. Any other word is copied as is.
 tilde_to() {
-  local _tt_w="$2"
+  local _tt_w="$2" _tt_d _tt_e="" _tt_c
   case "$_tt_w" in
-    \~|\~/*)
-      [ -n "${HOME:-}" ] || return 1
-      _tt_w="$HOME${_tt_w#\~}"
-      ;;
+    \~|\~/*) _tt_d="${HOME:-}" _tt_w="${_tt_w#\~}" ;;
+    \~+|\~+/*) _tt_d="${BASE_DIR:-$PWD}" _tt_w="${_tt_w#\~+}" ;;
     \~*) return 1 ;;
+    *) printf -v "$1" '%s' "$_tt_w"; return 0 ;;
   esac
-  printf -v "$1" '%s' "$_tt_w"
+  [ -n "$_tt_d" ] || return 1
+  if [ -n "${3:-}" ]; then
+    while [ -n "$_tt_d" ]; do
+      _tt_c="${_tt_d:0:1}" _tt_d="${_tt_d:1}"
+      case "$_tt_c" in
+        [\*\?\[\\]) _tt_e="$_tt_e\\$_tt_c" ;;
+        *) _tt_e="$_tt_e$_tt_c" ;;
+      esac
+    done
+    _tt_d="$_tt_e"
+  fi
+  printf -v "$1" '%s%s' "$_tt_d" "$_tt_w"
 }
 
 # Directories target_path_to resolved, for this run: RES_DIRS[i] is
@@ -331,6 +345,13 @@ bash_write_targets() {
           continue
           ;;
       esac
+      # bash expands a tilde after the `=` of dd's of= (an assignment-shaped
+      # word); a quoted one stays literal.
+      if [ "$verb" = dd ] && [[ "${kwords[$i]}" == of=* ]]; then
+        operand_to dw "${kwords[$i]#of=}"
+        ops+=("of=$dw")
+        continue
+      fi
       operand_to dw "${kwords[$i]}"
       ops+=("$dw")
     done
@@ -354,7 +375,8 @@ bash_write_targets() {
       ln)
         # One operand links into the current directory, under its name.
         if [ "${#ops[@]}" -eq 1 ]; then
-          emit_target "$(basename "$last")"
+          # `./`: a name like ~cfg is a file here, not a home.
+          emit_target "./$(basename "$last")"
           continue
         fi
         target_path_to dest "$last" || continue

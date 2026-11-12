@@ -32,6 +32,8 @@ export HOME="$FX/home"
 mkdir -p "$REPO" "$HOME/d"
 : > "$HOME/d/g.md"
 : > "$REPO/a.txt"
+# A file whose name starts with ~ is a name, not a home.
+: > "$REPO/~bak"
 
 targets() {  # targets <command>: bash_write_targets for it from $REPO
   ( COMMAND=$1 BASE_DIR=$REPO; SCAN_PLAIN="" SCAN_KEEP="" SCAN_KEPT=0
@@ -58,6 +60,22 @@ eq "$(targets 'rm ~"/d/q.txt"')" "$REPO/~/d/q.txt" "~ then quoted /x stays relat
 eq "$(targets 'rm ~/"d/q.txt"')" "$HOME/d/q.txt" "tilde-slash then a quoted rest is under HOME"
 eq "$(targets "echo x > '~/d/r.txt'")" "$REPO/~/d/r.txt" "redirect to quoted ~/x stays relative"
 eq "$(targets 'rm x~/y.txt')" "$REPO/x~/y.txt" "a ~ inside a word is literal"
+eq "$(targets 'rm *')" "$REPO/a.txt
+$REPO/~bak" "a glob match named ~bak is a file in the directory"
+eq "$(targets 'ln -s /opt/~cfg')" "$REPO/~cfg" "one-operand ln links ~cfg into the directory"
+eq "$(targets 'rm ~+/b.txt')" "$REPO/b.txt" "~+ is the current directory"
+eq "$(targets 'cp a.txt ~+')" "$REPO/a.txt" "cp into bare ~+"
+eq "$(targets 'rm ~-/b.txt')" "" "~- (OLDPWD) names nothing, like a variable"
+eq "$(targets 'dd if=a.txt of=~/d/x')" "$HOME/d/x" "dd of=~/x is under \$HOME"
+eq "$(targets "dd if=a.txt of='~/d/x'")" "$REPO/~/d/x" "dd of= a quoted ~/x stays relative"
+eq "$(targets 'dd if=a.txt of="~"/d/x')" "$REPO/~/d/x" "dd of= a quoted ~ then /x stays relative"
+# A home whose name holds glob characters is matched as a name, as bash
+# does: h[1] must not match the sibling h1.
+GH="$FX/g[1]"
+mkdir -p "$GH" "$FX/g1"
+: > "$GH/a.md"
+: > "$FX/g1/s.md"
+eq "$(HOME=$GH targets 'rm ~/*.md')" "$GH/a.md" "a glob under ~ stays inside a home with glob characters"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

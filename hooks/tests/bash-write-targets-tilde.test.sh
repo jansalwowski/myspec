@@ -53,6 +53,8 @@ check block "a relative write in the main checkout asks the isolation question" 
 check allow "rm ~/x writes under \$HOME, outside the repository" 'rm ~/d/CLAUDE.md'
 check allow "a redirect to ~/x writes under \$HOME" 'echo x > ~/d/notes.md'
 check block "a quoted ~/x is a relative path in the repository" "rm '~/d/CLAUDE.md'"
+check block "~+ is the current directory, the main checkout" 'rm ~+/CLAUDE.md'
+check block "dd of= a quoted ~/x writes in the repository" "dd if=/dev/null of='~/d/x'"
 
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
