@@ -6,7 +6,7 @@
 # inside a commit message blocking the commit) is invisible until something
 # exercises it. Gate B (tree-specific commands in worktree mode) reads the
 # session's last isolation event from its state file (session_isolation in
-# lib/session-event.sh); its cases prove the mode lookup, the 8 h expiry, a
+# lib/session-event.sh); its cases prove the mode lookup, a decision whose worktree is gone, a
 # subagent following its parent's session id and no other session's, the
 # recorded-path naming, the blockInMain setting (its default, a project
 # extension, the dry-run carve-out) and ignoreBlockInMain.
@@ -37,6 +37,10 @@ git -C "$REPO" commit -q --allow-empty -m init
 printf '{"aiDir":".ai","frameworkVersion":"2.0.0","isolation":{"blockInMain":["^make[[:space:]]+deploy([[:space:]]|$)"]}}\n' > "$REPO/.myspec.json"
 git -C "$REPO" worktree add -q "$REPO/.claude/worktrees/wt-a" -b wt-a
 WT="$REPO/.claude/worktrees/wt-a"
+# Recorded worktree paths must exist: one that is gone ends the decision (#416).
+ALT_WT="$(dirname "$REPO")/wt/feature-x"
+OTHER_WT="$(dirname "$REPO")/wt/other"
+mkdir -p "$ALT_WT" "$OTHER_WT"
 trap 'rm -rf "$(dirname "$REPO")"' EXIT
 
 mark() {  # mark <session-id> <mode> <age-seconds> [worktree-path]: an isolation event that old
@@ -293,7 +297,7 @@ check_in "$WT" allow "checkout inside the worktree" wt-sess 'git checkout -b fea
 check_in "$WT" allow "build inside the worktree"    wt-sess 'yarn build'
 
 # --- gate B, worktree mode: tree-specific work must not run in the main checkout
-mark wt-sess worktree 60 "/tmp/wt/feature-x"
+mark wt-sess worktree 60 "$ALT_WT"
 check_in "$REPO" block "build"                wt-sess 'yarn build'
 check_in "$REPO" block "npm run build"        wt-sess 'npm run build'
 check_in "$REPO" block "pnpm install"         wt-sess 'pnpm install'
@@ -427,11 +431,13 @@ check_in "$REPO" allow "develop mode, build"   dev-sess 'yarn build'
 check_in "$REPO" allow "develop mode, install" dev-sess 'yarn install'
 check_in "$REPO" allow "develop mode, push"    dev-sess 'git push origin HEAD'
 
-# --- no decision / expired: gate B stays out of the way ----------------------
+# --- no decision / worktree gone: gate B stays out of the way ----------------
 rm -f "$STATE/"*.jsonl
 check_in "$REPO" allow "no decision recorded"  none-sess 'yarn build'
-mark old-sess worktree 30000 "/tmp/wt/old"
-check_in "$REPO" allow "expired decision"      old-sess 'yarn build'
+mark gone-sess worktree 60 "$(dirname "$REPO")/wt/gone"
+check_in "$REPO" allow "worktree gone"         gone-sess 'yarn build'
+mark old-sess worktree 30000 "$ALT_WT"
+check_in "$REPO" block "decision past 8 h still holds (#416)" old-sess 'yarn build'
 
 # --- issue #146: no session inherits another session's answer ---------------
 # A subagent shares its parent's session id (#225) and reads its decision
@@ -454,7 +460,7 @@ check_as() {  # check_as <want> <desc> <session-id> <command> <extra input field
   fi
 }
 rm -f "$STATE/"*.jsonl
-mark other-sess worktree 60 "/tmp/wt/other"
+mark other-sess worktree 60 "$OTHER_WT"
 check_as allow "top-level session ignores another session's worktree decision" fresh-sess 'yarn build' '{}'
 check_as block "subagent sharing the parent id follows it"  other-sess 'yarn build' '{"agent_id":"a1","agent_type":"general-purpose"}'
 check_as allow "subagent with another id inherits nothing"  child-sess 'yarn build' '{"agent_id":"a1","agent_type":"general-purpose"}'
@@ -464,8 +470,8 @@ check_as allow "the session's last decision wins"           other-sess 'yarn bui
 rm -f "$STATE/"*.jsonl
 
 # --- the block names the recorded worktree -----------------------------------
-mark path-sess worktree 60 "/tmp/wt/feature-x"
-if run_hook "$REPO" path-sess 'yarn build' | grep -q "/tmp/wt/feature-x"; then
+mark path-sess worktree 60 "$ALT_WT"
+if run_hook "$REPO" path-sess 'yarn build' | grep -q "$ALT_WT"; then
   PASS=$((PASS + 1))
 else
   FAIL=$((FAIL + 1))

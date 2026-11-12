@@ -64,7 +64,11 @@ Task tool (general-purpose):
 
     End every commit message you write with these lines, verbatim:
 
+    Plan-Task: N
     [Commit trailers]
+
+    The `Plan-Task` line is how a restarted run finds a task that is
+    already committed instead of implementing it a second time.
 
     **While you work:** If you encounter something unexpected or unclear, **ask questions**.
     It is always OK to pause and clarify. Ask rather than guess when the
@@ -205,7 +209,7 @@ Task tool (general-purpose):
 
 Omit each one, heading included, when it does not apply:
 
-- `## Commit Trailers` — only when the controller's instructions name no commit attribution lines; otherwise `[Commit trailers]` is those lines, verbatim (SKILL.md Step 3)
-
 - `## Plan Drift` — only for a task that modifies a file Step 1's plan-freshness check listed
 - `## Open Findings`, `## Earlier Rounds`, and the framing line after them — only for a fresh fix dispatch in rounds 2–5 of Step 4d (or round 1 when the harness cannot resume); `[Rounds summary]` is the same paragraph `re-review-prompt.md` receives
+
+`## Commit Trailers` is never omitted: `Plan-Task: N` carries the task number this dispatch is for (a fix dispatch: the task that owns the finding), and `[Commit trailers]` is the attribution lines the controller's instructions name, verbatim, or nothing when they name none (SKILL.md Step 3).

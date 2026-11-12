@@ -78,6 +78,16 @@ run --session=$S
 expect_line '^\| hook block: isolation-undecided \| myspec \| 3 \| hooks/require-isolation-decision.sh' "repeated isolation block: myspec row"
 expect_line 'look framework-side' "repeated isolation block: framework-side footer"
 
+# ── 2b. the re-ask after a worktree is gone counts as the same friction (#416) ──
+S=s2b-gone-block
+GONE='BLOCKED: this session chose worktree at 2026-11-01 10:00 UTC, with the worktree /x, which no longer exists, so that decision no longer holds. Ask again.'
+{
+  prompt 'fix the bug'
+  for i in 1 2 3; do tool_use "g$i" Edit; tool_err "g$i" "PreToolUse:Edit hook error: $GONE"; done
+} > "$(session $S)"
+run --session=$S
+expect_line '^\| hook block: isolation-undecided \| myspec \| 3 \|' "repeated gone-worktree ask: isolation-undecided row"
+
 # ── 3. Stop and PostToolUse blocks from attachments, both value shapes ──
 S=s3-attachments
 {

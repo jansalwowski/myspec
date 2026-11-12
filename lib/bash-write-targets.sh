@@ -49,8 +49,13 @@ emit_target() {
     ''|Q|-|*'$'*|*'`'*|*:*|/dev/*) return 0 ;;
   esac
   if [ -z "${3:-}" ] && [[ "$w" == *[\*\?\[]* ]]; then
-    # A failed cd or an empty glob both mean no targets.
+    # compgen -G does not expand a tilde. The home it names is a name, not a
+    # pattern: bash does not glob the text a tilde expands to.
+    tilde_to w "$w" glob || return 0
+    # A failed cd or an empty glob both mean no targets. A match is a name
+    # in the directory, ~bak included: `./` keeps it from reading as a tilde.
     while IFS= read -r p; do
+      case "$p" in \~*) p="./$p" ;; esac
       emit_target "$p" "${2:-}" no-glob
     done < <(cd "$BASE_DIR" 2>/dev/null && { compgen -G "$w" || true; })
     return 0
@@ -65,6 +70,47 @@ emit_target() {
   printf '%s\n' "$p"
 }
 
+# operand_to <var> <keep-scan word> -> decode_word_to into <var>. A word that
+# decodes to a leading `~` the shell would not expand, because a character up
+# to the first unquoted `/` was quoted ('~/x', "~"/x, ~"/x"), gets a `./` so
+# target_path_to keeps it relative. The keep scan marks a quoted span with
+# \035 (lib/command-scan.sh).
+operand_to() {
+  local _op_w _op_pre="${2%%/*}"
+  decode_word_to _op_w "$2"
+  if [[ "$_op_w" == '~'* ]] && [[ "$2" != '~'* || "$_op_pre" == *$'\035'* ]]; then
+    _op_w="./$_op_w"
+  fi
+  printf -v "$1" '%s' "$_op_w"
+}
+
+# tilde_to <var> <word> [glob] -> <word> with an unquoted leading tilde
+# expanded as bash does, into <var>: `~` and `~/` to $HOME, `~+` and `~+/` to
+# BASE_DIR. With glob, the expanded directory's glob characters are escaped
+# for compgen -G. Returns 1 for a tilde this hook cannot resolve: `~user/...`
+# (another home), `~-` ($OLDPWD), or no $HOME. Any other word is copied as is.
+tilde_to() {
+  local _tt_w="$2" _tt_d _tt_e="" _tt_c
+  case "$_tt_w" in
+    \~|\~/*) _tt_d="${HOME:-}" _tt_w="${_tt_w#\~}" ;;
+    \~+|\~+/*) _tt_d="${BASE_DIR:-$PWD}" _tt_w="${_tt_w#\~+}" ;;
+    \~*) return 1 ;;
+    *) printf -v "$1" '%s' "$_tt_w"; return 0 ;;
+  esac
+  [ -n "$_tt_d" ] || return 1
+  if [ -n "${3:-}" ]; then
+    while [ -n "$_tt_d" ]; do
+      _tt_c="${_tt_d:0:1}" _tt_d="${_tt_d:1}"
+      case "$_tt_c" in
+        [\*\?\[\\]) _tt_e="$_tt_e\\$_tt_c" ;;
+        *) _tt_e="$_tt_e$_tt_c" ;;
+      esac
+    done
+    _tt_d="$_tt_e"
+  fi
+  printf -v "$1" '%s%s' "$_tt_d" "$_tt_w"
+}
+
 # Directories target_path_to resolved, for this run: RES_DIRS[i] is
 # RES_PHYS[i] physically.
 RES_DIRS=()
@@ -74,9 +120,11 @@ RES_PHYS=()
 # <var>, with each directory resolved once per run: a long command names the
 # same few directories over and over, and the subshells physical_path spends
 # per call cost seconds on one (#277). A path ending in / takes physical_path
-# itself.
+# itself. A leading `~` is $HOME (tilde_to; #451), and returns 1 when it names
+# a home this hook cannot resolve.
 target_path_to() {
-  local _tp_p="$2" _tp_dir _tp_rest _tp_phys="" _tp_i
+  local _tp_p _tp_dir _tp_rest _tp_phys="" _tp_i
+  tilde_to _tp_p "$2" || return 1
   case "$_tp_p" in
     /*) ;;
     *) _tp_p="${BASE_DIR:-$PWD}/$_tp_p" ;;
@@ -200,14 +248,14 @@ bash_write_targets() {
     while [ "${#words[@]}" -gt 0 ] && [[ "${words[0]}" =~ ^[0-9]*\>{1,2} ]]; do
       if [[ "${words[0]}" =~ ^[0-9]*\>{1,2}$ ]]; then
         if [ "${#words[@]}" -ge 2 ]; then
-          decode_word_to dw "${kwords[1]}"
+          operand_to dw "${kwords[1]}"
           emit_target "$dw"
         fi
         words=("${words[@]:2}")
         kwords=("${kwords[@]:2}")
       else
         [[ "${kwords[0]}" =~ ^[0-9]*\>{1,2}(.*)$ ]]
-        decode_word_to dw "${BASH_REMATCH[1]}"
+        operand_to dw "${BASH_REMATCH[1]}"
         emit_target "$dw"
         words=("${words[@]:1}")
         kwords=("${kwords[@]:1}")
@@ -255,7 +303,7 @@ bash_write_targets() {
       # get here with a target: the split on `&` leaves nothing after `>`.
       if [[ "$word" =~ ^[0-9]*\>{1,2}$ ]]; then
         if [ $((i + 1)) -lt "${#words[@]}" ]; then
-          decode_word_to dw "${kwords[$((i + 1))]}"
+          operand_to dw "${kwords[$((i + 1))]}"
           emit_target "$dw"
         fi
         skip=1
@@ -263,7 +311,7 @@ bash_write_targets() {
       fi
       if [[ "$word" =~ ^[0-9]*\>{1,2}(.+)$ ]]; then
         [[ "${kwords[$i]}" =~ ^[0-9]*\>{1,2}(.*)$ ]]
-        decode_word_to dw "${BASH_REMATCH[1]}"
+        operand_to dw "${BASH_REMATCH[1]}"
         emit_target "$dw"
         continue
       fi
@@ -287,7 +335,7 @@ bash_write_targets() {
             # the file it writes.
             patch:-o|patch:--output)
               if [ $((i + 1)) -lt "${#words[@]}" ]; then
-                decode_word_to dw "${kwords[$((i + 1))]}"
+                operand_to dw "${kwords[$((i + 1))]}"
                 emit_target "$dw"
               fi
               skip=1
@@ -297,7 +345,14 @@ bash_write_targets() {
           continue
           ;;
       esac
-      decode_word_to dw "${kwords[$i]}"
+      # bash expands a tilde after the `=` of dd's of= (an assignment-shaped
+      # word); a quoted one stays literal.
+      if [ "$verb" = dd ] && [[ "${kwords[$i]}" == of=* ]]; then
+        operand_to dw "${kwords[$i]#of=}"
+        ops+=("of=$dw")
+        continue
+      fi
+      operand_to dw "${kwords[$i]}"
       ops+=("$dw")
     done
     [ "${#ops[@]}" -gt 0 ] || continue
@@ -320,7 +375,8 @@ bash_write_targets() {
       ln)
         # One operand links into the current directory, under its name.
         if [ "${#ops[@]}" -eq 1 ]; then
-          emit_target "$(basename "$last")"
+          # `./`: a name like ~cfg is a file here, not a home.
+          emit_target "./$(basename "$last")"
           continue
         fi
         target_path_to dest "$last" || continue

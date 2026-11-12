@@ -96,9 +96,32 @@ mark dev-sess develop 60
 check allow "develop mode, source file"    dev-sess "$REPO/components/Foo.vue"
 check allow "develop mode, aiDir doc"      dev-sess "$REPO/.ai/features/x/spec.md"
 
-# --- expired decision falls through to the ask ------------------------------
-mark old-sess develop 30000
-check block "expired decision, source"     old-sess "$REPO/server/api/foo.js"
+# --- an old decision of the same session still holds (#416) -----------------
+# A session resumed under the same id the next day keeps its answer: there is
+# no other session's answer to leak (#146), so age alone ends nothing.
+mark old-sess develop 28801
+check allow "develop decision past 8 h"    old-sess "$REPO/server/api/foo.js"
+mark old-sess2 develop $(( 4 * 86400 ))
+check allow "develop decision 4 days old"  old-sess2 "$REPO/server/api/foo.js"
+mkdir -p "$ROOT/wt-old"
+printf '{"t":"isolation","mode":"worktree","path":"%s","note":"","at":%d}\n' \
+  "$ROOT/wt-old" "$(( $(date +%s) - 86400 ))" >> "$STATE/old-wt.jsonl"
+OUT=$(run_hook "$REPO" old-wt "$REPO/server/api/foo.js")
+case "$OUT" in
+  *"chose WORKTREE isolation"*) PASS=$((PASS + 1)) ;;
+  *) FAIL=$((FAIL + 1)); printf 'FAIL  a day-old worktree decision whose worktree exists still holds: %s\n' "$OUT" >&2 ;;
+esac
+
+# --- a decision whose worktree is gone is re-asked, and the ask says why ------
+printf '{"t":"isolation","mode":"worktree","path":"%s","note":"","at":%d}\n' \
+  "$ROOT/wt-removed" "$(( $(date +%s) - 60 ))" >> "$STATE/gone-sess.jsonl"
+check block "worktree removed, source"     gone-sess "$REPO/server/api/foo.js"
+check allow "worktree removed, aiDir doc"  gone-sess "$REPO/.ai/features/x/spec.md"
+OUT=$(run_hook "$REPO" gone-sess "$REPO/server/api/foo.js" | jq -r '.hookSpecificOutput.permissionDecisionReason')
+for needle in "this session chose worktree at " "$ROOT/wt-removed" "no longer exists" "\"$CLAUDE_PLUGIN_ROOT/lib/set-isolation.sh\" gone-sess worktree"; do
+  if printf '%s' "$OUT" | grep -qF -- "$needle"; then PASS=$((PASS + 1)); else FAIL=$((FAIL + 1)); echo "FAIL  gone-worktree ask does not mention: $needle" >&2; fi
+done
+if printf '%s' "$OUT" | grep -qF 'no work-isolation decision recorded'; then FAIL=$((FAIL + 1)); echo "FAIL  gone-worktree ask claims no decision was recorded" >&2; else PASS=$((PASS + 1)); fi
 
 # --- no decision: exempt paths never prompt, source paths do ----------------
 rm -f "$STATE/"*.jsonl

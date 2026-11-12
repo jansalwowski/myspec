@@ -51,16 +51,15 @@ if [ "${1:-}" = "--show" ]; then
   for f in "$STATE_DIR"/*.jsonl; do
     [ -f "$f" ] || continue
     ID=$(basename "$f" .jsonl)
+    # A reset, or a decision whose worktree is gone, decides nothing
+    # (session_isolation); age alone ends none (#416).
+    session_isolation "$REPO_ROOT" "$ID"
+    [ -n "$ISO_MODE" ] || continue
     # shellcheck disable=SC2016 # a jq program: $ev is a jq variable
     LAST=$(session_query "$REPO_ROOT" "$ID" '[$ev[] | select(.t == "isolation")] | last // empty
       | [(.mode // "" | tostring), (.at // 0 | tostring), (.note // "" | tostring), (.path // "" | tostring)] | join("\u001f")')
-    [ -n "$LAST" ] || continue
     IFS=$'\037' read -r MODE AT NOTE WT_PATH <<< "$LAST"
     case "$AT" in ''|*[!0-9]*) AT=0 ;; esac
-    # A reset, or a decision past HOOK_DECISION_TTL, decides nothing.
-    if [ -z "$MODE" ] || [ $(( NOW - AT )) -ge "$HOOK_DECISION_TTL" ]; then
-      continue
-    fi
     FOUND=1
     printf '%s  mode=%-8s age=%dmin  %s%s\n' \
       "${ID:0:8}" "$MODE" "$(( (NOW - AT) / 60 ))" "$NOTE" \
@@ -84,8 +83,10 @@ if [ "${1:-}" = "--reset" ]; then
     echo "set-isolation: bad session id '$SESSION_ID'" >&2
     exit 1
   fi
+  # A decision whose worktree is gone is reset too: it would hold again if
+  # a directory appeared at that path.
   session_isolation "$REPO_ROOT" "$SESSION_ID"
-  if [ -n "$ISO_MODE" ]; then
+  if [ -n "$ISO_MODE$ISO_GONE_MODE" ]; then
     session_append "$REPO_ROOT" "$SESSION_ID" '{"t":"isolation","mode":"","path":""}'
   fi
   echo "isolation decision cleared for ${SESSION_ID:0:8} — the next source edit will re-ask"
@@ -124,6 +125,14 @@ fi
 
 if ! session_file "$REPO_ROOT" "$SESSION_ID" >/dev/null; then
   echo "set-isolation: bad session id '$SESSION_ID'" >&2
+  exit 1
+fi
+
+# A worktree decision ends when its recorded worktree no longer exists
+# (session_isolation), so a path recorded before the worktree is made would
+# end it at once.
+if [ "$MODE" = worktree ] && [ -n "$WORKTREE_PATH" ] && [ ! -d "$WORKTREE_PATH" ]; then
+  echo "set-isolation: worktree path $WORKTREE_PATH does not exist; create the worktree first, then pass --worktree-path" >&2
   exit 1
 fi
 

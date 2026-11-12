@@ -80,4 +80,4 @@ set-isolation.sh --reset <session_id>   # force a re-ask
 
 The isolation hook's ask message prints both with the path resolved.
 
-Decisions expire after 8h.
+A decision lasts as long as the session id, so a session resumed the next day keeps its answer. A worktree decision ends when its recorded worktree no longer exists; the next gated edit asks again and names the old decision.
