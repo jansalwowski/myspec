@@ -98,12 +98,11 @@ Pinning is the project's call, not the skill's. Never add or remove a pin on the
 For each file in the manifest whose `when` holds (Step 2, "Conditional entries"):
 
 **`overwrite` strategy:**
-1. Read the source file from `framework-files/{filename}` (or `framework-files/rules/{filename}` for rules)
-2. Replace `${aiDir}` placeholders with the configured `aiDir` value
-3. Write to destination, replacing the existing file entirely
+1. Render the source file `framework-files/{filename}` (or `framework-files/rules/{filename}` for rules) with `node "${CLAUDE_PLUGIN_ROOT}/lib/aidir-render.mjs" <source>` from the project root. It replaces each `${aiDir}` with the configured value and turns `$${aiDir}` into a literal `${aiDir}`; never substitute by hand, since the doctor and pin-reconcile compare against this output.
+2. Write the output to the destination, replacing the existing file entirely
 
 **`marker-merge` strategy:** the file has two regions. Everything from line 1 through `<!-- myspec:framework-end -->` — frontmatter, title, standing note, and the marked framework section — is framework-owned; everything after the end marker is the project section and is never touched.
-1. Read the source file from `framework-files/{filename}` and replace `${aiDir}` placeholders
+1. Render the source file `framework-files/{filename}` with `lib/aidir-render.mjs`, as for `overwrite`
 2. Read the destination file and locate `<!-- myspec:framework-end -->`
 3. Write the source's framework-owned region (line 1 through its own end marker) followed by the destination's project section, unchanged
 4. If the destination has no end marker, do not guess where the project section starts. Show its content (the size, and the first lines when long) beside the plugin copy and ask which of these to do:

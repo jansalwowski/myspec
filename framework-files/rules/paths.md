@@ -5,7 +5,7 @@ paths:
   - ${aiDir}/**
   - .claude/**
   - docs/**
-updated: 2026-10-06
+updated: 2026-11-13
 ---
 
 # Path Conventions
@@ -14,7 +14,7 @@ Committed artifacts (anything under `${aiDir}/`, `docs/`, `.claude/`, or the rep
 
 | Reference target | Use | Do not use |
 |---|---|---|
-| Framework-managed doc (during skill or blueprint authoring) | `${aiDir}/features/foo/spec.md` | Resolved value (`ai/features/...`) hardcoded into skills |
+| Framework-managed doc (during skill or blueprint authoring) | `$${aiDir}/features/foo/spec.md` | Resolved value (`ai/features/...`) hardcoded into skills |
 | Codebase file in a tech-spec, plan, or memory note | Repo-relative: `src/auth/login.ts` | `/Users/<name>/project/src/auth/login.ts`, `~/project/src/...` |
 | Cross-doc link inside `${aiDir}/` | Explicitly relative: `./sub/spec.md` | Bare `sub/spec.md` (ambiguous) |
 | Example that must show an absolute path | Placeholder: `<repo_root>/src/...` or `<config_dir>/projects/<encoded_cwd>/...` | Real `/Users/...` or `/home/...` |
