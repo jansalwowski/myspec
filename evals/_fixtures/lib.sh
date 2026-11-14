@@ -31,10 +31,12 @@ FIXTURES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "$FIXTURES_DIR/../.." && pwd)"
 AI_DIR=".ai"
 
-# Copy one framework document, resolving ${aiDir} the way init does for docs.
+# Copy one framework document, rendered the way init does: through the
+# plugin's lib/aidir-render.mjs, so `$${aiDir}` stays a literal placeholder.
+# It reads aiDir from the .myspec.json myspec_init writes first.
 _copy_doc() {
   mkdir -p "$(dirname "$2")"
-  sed "s#\${aiDir}#$AI_DIR#g" "$1" > "$2"
+  node "$PLUGIN_ROOT/lib/aidir-render.mjs" "$1" --root . > "$2"
 }
 
 # myspec_init [project-name] [description] [tech-stack]
