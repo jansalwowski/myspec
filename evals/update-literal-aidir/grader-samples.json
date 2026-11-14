@@ -1,0 +1,23 @@
+{
+  "rendered-paths-md": {
+    "pass": [
+      [
+        { "tool": "Read", "input": { "file_path": "/plugin/framework-files/manifest.json" } },
+        { "tool": "Bash", "input": { "command": "node \"/plugin/lib/aidir-render.mjs\" /plugin/framework-files/rules/paths.md" } }
+      ],
+      [
+        { "tool": "Bash", "input": { "command": "node /plugin/lib/aidir-render.mjs \"/plugin/framework-files/rules/paths.md\" > .claude/rules/paths.md" } }
+      ]
+    ],
+    "fail": [
+      [
+        { "tool": "Bash", "input": { "command": "sed 's#${aiDir}#.ai#g' /plugin/framework-files/rules/paths.md > .claude/rules/paths.md" } }
+      ],
+      [
+        { "tool": "Bash", "input": { "command": "node /plugin/lib/aidir-render.mjs /plugin/framework-files/rules/workflow.md" } },
+        { "tool": "Read", "input": { "file_path": "/plugin/framework-files/rules/paths.md" } },
+        { "tool": "Write", "input": { "file_path": ".claude/rules/paths.md", "content": "rendered by hand" } }
+      ]
+    ]
+  }
+}
