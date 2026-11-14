@@ -118,7 +118,7 @@ Also create these framework files in `${aiDir}/`:
 - `pre-flight.md` ← copy from `framework-files/pre-flight.md`
 - `work-isolation.md` ← copy from `framework-files/work-isolation.md` (the procedure the isolation hooks' block messages cite; the always-loaded rule of the same name is only its contract)
 
-Replace `${aiDir}` placeholders with the configured value in the documents copied above — the `${aiDir}/` tree and `.claude/rules/`. Nothing else is copied: the hooks and their lib run from the plugin and resolve `aiDir` at runtime.
+Copy the documents above — the `${aiDir}/` tree and `.claude/rules/` — through `node "${CLAUDE_PLUGIN_ROOT}/lib/aidir-render.mjs" <source>` from the project root, and write its output. It replaces each `${aiDir}` with the configured value and turns `$${aiDir}` into a literal `${aiDir}`; never substitute by hand. Nothing else is copied: the hooks and their lib run from the plugin and resolve `aiDir` at runtime.
 
 ### Step 4.5: Announce `${aiDir}` binding to project context
 
