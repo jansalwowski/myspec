@@ -1,0 +1,20 @@
+{
+  "rendered-docs": {
+    "pass": [
+      [
+        { "tool": "Bash", "input": { "command": "mkdir -p .ai/features .ai/memory" } },
+        { "tool": "Bash", "input": { "command": "node \"/plugin/lib/aidir-render.mjs\" \"/plugin/framework-files/pre-flight.md\"" } }
+      ]
+    ],
+    "fail": [
+      [
+        { "tool": "Bash", "input": { "command": "sed 's#${aiDir}#.ai#g' /plugin/framework-files/pre-flight.md > .ai/pre-flight.md" } }
+      ],
+      [
+        { "tool": "Bash", "input": { "command": "node /plugin/lib/aidir-render.mjs /plugin/framework-files/anti-patterns.md" } },
+        { "tool": "Read", "input": { "file_path": "/plugin/framework-files/pre-flight.md" } },
+        { "tool": "Write", "input": { "file_path": ".ai/pre-flight.md", "content": "rendered by hand" } }
+      ]
+    ]
+  }
+}

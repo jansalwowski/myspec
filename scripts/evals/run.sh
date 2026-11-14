@@ -122,6 +122,11 @@ ALLOW_TOOLS+=("Bash(*/lib/implement-state.sh *)" "Bash(*/lib/myspec-config.sh *)
 # doctor's tier 0 (Phase 0), read-only: without it every doctor run stops
 # at the denied script before auditing anything.
 ALLOW_TOOLS+=("Bash(node *lib/setup-doctor.mjs*)")
+# init and update, read-only: the host floor, the upgrade-floor check update
+# refuses to go on without, the manifest `when` reader, the memory doctor, and
+# the renderer both copy framework documents through (stdout).
+ALLOW_TOOLS+=("Bash(claude --version)" "Bash(git --version)" "Bash(node *lib/upgrade-route.mjs*)"
+  "Bash(node *lib/myspec-config.mjs*)" "Bash(node *lib/memory-doctor.mjs*)" "Bash(node *lib/aidir-render.mjs*)")
 
 # ---------------------------------------------------------------- case index
 
