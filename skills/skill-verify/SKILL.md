@@ -43,11 +43,11 @@ description: "Use when an existing SKILL.md needs auditing for quality, complian
 
 6. **Detect Anti-Patterns** — scan for every row in the Anti-Patterns Reference table. Read [references/detection-patterns.md](references/detection-patterns.md) for the regexes first; do not re-derive them.
    - Apply the mechanical regex scans in one pass, then the judgment-based rows (#4, #14, #15, #16) one at a time
-   - Classify each normative guidance block by the failure it evidently targets, then check its form against the Guidance Form Rules table
+   - Classify each normative guidance block by the failure it evidently targets, then check its form against the table in [references/guidance-form-rules.md](references/guidance-form-rules.md)
 
 7. **Check Structural Completeness** — the highest-prevalence real defects are omissions, not smells. Read [references/structural-completeness.md](references/structural-completeness.md) for what counts as satisfying each row, then check the Structural Completeness table.
 
-8. **Validate Structure** (check against Structure Rules)
+8. **Validate Structure**. Check against the table in [references/structure-rules.md](references/structure-rules.md)
 
 9. **Assess Token Efficiency and Progressive Disclosure**
    - Use the measured cost from step 2 where available; otherwise count lines and words and estimate at ~0.75 words/token, stating that the estimate runs low
@@ -130,7 +130,7 @@ Regexes and the exact caps are in `references/detection-patterns.md`; the portab
 | 12 | **Decoration and post-invocation persuasion** | `> Note:` blockquotes, hard-wrapped prose, 3-deep bullet ladders, horizontal rules in body, emoji headers, ASCII boxes. Also "Bottom Line"/"Remember" recaps and social proof — the reader already invoked the skill. Charged on every load | High |
 | 13 | **Unexplained all-caps imperatives** | MUST/ALWAYS/NEVER with no rationale nearby. Flag only caps with no stated *why* — escalating to MUST for a rule that is actually being missed is legitimate | Low |
 | 14 | **Explanations the model already knows** | Tutorials for mainstream libraries, definitions of common terms. Test: "Does the model need this? Does this paragraph justify its token cost?" | Medium |
-| 15 | **Guidance form mismatched to failure** | Form does not match the targeted failure (see Guidance Form Rules) | High |
+| 15 | **Guidance form mismatched to failure** | Form does not match the targeted failure (see `references/guidance-form-rules.md`) | High |
 | 16 | **Nuance and exemption clauses** | "unless it matters", "except when necessary" appended to a rule; "this limit doesn't apply to..." carve-outs | High |
 | 17 | **Trigger-style description on a manual-only skill** | `disable-model-invocation: true` with a "Use when..." description. The description never enters context — trigger phrasing is dead tokens. Write a human-readable label | Low |
 | 18 | **`context: fork` with no task** | `context: fork` on a skill that states conventions rather than a task. The subagent receives guidelines and no actionable prompt, and returns nothing useful | Medium |
@@ -151,39 +151,6 @@ Absences, not smells. These are the defects that actually dominate real skills, 
 | **Progress tracking** | A long workflow with no checklist or state the agent updates as it goes | Medium |
 | **Caveats and failure path** | No statement of what to do when a step fails. Undefined failure paths get improvised | Medium |
 | **Utility script** | The same deterministic logic re-derived in prose every run instead of shipped as a script | Low |
-
-## Guidance Form Rules
-
-Normative guidance has a form, and each form fixes exactly one failure type; the form that bulletproofs one measurably backfires on another. Classify the failure the guidance targets, then check the form (mismatch = Anti-Pattern #15):
-
-| Baseline failure the guidance targets | Right form | Wrong form — flag it |
-|---|---|---|
-| Skips/violates a rule under pressure (knows better, does it anyway) | Prohibition + rationalization table + red flags | Soft guidance ("prefer...", "consider...") |
-| Complies, but output has the wrong shape (bloated, buried verdict, restated spec) | Positive recipe or contract: state what the output IS — its parts, in order | Prohibition list ("don't restate", "never narrate") |
-| Omits a required element from something they already produce | Structural: REQUIRED field or slot in the template they fill in | Prose reminders near the template |
-| Behavior should depend on a condition | Conditional keyed to an observable predicate | Unconditional rule + exemption clauses |
-
-Prohibitions backfire on shaping problems because agents negotiate with "don't X" under a competing incentive: in head-to-head tests the prohibition arm produced more of the unwanted content than the recipe arm, and trended worse than the no-guidance control. A recipe leaves nothing to negotiate. Rewrite a shape-targeting prohibition list as a recipe, tagged `[requires confirmation]`.
-
-Two wording rules apply to whichever form is used (violation = Anti-Pattern #16):
-
-- **No nuance clauses.** "Don't X unless it matters" reopens the negotiation — one nuance clause degraded a winning recipe from consistent to noisy. Express the real exception as its own conditional on an observable predicate.
-- **Exemption clauses don't scope.** "This limit doesn't apply to code blocks" still suppresses code blocks. Restructure so the rule cannot reach the exempt part.
-
-A workflow branch keyed to an observable predicate ("if the frontmatter has a `dependencies:` block") is the right form, not a hedge. Flag only hedges whose predicate is a judgment call ("matters", "necessary", "makes sense").
-
-## Structure Rules
-
-| Element | Required | Check |
-|---------|----------|-------|
-| Procedural body | Yes | Numbered steps or an explicit decision table — not prose exposition |
-| Rules/Constraints section | Yes | H2 with "Rules", "Constraints", "Common Mistakes", or "Edge Cases" |
-| Verification Checklist | Yes | H2 "Verification" with `- [ ]` items |
-| Imperative language | Yes | Steps start with: Check, Run, Read, Verify, Create, Add, Remove |
-| No documentary language | Yes | Absent: "You should", "It's important to", "Make sure you", "Understanding" |
-| Code examples | Recommended | Each block under 20 lines; non-obvious patterns only |
-
-**Match prescriptiveness to the task, do not impose it.** A numbered workflow is right for a narrow task with a known-good path and real hazards. For open-ended tasks it is a defect in its own right — an over-prescribed sequence stops the agent adapting, and rigid step lists are among the most common smells in real skills. Judge the body against the task: flag missing structure only where the task has one correct order. Where it does not, require an explicit decision table instead of a step list.
 
 ## Token Targets
 
@@ -216,7 +183,7 @@ Outcome checks (not a workflow echo — per `.claude/rules/skill-optimization.md
 - [ ] If a `dependencies:` block exists: every package located in a package.json and every path confirmed on disk by running the checks, or a Critical finding raised
 - [ ] Every frontmatter finding cites the violated constraint (field, tier, or format rule) and the portability target it applies to
 - [ ] Every row of the Anti-Patterns Reference and the Structural Completeness table was checked — none skipped silently; regexes taken from `references/detection-patterns.md`
-- [ ] Every normative guidance block was classified against the Guidance Form Rules table; each form-mismatch finding names the failure type and the right form
+- [ ] Every normative guidance block was classified against the table in `references/guidance-form-rules.md`; each form-mismatch finding names the failure type and the right form
 - [ ] Prescriptiveness was judged against the task, not assumed — a missing numbered workflow is a finding only where the task has one correct order
 - [ ] No cut of discipline-critical guard content proposed without a `[requires confirmation]` tag and a re-test recommendation
 - [ ] Findings table is grouped by severity and every row has a line number (or `—` for absent-section findings)
