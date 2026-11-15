@@ -139,7 +139,7 @@ Walk milestones in order, and each milestone's DAG topologically.
 
 **Before a phase's first dispatch:** refresh the orchestration marker and record `PHASE_BASE=$(git rev-parse HEAD)`, logging `Base (Phase N): <sha>` — once per phase: a resumed phase keeps its entry's base; a concurrent phase logs it at its merge (parallel-phases.md), not here. Stamp each stage as it starts, for 4f's timings: `"${CLAUDE_PLUGIN_ROOT}/lib/implement-state.sh" stamp {feature} N implement`, then `barrier` (4a), `review` (4b), `fix-R` (each 4d round), and `done` (4e).
 
-**Verification tiers.** An implementer runs its task's `Verify at phase review` command plus lint and typecheck scoped to the files it touched — never the full suite, a build, or an install. You run the full suite once per phase (4a), at each milestone checkpoint, and at Final Verification.
+**Verification tiers.** An implementer runs its task's `Verify at phase review` command plus lint and typecheck scoped to the files it touched — never the full suite, a build, or an install. You run the full suite once per phase (4a), at each milestone checkpoint, and at completion.
 
 **Dispatch one implementer per task** with [implementer-prompt.md](implementer-prompt.md), sequential tasks one at a time. Fill each dispatch with:
 
@@ -211,7 +211,7 @@ Mark `fresh` as `(Recommended)` when the plan has more than five tasks: the cont
 
 ### Step 5: Completion
 
-Read [completion.md](completion.md) and follow it: Final Verification, the mandatory `premium` holistic review, the report (evidence first), then ask the user what comes next — never auto-hand-off.
+Read [completion.md](completion.md) and follow it: the final run of the required checks, the mandatory `premium` holistic review, the report (evidence first), then ask the user what comes next — never auto-hand-off.
 
 ## Model Selection
 
@@ -239,7 +239,7 @@ Map each tier name to a concrete model the runtime has; never hardcode a model I
 ## Verification Checklist
 
 - [ ] No `[~]` or `[ ]` task left in implementation-plan.md
-- [ ] Every required `.claude/verification.json` check and the plan's Final Verification pass, run after `session-event.sh implement stop`
+- [ ] Every required `.claude/verification.json` check passes, run after `session-event.sh implement stop`
 - [ ] The holistic verdict is READY TO MERGE, or the user accepted a lesser one; `holistic-review.md` is committed and its deferred minors triaged
 - [ ] Every logged `Ruling:`, `Decision` and `Waiver:` line is in the completion report
 - [ ] `git status --porcelain` is empty
