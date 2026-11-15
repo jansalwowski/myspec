@@ -135,12 +135,15 @@ START_DIR=$(first_dir "$CWDS") || START_DIR="$PWD"
 ALLOW_BRANCH_OPS=0
 # Here-strings, not `printf | grep -q`, throughout: grep -q exits on the
 # first match, a long input then kills printf with SIGPIPE, and under
-# pipefail the match reads as a miss.
-if grep -qE '(^|[[:space:]])MYSPEC_ALLOW_BRANCH_OPS=1[[:space:]]' <<< "$COMMAND"; then
+# pipefail the match reads as a miss. The substring test first skips the
+# grep for a command that cannot match (#524).
+if [[ "$COMMAND" == *MYSPEC_ALLOW_BRANCH_OPS=1* ]] \
+    && grep -qE '(^|[[:space:]])MYSPEC_ALLOW_BRANCH_OPS=1[[:space:]]' <<< "$COMMAND"; then
   ALLOW_BRANCH_OPS=1
 fi
 ALLOW_MAIN_CHECKOUT=0
-if grep -qE '(^|[[:space:]])MYSPEC_ALLOW_MAIN_CHECKOUT=1[[:space:]]' <<< "$COMMAND"; then
+if [[ "$COMMAND" == *MYSPEC_ALLOW_MAIN_CHECKOUT=1* ]] \
+    && grep -qE '(^|[[:space:]])MYSPEC_ALLOW_MAIN_CHECKOUT=1[[:space:]]' <<< "$COMMAND"; then
   ALLOW_MAIN_CHECKOUT=1
 fi
 
@@ -824,13 +827,26 @@ heavy_patterns() {
       ($skip[] | strings | select(. as $p | $all | index([$p]) | not) | "x\t" + .)' <<< "$SETTING" 2>/dev/null)
 }
 
+# ere_match <string> <ERE> -> 0 when the ERE matches the one-line string.
+# Bash's own regex, not a grep per pattern per segment (#524): the same for
+# a POSIX ERE, but the macOS regex library lacks GNU escapes (`\s`, `\b`,
+# `\w`, `\<`, back-references). An entry that holds a backslash before a
+# letter, digit, `<` or `>` still goes to grep, as a project wrote it for.
+ere_match() {
+  local re="$2"
+  case "$re" in
+    *\\[A-Za-z0-9\<\>]*) grep -qE -- "$re" <<< "$1" ;;
+    *) [[ "$1" =~ $re ]] ;;
+  esac
+}
+
 # heavy_match <segment> -> 0 when an entry of HEAVY matches the segment, the
 # dry-run carve-out excepted for the default entries.
 heavy_match() {
   local i
   for ((i = 0; i < ${#HEAVY[@]}; i++)); do
-    grep -qE -- "${HEAVY[i]}" <<< "$1" || continue
-    if [ "${HEAVY_DEFAULT[i]}" = 1 ] && grep -qE -- "$HEAVY_CARVE_OUT" <<< "$1"; then
+    ere_match "$1" "${HEAVY[i]}" || continue
+    if [ "${HEAVY_DEFAULT[i]}" = 1 ] && ere_match "$1" "$HEAVY_CARVE_OUT"; then
       continue
     fi
     return 0
@@ -842,7 +858,7 @@ matches_any() {  # matches_any <segment> <pattern>...
   local segment="$1" pattern
   shift
   for pattern in "$@"; do
-    if grep -qE -- "$pattern" <<< "$segment"; then
+    if ere_match "$segment" "$pattern"; then
       return 0
     fi
   done
@@ -969,7 +985,7 @@ check_segment() {
 
   if [ "$ALLOW_BRANCH_OPS" = 0 ]; then
     if matches_any "$segment" "${BRANCH_PATTERNS[@]}" \
-        && ! grep -qE -- "$BRANCH_CARVE_OUT" <<< "$segment"; then
+        && ! ere_match "$segment" "$BRANCH_CARVE_OUT"; then
       classify "$dir" "$gitdir"
       if [ -n "$CLS_ROOT" ]; then
         verdict=$(branch_op_verdict "$segment" "$CLS_ROOT" "$unres")
@@ -1216,7 +1232,8 @@ walk() {
   # A backslash in a removal's text: the scanner blanked it, so the path it
   # reads is not the one git gets (note_segment).
   # shellcheck disable=SC1003 # an ERE: the backslashes are literal
-  if grep -qE 'worktree[[:space:]\\]+remove[^;&|()]*\\' <<< "$cmd"; then esc=1; fi
+  if [[ "$cmd" == *worktree* ]] \
+      && grep -qE 'worktree[[:space:]\\]+remove[^;&|()]*\\' <<< "$cmd"; then esc=1; fi
   # A git dir substituted into a word (`GIT_DIR=$(...)/.git git switch`,
   # `git --git-dir=`...` switch`) splits that word across segments: the git
   # before the substitution is seen with no command, the one after it with no
