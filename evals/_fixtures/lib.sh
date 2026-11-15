@@ -31,12 +31,13 @@ FIXTURES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "$FIXTURES_DIR/../.." && pwd)"
 AI_DIR=".ai"
 
-# Copy one framework document, rendered the way init does: through the
-# plugin's lib/aidir-render.mjs, so `$${aiDir}` stays a literal placeholder.
-# It reads aiDir from the .myspec.json myspec_init writes first.
+# Copy one framework document, rendered the way lib/aidir-render.mjs does:
+# `${aiDir}` becomes the aiDir and the escape `$${aiDir}` a literal
+# `${aiDir}`. Done here rather than through the script: release-check runs
+# HEAD's evals/ against older release trees, which do not ship it.
 _copy_doc() {
   mkdir -p "$(dirname "$2")"
-  node "$PLUGIN_ROOT/lib/aidir-render.mjs" "$1" --root . > "$2"
+  AI="$AI_DIR" perl -pe 's/\$?\$\{aiDir\}/length($&) == 8 ? $ENV{AI} : q(${aiDir})/ge' "$1" > "$2"
 }
 
 # myspec_init [project-name] [description] [tech-stack]
