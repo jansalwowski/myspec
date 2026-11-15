@@ -7,6 +7,8 @@
 # Usage:
 #   "${CLAUDE_PLUGIN_ROOT}"/lib/implement-state.sh init <feature>
 #   "${CLAUDE_PLUGIN_ROOT}"/lib/implement-state.sh stamp <feature> <phase> <stage>
+#   "${CLAUDE_PLUGIN_ROOT}"/lib/implement-state.sh phase-start <feature> <phase>
+#   "${CLAUDE_PLUGIN_ROOT}"/lib/implement-state.sh timing <feature> <phase>
 #   "${CLAUDE_PLUGIN_ROOT}"/lib/implement-state.sh probe-run <feature> <milestone>
 #   "${CLAUDE_PLUGIN_ROOT}"/lib/implement-state.sh task <feature> <plan-file> <task>
 #
@@ -14,6 +16,12 @@
 #            main checkout's info/exclude when nothing ignores it yet), and
 #            print its absolute path
 # stamp      append "<stage> <epoch seconds>" to phase-<phase>.times there
+# phase-start  stamp `implement` and print HEAD's sha: the phase base (#488)
+# timing     print the phase's durations from its stamps, as feature-implement's
+#            progress note shows them: `41m (implement 17m · barrier 6m ·
+#            review 9m · fixes 2 rounds 9m)`. A stage runs until the next
+#            stamp; a stage with no stamp, or one still running, shows `?`, and
+#            the total needs a `done` stamp. No fix stamp: no fixes part.
 # probe-run  create the next free probes/milestone-<milestone>/run-<R>/ and
 #            print its absolute path
 # task       write the task's `### Task N:` section of the plan to task-<N>.md
@@ -36,7 +44,7 @@ set -euo pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/session-event.sh"
 
 die() { echo "implement-state: $*" >&2; exit 1; }
-usage() { die "usage: implement-state.sh init <feature> | stamp <feature> <phase> <stage> | probe-run <feature> <milestone> | task <feature> <plan-file> <task>"; }
+usage() { die "usage: implement-state.sh init <feature> | stamp <feature> <phase> <stage> | phase-start <feature> <phase> | timing <feature> <phase> | probe-run <feature> <milestone> | task <feature> <plan-file> <task>"; }
 
 # A name becomes one path segment: no slash, no leading dot, nothing odd.
 segment() { [[ "$2" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "invalid $1: '$2'"; }
@@ -95,6 +103,37 @@ case "$CMD" in
     segment stage "$4"
     ensure
     printf '%s %s\n' "$4" "$(date -u +%s)" >> "$STATE/phase-$3.times"
+    ;;
+  phase-start)
+    [ $# -eq 3 ] || usage
+    segment phase "$3"
+    sha=$(git -C "$TOP" rev-parse --verify -q HEAD) || die "HEAD is not a commit"
+    ensure
+    printf '%s %s\n' implement "$(date -u +%s)" >> "$STATE/phase-$3.times"
+    printf '%s\n' "$sha"
+    ;;
+  timing)
+    [ $# -eq 3 ] || usage
+    segment phase "$3"
+    times="$STATE/phase-$3.times"
+    [ -s "$times" ] || die "no stamps for phase $3 in $times"
+    awk '
+      function m(sec) { return int((sec + 30) / 60) "m" }
+      function show(k) { return ((k in unknown) || !(k in dur)) ? "?" : m(dur[k]) }
+      NF == 2 && $2 ~ /^[0-9]+$/ { n++; st[n] = $1; t[n] = $2 }
+      END {
+        for (i = 1; i <= n; i++) {
+          k = st[i]
+          if (k == "done") { end = t[i]; continue }
+          if (k ~ /^fix-/) { if (!(k in round)) { round[k] = 1; rounds++ } k = "fix" }
+          if (i < n) dur[k] += t[i + 1] - t[i]; else unknown[k] = 1
+        }
+        total = (end != "" ? m(end - t[1]) : "?")
+        line = total " (implement " show("implement") " · barrier " show("barrier") " · review " show("review")
+        if (rounds) line = line " · fixes " rounds " round" (rounds > 1 ? "s" : "") " " show("fix")
+        print line ")"
+      }
+    ' "$times"
     ;;
   probe-run)
     [ $# -eq 3 ] || usage

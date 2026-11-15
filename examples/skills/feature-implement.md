@@ -28,7 +28,7 @@ The simple shape: a single-phase plan with no parallel groups. The skill first a
 
 #### Step 0 — Confirm implementation flow (BLOCKING)
 
-The skill announces, then inspects git state *before* parsing the plan:
+The skill announces, then inspects git state *before* parsing the plan, with one `git-state.sh favorite-reports` call:
 
 > Executing feature-implement on `ai/features/favorite-reports/implementation-plan.md`.
 
@@ -84,7 +84,7 @@ Had the review returned findings instead, they would be triaged, never silently 
 
 #### Checkboxes close
 
-Only now — after `APPROVED` — the skill flips all six checkboxes `[~]` → `[x]`. The six commits already exist, one per task, each staging exactly that task's file list (`git add -- <paths>`, never `git add -A`) with the plan's message verbatim:
+Only now — after `APPROVED` — the skill flips all six checkboxes `[~]` → `[x]`, in one call: `plan-checkbox.sh <plan> 1 2 3 4 5 6 done`. The six commits already exist, one per task, each staging exactly that task's file list (`git add -- <paths>`, never `git add -A`) with the plan's message verbatim:
 
 ```
 feat(favorite-reports): add report_favorites migration
@@ -95,7 +95,7 @@ feat(favorite-reports): add StarButton component
 feat(favorite-reports): pin favorited reports to top of list
 ```
 
-The progress note carries the phase's wall-clock time per stage, read from the timestamps the controller appended to `.claude/state/implement/favorite-reports/phase-1.times`, and the same line goes to the Execution Log as `Timing (Phase 1)`:
+The progress note carries the phase's wall-clock time per stage, which `implement-state.sh timing favorite-reports 1` prints from the timestamps in `.claude/state/implement/favorite-reports/phase-1.times`, and the same line goes to the Execution Log as `Timing (Phase 1)`:
 
 ```
 ✓ Phase 1 complete: Favorites end to end — 52m (implement 31m · barrier 5m · review 16m · fixes 0 rounds 0m)
@@ -186,7 +186,7 @@ User picks **Worktree**. The skill creates `.claude/worktrees/feat-scheduled-rep
 
 The skill walks the DAG. **Phase 2 (`parallel:repos`)** is the showcase: T2 ScheduleRepository, T3 ExportRunRepository, disjoint file lists.
 
-1. Records `PHASE_BASE` (`git rev-parse HEAD`) and logs it as `Base (Phase 2): <sha>` in the Execution Log.
+1. Runs `implement-state.sh phase-start scheduled-reports 2`, which stamps `implement` and prints HEAD: that is `PHASE_BASE`, logged as `Base (Phase 2): <sha>` in the Execution Log.
 2. Creates one worktree per task from the feature HEAD — `"${CLAUDE_PLUGIN_ROOT}/lib/task-worktree.sh" create scheduled-reports-t2` and `create scheduled-reports-t3` — because harness `isolation: "worktree"` would fork from `main` and miss the Phase 1 migration. Each is provisioned from the controller's checkout: the `isolation.provision.symlink` entries (here `node_modules`) linked when the lockfile is unchanged, lint cache copied. Had `.myspec.json` set `isolation.provision.install` (say `composer install` in `api/` and `pnpm install --frozen-lockfile` at the root), each task worktree would run those steps instead of linking the dependency trees, one worktree after another before dispatch. A task whose code generation writes into a linked directory (say, a generator writing into `node_modules`) gets `--no-symlink`, and the controller runs the install in that worktree itself before dispatch, so generated output cannot write through the link (`_shared/worktree-provisioning.md` is the recipe). Only then does it mark T2 and T3 `[~]` — after `create`, so the uncommitted plan edit doesn't trip the dirty-tree warning. Then it dispatches **two implementers in one message**, each told to work from its worktree path with absolute paths and `cd <worktree> && …` in every command (a subagent's shell returns to the controller's checkout between calls), with only its file list and task text inline:
    - Implementer A → `src/features/schedules/repository.ts` (+ test)
    - Implementer B → `src/features/schedules/run-repository.ts` (+ test)
@@ -198,7 +198,7 @@ Had the review returned Critical/Important findings, the fix loop would run: rou
 
 #### Step 5 — Milestone Checkpoint
 
-After every phase in Milestone 1 passes, the skill checks the suite. Phase 5's barrier log starts with the current HEAD, since its review passed with no fix round, and every check in it exited 0, so the skill prints `Suite: reused the Phase 5 barrier run at <sha>` and does not run the suite a second time on the same tree. The milestone carries a `**Checkpoint probes:**` block (the tech-spec sets `verification_mode: mixed`), so the controller creates `.claude/state/implement/scheduled-reports/probes/milestone-1/run-1/` and dispatches one `myspec:probe-executor` agent with that block verbatim and whole, the checkout path and base commit, that artifact directory, and nothing else — no spec, no phase verdicts, no implementer reports. The agent has no Edit, Write, NotebookEdit or Agent tool and loads no project CLAUDE.md, so everything it needs to start the target comes from the block's Target and Scratch env lines. The executor works through the scratch-isolation checklist (separate database, a second Redis on its own port, a "before" fingerprint of the real database and queue; no bucket in this feature), runs each probe, and reports:
+After every phase in Milestone 1 passes, the skill checks the suite. Phase 5's barrier log starts with the current HEAD, since its review passed with no fix round, and every check in it exited 0, so the skill prints `Suite: reused the Phase 5 barrier run` and does not run the suite a second time on the same tree. The milestone carries a `**Checkpoint probes:**` block (the tech-spec sets `verification_mode: mixed`), so the controller creates `.claude/state/implement/scheduled-reports/probes/milestone-1/run-1/` and dispatches one `myspec:probe-executor` agent with that block verbatim and whole, the checkout path and base commit, that artifact directory, and nothing else — no spec, no phase verdicts, no implementer reports. The agent has no Edit, Write, NotebookEdit or Agent tool and loads no project CLAUDE.md, so everything it needs to start the target comes from the block's Target and Scratch env lines. The executor works through the scratch-isolation checklist (separate database, a second Redis on its own port, a "before" fingerprint of the real database and queue; no bucket in this feature), runs each probe, and reports:
 
 > P1: PASS — observed: `201`, body `{"id":"sch_1","cadence":"WEEKLY_MONDAY"}` — artifact: `…/probes/milestone-1/run-1/p1.json`
 > P2: BLOCKED — observed: `ECONNREFUSED` on the scratch `REDIS_URL` — artifact: `…/probes/milestone-1/run-1/p2.log`

@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 # plan-checkbox.sh
-# Reads or sets the checkbox state of one task in an implementation-plan.md,
+# Reads or sets the checkbox state of tasks in an implementation-plan.md,
 # addressed by its `### Task N:` heading (issue #93: an ad-hoc index script
 # matched `### Milestone 2` and the `| 2 | Task 2: ... |` rows of the
 # Execution Order table instead of the task, and corrupted the plan).
 #
 # Usage:
-#   "${CLAUDE_PLUGIN_ROOT}"/lib/plan-checkbox.sh <plan-file> <task> [todo|doing|done|text]
+#   "${CLAUDE_PLUGIN_ROOT}"/lib/plan-checkbox.sh <plan-file> <task>... [todo|doing|done|text]
 #
-# <task>   the task number: `3`, `T3`, or `Task 3`
+# <task>   the task number: `3`, `T3`, or `Task 3`. Several tasks take one
+#          call (#488): each is handled as if alone, in the order given, and
+#          a read prints one `Task N: <state>` line per task.
 # state    todo → `[ ]`, doing → `[~]`, done → `[x]`. Omitted: print the
 #          task's current state (todo, doing, done, or mixed) and change nothing.
 #          text: print the task's whole section (below) and change nothing;
@@ -21,28 +23,36 @@
 # Setting a state also bumps `last_updated:` in the plan frontmatter, which
 # feature-verify compares against tech-spec.md.
 #
-# Exit 1 when the heading is missing or duplicated, or the section holds no
-# checkbox — the plan is left unchanged in every failure case.
+# Exit 1 when a heading is missing or duplicated, or a section holds no
+# checkbox — the plan is left unchanged in every failure case, including
+# when only one of several tasks fails.
 
 set -euo pipefail
 
 usage() {
-  echo "usage: plan-checkbox.sh <plan-file> <task> [todo|doing|done|text]" >&2
+  echo "usage: plan-checkbox.sh <plan-file> <task>... [todo|doing|done|text]" >&2
   exit 1
 }
 
-# shellcheck disable=SC2015 # B is a test too: either one failing means usage
-[ $# -ge 2 ] && [ $# -le 3 ] || usage
+[ $# -ge 2 ] || usage
 PLAN="$1"
-TASK="$2"
-STATE="${3:-}"
+shift
+STATE=""
+case "${!#}" in
+  todo|doing|done|text) STATE="${!#}"; set -- "${@:1:$(($# - 1))}" ;;
+esac
+[ $# -ge 1 ] || usage
 
 [ -f "$PLAN" ] || { echo "plan-checkbox: no such file: $PLAN" >&2; exit 1; }
 
-ID=$(printf '%s' "$TASK" | sed -E 's/^[Tt]ask[[:space:]]*//; s/^[Tt]//')
-case "$ID" in
-  ''|*[!0-9]*) echo "plan-checkbox: task must be a number, T<n> or 'Task <n>' (got '$TASK')" >&2; exit 1 ;;
-esac
+IDS=()
+for TASK in "$@"; do
+  ID=$(printf '%s' "$TASK" | sed -E 's/^[Tt]ask[[:space:]]*//; s/^[Tt]//')
+  case "$ID" in
+    ''|*[!0-9]*) echo "plan-checkbox: task must be a number, T<n> or 'Task <n>' (got '$TASK')" >&2; exit 1 ;;
+  esac
+  IDS+=("$ID")
+done
 
 TEXT=""
 case "$STATE" in
@@ -57,11 +67,14 @@ case "$STATE" in
 esac
 
 TMP=$(mktemp "${TMPDIR:-/tmp}/plan-checkbox.XXXXXX")
-trap 'rm -f "$TMP"' EXIT
+CUR=$(mktemp "${TMPDIR:-/tmp}/plan-checkbox.XXXXXX")
+trap 'rm -f "$TMP" "$CUR"' EXIT
+cp "$PLAN" "$CUR"
 
+# one <id> <file>: run the task's pass over <file> into $TMP.
 # awk exit codes: 0 ok, 2 heading missing, 3 heading duplicated, 4 no checkbox.
-set +e
-awk -v id="$ID" -v mark="$MARK" -v set="${STATE:+1}" -v text="$TEXT" -v today="$(date +%F)" '
+one() {
+awk -v id="$1" -v mark="$MARK" -v set="${STATE:+1}" -v text="$TEXT" -v today="$(date +%F)" '
   function heading_level(s) { match(s, /^#+/); return RLENGTH }
   function emit(s) { if (set || (text && in_task)) print s }
   BEGIN {
@@ -112,23 +125,33 @@ awk -v id="$ID" -v mark="$MARK" -v set="${STATE:+1}" -v text="$TEXT" -v today="$
       print st
     }
   }
-' "$PLAN" > "$TMP"
-RC=$?
-set -e
+' "$2" > "$TMP"
+}
 
-case "$RC" in
-  0) ;;
-  2) echo "plan-checkbox: no '### Task $ID:' heading in $PLAN" >&2; exit 1 ;;
-  3) echo "plan-checkbox: '### Task $ID:' appears more than once in $PLAN" >&2; exit 1 ;;
-  4) echo "plan-checkbox: Task $ID has no checkbox steps in $PLAN" >&2; exit 1 ;;
-  *) echo "plan-checkbox: awk failed ($RC)" >&2; exit 1 ;;
-esac
+for ID in "${IDS[@]}"; do
+  set +e
+  one "$ID" "$CUR"
+  RC=$?
+  set -e
+  case "$RC" in
+    0) ;;
+    2) echo "plan-checkbox: no '### Task $ID:' heading in $PLAN" >&2; exit 1 ;;
+    3) echo "plan-checkbox: '### Task $ID:' appears more than once in $PLAN" >&2; exit 1 ;;
+    4) echo "plan-checkbox: Task $ID has no checkbox steps in $PLAN" >&2; exit 1 ;;
+    *) echo "plan-checkbox: awk failed ($RC)" >&2; exit 1 ;;
+  esac
+  if [ -n "$STATE" ]; then
+    cp "$TMP" "$CUR"
+  elif [ -z "$TEXT" ] && [ "${#IDS[@]}" -gt 1 ]; then
+    printf 'Task %s: %s\n' "$ID" "$(cat "$TMP")"
+  else
+    cat "$TMP"
+  fi
+done
 
-if [ -z "$STATE" ]; then
-  cat "$TMP"
-  exit 0
-fi
+[ -n "$STATE" ] || exit 0
 
 # cat into the file, not mv: keeps the plan's inode, mode and any hard link.
-cat "$TMP" > "$PLAN"
-echo "plan-checkbox: Task $ID → $STATE"
+cat "$CUR" > "$PLAN"
+LIST=$(printf ', %s' "${IDS[@]}")
+echo "plan-checkbox: Task ${LIST#, } → $STATE"

@@ -124,6 +124,19 @@ cmp -s "$FIXTURE" "$PLAN"; ok "text leaves the plan unchanged" $?
 "$SCRIPT" "$PLAN" 4 text >/dev/null 2>&1
 [ $? -ne 0 ]; ok "text of a missing task exits non-zero" $?
 
+# --- several tasks in one call (#488) ------------------------------------------
+fresh
+"$SCRIPT" "$PLAN" 2 T3 "Task 10" "done" >/dev/null; ok "set Tasks 2, 3 and 10 done in one call exits 0" $?
+[ "$("$SCRIPT" "$PLAN" 2 3 10 1 | tr '\n' '|')" = "Task 2: done|Task 3: done|Task 10: done|Task 1: todo|" ]; ok "a read of several tasks prints one line each" $?
+[ "$(changed_lines | wc -w | tr -d ' ')" = "6" ]; ok "three tasks change their five steps plus last_updated" $?
+fresh
+"$SCRIPT" "$PLAN" 2 4 "done" >/dev/null 2>&1
+[ $? -ne 0 ]; ok "one missing task among several exits non-zero" $?
+cmp -s "$FIXTURE" "$PLAN"; ok "and leaves the plan unchanged, the valid task included" $?
+"$SCRIPT" "$PLAN" 2 11 doing >/dev/null 2>&1
+[ $? -ne 0 ]; ok "one task without checkboxes among several exits non-zero" $?
+cmp -s "$FIXTURE" "$PLAN"; ok "and leaves the plan unchanged" $?
+
 # --- a fence closes only on its own character and length -----------------------
 printf '%s\n' '### Task 1: a' '```bash' 'echo x' '~~~' '```' '- [ ] s' '### Task 2: b' '- [ ] real' > "$ROOT/tilde.md"
 "$SCRIPT" "$ROOT/tilde.md" 2 doing >/dev/null 2>&1; ok "~~~ inside a backtick fence does not close it" $?

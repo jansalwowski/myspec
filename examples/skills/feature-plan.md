@@ -183,7 +183,7 @@ yes
 
 ### Step 6: Commit decision (BLOCKING)
 
-`HEAD` is the default branch (`main`) and the working tree is clean, so the skill recommends a new branch and asks:
+One `git-state.sh` call shows that `HEAD` is the default branch (`main`) and the working tree is clean, so the skill recommends a new branch and asks:
 
 ```
 Plan is ready. Commit before /feature-implement to avoid dangling files.

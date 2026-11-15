@@ -3,7 +3,9 @@
 #
 # The properties under test: init creates the directory, prints its absolute
 # path and makes git ignore it (once, and not at all when a .gitignore already
-# does); stamp appends one "<stage> <epoch>" line per call; probe-run hands out
+# does); stamp appends one "<stage> <epoch>" line per call; phase-start
+# stamps implement and prints HEAD; timing turns the stamps into the progress
+# note's durations; task writes one task's plan section; probe-run hands out
 # run-1, run-2, ... without reusing one; every checkout of a repository gets
 # the main checkout's state (#441), and a state directory left in a linked
 # worktree by an older version moves there, from whichever checkout runs
@@ -55,6 +57,21 @@ expect_eq "one line per stamp, in order" "$(cut -d' ' -f1 "$T" | tr '\n' ' ')" "
 if grep -qE '^implement [0-9]{9,}$' "$T"; then ok "each line carries epoch seconds"; else nok "each line carries epoch seconds" "$(cat "$T")"; fi
 (cd "$REPO" && "$SCRIPT" stamp invoice-due-dates 3a review)
 [ -f "$REPO/.claude/state/implement/invoice-due-dates/phase-3a.times" ] && ok "a phase id with a letter (3a) is valid" || nok "a phase id with a letter (3a) is valid"
+
+echo "# phase-start"
+ps=$(cd "$REPO" && "$SCRIPT" phase-start invoice-due-dates 7)
+expect_eq "prints HEAD's sha" "$ps" "$(git -C "$REPO" rev-parse HEAD)"
+expect_eq "stamps implement" "$(cut -d' ' -f1 "$REPO/.claude/state/implement/invoice-due-dates/phase-7.times")" "implement"
+
+echo "# timing"
+TD="$REPO/.claude/state/implement/invoice-due-dates"
+printf '%s\n' 'implement 1000' 'barrier 2020' 'review 2380' 'fix-1 2920' 'fix-2 3100' 'done 3460' > "$TD/phase-8.times"
+expect_eq "every stage, fix rounds summed" "$(cd "$REPO" && "$SCRIPT" timing invoice-due-dates 8)" "41m (implement 17m · barrier 6m · review 9m · fixes 2 rounds 9m)"
+printf '%s\n' 'implement 0' 'review 600' 'done 900' > "$TD/phase-9.times"
+expect_eq "no barrier stamp shows ?, no fix stamp drops the fixes part" "$(cd "$REPO" && "$SCRIPT" timing invoice-due-dates 9)" "15m (implement 10m · barrier ? · review 5m)"
+printf '%s\n' 'implement 0' 'barrier 60' 'review 120' 'fix-1 180' > "$TD/phase-10.times"
+expect_eq "no done stamp: the open stage and the total are ?" "$(cd "$REPO" && "$SCRIPT" timing invoice-due-dates 10)" "? (implement 1m · barrier 1m · review 1m · fixes 1 round ?)"
+if (cd "$REPO" && "$SCRIPT" timing invoice-due-dates 11 >/dev/null 2>&1); then nok "a phase with no stamps exits 1"; else ok "a phase with no stamps exits 1"; fi
 
 echo "# probe-run"
 r1=$(cd "$REPO" && "$SCRIPT" probe-run invoice-due-dates 1)
@@ -112,7 +129,7 @@ BARE=$(cd "$ROOT/bare.git" && pwd -P)
 expect_eq "state under myspec-state/implement" "$(cd "$ROOT/bwt" && "$SCRIPT" init f)" "$BARE/myspec-state/implement/f"
 
 echo "# bad input creates nothing"
-for args in "init ../x" "init .hidden" "init a/b" "stamp f 1" "stamp f 1/2 x" "probe-run f" "task f plan.md" "task f plan.md x/1" "frobnicate f" "init"; do
+for args in "init ../x" "init .hidden" "init a/b" "stamp f 1" "stamp f 1/2 x" "probe-run f" "task f plan.md" "task f plan.md x/1" "phase-start f" "phase-start f ../1" "timing f" "frobnicate f" "init"; do
   # shellcheck disable=SC2086 # the args are split on purpose
   if (cd "$REPO" && "$SCRIPT" $args >/dev/null 2>&1); then nok "rejects: $args"; else ok "rejects: $args"; fi
 done

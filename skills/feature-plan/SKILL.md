@@ -156,7 +156,7 @@ Present the plan. If Step 4.5 recorded any `DEFERRED` row, list those requiremen
 
 The plan must be committed before `/myspec:feature-implement` runs, or the spec and plan files dangle on the current branch and are left behind when implement makes its worktree.
 
-Resolve the default branch, `HEAD` and working-tree state (REQUIRED reference: [`_shared/git-helpers.md`](../_shared/git-helpers.md)), then call `AskUserQuestion` — question "Plan is ready. Commit before /feature-implement to avoid dangling files.", header "Commit plan" — with the recommended option first and `(Recommended)` appended:
+Run `"${CLAUDE_PLUGIN_ROOT}/lib/git-state.sh"` once for the default branch, `HEAD` and working-tree state (REQUIRED reference: [`_shared/git-helpers.md`](../_shared/git-helpers.md)), then call `AskUserQuestion` — question "Plan is ready. Commit before /feature-implement to avoid dangling files.", header "Commit plan" — with the recommended option first and `(Recommended)` appended:
 
 | Option | Does |
 |--------|------|

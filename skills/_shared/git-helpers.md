@@ -4,6 +4,15 @@ Reusable git logic referenced by skills that ask about commits, branches, or
 worktrees. Not a skill — do not invoke via `Skill`. Read inline when a skill
 points to this file.
 
+## One call for every signal
+
+`"<plugin lib>/git-state.sh" [<feature-name>]` prints the default branch, the
+current branch and the tree state (with the porcelain lines when dirty), plus,
+with a feature name, the `feat-{name}` worktree and whether `feat/{name}`
+exists. `<plugin lib>` is the plugin's `lib` directory, whose resolved path the
+skill that sent you here states. Run it once instead of the commands below;
+they are the fallback when the script cannot run.
+
 ## Detect the default branch
 
 Run this cascade; first one that succeeds is authoritative:
