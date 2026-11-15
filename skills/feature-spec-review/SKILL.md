@@ -26,9 +26,8 @@ Steps 1–6 run in a fresh subagent, so the review never reads the spec with the
    - Read related feature specs listed in dependencies.md
 
 2. **Analyze Structure**
-   - Verify required sections exist: Overview, Requirements, User Stories, Acceptance Criteria, Out of Scope
+   - Check spec.md and dependencies.md against [`_shared/spec-template.md`](../_shared/spec-template.md): frontmatter fields, every required section, `REQ-001` requirement IDs, `- [ ] AC-1:` acceptance criteria, the dependencies.md headings
    - Check for empty or stub sections
-   - Validate frontmatter has spec_version, status, priority
 
 3. **Apply Review Dimensions** (Check spec.md against all 8 dimensions below)
    - Completeness: Missing user stories, requirement gaps, undefined edge cases
@@ -102,7 +101,7 @@ Steps 1–6 run in a fresh subagent, so the review never reads the spec with the
 | **Consistency** | Contradictory requirements, conflicting priorities | Same concept described differently, requirements that contradict each other, misaligned acceptance criteria |
 | **Clarity** | `might`, `could`, `possibly`; `should` without `must` | Vague language, unmeasurable criteria, ambiguous terms, unclear priorities. RFC-style `may` marking an explicitly optional requirement is correct usage (feature-spec mandates it) — flag `may` only when it leaves a *required* behavior undecided |
 | **Scope** | Empty "Out of Scope", "nice to have" in requirements | Scope creep indicators, features contradicting "Out of Scope", undefined boundaries |
-| **Testability** | Acceptance criteria without `[ ]`, subjective criteria | Unmeasurable criteria, untestable requirements, no clear pass/fail conditions |
+| **Testability** | Acceptance criteria not in the `- [ ] AC-1:` form, subjective criteria | Unmeasurable criteria, untestable requirements, no clear pass/fail conditions |
 | **Dependencies** | Feature names mentioned in spec.md | Dependencies not in dependencies.md, circular dependencies, missing features in index.yaml |
 | **Assumptions** | `assumes`, `expects`, `given that`, implicit prerequisites | Hidden assumptions, unstated preconditions, undocumented system state requirements |
 | **YAGNI** | `future`, `extensible`, `scalable`, `flexible` | Over-engineering, features without clear user value, premature optimization, "just in case" requirements |
@@ -125,14 +124,8 @@ Run these checks against spec.md content:
 // Unresolved decisions (Completeness)
 /\b(TBD|TODO|FIXME|\?\?\?)\b/gi
 
-// Missing structure (Completeness)
-// Check: Are requirements numbered? (REQ-001 pattern)
-
 // Potential scope creep (Scope)
 // Check: Is "Out of Scope" section empty or generic?
-
-// Not checkable (Testability)
-// Check: Do acceptance criteria use `[ ]` checkbox format?
 ```
 
 Technical content is `feature-spec-cleanup`'s job, not a dimension here. If spec.md holds a code block or SQL, add one Low row that recommends `/myspec:feature-spec-cleanup`, and no other finding for it.
@@ -142,7 +135,7 @@ Technical content is `feature-spec-cleanup`'s job, not a dimension here. If spec
 **REQUIRED:** Follow [../\_shared/review-output.md](../_shared/review-output.md) for the findings table, fix-proposal shape, and tagging rules. Example row for this skill:
 
 ```markdown
-| Critical | Consistency | Contradictory requirements | spec.md | 45-47, 89 | REQ-003 requires admin approval, but AC-007 allows auto-approval |
+| Critical | Consistency | Contradictory requirements | spec.md | 45-47, 89 | REQ-003 requires admin approval, but AC-7 allows auto-approval |
 ```
 
 ## Severity Classification
@@ -157,15 +150,17 @@ Technical content is `feature-spec-cleanup`'s job, not a dimension here. If spec
 ## Cross-File Validation Rules
 
 ### spec.md → dependencies.md
-- Every feature name mentioned in spec.md Requirements/User Stories must appear in dependencies.md "depends_on" section
+Headings are the ones in [`_shared/spec-template.md`](../_shared/spec-template.md#dependenciesmd).
+
+- Every feature name mentioned in spec.md Requirements/User Stories must appear in dependencies.md "Feature Dependencies"
 - If spec.md says "Out of Scope: Feature X", Feature X should NOT be in dependencies.md
 
 ### dependencies.md → index.yaml
-- Every feature in dependencies.md "depends_on" must exist in ${aiDir}/features/index.yaml
-- Every feature in dependencies.md "enables" must exist in ${aiDir}/features/index.yaml
+- Every feature under "Feature Dependencies" must exist in ${aiDir}/features/index.yaml and be in this feature's `depends-on` list
+- Every feature under "Dependent Features" must exist in ${aiDir}/features/index.yaml
 
 ### dependencies.md Bidirectional Check
-- If Feature A depends on Feature B, then Feature B should list Feature A in "enables"
+- If Feature A lists Feature B under "Feature Dependencies", then Feature B should list Feature A under "Dependent Features"
 - Circular dependencies are an error: A depends on B, B depends on A
 
 ### Feature Status Compatibility

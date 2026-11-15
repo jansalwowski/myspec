@@ -29,34 +29,10 @@ tags: [feature, specification, planning, documentation]
      Under autopilot ([`_shared/autopilot.md`](../_shared/autopilot.md)) take the recommended option. When the request already says to review the draft before showing it, take "Yes". When the user only asked for the draft without questions, take "No" and say so in one line: they plan to read it first.
 
 2. **Create Spec Document**
-   Create `${aiDir}/features/{feature-name}/spec.md` with:
-
-```yaml
----
-title: "{Feature Title}"
-status: draft
-phase: 1
-priority: P{0|1|2|3}
-spec_version: 1
-created: {TODAY}
-last_updated: {TODAY}
----
-```
-
-Required sections:
-- **Overview**: 2-3 sentence summary
-- **Goals**: Bullet list of what this achieves
-- **User Stories / Requirements**: Numbered, testable requirements
-- **Acceptance Criteria**: Testable "done" conditions
-- **Out of Scope**: What this does NOT cover
-- **Open Questions**: Unresolved decisions
+   Create `${aiDir}/features/{feature-name}/spec.md` with the frontmatter, sections, requirement IDs and acceptance-criteria format in [`_shared/spec-template.md`](../_shared/spec-template.md#specmd). `feature-spec-review` checks against the same file.
 
 3. **Create Dependencies Document**
-   Create `${aiDir}/features/{feature-name}/dependencies.md`:
-   - Feature Dependencies (what this depends on)
-   - Dependent Features (what depends on this)
-   - External Dependencies (npm packages, APIs)
-   - Rationale for non-obvious dependencies
+   Create `${aiDir}/features/{feature-name}/dependencies.md` with the headings in [`_shared/spec-template.md`](../_shared/spec-template.md#dependenciesmd), and a reason for each dependency.
 
 4. **Update Feature Manifest**
    Add entry to `${aiDir}/features/index.yaml`:
@@ -116,8 +92,6 @@ Required sections:
 
 ## Rules
 - Use kebab-case for feature directory name
-- NO implementation details in spec (no file paths, class names)
-- Use "must" for requirements, "may" for optional
 - Ensure bidirectional dependency links are consistent
 
 ## Verification Checklist
@@ -125,8 +99,7 @@ Required sections:
 - [ ] `${aiDir}/features/{feature}/spec.md` created with valid YAML frontmatter
 - [ ] `status: draft` field present in frontmatter (`approved` only when the auto-review passed and the user said yes)
 - [ ] Auto-review question asked or answered by argument (Step 1); when on, feature-spec-review ran with `--from-author`
-- [ ] All required sections present: Overview, Goals, User Stories, Acceptance Criteria, Out of Scope, Open Questions
-- [ ] `${aiDir}/features/{feature}/dependencies.md` created
+- [ ] spec.md and dependencies.md match `_shared/spec-template.md`: every required section, `REQ-001` requirement IDs, `- [ ] AC-1:` acceptance criteria, the three dependencies headings
 - [ ] Entry added to `${aiDir}/features/index.yaml`
 - [ ] No implementation details in spec (no file paths, class names, SQL, code)
 - [ ] Run project documentation audit command if configured

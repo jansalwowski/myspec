@@ -51,7 +51,7 @@ last_updated: 2026-04-30
 ---
 ```
 
-Required sections all present — Overview, Goals, User Stories (US1 star, US2 unstar, US3 favorites pin to top), Acceptance Criteria (AC1–AC5), Out of Scope (sharing, tagging, max count), Open Questions (none).
+Required sections all present, per `_shared/spec-template.md` — Overview, Goals, Requirements (REQ-001–REQ-004), User Stories (star, unstar, favorites pin to top), Acceptance Criteria (`- [ ] AC-1:` to `AC-5`), Out of Scope (sharing, tagging, max count), Open Questions (none).
 
 `dependencies.md` is short — no feature deps, just a one-liner external dep on the existing `react-icons` star glyph.
 
@@ -133,14 +133,14 @@ The skill drafts:
 **dependencies.md**:
 
 ```markdown
-## Feature Dependencies (this feature requires)
+## Feature Dependencies
 
 - `notification-system` — used for queued email delivery. Hard dependency.
 - `email-templates` — provides the report email template. Hard dependency. Note: `email-templates` is currently in-progress; this feature blocks on its completion.
 
-## Dependent Features (require this feature)
+## Dependent Features
 
-(none yet)
+None.
 
 ## External Dependencies
 
