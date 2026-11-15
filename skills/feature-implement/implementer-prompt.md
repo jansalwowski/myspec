@@ -12,7 +12,8 @@ Task tool (general-purpose):
 
     ## Task Description
 
-    [FULL TEXT of task from plan — paste it here, do not make subagent read the file]
+    Read your task first: [task file path]. It holds your task's section
+    of the plan. Do not open the plan file itself.
 
     ## Context
 

@@ -6,11 +6,13 @@
 # Execution Order table instead of the task, and corrupted the plan).
 #
 # Usage:
-#   "${CLAUDE_PLUGIN_ROOT}"/lib/plan-checkbox.sh <plan-file> <task> [todo|doing|done]
+#   "${CLAUDE_PLUGIN_ROOT}"/lib/plan-checkbox.sh <plan-file> <task> [todo|doing|done|text]
 #
 # <task>   the task number: `3`, `T3`, or `Task 3`
 # state    todo → `[ ]`, doing → `[~]`, done → `[x]`. Omitted: print the
 #          task's current state (todo, doing, done, or mixed) and change nothing.
+#          text: print the task's whole section (below) and change nothing;
+#          feature-implement hands it to a subagent as a file (#476).
 #
 # Scope: only checkbox list items (`- [ ]`) inside the task's own section —
 # from its `### Task N:` heading to the next heading of level 1-3 (the next
@@ -25,7 +27,7 @@
 set -euo pipefail
 
 usage() {
-  echo "usage: plan-checkbox.sh <plan-file> <task> [todo|doing|done]" >&2
+  echo "usage: plan-checkbox.sh <plan-file> <task> [todo|doing|done|text]" >&2
   exit 1
 }
 
@@ -42,6 +44,10 @@ case "$ID" in
   ''|*[!0-9]*) echo "plan-checkbox: task must be a number, T<n> or 'Task <n>' (got '$TASK')" >&2; exit 1 ;;
 esac
 
+TEXT=""
+case "$STATE" in
+  text) TEXT=1; STATE="" ;;
+esac
 case "$STATE" in
   '') MARK="" ;;
   todo) MARK=" " ;;
@@ -55,9 +61,9 @@ trap 'rm -f "$TMP"' EXIT
 
 # awk exit codes: 0 ok, 2 heading missing, 3 heading duplicated, 4 no checkbox.
 set +e
-awk -v id="$ID" -v mark="$MARK" -v set="${STATE:+1}" -v today="$(date +%F)" '
+awk -v id="$ID" -v mark="$MARK" -v set="${STATE:+1}" -v text="$TEXT" -v today="$(date +%F)" '
   function heading_level(s) { match(s, /^#+/); return RLENGTH }
-  function emit(s) { if (set) print s }
+  function emit(s) { if (set || (text && in_task)) print s }
   BEGIN {
     task_re = "^###[ \t]+(Task[ \t]+|T)" id "([^0-9A-Za-z]|$)"
     box_re = "^[ \t]*[-*+][ \t]+\\[[ ~xX]\\]"
@@ -97,6 +103,7 @@ awk -v id="$ID" -v mark="$MARK" -v set="${STATE:+1}" -v today="$(date +%F)" '
   END {
     if (found == 0) exit 2
     if (found > 1) exit 3
+    if (text) exit 0
     if (boxes == 0) exit 4
     if (!set) {
       n = 0; for (k in seen) { n++; only = k }

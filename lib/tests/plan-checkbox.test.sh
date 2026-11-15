@@ -113,6 +113,17 @@ cp "$PLAN" "$ROOT/dup.md"
 [ $? -ne 0 ]; ok "duplicated task heading is refused" $?
 cmp -s "$ROOT/dup.md" "$PLAN"; ok "duplicate refusal leaves the plan unchanged" $?
 
+# --- text: the task's section verbatim, the plan unchanged (#476) --------------
+fresh
+"$SCRIPT" "$PLAN" 1 text > "$ROOT/t1.md"; ok "text Task 1 exits 0" $?
+sed -n "$(line_of '### Task 1: Migration'),$(( $(line_of '### Task 2: ScheduleRepository') - 1 ))p" "$FIXTURE" > "$ROOT/t1.want"
+cmp -s "$ROOT/t1.want" "$ROOT/t1.md"; ok "text prints Task 1 through its last line, fenced fake heading included" $?
+cmp -s "$FIXTURE" "$PLAN"; ok "text leaves the plan unchanged" $?
+"$SCRIPT" "$PLAN" 3 text | grep -v '^$' | tail -1 | grep -qxF -- '- [ ] **Step 2: Implement**'; ok "text Task 3 stops before the barrier" $?
+[ "$("$SCRIPT" "$PLAN" 11 text | head -1)" = "### Task 11: ScheduleForm [parallel:ui]" ]; ok "text works on a task with no checkbox" $?
+"$SCRIPT" "$PLAN" 4 text >/dev/null 2>&1
+[ $? -ne 0 ]; ok "text of a missing task exits non-zero" $?
+
 # --- a fence closes only on its own character and length -----------------------
 printf '%s\n' '### Task 1: a' '```bash' 'echo x' '~~~' '```' '- [ ] s' '### Task 2: b' '- [ ] real' > "$ROOT/tilde.md"
 "$SCRIPT" "$ROOT/tilde.md" 2 doing >/dev/null 2>&1; ok "~~~ inside a backtick fence does not close it" $?

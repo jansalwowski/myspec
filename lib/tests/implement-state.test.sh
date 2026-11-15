@@ -54,7 +54,7 @@ T="$REPO/.claude/state/implement/invoice-due-dates/phase-1.times"
 expect_eq "one line per stamp, in order" "$(cut -d' ' -f1 "$T" | tr '\n' ' ')" "implement barrier "
 if grep -qE '^implement [0-9]{9,}$' "$T"; then ok "each line carries epoch seconds"; else nok "each line carries epoch seconds" "$(cat "$T")"; fi
 (cd "$REPO" && "$SCRIPT" stamp invoice-due-dates 3a review)
-[ -f "$REPO/.claude/state/implement/invoice-due-dates/phase-3a.times" ] && ok "a dual-stream phase id (3a) is a valid phase" || nok "a dual-stream phase id (3a) is a valid phase"
+[ -f "$REPO/.claude/state/implement/invoice-due-dates/phase-3a.times" ] && ok "a phase id with a letter (3a) is valid" || nok "a phase id with a letter (3a) is valid"
 
 echo "# probe-run"
 r1=$(cd "$REPO" && "$SCRIPT" probe-run invoice-due-dates 1)
@@ -64,6 +64,16 @@ expect_eq "first run is run-1, the next run-2" "$r1 $r2" "$P/run-1 $P/run-2"
 [ -d "$r2" ] && ok "creates the run directory" || nok "creates the run directory"
 rm -rf "$P/run-1"
 expect_eq "a gap is reused, as the skill's loop did" "$(cd "$REPO" && "$SCRIPT" probe-run invoice-due-dates 1)" "$P/run-1"
+
+echo "# task"
+printf '%s\n' '---' 'title: x' '---' '### Task 1: A' '- [ ] a' '### Task 2: B' 'body' '- [ ] b' '## Barrier: x' > "$ROOT/plan.md"
+cp "$ROOT/plan.md" "$ROOT/plan.orig"
+tp=$(cd "$REPO" && "$SCRIPT" task invoice-due-dates "$ROOT/plan.md" T2)
+expect_eq "prints the task file path" "$tp" "$REPO/.claude/state/implement/invoice-due-dates/task-2.md"
+expect_eq "the file holds the task's section" "$(cat "$tp")" "### Task 2: B"$'\n'"body"$'\n'"- [ ] b"
+cmp -s "$ROOT/plan.orig" "$ROOT/plan.md" && ok "the plan is unchanged" || nok "the plan is unchanged"
+if (cd "$REPO" && "$SCRIPT" task invoice-due-dates "$ROOT/plan.md" 9 >/dev/null 2>&1); then nok "a missing task exits 1"; else ok "a missing task exits 1"; fi
+[ ! -e "$REPO/.claude/state/implement/invoice-due-dates/task-9.md" ] && [ ! -e "$REPO/.claude/state/implement/invoice-due-dates/task-9.md.tmp" ] && ok "and leaves no file" || nok "and leaves no file"
 
 echo "# a linked worktree shares the main checkout's state (#441)"
 git -C "$REPO" worktree add -q "$ROOT/wt" -b wt
@@ -102,7 +112,7 @@ BARE=$(cd "$ROOT/bare.git" && pwd -P)
 expect_eq "state under myspec-state/implement" "$(cd "$ROOT/bwt" && "$SCRIPT" init f)" "$BARE/myspec-state/implement/f"
 
 echo "# bad input creates nothing"
-for args in "init ../x" "init .hidden" "init a/b" "stamp f 1" "stamp f 1/2 x" "probe-run f" "frobnicate f" "init"; do
+for args in "init ../x" "init .hidden" "init a/b" "stamp f 1" "stamp f 1/2 x" "probe-run f" "task f plan.md" "task f plan.md x/1" "frobnicate f" "init"; do
   # shellcheck disable=SC2086 # the args are split on purpose
   if (cd "$REPO" && "$SCRIPT" $args >/dev/null 2>&1); then nok "rejects: $args"; else ok "rejects: $args"; fi
 done

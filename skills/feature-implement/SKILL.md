@@ -143,7 +143,7 @@ Walk milestones in order, and each milestone's DAG topologically.
 
 **Dispatch one implementer per task** with [implementer-prompt.md](implementer-prompt.md), sequential tasks one at a time. Fill each dispatch with:
 
-- The full task text inline — a subagent never reads the plan file.
+- The task file path, never pasted text: `"${CLAUDE_PLUGIN_ROOT}/lib/implement-state.sh" task {feature} <plan> N` writes its plan section to `$STATE/task-N.md` and prints that path. A subagent never reads the plan.
 - Its Verify command and the file-scoped lint/typecheck commands ("none" when a tool cannot take a file list).
 - `[Commit trailers]`: the lines your own instructions say end a commit message (a harness attribution reminder, a CLAUDE.md or project commit rule), copied verbatim, never one tool's trailer from memory. A subagent never sees those instructions. Your own commits carry the same lines. The prompt puts `Plan-Task: N` above them, which is how resume finds a committed task (resume.md).
 - A named model tier (Model Selection).

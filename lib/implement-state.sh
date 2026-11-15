@@ -8,6 +8,7 @@
 #   "${CLAUDE_PLUGIN_ROOT}"/lib/implement-state.sh init <feature>
 #   "${CLAUDE_PLUGIN_ROOT}"/lib/implement-state.sh stamp <feature> <phase> <stage>
 #   "${CLAUDE_PLUGIN_ROOT}"/lib/implement-state.sh probe-run <feature> <milestone>
+#   "${CLAUDE_PLUGIN_ROOT}"/lib/implement-state.sh task <feature> <plan-file> <task>
 #
 # init       create the directory, make sure git ignores .claude/state/ (the
 #            main checkout's info/exclude when nothing ignores it yet), and
@@ -15,6 +16,9 @@
 # stamp      append "<stage> <epoch seconds>" to phase-<phase>.times there
 # probe-run  create the next free probes/milestone-<milestone>/run-<R>/ and
 #            print its absolute path
+# task       write the task's `### Task N:` section of the plan to task-<N>.md
+#            there (plan-checkbox.sh text) and print its absolute path, so
+#            every dispatch passes a path instead of the pasted text (#476)
 #
 # One command per step, so a session asks for one permission instead of a
 # chain of mkdir, git and redirects, and a write under .claude/ (which Claude
@@ -32,7 +36,7 @@ set -euo pipefail
 . "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/session-event.sh"
 
 die() { echo "implement-state: $*" >&2; exit 1; }
-usage() { die "usage: implement-state.sh init <feature> | stamp <feature> <phase> <stage> | probe-run <feature> <milestone>"; }
+usage() { die "usage: implement-state.sh init <feature> | stamp <feature> <phase> <stage> | probe-run <feature> <milestone> | task <feature> <plan-file> <task>"; }
 
 # A name becomes one path segment: no slash, no leading dot, nothing odd.
 segment() { [[ "$2" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "invalid $1: '$2'"; }
@@ -101,6 +105,16 @@ case "$CMD" in
     while [ -e "$probes/run-$r" ]; do r=$((r + 1)); done
     mkdir -p "$probes/run-$r"
     printf '%s\n' "$probes/run-$r"
+    ;;
+  task)
+    [ $# -eq 4 ] || usage
+    id=$(printf '%s' "$4" | sed -E 's/^[Tt]ask[[:space:]]*//; s/^[Tt]//')
+    case "$id" in ''|*[!0-9]*) die "task must be a number, T<n> or 'Task <n>' (got '$4')" ;; esac
+    ensure
+    out="$STATE/task-$id.md"
+    "$(dirname "${BASH_SOURCE[0]}")/plan-checkbox.sh" "$3" "$id" text > "$out.tmp" || { rm -f "$out.tmp"; exit 1; }
+    mv "$out.tmp" "$out"
+    printf '%s\n' "$out"
     ;;
   *) usage ;;
 esac
