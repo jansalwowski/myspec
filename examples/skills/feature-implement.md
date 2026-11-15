@@ -54,7 +54,7 @@ Parses the Execution Order table: 6 sequential tasks, no barriers between them �
 
 **Plan freshness:** the front-matter carries `planned_against: <sha>`, so the skill runs `plan-freshness.sh check <sha> main <Modify: paths>`. The helper fetches and diffs three-dot from that SHA to `origin/main`, so the branch's own commits are not drift and a lagging local `main` never diffs empty. It exits 0 and prints `fresh`. Had a file changed, it would exit 1 with `stale` and the paths, and the skill would warn, log a `Ruling:`, and tell the affected task's implementer. Had the SHA been squashed away or the fetch failed, it would exit 2 with `unknown: <reason>`, and the skill would warn that freshness cannot be verified rather than proceed as if nothing changed.
 
-**Setup** also sets the orchestration marker with `"${CLAUDE_PLUGIN_ROOT}/lib/session-event.sh" implement start`, which the PostToolUse hook records in the session's state file. Until Step 5 removes it (`implement stop`), the Stop hook reports failing verification checks at controller turn ends as a warning rather than a block — mid-run the tree is red by design, and the controller may not fix code itself.
+**Setup** also sets the orchestration marker with `"${CLAUDE_PLUGIN_ROOT}/lib/session-event.sh" implement start`, which the PostToolUse hook records in the session's state file. Until Step 6 removes it (`implement stop`), the Stop hook reports failing verification checks at controller turn ends as a warning rather than a block — mid-run the tree is red by design, and the controller may not fix code itself.
 
 #### Step 2–3 — Task dispatch loop
 
@@ -101,9 +101,9 @@ The progress note carries the phase's wall-clock time per stage, read from the t
 ✓ Phase 1 complete: Favorites end to end — 52m (implement 31m · barrier 5m · review 16m · fixes 0 rounds 0m)
 ```
 
-This is the only milestone, so the skill goes directly to Step 5 (no Milestone Checkpoint prompt).
+This is the only milestone, so the skill goes directly to Step 6 (no Milestone Checkpoint prompt).
 
-#### Step 5 — Completion + review choice
+#### Step 6 — Completion + review choice
 
 1. Removes the orchestration marker, so the Stop hook blocks on failures again, then runs every required `.claude/verification.json` check.
 2. Writes the full-feature review package to `feature-review.diff` in the state directory (`review-diff.sh "$BASE_SHA"`, over `BASE_SHA..HEAD`) and dispatches the holistic reviewer with the package path, the exit code of each required check, and the plan's Execution Log entries. This pass is mandatory and the tier (premium) is named explicitly on the dispatch — an omitted model would silently inherit the session's model. Returns READY TO MERGE, **Not proven: none**, no MUST FIX triage items. The controller writes the report to `${aiDir}/features/favorite-reports/holistic-review.md` (frontmatter records `head_sha` and `verdict: ready-to-merge`) and commits it with the same trailers.
@@ -141,14 +141,14 @@ User picks **feature-implement-review** anyway. The skill invokes `/myspec:featu
 
 - All 6 tasks `[x]`, six commits on `feat/favorite-reports`, checkboxes closed after the phase passed review.
 - One phase review, not six.
-- Routed to `/myspec:feature-implement-review` by the user's Step 5 choice, over the recommended `feature-complete`.
+- Routed to `/myspec:feature-implement-review` by the user's Step 6 choice, over the recommended `feature-complete`.
 
 ### Why this example matters
 
 - **Step 0 is blocking and always asked.** Even on a clean `main` with an obvious recommendation, the skill confirms *where* to work. Silent assumption is the bug Step 0 exists to prevent; worktrees live at `.claude/worktrees/feat-{name}`, never `/tmp`.
 - **Each check runs at its narrowest scope.** The implementer runs its own task's check and file-scoped lint/typecheck, which catches in seconds the slips that otherwise each cost a review round. The controller runs the full suite once per phase, and the reviewer reads that log instead of repeating it. Because the implementer could see its own tests, the reviewer audits the test diff for weakening. The implementer does not spawn a reviewer of its own either; that review is already scheduled.
 - **Review is per-phase, at the barrier.** All six implementers finish, then one reviewer covers the whole phase's diff at once — spec conformance, quality, test coverage, docs — from a package file, never a pasted diff.
-- **Findings are triaged, never suppressed.** The Controller may not tell a reviewer what not to flag. Minor findings park in the plan's `## Execution Log`, plan-conflicting findings get a recorded `Ruling: <what> — <why> — <what it costs if wrong>`, and every ruling resurfaces under "Rulings I made" in the Step 5 completion report.
+- **Findings are triaged, never suppressed.** The Controller may not tell a reviewer what not to flag. Minor findings park in the plan's `## Execution Log`, plan-conflicting findings get a recorded `Ruling: <what> — <why> — <what it costs if wrong>`, and every ruling resurfaces under "Rulings I made" in the Step 6 completion report.
 - **One commit per task, staged by path.** Each implementer stages exactly its own file list and copies the plan's commit message verbatim, so the history reads cleanly and nothing outside the declared scope sneaks in.
 
 ---
@@ -196,7 +196,7 @@ The skill walks the DAG. **Phase 2 (`parallel:repos`)** is the showcase: T2 Sche
 
 Had the review returned Critical/Important findings, the fix loop would run: round 1 resumes the implementer that owns the finding (its context is intact), rounds 2–5 dispatch fresh (rounds 4–5 one tier up) — all from the controller's checkout, since the task worktree is gone after the merge — and every round ends with a fresh *scoped* re-review over `FIX_BASE..HEAD` that verdicts each finding ADDRESSED / NOT ADDRESSED, running only the checks that finding touches — never a full phase re-review. Minor findings never enter the loop; they park in the plan's `## Execution Log` for the holistic reviewer to triage.
 
-#### Milestone Checkpoint
+#### Step 5 — Milestone Checkpoint
 
 After every phase in Milestone 1 passes, the skill runs the milestone verification commands. The milestone carries a `**Checkpoint probes:**` block (the tech-spec sets `verification_mode: mixed`), so the controller creates `.claude/state/implement/scheduled-reports/probes/milestone-1/run-1/` and dispatches one `myspec:probe-executor` agent with that block verbatim and whole, the checkout path and base commit, that artifact directory, and nothing else — no spec, no phase verdicts, no implementer reports. The agent has no Edit, Write, NotebookEdit or Agent tool and loads no project CLAUDE.md, so everything it needs to start the target comes from the block's Target and Scratch env lines. The executor works through the scratch-isolation checklist (separate database, a second Redis on its own port, a "before" fingerprint of the real database and queue; no bucket in this feature), runs each probe, and reports:
 
@@ -217,7 +217,7 @@ The scratch Redis was never started. The controller does not rerun P2 against th
 
 This plan has 12 tasks, so `fresh` carries the `(Recommended)` marker: one milestone per session. The user takes it, the skill commits and exits, and a new `/myspec:feature-implement` session picks up at Milestone 2 from the checkbox state. **Milestone 2's** `parallel:ui` phase then dispatches three implementers (SchedulesList, ScheduleForm, RunHistoryTable) in three worktrees, merged at the barrier the same way.
 
-#### Step 5 — Completion
+#### Step 6 — Completion
 
 The required checks run, then the controller builds the full-feature review package (`feature-review.diff` in the state directory, written by `review-diff.sh` over `BASE_SHA..HEAD`) and dispatches the holistic reviewer on the premium tier with the package path, the exit code of each required check, and the plan's Execution Log entries, P1 and P2's probe lines among them. Per-phase reviews saw one phase's diff each; this one sees the feature — no overlap, and it is never skipped. Its Not proven list names one gap: the weekly cron's next-run calculation across a daylight-saving change is covered only by a test with a mocked clock. The completion report opens with the evidence — each required check with its exit code, then each probe line from the `run-2/` dispatch with its observed value and artifact — then the verdict with that Not proven line, the milestone summary, every `Ruling:` line under **Rulings I made**, every `Decision` line, and the triage, then offers the same 4-option choice (feature-implement-review / /code-review / feature-complete / Stop here). With 12 tasks and a Not proven gap, `feature-implement-review` carries the recommendation even on a READY TO MERGE verdict.
 
@@ -294,7 +294,7 @@ The skill never silently flips [~] → [x]; the only path to [x] is
 "task completes + phase review passes" in this run.
 ```
 
-Before re-executing T5 and T6, the skill reads Phase 4's stage stamps, `.claude/state/implement/scheduled-reports/phase-4.times`. It holds only an `implement` stamp, so the barrier never started. T5 and T6 are parallel tasks: their commits sit in their task worktrees until the barrier merge, so `git log --first-parent --format=%H --grep='^Plan-Task: 5$' <PHASE_BASE>..HEAD` exits 0 with no output, and so does the same check for T6. A serial task commits straight onto the feature branch, so there the check would print its commit, and that task would go to the barrier with the rest instead of being re-dispatched (resume.md step 4). Had its last stamp been `barrier`, Phase 4 would resume at its barrier (4a) instead, merging the task worktrees rather than discarding them; had it been `review` or a fix round, at a fresh phase review (Step 4, item b — not the Step 4b milestone checkpoint); had it been `done`, the review had passed and only the `[x]` flip remained. In every case the committed tasks are not re-implemented.
+Before re-executing T5 and T6, the skill reads Phase 4's stage stamps, `.claude/state/implement/scheduled-reports/phase-4.times`. It holds only an `implement` stamp, so the barrier never started. T5 and T6 are parallel tasks: their commits sit in their task worktrees until the barrier merge, so `git log --first-parent --format=%H --grep='^Plan-Task: 5$' <PHASE_BASE>..HEAD` exits 0 with no output, and so does the same check for T6. A serial task commits straight onto the feature branch, so there the check would print its commit, and that task would go to the barrier with the rest instead of being re-dispatched (resume.md step 4). Had its last stamp been `barrier`, Phase 4 would resume at its barrier (4a) instead, merging the task worktrees rather than discarding them; had it been `review` or a fix round, at a fresh phase review (Step 4, item b); had it been `done`, the review had passed and only the `[x]` flip remained. In every case the committed tasks are not re-implemented.
 
 The first milestone with a non-`[x]` task is Milestone 1, Phase 4 — resume there.
 

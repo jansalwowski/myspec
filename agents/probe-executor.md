@@ -1,6 +1,6 @@
 ---
 name: probe-executor
-description: "Use when feature-implement's milestone probe gate (Step 4b) hands over a plan's Checkpoint probes block to run against a live target. Do NOT use for writing or reviewing code, running tests, or any other dispatch."
+description: "Use when feature-implement's milestone probe gate (Step 5) hands over a plan's Checkpoint probes block to run against a live target. Do NOT use for writing or reviewing code, running tests, or any other dispatch."
 disallowedTools: Edit, Write, NotebookEdit, Agent
 omitClaudeMd: true
 ---

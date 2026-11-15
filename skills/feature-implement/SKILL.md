@@ -24,7 +24,7 @@ description: "Use when an approved implementation-plan.md is ready to execute �
 | Triage leaves a Critical or Important finding (4d) | [fix-loop.md](fix-loop.md) |
 | At startup, the plan already holds a `[x]` or `[~]` task or an Execution Log | [resume.md](resume.md) |
 | A milestone carries `**Checkpoint probes:**` | [probe-gate.md](probe-gate.md) |
-| Every milestone is complete (Step 5) | [completion.md](completion.md) |
+| Every milestone is complete (Step 6) | [completion.md](completion.md) |
 
 ## Execution Model
 
@@ -131,7 +131,7 @@ Read the implementation plan, front-matter first.
    "${CLAUDE_PLUGIN_ROOT}/lib/session-event.sh" implement start
    ```
 
-   Run it as written, as a Bash command: a hook records it from the command itself. The marker expires after 8h, so re-run it before each phase's first dispatch. Remove it (`… implement stop`) on **stop** or **fresh** at a checkpoint and at the start of Step 5.
+   Run it as written, as a Bash command: a hook records it from the command itself. The marker expires after 8h, so re-run it before each phase's first dispatch. Remove it (`… implement stop`) on **stop** or **fresh** at a checkpoint and at the start of Step 6.
 
 ### Step 3: Execute Milestones
 
@@ -197,9 +197,9 @@ Hand the reviewer the path, never a pasted diff. Every review package in this sk
 
 Durations come from `$STATE/phase-N.times` (a stage runs until the next stamp; one with no stamp shows as `?`). Log the same line as `Timing (Phase N)`.
 
-### Step 4b: Milestone Checkpoint
+### Step 5: Milestone Checkpoint
 
-After all phases in a milestone complete. For the final milestone run only (b), then continue at Step 5.
+After all phases in a milestone complete. For the final milestone run only (b), then continue at Step 6.
 
 **a) Verify completion:** every task in the milestone is `[x]`, and the full suite — every required check in `.claude/verification.json` — passes over the milestone's tree.
 
@@ -209,7 +209,7 @@ After all phases in a milestone complete. For the final milestone run only (b), 
 
 Mark `fresh` as `(Recommended)` when the plan has more than five tasks: the controller's context degrades across milestones. On **stop** or **fresh**, remove the orchestration marker, commit everything, and say how to resume: `/myspec:feature-implement` detects progress from the `[x]` checkboxes.
 
-### Step 5: Completion
+### Step 6: Completion
 
 Read [completion.md](completion.md) and follow it: the final run of the required checks, the mandatory `premium` holistic review, the report (evidence first), then ask the user what comes next — never auto-hand-off.
 

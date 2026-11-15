@@ -1,6 +1,6 @@
 # Completion
 
-Read from SKILL.md Step 5, once every milestone is complete. `<plugin lib>` is the path SKILL.md resolves.
+Read from SKILL.md Step 6, once every milestone is complete. `<plugin lib>` is the path SKILL.md resolves.
 
 1. Remove the orchestration marker (`"<plugin lib>/session-event.sh" implement stop`) so the Stop hook blocks again, then run every required `.claude/verification.json` check.
 2. Build the full-feature review package: `"<plugin lib>/review-diff.sh" "$BASE_SHA" "$STATE/feature-review.diff"` and dispatch the holistic reviewer (`./holistic-reviewer-prompt.md`) on the `premium` tier with the package path, the exit code of each required `verification.json` check, and the plan's Execution Log entries (deferred minors and parked findings to triage, probes, waivers and phase Not proven lines to weigh as evidence, decisions to check across the feature). This pass is mandatory — never skipped, never downgraded to a cheaper tier: it is the only pass that sees the whole feature. Write its report to `${aiDir}/features/{feature}/holistic-review.md` (frontmatter in the prompt file) and commit it with the commit trailers (SKILL.md Step 3): `/myspec:feature-implement-review` reads it and skips what it already covers.
