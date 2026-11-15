@@ -36,7 +36,7 @@ Reads `scheduled-reports/{spec.md, tech-spec.md, dependencies.md}`. Extracts key
 
 **Dependency graph**: `scheduled-reports` depends on `notification-system`. `notification-system` is a dependency.
 
-**Keyword scan**: greps `${aiDir}/features/*/{spec.md, tech-spec.md}` for `audit log`, `audit_log`, `retention`. Finds matches in:
+**Keyword scan**: greps `${aiDir}/features/**/{spec.md, tech-spec.md}` (sub-features included) for `audit log`, `audit_log`, `retention`. Finds matches in:
 
 - `notification-system/tech-spec.md` (multiple — owns the audit_log table).
 - `compliance/spec.md` (one — references audit_log retention as a compliance requirement).
