@@ -6,7 +6,7 @@ tags: [feature, decompose, split, subfeatures, refactoring, modular]
 
 # Feature Decomposition Skill
 
-Splits a monolithic feature into modular sub-features following the browser-extension pattern.
+Splits a monolithic feature into modular sub-features, each a peer directory under the parent with its own docs.
 
 ## Prerequisites
 
@@ -65,81 +65,19 @@ For each confirmed sub-feature, create directory and files. See [templates.md](r
 
 ### 4. Update Parent Files
 
-**spec.md** - Add Sub-Features table after Overview, remove moved content:
+Apply the patterns in [templates.md](references/templates.md) "Parent File Update Patterns":
 
-```markdown
-## Sub-Features
-
-This feature is split into modular sub-features:
-
-| Feature | Phase | Status | Description | Priority |
-|---------|-------|--------|-------------|----------|
-| [{SubFeature 1}](./{sub1}/spec.md) | 1 | ✅ Complete | [Description] | P1 |
-| [{SubFeature 2}](./{sub2}/spec.md) | 2 | 🔄 In Progress | [Description] | P1 |
-| [{SubFeature 3}](./{sub3}/spec.md) | 2 | ⬜ Draft | [Description] | P2 |
-
-See individual sub-feature specs for details.
-```
-
-**dependencies.md** - Add Sub-Features section:
-
-```markdown
-## Sub-Features
-
-This feature is decomposed into:
-
-- **{sub-feature-1}**: [Description] → [dependencies.md](./{sub1}/dependencies.md)
-- **{sub-feature-2}**: [Description] → [dependencies.md](./{sub2}/dependencies.md)
-
-Dependencies for each sub-feature are tracked separately.
-```
-
-**tech-spec.md** (if exists) - Add Sub-Feature Mapping after Architecture:
-
-```markdown
-## Sub-Feature Mapping
-
-| Sub-Feature | Implementation Files | Status |
-|-------------|---------------------|---------|
-| [{SubFeature 1}](./{sub1}/tech-spec.md) | [Key files] | Complete |
-| [{SubFeature 2}](./{sub2}/spec.md) | [Key files] | Draft |
-
-See individual sub-feature tech-specs for implementation details.
-```
+- **spec.md**: add the Sub-Features table after Overview and remove the moved content
+- **dependencies.md**: add the Sub-Features section
+- **tech-spec.md** (if exists): add the Sub-Feature Mapping after Architecture
 
 Do not change spec.md's `status:` — `in-progress` is a manifest-only status; spec frontmatter allows `draft | approved | deprecated`. Decomposition progress lives in the sub-feature manifest (next step).
 
 ### 5. Create Feature-Level index.yaml
 
-Create `${aiDir}/features/{feature}/index.yaml` with sub-features array:
+Create `${aiDir}/features/{feature}/index.yaml` from [templates.md](references/templates.md) "Feature-Level index.yaml Template". Each sub-feature depends on the parent at minimum.
 
-```yaml
-# Sub-feature manifest for {Feature Title}
-
-sub-features:
-  - name: {feature}/{sub-feature-1}
-    title: "Sub-Feature 1 Title"
-    status: complete
-    phase: 1
-    priority: P1
-    depends-on: [{feature}]
-    note: "Optional context"
-
-  - name: {feature}/{sub-feature-2}
-    title: "Sub-Feature 2 Title"
-    status: draft
-    phase: 1
-    priority: P2
-    depends-on: [{feature}, {feature}/{sub-feature-1}]
-```
-
-**Rules:**
-- Each sub-feature depends on parent feature at minimum
-- Sub-features can depend on other sub-features
-- Include `note` field for important context
-
-**Update main index.yaml:**
-After creating feature-level index.yaml, add `subfeatures: true` to parent feature entry in main `${aiDir}/features/index.yaml`.
+Then add `subfeatures: true` to the parent's entry in the main `${aiDir}/features/index.yaml`. The sub-feature list stays in the feature-level file.
 
 ### 6. Split Scenarios (if applicable)
 
@@ -147,7 +85,14 @@ If `scenarios.md` exists, read it, analyze which scenarios belong to which sub-f
 
 ### 7. Run Verification
 
-Run verification checks from `.claude/verification.json`. Fix any issues before completing.
+Decompose only moves Markdown and YAML, so check the docs, not the code:
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/lib/feature-status-audit/audit.mjs" --only={feature}
+node "${CLAUDE_PLUGIN_ROOT}/lib/feature-spec-sync/dead-paths.mjs" --only={feature}
+```
+
+The first checks the manifest entries against the files on disk, sub-features included. The second checks that every repo path the moved docs cite still resolves. Fix each finding the decomposition caused before completing.
 
 ### 8. Present Summary
 
@@ -221,7 +166,7 @@ After decomposition:
 - [ ] `subfeatures: true` added to parent feature in main `${aiDir}/features/index.yaml`
 - [ ] No duplicate content between parent and sub-features
 - [ ] All links between files work
-- [ ] Verification checks from `.claude/verification.json` pass — no errors
+- [ ] `audit.mjs --only={feature}` and `dead-paths.mjs --only={feature}` report nothing the decomposition caused
 - [ ] Scenarios split appropriately (if scenarios.md existed)
 - [ ] Parent manifest entry has `subfeatures: true`; spec.md `status:` left unchanged
 - [ ] Sub-feature dependencies properly set in feature-level index.yaml
