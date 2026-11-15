@@ -8,7 +8,7 @@ Four-phase methodology for finding root causes before applying fixes. Iron rule:
 
 - [Single-component bug found in Phase 1](#single-component-bug-found-in-phase-1)
 - [Multi-component bug — boundary tracing](#multi-component-bug--boundary-tracing)
-- [Stuck in a loop — 3-attempt escalation](#stuck-in-a-loop--3-attempt-escalation)
+- [Stuck in a loop: escalation after 2 failed fixes](#stuck-in-a-loop-escalation-after-2-failed-fixes)
 
 ---
 
@@ -179,9 +179,9 @@ The skill ends:
 
 ---
 
-## Stuck in a loop — 3-attempt escalation
+## Stuck in a loop: escalation after 2 failed fixes
 
-Phase 4's fallback: *"if fix doesn't work and you've tried < 3 fixes → return to Phase 1 with new information."* This is what stops infinite-fix-stacking when a hypothesis is wrong.
+Phase 4's fallback: after the first failed fix, return to Phase 1 with new information; after the second, stop and ask the user. This is what stops infinite-fix-stacking when a hypothesis is wrong.
 
 ### Setup
 
@@ -209,7 +209,11 @@ Production logs show occasional `ECONNRESET` errors when calling an external bil
 
 The skill flags this carefully:
 
-> The graceful-shutdown fix addressed a real bug (deploy-window errors), but it's not the original ECONNRESET we were chasing. **The remaining errors are still happening.** I've tried 2 fixes; the iron rule says I should not try a 3rd fix without restarting Phase 1 with the new evidence in hand.
+The skill runs `/myspec:memory-lookup econnreset billing` again (no match), then stops and asks:
+
+> I've made 2 attempts without success. What I've tried: HTTP keepalive (no change), graceful shutdown on deploy (fixed a real deploy-window bug, but not the original ECONNRESET). **The remaining errors are still happening.** Should I go back to Phase 1 with this evidence, or should we step back and reconsider the approach?
+
+The user answers: go back to Phase 1, and look at payloads.
 
 #### Phase 1, third pass
 
@@ -231,7 +235,7 @@ Reads the billing API's docs. Buried at the bottom: *"Maximum request body size:
 
 ### Why this example matters
 
-- **The 3-attempt rule is what saves you from infinite-fix-stacking.** Without it, the skill would have tried fix 3, fix 4, fix 5 — each addressing a plausible-sounding theory, each not actually solving the original problem. Methodical regression to Phase 1 with new info is the way out.
+- **The 2-failed-fix rule is what saves you from infinite-fix-stacking.** Without it, the skill would have tried fix 3, fix 4, fix 5, each addressing a plausible-sounding theory, each not actually solving the original problem. Stopping to ask, then returning to Phase 1 with new info, is the way out.
 - **A "partial success" is suspicious, not celebratory.** Attempt 2 fixed *something* but not the original symptom. Conflating those creates false confidence.
 - **Long-tail evidence gathering pays off.** Looking at 30 days of logs and correlating across multiple axes is what surfaced the payload-size pattern. Phase 1 isn't just "read the latest stack trace" — sometimes it's "stare at history hard."
 - **A failed-but-real fix isn't always reverted.** The graceful-shutdown work from attempt 2 stays. Two real bugs were found in this session, even though only one was the one we set out to find.

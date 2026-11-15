@@ -14,9 +14,10 @@ Find the root cause before proposing fixes. Symptom fixes waste time and create 
 ### Phase 1: Root Cause Investigation
 
 1. **Read error messages completely** — stack traces, line numbers, error codes. They often contain the answer.
-2. **Reproduce consistently** — exact steps, every time. If not reproducible, gather more data — do not guess.
-3. **Check recent changes** — `git diff`, recent commits, new dependencies, config changes.
-4. **Gather evidence at component boundaries** (multi-component systems only):
+2. **Look up past memories** — run `/myspec:memory-lookup` with the error message or symptom. A past session may have traced the same error already.
+3. **Reproduce consistently** — exact steps, every time. If not reproducible, gather more data — do not guess.
+4. **Check recent changes** — `git diff`, recent commits, new dependencies, config changes.
+5. **Gather evidence at component boundaries** (multi-component systems only):
 
 ```
 For EACH component boundary:
@@ -26,7 +27,7 @@ For EACH component boundary:
 Run once → analyze WHERE it breaks → investigate THAT component
 ```
 
-5. **Trace data flow backward** — where does the bad value originate? What called this with the bad value? Keep tracing up until you find the source. Fix at source, not at symptom.
+6. **Trace data flow backward** — where does the bad value originate? What called this with the bad value? Keep tracing up until you find the source. Fix at source, not at symptom.
 
 ### Phase 2: Pattern Analysis
 
@@ -46,11 +47,11 @@ Run once → analyze WHERE it breaks → investigate THAT component
 1. Write a failing test that reproduces the bug
 2. Implement a single fix addressing the root cause
 3. Verify: test passes, no regressions
-4. If fix doesn't work and you've tried < 3 fixes → return to Phase 1 with new information
+4. If the fix doesn't work and it is the first failed fix → return to Phase 1 with new information. The second failed fix → the rule below
 
-## 3-Attempt Architecture Rule
+## 2-Failed-Fix Escalation Rule
 
-**If 3+ fixes have failed:** stop. Don't attempt fix #4 — repeated failure on the same surface usually means the diagnosis or the architecture is wrong, not that fix #4 will be the one. Ask:
+**If the same error remains after 2 different fixes:** stop. Don't attempt fix #3 — repeated failure on the same surface usually means the diagnosis or the architecture is wrong, not that fix #3 will be the one. Run `/myspec:memory-lookup` with the error once more, then ask:
 
 - Is this pattern fundamentally sound?
 - Are we persisting through inertia?
@@ -59,7 +60,7 @@ Run once → analyze WHERE it breaks → investigate THAT component
 **Escalate to the user:**
 > "I've made {N} attempts without success. What I've tried: [list]. Each fix reveals new issues in different places — this may be an architectural problem. Should we step back and reconsider the approach?"
 
-This aligns with the escalation triggers in `${aiDir}/pre-flight.md`.
+This is the "Same error" row of "Escalation Triggers" in `${aiDir}/pre-flight.md`, which lists the other triggers.
 
 ## Red Flags — return to Phase 1
 
@@ -85,7 +86,7 @@ These thoughts mean Phase 1 isn't done; they justify guessing rather than diagno
 | "Multiple fixes at once saves time" | Can't isolate what worked. Causes new bugs. |
 | "Reference too long, I'll adapt" | Partial understanding guarantees bugs. Read completely. |
 | "I see the problem, let me fix it" | Seeing symptoms ≠ understanding root cause. |
-| "One more attempt" (after 2+ failures) | 3+ failures = architectural problem. Question the pattern. |
+| "One more attempt" (after 2 failures) | 2 failed fixes = stop and ask. Question the pattern. |
 
 ## Session Logging Integration
 
@@ -95,7 +96,7 @@ When debugging, log each attempt in the session table:
 | # | Action | File(s) | Result | Attempt | Type | Note |
 ```
 
-Increment **Attempt** when repeating same/similar approach. At attempt 3+, the escalation protocol triggers automatically.
+Increment **Attempt** when repeating same/similar approach. Nothing escalates for you: count the failed fixes yourself and stop at 2.
 
 ## Verification Checklist
 
@@ -107,4 +108,5 @@ Increment **Attempt** when repeating same/similar approach. At attempt 3+, the e
 - [ ] Made one change at a time
 - [ ] Wrote failing test before implementing fix
 - [ ] All tests pass after fix — run verification commands from `.claude/verification.json`
-- [ ] No more than 3 fix attempts without escalating
+- [ ] `/myspec:memory-lookup` run with the error before the first fix
+- [ ] Escalated to the user after 2 failed fixes, without trying a third
