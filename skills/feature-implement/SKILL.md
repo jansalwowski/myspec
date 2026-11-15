@@ -163,7 +163,7 @@ After 3 attempts on one task, whatever it reported, escalate: "I've made N attem
 
 After all tasks in a phase complete:
 
-**a) Barrier.** Merge parallel task worktrees first (parallel-tasks.md). Then run the full suite once — the plan's barrier commands plus each required `.claude/verification.json` check (its `diffCommand` when non-empty, with `MYSPEC_BASE_REF=$(git merge-base HEAD <default branch>)`) — and capture everything to `VERIFY_LOG="$STATE/phase-N-verify.log"`, each check headed by its command and exit code. A red run still goes to review, where each failure is attributed. Export a fresh `MYSPEC_CHECK_RUN_ID` per check; a check that is killed or times out keeps running wherever its client sent it, so run its `cleanup` with the same id before the next run.
+**a) Barrier.** Merge parallel task worktrees first (parallel-tasks.md). Then run the full suite once — the plan's barrier commands plus each required `.claude/verification.json` check (its `diffCommand` when non-empty, with `MYSPEC_BASE_REF=$(git merge-base HEAD <default branch>)`) — and capture everything to `VERIFY_LOG="$STATE/phase-N-verify.log"`: first `HEAD <sha>`, then each check headed by its command and exit code. A red run still goes to review, where each failure is attributed. Export a fresh `MYSPEC_CHECK_RUN_ID` per check; a check that is killed or times out keeps running wherever its client sent it, so run its `cleanup` with the same id before the next run.
 
 **b) Build the review package, then dispatch the phase reviewer** ([phase-reviewer-prompt.md](phase-reviewer-prompt.md), `mid` tier):
 
@@ -201,7 +201,7 @@ Durations come from `$STATE/phase-N.times` (a stage runs until the next stamp; o
 
 After all phases in a milestone complete. For the final milestone run only (b), then continue at Step 6.
 
-**a) Verify completion:** every task in the milestone is `[x]`, and the full suite — every required check in `.claude/verification.json` — passes over the milestone's tree.
+**a) Verify completion:** every task in the milestone is `[x]`, and the full suite — every required check in `.claude/verification.json` — passes over the milestone's tree. If the last phase's `VERIFY_LOG` names the current HEAD and every check in it exited 0, reuse it and print `Suite: reused the Phase N barrier run at <sha>`.
 
 **b) Probe gate** — only when the milestone carries a `**Checkpoint probes:**` block. Read [probe-gate.md](probe-gate.md), then dispatch the plugin agent `myspec:probe-executor` (`subagent_type: "myspec:probe-executor"`) — never general-purpose. You never run, reword, or drop a probe yourself, and tests green is not a substitute. The gate passes only on a `PROBES_PASSED` report or a logged user `Waiver` — it is the one check you do not grade; FAIL, BLOCKED or a missing report is a hard stop.
 
