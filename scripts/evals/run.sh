@@ -114,11 +114,13 @@ export CLAUDE_CODE_PROMPT_CACHE_TTL="${CLAUDE_CODE_PROMPT_CACHE_TTL:-5m}"
 ALLOW_TOOLS=(Write Edit "Bash(git diff:*)" "Bash(git log:*)" "Bash(git status:*)" "Bash(git show:*)"
   "Bash(git merge-base:*)" "Bash(git rev-parse:*)" "Bash(git branch:*)" "Bash(git symbolic-ref:*)")
 # The plugin lib helpers feature-implement runs as single commands (run state,
-# config read, plan freshness, orchestration marker, checkboxes), as a user
-# would approve them. Never unrestricted Bash: a controller could then write
+# config read, plan freshness, orchestration marker, checkboxes, git state),
+# as a user would approve them. git-state.sh is read-only and runs with or
+# without a feature name, so both forms are allowed. Never unrestricted Bash: a controller could then write
 # source through a heredoc, which the Write-based dispatch graders cannot see.
 ALLOW_TOOLS+=("Bash(*/lib/implement-state.sh *)" "Bash(*/lib/myspec-config.sh *)"
-  "Bash(*/lib/plan-freshness.sh *)" "Bash(*/lib/session-event.sh *)" "Bash(*/lib/plan-checkbox.sh *)")
+  "Bash(*/lib/plan-freshness.sh *)" "Bash(*/lib/session-event.sh *)" "Bash(*/lib/plan-checkbox.sh *)"
+  "Bash(*/lib/git-state.sh)" "Bash(*/lib/git-state.sh *)")
 # doctor's tier 0 (Phase 0), read-only: without it every doctor run stops
 # at the denied script before auditing anything.
 ALLOW_TOOLS+=("Bash(node *lib/setup-doctor.mjs*)")
