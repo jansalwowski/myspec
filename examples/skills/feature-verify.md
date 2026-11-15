@@ -27,7 +27,7 @@ The base case: a feature in good shape after a recent ship. Useful as a pre-merg
 
 ### Skill flow
 
-The skill walks the 8 categories. Each check passes. Final report:
+The skill runs `lib/feature-status-audit/audit.mjs --only=favorite-reports --json` and `lib/feature-spec-sync/dead-paths.mjs --only=favorite-reports`. Both report no issues. It then reads the docs for the checks the scripts do not cover. Each check passes. Final report:
 
 ```
 Feature Health: favorite-reports
@@ -81,7 +81,7 @@ The interesting case: a feature with mid-severity issues. The report routes each
 
 ### Skill flow
 
-The skill walks the categories and produces:
+The skill runs the two scripts. `audit.mjs` reports no issue. `dead-paths.mjs` reports 2 `MISSING` paths in tech-spec.md, which are High because the feature is `complete`. The skill reads the docs for the other checks and produces:
 
 ```
 Feature Health: team-invites

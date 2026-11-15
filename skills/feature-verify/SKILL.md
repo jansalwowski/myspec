@@ -1,7 +1,7 @@
 ---
 name: feature-verify
 description: "Use when one feature's health needs auditing — spec, tech-spec, plan, implementation, sub-features, memories, manifest sync. Keywords: feature health, verify feature, feature drift. Do NOT use to audit every feature (feature-status-audit)."
-allowed-tools: [Read, Grep, Glob]
+allowed-tools: [Read, Grep, Glob, Bash]
 ---
 
 # Feature Verify
@@ -23,15 +23,32 @@ Holistic read-only health check across all 8 feature documentation categories. P
 - Read manifest entry from `${aiDir}/features/index.yaml` (or `${aiDir}/features/{parent}/index.yaml` for sub-features)
 - Note: `status`, `phase`, `priority`, `depends-on`, `subfeatures`, `implementation-plan`, `note`
 
+Then run the two scripts once, from the project root. For a sub-feature, pass the parent to `audit.mjs` and read the result whose `name` is the sub-feature path.
+
+```bash
+node "${CLAUDE_PLUGIN_ROOT}/lib/feature-status-audit/audit.mjs" --only={top-level feature} --json
+node "${CLAUDE_PLUGIN_ROOT}/lib/feature-spec-sync/dead-paths.mjs" --only={feature}
+```
+
+`audit.mjs` owns status drift, required and expected docs per status, doc status vocabulary, archived plans and parent acceptance criteria. It exits 0 or 2 (2 means a Critical issue); 3 means it could not run. `dead-paths.mjs` lists `MISSING` and `MOVED` paths cited in the feature docs; it exits 0 clean, 1 with findings, 3 when it cannot run. If a script exits 3, report its error and do that step by hand.
+
+Report every `audit.mjs` issue with the script's severity. Do not check those conditions again by hand. Put each issue in a category:
+
+| Script message | Category |
+|----------------|----------|
+| `directory missing`, `required doc missing`, `expected doc missing`, `present but status=` (docs ahead), `draft with no documentation files` | Workflow Phase |
+| `frontmatter status: X is not a doc status` | Spec or Tech-Spec |
+| `implementation-plan.md is ...`, `implementation-plan.md still present`, `archived plans/...` | Plan |
+| `frontmatter status: draft but manifest status=complete` | Index Sync |
+| `subfeatures: true but no index.yaml`, any issue on a sub-feature result, `all N sub-features complete but spec.md acceptance criteria ...` | Sub-Features |
+
 ### 2. Check Spec
 
 Read `${aiDir}/features/{feature}/spec.md`:
 
 | Check | Severity | Condition |
 |-------|----------|-----------|
-| spec.md exists | Critical | File missing and status != planned |
 | Frontmatter complete | High | Missing any of: title, status, phase, priority, spec_version, created, last_updated |
-| Status valid | Medium | Status not in: draft, approved, deprecated |
 | Phase matches manifest | Low | spec.md phase != index.yaml phase |
 
 ### 3. Check Tech-Spec
@@ -40,11 +57,10 @@ Read `${aiDir}/features/{feature}/tech-spec.md`:
 
 | Check | Severity | Condition |
 |-------|----------|-----------|
-| tech-spec.md exists | Critical | Status is in-progress or complete but file missing |
-| tech-spec.md exists | Low | Status is planned or draft but file missing |
 | Frontmatter complete | High | Missing any of: title, status, based_on_spec_version, created, last_updated |
 | Spec version aligned | Critical | `based_on_spec_version` != spec.md `spec_version` (same severity as feature-tech-spec-review and the report example below) |
-| Status valid | Medium | Status not in: draft, approved, deprecated |
+
+A missing spec.md or tech-spec.md and an invalid doc status come from `audit.mjs` (Step 1).
 
 ### 4. Check Plan
 
@@ -54,28 +70,17 @@ Scan for `${aiDir}/features/{feature}/implementation-plan.md` and `${aiDir}/feat
 |-------|----------|-----------|
 | Plan missing | Medium | Status is in-progress, no implementation-plan.md, no archived plans in plans/ |
 | Plan stale | High | implementation-plan.md exists and tech-spec.md `last_updated` is newer than plan `last_updated` |
-| Orphaned plan | Medium | Status is complete but implementation-plan.md still exists (should be archived) |
-| Checkbox mismatch | Medium | See heuristic below |
 
-Checkbox-to-status heuristic (count `- [x]` vs `- [ ]` in implementation-plan.md):
-
-| Checkbox state | Manifest status | Flag |
-|----------------|-----------------|------|
-| 0% done | in-progress | "no progress recorded in plan" |
-| 100% done | in-progress | "plan complete — should run /feature-complete" |
-| >0% done | draft | "status should be in-progress" |
-| <100% done | complete | "premature completion — plan has unchecked items" |
+Use `docs.implementationPlan` and `docs.archivedPlans` from the `audit.mjs` JSON for the Plan missing check. Plan ratio drift, an active plan under `complete` and archived plans at 0/N come from `audit.mjs` (Step 1). Do not count checkboxes by hand.
 
 ### 5. Check Implementation
 
-If tech-spec.md has a "File Inventory" section:
-- Extract every repo-relative path in the section that has a file extension — backticked, in a table cell, or a bare bullet — in any language and any layout (`src/Controller/UserController.php`, `app/models/user.py`, `internal/queue/worker.go`, `web/App.vue`). Skip URLs, globs, and placeholders (`{x}`, `<x>`, `${x}`).
-- Use Glob to verify each path exists
+Dead paths come from `dead-paths.mjs` (Step 1). Drop a `MISSING` path that the tech-spec lists as still to be created in a feature that is not yet implemented.
 
 | Check | Severity | Condition |
 |-------|----------|-----------|
-| Inventory files exist | High | Tech-spec references files that don't exist and status >= in-progress |
-| Inventory files exist | Low | Tech-spec references files that don't exist and status = draft |
+| Cited paths exist | High | `dead-paths.mjs` reports `MISSING` or `MOVED` and status is in-progress or complete |
+| Cited paths exist | Low | `dead-paths.mjs` reports `MISSING` or `MOVED` and status is planned or draft |
 | Code ahead of docs | Medium | Files exist in expected directories but not listed in File Inventory |
 
 If tech-spec.md has checkbox task lists (the template uses a numbered outline without checkboxes):
@@ -91,11 +96,11 @@ If manifest entry has `subfeatures: true`:
 
 | Check | Severity | Condition |
 |-------|----------|-----------|
-| Sub-feature dir exists | High | Listed in index.yaml but directory missing |
-| Sub-feature spec exists | Medium | Directory exists but no spec.md |
 | Parent complete, child not | High | Parent status=complete but any sub-feature status != complete |
 | All children complete, parent not | Medium | All sub-features complete but parent status != complete |
 | Orphaned sub-feature | Low | Directory exists but not listed in index.yaml |
+
+A missing sub-feature directory or spec.md, a missing sub-feature index.yaml and open parent acceptance criteria come from `audit.mjs` (Step 1).
 
 If user requests recursive check: run Steps 2–5 for each sub-feature and append results.
 
@@ -113,25 +118,15 @@ If no memories found and no memory indexes exist: skip this section silently (pe
 
 | Check | Severity | Condition |
 |-------|----------|-----------|
-| Status matches reality | High | Manifest=complete but unchecked plan items exist, or manifest=draft but implementation files present |
 | Dependencies exist | Medium | `depends-on` lists a feature not found in any index.yaml |
 | Dependencies ready | Low | `depends-on` lists a feature with status=planned |
 | implementation-plan field | Low | Manifest `implementation-plan:` points to a file that doesn't exist |
-| subfeatures field | Medium | Manifest `subfeatures: true` but no `${aiDir}/features/{feature}/index.yaml` |
+
+Status drift (plan ratio against manifest status) and `subfeatures: true` without an index.yaml come from `audit.mjs` (Step 1).
 
 ### 9. Check Workflow Phase Appropriateness
 
-Verify the right documents exist for the current manifest status:
-
-The Required/Expected columns mirror the authoritative matrix in `lib/feature-status-audit/audit.mjs` (EXPECTATIONS) — keep those in sync. The `complete` row's CHANGELOG/archived-plan expectations and active-plan flag are deliberate deep-audit additions: audit.mjs treats them as informational post-signals only.
-
-| Status | Required | Expected | Flag If |
-|--------|----------|----------|---------|
-| planned | index.yaml entry | — | tech-spec.md or implementation-plan.md exists (ahead of status; spec.md alone is fine) |
-| draft | spec.md | dependencies.md | implementation-plan.md exists (ahead of status) |
-| in-progress | spec.md | tech-spec.md, dependencies.md | No tech-spec (Medium — likely skipped workflow step) |
-| complete | spec.md, tech-spec.md | CHANGELOG.md, archived plans in plans/ | Active implementation-plan.md (should be archived) |
-| deprecated | — | — | — |
+The `audit.mjs` issues in the Workflow Phase category (Step 1) are this check. Its matrix of required and expected docs per status is the one in `/myspec:feature-status-audit`. Add nothing by hand.
 
 ### 10. Present Health Report
 
@@ -175,8 +170,11 @@ List numbered recommendations. Each issue type maps to one fix skill:
 | Issue | Recommended Skill |
 |-------|------------------|
 | Spec version mismatch | `/myspec:feature-spec-sync` |
-| File inventory drift | `/myspec:feature-spec-sync` |
-| Checkbox drift | `/myspec:feature-spec-sync` |
+| Dead or moved path | `/myspec:feature-spec-sync` |
+| Tech-spec checkbox drift | `/myspec:feature-spec-sync` |
+| Plan has open tasks under `complete` | Finish or defer the open tasks, then `/myspec:feature-complete`; or revert the manifest status |
+| Archived plan at 0/N under `complete` | Check that the work happened (git log), then tick the delivered tasks or revert the manifest status |
+| Parent acceptance criteria open, all sub-features complete | Tick the delivered criteria in spec.md, or split the rest into a new sub-feature |
 | Missing spec.md | `/myspec:feature-spec` |
 | Missing tech-spec.md | `/myspec:feature-tech-spec` |
 | Stale or missing plan | `/myspec:feature-plan` |
@@ -192,7 +190,7 @@ Wait for user to choose which action to pursue.
 - Never modify any files. Read-only.
 - Present full report before recommending actions.
 - Severity levels are fixed: Critical > High > Medium > Low > Info. Do not downgrade.
-- Check file existence with Glob, not filesystem assumptions.
+- Check file existence with Glob, not filesystem assumptions. Conditions the two scripts check are taken from their output, not checked again.
 - Memory check is always Info — never a warning or failure.
 - Category with 0 issues → OK. 1+ Low/Medium → WARN. 1+ High/Critical → FAIL.
 
@@ -208,10 +206,10 @@ Wait for user to choose which action to pursue.
 
 - [ ] Feature path resolved and directory confirmed to exist
 - [ ] Manifest entry found and read
+- [ ] `audit.mjs --json` and `dead-paths.mjs` run once, each issue reported with the script's severity
 - [ ] spec.md checked: existence, frontmatter, status validity
 - [ ] tech-spec.md checked: existence, frontmatter, version alignment
-- [ ] Plan checked: existence, currency, checkpoint progress
-- [ ] File inventory checked against filesystem (if File Inventory section exists)
+- [ ] Plan checked: existence, currency
 - [ ] Sub-features checked (if subfeatures: true)
 - [ ] Memory indexes scanned for feature references
 - [ ] Index.yaml sync validated
