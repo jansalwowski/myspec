@@ -46,6 +46,8 @@ Check if the output file already exists.
 
 `visual-questions` is a toggle, not a generated file: skip the overwrite question; its discovery question covers it.
 
+`pre-flight` and `anti-patterns` append to the project section of a file that `init` created: skip the overwrite question. Never replace the file or its framework section.
+
 `mockup` run with question numbers (`/myspec:update` Step 3.5 passes the ones its *Question changes* table lists): skip the overwrite question, read the blueprint, and follow its *Asking only the changed questions* procedure instead of the rest of Steps 3 and 4. The file stays; only what those rows write and its stamp change.
 
 ### Step 3: Execute Blueprint
@@ -83,7 +85,7 @@ Next: {relevant next step — e.g., "Run /myspec:bootstrap to load the topology"
 
 - [ ] Blueprint name resolved against the Available Blueprints table (asked the user if missing or unmatched)
 - [ ] `.myspec.json` read before running; stopped with the init warning if absent
-- [ ] Checked whether the output file exists; asked before overwriting (not asked in `mockup` question-numbers mode, which overwrites nothing)
+- [ ] Checked whether the output file exists; asked before overwriting (not asked for `visual-questions`, `pre-flight`, `anti-patterns`, or `mockup` question-numbers mode, which overwrite nothing)
 - [ ] Discovery questions asked one at a time, each answer awaited
 - [ ] Output generated using the blueprint's Output Format and written to its Output Location
 - [ ] `${aiDir}` placeholders replaced with the configured value
