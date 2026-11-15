@@ -85,7 +85,7 @@ Use the type-appropriate template from `${aiDir}/.templates/memory-{type}.md`:
 - Extract: context, decision, outcome, consequence
 - Set `outcome`: success | failure | partial | abandoned
 - Set `persistent: true` only if this has indefinite relevance
-- Default `persistent: false` -- will auto-archive after 30 days
+- Default `persistent: false`: after 30 days `/myspec:memory-optimize` proposes to consolidate or expire it
 - Add `anchors:` (file + pattern) only if code-specific; otherwise leave the key out, since the doctor warns on an empty one
 - Set `related`: IDs of related procedural/semantic memories (e.g., ["P009", "S001"])
 
