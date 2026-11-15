@@ -10,7 +10,7 @@ Read the whole written plan against `spec.md` and `tech-spec.md`, not against yo
 |---|-------|-----------|
 | 1 | **Snippets vs spec contract.** Compare every code and test snippet with the Spec contract quotes and Global Constraints its task carries. | The snippet enforces a narrower rule than the quote, such as one variant where the spec says "any". It adds a case or misses one. An update path validates less than the create path the same rule covers. A memo or cache is keyed on less than its result depends on, so it goes stale when an input changes. An eager reference or import-time side effect breaks existing tests' mocks. |
 | 2 | **Steps agree.** Within each task, compare the test step with the implementation step. Then compare each task with the later tasks that touch the same behavior. | Step 1 asserts something Step 3 contradicts, for example a test that expects "no clip-path" while the implementation adds one. A later task's snippet undoes or contradicts an earlier task's. |
-| 3 | **Reader-visible strings.** Check every string the plan dictates that reaches a person: UI text, labels, attribution, messages, emails, exported headers. | An internal ID, a `TODO`, a `FIXME` or an open-question reference reaches rendered output. Placeholder text. Two strings shown together that repeat the same sentence. A string the spec does not supply that the plan made up: take the spec's wording, or name the string in Step 6 for the user to supply. |
+| 3 | **Reader-visible strings.** Check every string the plan dictates that reaches a person: UI text, labels, attribution, messages, emails, exported headers. | An internal ID, a `TODO`, a `FIXME` or an open-question reference reaches rendered output. Placeholder text. Two strings shown together that repeat the same sentence. A string the spec does not supply that the plan made up: take the spec's wording, or name the string in Step 5 for the user to supply. |
 | 4 | **Probe lint.** Check every `**Checkpoint probes:**` line. Skip this check when the plan has no probes. | The target cannot do the action at that milestone, for example zooming a page that renders without zoom, or calling an endpoint a later milestone adds. A probe's expected value contradicts what the tasks build. A probe reads state that an earlier probe in the block wrote, hid or deleted, and does not say so. |
 
 ## Probe order
@@ -33,7 +33,7 @@ Walk this after the four checks, against the written plan. Each line restates a 
 - [ ] Barriers exist after every parallel group
 - [ ] Consecutive small sequential tasks share a phase; a new phase starts only after a task publishing a contract later tasks are written against
 - [ ] Execution order table matches task dependencies
-- [ ] Every `DEFERRED` row was surfaced to the user in Step 6, not decided unilaterally
+- [ ] Every `DEFERRED` row was surfaced to the user in Step 5, not decided unilaterally
 - [ ] Every task has a populated **Spec contract** block with verbatim quotes (not paraphrased) from spec.md / tech-spec.md
 - [ ] Every task whose Files contain `Modify:` has a populated **Touch only** line
 - [ ] Every task has an Interfaces block (Consumes/Produces, exact signatures); names and types match verbatim between producer and consumer tasks
@@ -45,7 +45,7 @@ Walk this after the four checks, against the written plan. Each line restates a 
 - [ ] Each milestone is a coherent vertical slice
 - [ ] If tech-spec.md sets `verification_mode` (not `none`): every milestone has a `**Checkpoint probes:**` block of literal probes with expected values, referencing only `### Test Hooks` handles; a `[real-input]` probe on every milestone touching a named real corpus; a *Scratch environment* line in Test Hooks whenever any probe writes
 - [ ] `## Plan Self-Check` records the four Step 4.6 checks, each clean or naming its fixes; every probe that depends on an earlier probe declares it
-- [ ] Commit decision presented to user (Step 7); plan committed before handoff
+- [ ] Commit decision presented to user (Step 6); plan committed before handoff
 
 ## Recording the result
 

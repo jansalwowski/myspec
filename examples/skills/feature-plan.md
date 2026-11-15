@@ -162,7 +162,7 @@ Every row lands on a task and names the test that will prove it, so there is not
 
 ### Step 4.6: Plan self-check
 
-Before saving, the skill reads the written plan against both documents and runs the four checks in `references/plan-self-check.md`. Two findings are fixed in the plan, and the result closes the plan:
+The skill reads the plan file it wrote in Step 3 against both documents and runs the four checks in `references/plan-self-check.md`. Two findings are fixed in the plan, and the result closes the plan:
 
 ```markdown
 ## Plan Self-Check
@@ -181,7 +181,7 @@ Either defect would have reached the implementer as a mandate and come back as a
 yes
 ```
 
-### Step 7: Commit decision (BLOCKING)
+### Step 6: Commit decision (BLOCKING)
 
 `HEAD` is the default branch (`main`) and the working tree is clean, so the skill recommends a new branch and asks:
 
@@ -210,7 +210,7 @@ Plan is ready. Commit before /feature-implement to avoid dangling files.
 - **Plan against the synced base.** The pre-merge `listReports()` would have given Task 6 a snippet for a query that no longer exists; `planned_against` lets `feature-implement` warn if it moves again before Task 6 runs.
 - **Phases amortise their fixed cost.** Six phases would run six full suites and six reviews for a migration, a wrapper hook and a button; three phases put a boundary only after the one task that publishes a contract.
 - **Single-milestone, all-sequential is fine.** Don't split into milestones to look "complex." The milestone checkpoint at the end gives the user an exit point.
-- **The commit decision is part of the skill.** Leaving the plan uncommitted is the failure mode Step 7 exists to prevent — there's no "leave uncommitted" option offered.
+- **The commit decision is part of the skill.** Leaving the plan uncommitted is the failure mode Step 6 exists to prevent — there's no "leave uncommitted" option offered.
 
 ---
 
@@ -341,7 +341,7 @@ The coverage walk finds one criterion no task realizes:
 | spec.md AC-9 | "A failed schedule run notifies the owner by email." | DEFERRED — tech-spec §Non-Goals excludes the notification transport; tracked as idea `run-failure-alerts` | — |
 ```
 
-The tech-spec deliberately excluded it, so this is a scope cut rather than a planning miss — but it is still the user's call, so the skill carries it into Step 6 rather than dropping it. Had the gap been an oversight, the fix would be a new task plus the AC quoted into its Spec contract block, not a `DEFERRED` row.
+The tech-spec deliberately excluded it, so this is a scope cut rather than a planning miss — but it is still the user's call, so the skill carries it into Step 5 rather than dropping it. Had the gap been an oversight, the fix would be a new task plus the AC quoted into its Spec contract block, not a `DEFERRED` row.
 
 ### User confirms
 
@@ -353,7 +353,7 @@ The skill presents the plan and names the deferral:
 yes — defer it
 ```
 
-### Step 7: Commit decision (BLOCKING)
+### Step 6: Commit decision (BLOCKING)
 
 The user is already on `feat/scheduled-reports` (not the default branch), so the skill recommends committing to `HEAD` and commits `feat(scheduled-reports): add implementation plan`.
 
@@ -416,7 +416,7 @@ A — decompose
 
 ### Skill flow (continued)
 
-The skill does **not** create a plan, and never reaches Step 7. It hands off:
+The skill does **not** create a plan, and never reaches Step 6. It hands off:
 
 > Skipping plan creation. Run `/myspec:feature-decompose analytics-dashboard` next. After decomposition, you'll run `/myspec:feature-tech-spec` per sub-feature (the parent's tech-spec content carries over as starting drafts), then `/myspec:feature-plan` per sub-feature.
 
