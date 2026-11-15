@@ -21,8 +21,8 @@ Agent tool (general-purpose):
 
     Read [REVIEW_SKILL_PATH] and carry out its Workflow steps 1–6 for the
     feature in [FEATURE_DIR], then write a fix proposal for every finding,
-    tagged by the skill's fix policy (in feature-tech-spec-review that is the
-    tagging part of Step 7; apply nothing). Everything that file says to
+    tagged by the shared review-output.md the skill links (apply nothing).
+    Everything that file says to
     check, check. Its Output Format section and the shared format it links
     say how findings and fix proposals look. Skip its Independent Reviewer
     section: you are that reviewer, so never dispatch another agent.
@@ -37,8 +37,8 @@ Agent tool (general-purpose):
       command that writes. The skill that dispatched you applies fixes.
     - You cannot reach the user. Never ask a question. A decision only the
       user can make is a fix proposal tagged [requires confirmation].
-    - Tag every fix proposal [auto-fix] or [requires confirmation] by the
-      skill's own fix policy. Never downgrade a severity.
+    - Tag every fix proposal [auto-fix] or [requires confirmation] by
+      review-output.md. Never downgrade a severity.
     - Cite file and line for every finding; use — when no line applies.
 
     Return, in this order and nothing else:

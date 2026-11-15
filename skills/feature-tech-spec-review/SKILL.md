@@ -15,7 +15,7 @@ tags: [feature, tech-spec, validation, critical-thinking, review]
 
 ## Independent Reviewer
 
-Steps 1–6 run in a fresh subagent, so the review never reads the tech-spec with the context of whoever wrote it. Dispatch it per [`_shared/spec-reviewer-prompt.md`](../_shared/spec-reviewer-prompt.md), with `[REVIEW_SKILL_PATH]` set to `${CLAUDE_PLUGIN_ROOT}/skills/feature-tech-spec-review/SKILL.md`. It tags each fix by the [Fix Policy](#fix-policy). Show the findings table and fix proposals it returns as they came back, then continue at Step 7. When the Agent tool is not available or the dispatch fails, run Steps 1–6 yourself and say so in one line.
+Steps 1–6 run in a fresh subagent, so the review never reads the tech-spec with the context of whoever wrote it. Dispatch it per [`_shared/spec-reviewer-prompt.md`](../_shared/spec-reviewer-prompt.md), with `[REVIEW_SKILL_PATH]` set to `${CLAUDE_PLUGIN_ROOT}/skills/feature-tech-spec-review/SKILL.md`. It tags each fix per [`_shared/review-output.md`](../_shared/review-output.md#tagging-and-application-rules). Show the findings table and fix proposals it returns as they came back, then continue at Step 7. When the Agent tool is not available or the dispatch fails, run Steps 1–6 yourself and say so in one line.
 
 ## Workflow
 
@@ -30,7 +30,7 @@ Steps 1–6 run in a fresh subagent, so the review never reads the tech-spec wit
 2. **Analyze Structure**
    - Verify required sections exist: Architecture, Reuse audit, Implementation Steps, Edge Cases, File Inventory
    - Check optional sections present if relevant: Key Interfaces/Types, Database Changes, API Schema, API Endpoints, Decisions
-   - **Reuse-audit gate** (skip only when the tech-spec carries `<!-- myspec:reuse-audit skip: <reason> -->` with a reason; a marker without one is a High finding). Flag and **refuse approval** (do not recommend `/myspec:feature-plan`) when the `### Reuse audit` section is:
+   - **Reuse-audit gate** (skip only when the tech-spec carries `<!-- myspec:reuse-audit skip: <reason> -->` with a reason; a marker without one is a High finding). Each condition below is a **High** finding, so approval is refused and `/myspec:feature-plan` is not recommended. It applies when the `### Reuse audit` section is:
      - missing, OR
      - an empty table (header + separator only, zero data rows), OR
      - a blanket-skip audit (every row `skip`) with one or more rows lacking a `Reason`, OR
@@ -73,9 +73,7 @@ Steps 1–6 run in a fresh subagent, so the review never reads the tech-spec wit
    - Include specific line numbers for each issue
 
 7. **Classify and Apply Fixes**
-   - **Small issues** (typos, missing sections, unclear wording, missing edge cases, frontmatter fixes): apply immediately without asking
-   - **Big issues** (strategy changes, splitting into sub-features, removing/changing steps, interface changes, conceptual problems): propose solution and WAIT for confirmation
-   - Tag proposals: `[auto-fix]` or `[requires confirmation]`
+   - Tag each proposal `[auto-fix]` or `[requires confirmation]` per [review-output.md](../_shared/review-output.md#tagging-and-application-rules). Apply `[auto-fix]` immediately. For `[requires confirmation]` (for example a split into sub-features, a removed or reordered step, a changed interface), propose and WAIT.
    - Use diff format: `- old text` / `+ new text`
 
 8. **Execute Changes**
@@ -162,13 +160,6 @@ When flagging:
 - Quote the vague step and name the missing concretion (which file, which behavior, which contract), so the author can tighten it before `feature-plan` runs.
 - Stay **medium-agnostic**: do not prescribe a language, framework, or test tool — "concrete" means the *what and where* are pinned down, not that any particular stack is named.
 
-## Fix Policy
-
-| Category | Examples | Action |
-|----------|----------|--------|
-| **Small (auto-fix)** | Typos, missing edge cases, frontmatter date fixes, adding missing sections with stub content, unclear wording, missing file inventory rows | Apply immediately |
-| **Big (requires confirmation)** | Strategy changes, splitting into sub-features, removing or reordering steps, adding new capabilities, changing interfaces, conceptual issues | Propose and WAIT |
-
 ## Detection Patterns (Automated Checks)
 
 ```typescript
@@ -187,14 +178,6 @@ When flagging:
 
 // Missing file inventory (Completeness)
 // Check: File Inventory section exists and has at least one row
-
-// Reuse audit (Spec Alignment) — see the Reuse-audit gate in step 2 for severities
-// Refuse approval (blocks feature-plan) if: section missing, OR table empty (0 data
-//   rows), OR any row Decision not exactly {reuse, skip}, OR any `skip` row without a
-//   non-dash Reason (this also covers a blanket-skip table with any Reason-less row).
-// High finding (not a refusal): every row is `skip` but each has a substantive Reason —
-//   ask the author to re-confirm nothing is reusable.
-// Skip this check entirely when the tech-spec holds <!-- myspec:reuse-audit skip: <reason> --> with a reason
 
 // Missing edge cases (Completeness)
 // Check: Edge Cases section exists and has at least one item
@@ -270,8 +253,8 @@ After running the skill:
 - [ ] Edge Cases section is non-empty
 - [ ] Issues categorized by severity (Critical/High/Medium/Low)
 - [ ] Each finding includes file name and line numbers
-- [ ] Small fixes applied automatically without asking
-- [ ] Big fixes proposed with `[requires confirmation]` tag and awaited
+- [ ] `[auto-fix]` fixes (per `_shared/review-output.md`) applied without asking
+- [ ] `[requires confirmation]` fixes proposed and awaited
 - [ ] `last_updated` set to today after changes
 - [ ] Summary shows files changed and remaining issues
 

@@ -271,10 +271,10 @@ The skill drafts `spec.md` and `dependencies.md` as usual, then runs `/myspec:fe
 | Severity | Dimension | Issue | File | Line(s) | Finding |
 |----------|-----------|-------|------|---------|---------|
 | High | Completeness | No failure state | spec.md | 22-30 | Nothing says what happens when the reminder email bounces |
-| Low | Clarity | Vague wording | spec.md | 14 | "shortly before" in Goals; REQ-001 says three days |
+| Low | Clarity | Typo | spec.md | 14 | "remider" in Goals |
 ```
 
-The Low fix is `[auto-fix]` and is applied at once. The High fix adds a requirement, so it is `[requires confirmation]`:
+The Low fix is a typo, so it is `[auto-fix]` and is applied at once. A rewording that changed meaning would wait for the user. The High fix adds a requirement, so it is `[requires confirmation]`:
 
 > **Which fixes should I apply?** All (Recommended) / Critical+High / Individually / None
 

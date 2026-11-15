@@ -68,8 +68,8 @@ Steps 1–6 run in a fresh subagent, so the review never reads the spec with the
        - "None"           → leave spec unchanged
      ```
    - Order options so the recommended choice is first with `(Recommended)` appended.
-   - **Small issues** (typos, formatting, frontmatter fixes that change no meaning): apply immediately without asking, tagged `[auto-fix]` — same split as `feature-tech-spec-review`.
-   - **Anything touching requirements, scope, or acceptance criteria**: do NOT proceed without explicit approval — spec content is the user's product intent.
+   - `[auto-fix]` proposals, as defined in [review-output.md](../_shared/review-output.md#tagging-and-application-rules): apply immediately without asking. The question covers only `[requires confirmation]` proposals.
+   - **Anything touching requirements, scope, or acceptance criteria** is `[requires confirmation]`: do NOT proceed without explicit approval. Spec content is the user's product intent.
 
 8. **Execute Changes**
    - Apply auto-fixes and approved fixes to spec.md and/or dependencies.md
