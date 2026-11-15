@@ -62,7 +62,7 @@ Two sources, both optional — configure with `/myspec:setup mockup`:
    - `.myspec.json` `mockups` block + `${aiDir}/conventions/mockup-design.md` (scaffold if missing; the *Repeated user feedback* section is authoritative override).
    - `${aiDir}/conventions/accessibility.md` if present — link-vs-button catalogue backing the navigation guard.
    - `${aiDir}/features/{feature}/spec.md` (+ parent feature's `spec.md` when sub-feature).
-   - `${aiDir}/features/{feature}/seed/` and `scenarios.md` if present (realistic sample data).
+   - `${aiDir}/features/{feature}/seed.json` and `scenarios.md` if present (realistic sample data).
    - **Data-model slice** — read the project's authoritative model definitions (schema file, migrations, model classes — named under *Data model source* in `mockup-design.md`) for the models the spec references; copy exact enum values and field names into the inline mock types.
    - **Component-library surface** — the library's export index / component list (named in `mockup-design.md`), so every pick is a real component. If the *Component library* section pins a version (`Configured against: {package}@{version}`), compare it against the installed version (package.json / lockfile). On mismatch, stop before building: tell the user the mockup config predates the installed library and confirm the *Allowed imports* / *Detection patterns* sections still hold — or route to `/myspec:setup mockup` to regenerate.
    - **Reuse audit** — run the configured `audit` command if present and read its output. Then `find ${aiDir}/features -path '*/mockups/_*'` to list shared scaffolding files; for each that overlaps planned chrome, read it and plan to import rather than re-roll.
@@ -93,7 +93,7 @@ For each confirmed mockup, in order:
 1. **Write** `${aiDir}/features/{feature}/mockups/{Name}{extension}` with:
    - **Title header** — a `title:` + `description:` comment block at the top, in the file format's comment syntax (preview tooling reads it; it is also the file's self-description).
    - **Authoring idioms** from `mockup-design.md` (structure order, helper style, typing discipline — whatever the project mandates).
-   - **Inline mock types** mirroring the real data model; realistic sample data drawn from `seed/` + `scenarios.md` when available — never Lorem ipsum.
+   - **Inline mock types** mirroring the real data model; realistic sample data drawn from `seed.json` + `scenarios.md` when available — never Lorem ipsum.
    - **Static only** — no lifecycle/effect hooks, no network, no timers. Interaction state may be mocked with local reactive state when the surface's job is to demonstrate the interaction.
    - **States via preview controls** — switch loading / empty / error / modal states with one `controls: <name>=<default>|<opt2>|...` title-header line per control (first option is the default). Read the value once with `new URLSearchParams(window.location.search).get('<name>')` and fall back to the default. Never render a state toggle inside the mockup: reviewers read it as design, and it pushes the content down. Preview tooling without a controls toolbar: append `<name>=<value>` to the frame URL by hand.
    - **Modal surfaces** follow the project's modal mockup pattern from `mockup-design.md`, with all four dismissal paths wired (X + ESC + backdrop + Cancel).
