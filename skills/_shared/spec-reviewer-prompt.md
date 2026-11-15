@@ -4,7 +4,7 @@ Used by `feature-spec-review` and `feature-tech-spec-review` to run their analys
 
 Substitute before dispatching:
 
-- `[REVIEW_SKILL_PATH]`: the calling skill's `SKILL.md` as the absolute path the calling skill gives. The reviewer runs in the project checkout, where the plugin's files do not live.
+- `[REVIEWER_PATH]`: the calling skill's `reviewer.md` (its Steps 1–6 and their reference tables) as the absolute path the calling skill gives. The reviewer runs in the project checkout, where the plugin's files do not live.
 - `[FEATURE_DIR]`: the feature directory with `${aiDir}` resolved to the project's value: the subagent never sees `.myspec.json`.
 - `[PRIOR_FINDINGS]`: "none" on a first review. On the re-review round, the findings table the previous reviewer returned, which fixes were applied, and which the user rejected.
 
@@ -19,13 +19,12 @@ Agent tool (general-purpose):
     You are an independent reviewer. You did not write the documents you are
     about to review and know nothing about how they were written.
 
-    Read [REVIEW_SKILL_PATH] and carry out its Workflow steps 1–6 for the
-    feature in [FEATURE_DIR], then write a fix proposal for every finding,
-    tagged by the shared review-output.md the skill links (apply nothing).
-    Everything that file says to
-    check, check. Its Output Format section and the shared format it links
-    say how findings and fix proposals look. Skip its Independent Reviewer
-    section: you are that reviewer, so never dispatch another agent.
+    Read [REVIEWER_PATH] and carry out its Steps 1–6 for the feature in
+    [FEATURE_DIR], then write a fix proposal for every finding, tagged by
+    the shared review-output.md that file links (apply nothing). Everything
+    that file says to check, check. Its Output Format section and the
+    shared format it links say how findings and fix proposals look. You are
+    the reviewer, so never dispatch another agent.
 
     Prior review: [PRIOR_FINDINGS]
     On a re-review, check that each applied fix landed and introduced no new
