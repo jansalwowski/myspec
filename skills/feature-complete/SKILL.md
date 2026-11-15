@@ -129,9 +129,15 @@ The pass is not a gate: continue to Phase 3 whatever the answers.
 
 ### Phase 3 — Branch Integration
 
-1. **Detect worktree** — run `git worktree list | grep $(git branch --show-current)`
+1. **Detect worktree** — run:
 
-   If a worktree exists, record its **absolute path and the branch name now**, before any `cd` or checkout. Option 1 and 4 switch to the base branch, so re-deriving the path afterwards (e.g. from `git branch --show-current`) resolves against the wrong tree — detection silently stops matching and step 4 no-ops, leaving the worktree behind.
+   ```bash
+   [ "$(git rev-parse --path-format=absolute --git-dir)" != "$(git rev-parse --path-format=absolute --git-common-dir)" ] && git rev-parse --show-toplevel
+   ```
+
+   It prints a path only when the current checkout is a linked worktree. The main checkout is never a worktree here, even on a feature branch: git refuses to remove it.
+
+   If it printed a path, record that **absolute path and the branch name now**, before any `cd` or checkout. Option 1 and 4 switch to the base branch, so re-deriving the path afterwards (e.g. from `git branch --show-current`) resolves against the wrong tree — detection silently stops matching and step 4 no-ops, leaving the worktree behind.
 
 2. **Present options:**
    ```
