@@ -105,9 +105,25 @@ If yes: write discovery first, then follow the feature-decompose workflow.
 
 Note the answer — decomposition (if agreed) happens AFTER Step 8.
 
-### 6. Write discovery.md
+### 6. Output Decision
 
-Write this file immediately after confirmation. Do not wait for the output location decision (Step 7) — this is the durable checkpoint.
+Ask where the output goes before writing any file, so `discovery.md` is written once, to a known path:
+
+```
+Findings confirmed. Where should the docs go?
+
+A) Discovery only — save to `${aiDir}/discoveries/{TODAY}-{feature-slug}/`
+   Good when: knowledge is partial, no time for full spec, or this feeds into a larger feature
+
+B) Full feature docs — save to `${aiDir}/features/{feature-name}/` with spec.md + tech-spec.md
+   Good when: findings are solid and you want this in the feature pipeline
+
+C) Both — discovery in `${aiDir}/discoveries/` + full feature docs in `${aiDir}/features/`
+```
+
+### 7. Write discovery.md
+
+Write this file now, before any other output file. It is the durable checkpoint. The path comes from the Step 6 answer: `${aiDir}/features/{feature-name}/discovery.md` for B, `${aiDir}/discoveries/{TODAY}-{feature-slug}/discovery.md` for A and C.
 
 Use the **discovery.md Frontmatter** from [references/templates.md](references/templates.md).
 
@@ -161,40 +177,23 @@ Unresolved items after Q&A. Format:
 **Reasoning**: [brief explanation]
 **Decompose candidate**: yes / no
 
-### 7. Output Decision
-
-After writing discovery.md, ask:
-
-```
-discovery.md is written. What would you like to do next?
-
-A) Discovery only — save to `${aiDir}/discoveries/{TODAY}-{feature-slug}/`
-   Good when: knowledge is partial, no time for full spec, or this feeds into a larger feature
-
-B) Full feature docs — save to `${aiDir}/features/{feature-name}/` with spec.md + tech-spec.md
-   Good when: findings are solid and you want this in the feature pipeline
-
-C) Both — discovery in `${aiDir}/discoveries/` + full feature docs in `${aiDir}/features/`
-```
-
 ### 8. Write Output Files
 
 Load format templates from [references/templates.md](references/templates.md) before generating any files.
 
 #### Option A — Discovery only
-- Write `discovery.md` to `${aiDir}/discoveries/{TODAY}-{feature-slug}/discovery.md`
+- Nothing more to write: `discovery.md` is in `${aiDir}/discoveries/` (Step 7)
 - No index.yaml update needed
 
 #### Option B — Full feature
 - Create `${aiDir}/features/{feature-name}/` if it doesn't exist
-- Write `discovery.md` to `${aiDir}/features/{feature-name}/discovery.md`
 - Generate `spec.md` using the **spec.md Format** template
 - Generate `tech-spec.md` using the **tech-spec.md Format** template
 - Create `dependencies.md` using the **dependencies.md Format** template
 - Add entry to `${aiDir}/features/index.yaml`
 
 #### Option C — Both
-Do A and B.
+Do B. `discovery.md` stays in `${aiDir}/discoveries/` (Step 7) and is not copied into the feature directory.
 
 ### 9. Decompose (if flagged in Step 5)
 
@@ -224,9 +223,9 @@ If yes: follow `/myspec:feature-decompose` [OPTIONAL — only when decomposition
 - [ ] All file categories explored: components, stores, APIs, gates, translations, external deps
 - [ ] Unknowns grouped by topic and asked in batches (not one-by-one)
 - [ ] User explicitly confirmed findings before any file was written
-- [ ] `discovery.md` written immediately after confirmation
+- [ ] Output location chosen by user (A / B / C) before any file was written
+- [ ] `discovery.md` written once, to the path that option names
 - [ ] `discovery.md` contains all required sections: Overview, Entry Points, Components & Structure, Behavior, Integration Points, Feature Flags, Translations, Open Questions, Complexity Assessment
-- [ ] Output location chosen by user (A / B / C)
 - [ ] If full feature (B or C): spec.md, tech-spec.md, dependencies.md created; index.yaml updated
 - [ ] `tech-spec.md` File Inventory uses `Action: exists` for all discovered files
 - [ ] Open Questions carried through from discovery.md into spec.md

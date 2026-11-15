@@ -72,7 +72,7 @@ The hand-off line:
 
 ### Why this example matters
 
-- **Discovery is the durable checkpoint** — it gets written immediately after confirmation, before the output-location decision. Even if the user closes the laptop after this step, the knowledge is captured.
+- **Discovery is the durable checkpoint.** The skill asks for the output location first, then writes `discovery.md` once to that path, before any other file. Even if the user closes the laptop after this step, the knowledge is captured.
 - **Grouped Q&A, not drip-feed** — the skill collected unknowns during exploration and asked them in batches. Asking one question at a time would have stretched this into a 90-minute session.
 - **Option A is the right call when knowledge is partial** — the user knew the feature but didn't want to commit to the full spec/tech-spec pipeline. Forcing B here would have produced a low-quality spec and a tech-spec full of `Action: exists` rows nobody asked for.
 
