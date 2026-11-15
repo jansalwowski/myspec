@@ -133,10 +133,9 @@ Run these checks against spec.md content:
 
 // Not checkable (Testability)
 // Check: Do acceptance criteria use `[ ]` checkbox format?
-
-// Technical leak (spec-cleanup territory)
-/\b(SELECT|INSERT|UPDATE|DELETE|interface|type|class|function|const|export)\b/g
 ```
+
+Technical content is `feature-spec-cleanup`'s job, not a dimension here. If spec.md holds a code block or SQL, add one Low row that recommends `/myspec:feature-spec-cleanup`, and no other finding for it.
 
 ## Output Format
 
@@ -190,7 +189,7 @@ After running the skill:
 - [ ] If changes were made: spec_version was incremented
 - [ ] If changes were made: `last_updated` was set to today
 - [ ] Summary shows files changed and remaining issues
-- [ ] Skill did NOT flag technical content (spec-cleanup's job)
+- [ ] Technical content got at most one Low row, recommending `/myspec:feature-spec-cleanup`
 
 ## Integration
 
