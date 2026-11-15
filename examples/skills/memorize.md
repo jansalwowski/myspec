@@ -380,10 +380,10 @@ Because the user flagged this as critical ("future agents need to know"), the sk
 yes please
 ```
 
-The agent appends a one-line summary under the **Decisions** section of `${aiDir}/memory/index.md`:
+The agent appends one line under the `## Recent Significant Events` section of `${aiDir}/memory/index.md`, the section for episodic memories:
 
 ```markdown
-- **E009** Marketing site is fully static (no SSR) since 2026-04-22 — don't reintroduce SSR without an explicit carve-out.
+- [E009](episodic/E009-drop-ssr-marketing.md) marketing site static, no SSR since 2026-04-22
 ```
 
 ### Result
