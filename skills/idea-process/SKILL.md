@@ -70,11 +70,11 @@ ${aiDir}/features/{feature-name}/
 
 ### Step 5: Write spec.md
 
-Read template from `references/templates.md` — Section "spec.md Template".
+Write it as [feature-spec](../feature-spec/SKILL.md) Step 2 does: the same frontmatter (`status: draft`) and the same required sections, filled from the idea and the answers to Step 3. Do not use another template here.
 
 ### Step 6: Write dependencies.md
 
-Read template from `references/templates.md` — Section "dependencies.md Template".
+Write the sections [feature-spec](../feature-spec/SKILL.md) Step 3 lists. Start the file with frontmatter that holds `title:` and `created:`, because the frontmatter hook denies a doc under `${aiDir}/` without an identity field and a date field.
 
 ### Step 7: Write scenarios.md and seed.json
 
