@@ -52,7 +52,6 @@ Guide the user through creating a project topology file (`backbone.yml`) that gi
 ```yaml
 version: 1
 project: {project name from .myspec.json}
-description: {description from .myspec.json}
 package_manager: {from Q1}
 workspace_config: {from Q1, or omit if not provided}
 
