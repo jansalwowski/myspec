@@ -13,6 +13,7 @@ Autopilot is on only when the user asked for it in this session: the words "auto
 | Option list with one marked `(Recommended)` | That option |
 | "Review passed — mark `status: approved`?" | Yes, when the skill's own rule says the review passed (no Critical/High open) |
 | Next-step / hand-off choice | The recommended skill, invoked directly |
+| `feature-implement` milestone checkpoint (continue, stop or fresh) | `continue`, even when `fresh` is marked `(Recommended)`: autopilot runs the plan to its last milestone. A failed or blocked probe still stops (below) |
 | Fixes tagged `[requires confirmation]` with no Critical among them | Apply the ones the skill recommends; leave the rest unapplied and listed |
 | An optional pass that only works on the user's own answers (`feature-complete`'s comprehension offer) | Skip it — an answer autopilot gives teaches nobody |
 
