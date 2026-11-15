@@ -1,6 +1,6 @@
-# Parallel Tasks and Dual-Stream Forks
+# Parallel Tasks
 
-Read from SKILL.md Step 3, when a phase holds a `**parallel:groupName**` group or a dual-stream fork. `<plugin lib>` is the path SKILL.md resolves. Concurrent phases are a different mechanism: [parallel-phases.md](parallel-phases.md).
+Read from SKILL.md Step 3, when a phase holds a `parallel:groupName` group. `<plugin lib>` is the path SKILL.md resolves. Concurrent phases are a different mechanism: [parallel-phases.md](parallel-phases.md).
 
 Parallelism pays only when each task outweighs its merge and review overhead; run small parallel groups sequentially in the controller's checkout.
 
@@ -17,10 +17,6 @@ Task M, Task K as separate Agent calls in the same message → track per-task st
 - Tasks that share a file are not parallel: the worktree merge will conflict on the shared path. Run them sequentially.
 - Create the worktrees before marking the tasks `[~]`, so the uncommitted plan edit does not trip `create`'s dirty-tree warning — a warning that fires every time trains you to ignore the one that matters.
 - When a task regenerates output into a dependency directory (codegen into `node_modules`, `vendor`, `.venv`, …), pass `--no-symlink` and run the project's install in that worktree yourself before dispatch — implementers never install.
-
-## Dual-stream fork
-
-Dispatch both stream heads simultaneously, each in its own task worktree. Each stream proceeds independently (with its own sequential/parallel phases). Join waits for both streams.
 
 ## Barrier merge (Step 4a)
 

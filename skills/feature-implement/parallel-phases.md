@@ -10,7 +10,7 @@ Within one milestone, a set of phases runs together only when all of these hold.
 2. **No interface link.** No task in one phase lists, under `Consumes`, an item that a task in the other phase lists under `Produces`.
 3. **Disjoint files.** Collect each phase's paths from its tasks' `**Files:**` (Create, Modify, Test) and `**Touch only:**` lines. The two sets share no path, and no path in one set is a directory that contains a path in the other. Only these two lines count. A path you infer from a snippet or the tech-spec does not prove anything.
 4. **No writes outside the listed paths.** Exclude a phase if any of its tasks, by design, writes a file it does not list: code generation, a dependency install, a lockfile change, or a migration whose name or number comes from a shared sequence.
-5. **Sequential mode.** Every phase in the set is `sequential` in the Mode column. A phase holding a `[parallel:*]` group or a dual-stream fork keeps its own handling and runs alone.
+5. **Sequential mode.** Every phase in the set is `sequential` in the Mode column. A phase holding a `parallel:*` group keeps its own handling and runs alone.
 6. **Opted in.** The plan front-matter sets `auto_parallel_phases: true`. Absent or `false`: every phase runs serially, and none of the checks above runs.
 
 Log the decision once per set, before the first dispatch: `Ruling: Phases 3 and 4 run concurrently — no Depends On path, no Consumes/Produces link, disjoint Files/Touch only — cost if wrong: a merge conflict at the second phase's barrier`.

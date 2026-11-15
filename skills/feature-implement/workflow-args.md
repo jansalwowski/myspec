@@ -21,7 +21,7 @@ Pass `args` as a JSON object, not as a JSON-encoded string.
 |-------|----------|-------|
 | `feature` | yes | the feature directory name |
 | `phase` | yes | the phase number |
-| `mode` | yes | `sequential` or `parallel`, from the phase's Mode column |
+| `mode` | yes | `sequential`, or `parallel` for a phase whose Mode column reads `parallel:groupName` |
 | `phaseBase` | yes | the sha the phase's tasks start from: `PHASE_BASE`, or for a concurrent phase the HEAD its worktree was created from (`git -C <phase worktree> merge-base HEAD <feature branch>` recovers it) |
 | `stateDir` | yes | `$STATE`, absolute. The verify agent writes each task's diff here as `phase-N-task-<id>-r<round>.diff` |
 | `planPath` | yes | the plan's repo-relative path. Its uncommitted checkbox edits are not counted as a dirty tree |

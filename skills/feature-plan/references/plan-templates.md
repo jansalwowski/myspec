@@ -87,6 +87,7 @@ Resume behavior: A new agent reads the plan, skips `[x]` tasks, re-executes `[~]
 |-------|-------|------|------------|
 | 1 | Task 1: [Data task], Task 2: [Small service task] | sequential | — |
 | 2 | Task 3: [Frontend task that builds on the approved service] | sequential | Phase 1 |
+| 3 | Task 4: [Extractor A], Task 5: [Extractor B] | parallel:groupName | Phase 2 |
 
 **Checkpoint probes:**
 - Target: `[command that serves the milestone on scratch config]` → `[URL or entry point]`
@@ -100,6 +101,7 @@ Resume behavior: A new agent reads the plan, skips `[x]` tasks, re-executes `[~]
 ```
 
 Notes:
+- A parallel phase's Mode is exactly `parallel:groupName`, the same name its tasks carry as `[parallel:groupName]` in their headings and its `## Barrier: Merge parallel:groupName` section uses
 - A sequential phase may list several tasks; they run in listed order and share one barrier suite and one phase review (Step 2's phase grouping rule)
 - `Depends On` names only the phases whose output a phase actually uses (data, an interface, a file it modifies). With `auto_parallel_phases: true` in the front-matter, which every new plan carries, `feature-implement` runs phases with no dependency path between them and disjoint Files/Touch only paths concurrently. A habitual chain to the previous phase then costs throughput, and a missing edge lets two phases race. Set the key to `false` to keep the whole plan serial
 - Phase numbers must be globally unique across the entire plan (Milestone 2 starts at the next available phase number)
@@ -183,7 +185,7 @@ here so neither has to infer it.)
 ```markdown
 ## Barrier: Merge parallel:groupName
 
-> After all tasks in `parallel:groupName` complete and pass review, merge worktrees back to the working branch before proceeding.
+> After all tasks in `parallel:groupName` complete, merge their worktrees back to the working branch and run the checks below. The phase review then runs on the merged result.
 
 - [ ] Merge Task N worktree
 - [ ] Merge Task N+1 worktree

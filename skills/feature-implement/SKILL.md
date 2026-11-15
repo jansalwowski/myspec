@@ -18,7 +18,7 @@ description: "Use when an approved implementation-plan.md is ready to execute â€
 
 | When | Read |
 |------|------|
-| A phase holds a `**parallel:groupName**` group or a dual-stream fork | [parallel-tasks.md](parallel-tasks.md) |
+| A phase holds a `parallel:groupName` group | [parallel-tasks.md](parallel-tasks.md) |
 | Front-matter sets `auto_parallel_phases: true` | [parallel-phases.md](parallel-phases.md) |
 | Step 1 chose workflow mode | [workflow-args.md](workflow-args.md) |
 | Triage leaves a Critical or Important finding (4d) | [fix-loop.md](fix-loop.md) |
@@ -99,7 +99,7 @@ Read the implementation plan, front-matter first.
 **Build the DAG:**
 
 1. Each `### Milestone N:` heading scopes a milestone; a plan with no milestone heading is one milestone.
-2. Per milestone, read the Execution Order table: nodes = tasks + barriers, edges = the `Depends On` column, phases = task groups separated by barriers. Note parallel groups (`**parallel:groupName**` in Mode) and dual-stream forks (`3a`/`3b` rows).
+2. Per milestone, read the Execution Order table: nodes = tasks + barriers, edges = the `Depends On` column, phases = task groups separated by barriers. Note parallel groups: Mode `parallel:groupName` (older plans bold it, `**parallel:groupName**`), whose tasks carry `[parallel:groupName]` in their headings.
 3. Only when the front-matter sets `auto_parallel_phases: true`: find concurrent phase sets (parallel-phases.md). Without the key, phases run serially.
 4. A milestone whose first phase says `Depends On: Milestone N` starts only after that milestone is complete.
 
@@ -157,7 +157,7 @@ Walk milestones in order, and each milestone's DAG topologically.
 
 After 3 attempts on one task, whatever it reported, escalate: "I've made N attempts. What I tried: [list]."
 
-**Parallel groups, dual-stream forks, concurrent phases and workflow mode** replace only this step's dispatches, per their files (Read on demand); barriers and reviews stay per phase.
+**Parallel groups, concurrent phases and workflow mode** replace only this step's dispatches, per their files (Read on demand); barriers and reviews stay per phase.
 
 ### Step 4: Phase Review
 
