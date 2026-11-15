@@ -27,15 +27,17 @@ If only a description is provided, proceed directly to exploration.
 
 ### 2. Exploration
 
-Explore the codebase to build a complete picture of the feature. Use grep, file reads, and import tracing. Start from known paths or grep description keywords to locate entry points.
+Explore the codebase to build a complete picture of the feature. Read the project's stack from `backbone.yml` or `${aiDir}/conventions/` first, so the categories below map to its real file types. Use grep, file reads, and import tracing. Start from known paths or grep description keywords to locate entry points.
 
 **What to look for:**
 
 | Category | Look for |
 |----------|----------|
-| Entry points | Routes, page components, navigation entries, event triggers |
-| Components | Vue components, composables, mixins involved |
-| State | Vuex/Pinia stores, getters, actions, mutations |
+| Entry points | Routes, controllers, CLI commands, page components, navigation entries, event triggers |
+| UI components | Components, templates, views, and their shared helpers (hooks, composables, partials) |
+| Client or server state | Stores, sessions, caches, and the code that reads or changes them |
+| Data models and persistence | Models, entities, repositories, migrations, schemas |
+| Background jobs | Queued jobs, workers, scheduled tasks, event listeners |
 | API | GraphQL queries/mutations, REST calls, endpoint URLs |
 | Gates / flags | Feature flags, server gates, environment-based conditions |
 | Translations | i18n keys, translation files |
@@ -43,7 +45,7 @@ Explore the codebase to build a complete picture of the feature. Use grep, file 
 | Shared utilities | Common helpers, validators, formatters used |
 
 **Exploration rules:**
-- Trace outward from entry points: component → store → API → types → shared utilities
+- Trace outward from entry points: entry point → UI or handler → state → API → models and types → shared utilities
 - Follow imports to find all involved files
 - Note every external API call, external service reference, or cross-app dependency as you go
 - Do NOT stop to ask about each finding — keep exploring until you have a complete picture
@@ -140,8 +142,8 @@ All involved files and their roles:
 
 | File | Type | Role |
 |------|------|------|
-| `path/to/Component.vue` | Vue component | [role] |
-| `path/to/store.ts` | Pinia store | [role] |
+| `path/to/{file}` | UI component | [role] |
+| `path/to/{file}` | Data model | [role] |
 
 #### Behavior
 Step-by-step: what happens from user action to final state. Include:
@@ -152,7 +154,7 @@ Step-by-step: what happens from user action to final state. Include:
 #### Integration Points
 
 **Internal**
-- [Other modules, stores, or features this depends on]
+- [Other modules, state, or features this depends on]
 
 **External**
 - [External APIs, third-party services, webhooks — with purpose from Q&A answers]
@@ -170,7 +172,7 @@ Step-by-step: what happens from user action to final state. Include:
 
 #### Open Questions
 Unresolved items after Q&A. Format:
-- **[Q]** What does X do exactly? — *Found at `path/to/file.ts:42`*
+- **[Q]** What does X do exactly? — *Found at `path/to/{file}:42`*
 
 #### Complexity Assessment
 **Rating**: Simple / Moderate / Complex
@@ -220,7 +222,7 @@ If yes: follow `/myspec:feature-decompose` [OPTIONAL — only when decomposition
 ## Verification Checklist
 
 - [ ] Description or paths collected before exploration started
-- [ ] All file categories explored: components, stores, APIs, gates, translations, external deps
+- [ ] All file categories explored: entry points, UI, state, models, jobs, APIs, gates, translations, external deps
 - [ ] Unknowns grouped by topic and asked in batches (not one-by-one)
 - [ ] User explicitly confirmed findings before any file was written
 - [ ] Output location chosen by user (A / B / C) before any file was written
