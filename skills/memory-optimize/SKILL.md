@@ -42,7 +42,7 @@ The target is **retrieval quality, not size**. Memory bodies load only when `/my
 | Related graph | all | every id in `related` resolves, and the target lists this id back | RELINK |
 | Hook leakage | all | row states a solution: imperative verb, "use X instead of Y", a code span, a file path | RETUNE |
 | Feature orphan | all | `feature:` names something absent from `${aiDir}/features/index.yaml` | RELINK or clear the field |
-| Layer 1 drift | all | Layer 1 line points at a superseded id; or `validation_count >= 3` and absent from Layer 1 | DEMOTE / PROMOTE — Layer 1 is always in context (its budget: `/myspec:memory-create` step 8), so propose a PROMOTE only alongside the DEMOTE it displaces |
+| Layer 1 drift | all | Layer 1 line points at a superseded id; or `validation_count >= 3` and absent from Layer 1 | DEMOTE / PROMOTE — Layer 1 is always in context (its budget: `/myspec:memory-create` step 7), so propose a PROMOTE only alongside the DEMOTE it displaces |
 
 **A never-fired memory is a triggers bug until proven otherwise.** When `validation_count` is 0 but the anchor still resolves, the pattern is usually real and filed under keywords nobody types — implementation nouns instead of the symptom text. Rewrite `triggers` to what a person actually meets (error strings, observed behavior) and keep the memory. Retire it only after a retune that still cannot name a scenario that would surface it.
 
