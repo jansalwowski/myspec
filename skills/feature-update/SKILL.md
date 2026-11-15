@@ -34,9 +34,11 @@ Ask the user what is changing. Gather:
 - What existing behavior is being changed or removed?
 - Are there constraints (performance, compatibility, scope)?
 
-### Step 3: Update `spec.md`
+Steps 3 and 4 draft the changes without writing any file. Step 5 writes them only on "Apply", so "Cancel" leaves every file as it was.
 
-Edit only the sections affected by the change. Do not touch unrelated sections.
+### Step 3: Draft `spec.md` changes
+
+Change only the sections affected by the change. Do not touch unrelated sections.
 
 Changes to make:
 - **Add** new requirements to the User Stories / Requirements section
@@ -48,9 +50,9 @@ Changes to make:
 - **Update** `last_updated` to today
 - **Update** `status` back to `draft` if previously `approved` (change requires re-approval)
 
-### Step 4: Update `tech-spec.md`
+### Step 4: Draft `tech-spec.md` changes
 
-Edit only the sections affected by the change. tech-spec.md describes the design in force, so a superseded decision, step, or passage is rewritten or deleted — never kept with a "superseded" note. Stacked versions are how a tech-spec grows into a log that contradicts the code.
+Change only the sections affected by the change. tech-spec.md describes the design in force, so a superseded decision, step, or passage is rewritten or deleted — never kept with a "superseded" note. Stacked versions are how a tech-spec grows into a log that contradicts the code.
 
 Changes to make:
 - **Update** Architecture section if the approach changes
@@ -64,7 +66,7 @@ Changes to make:
 - **Update** `last_updated` to today
 - **Update** `status` to `draft` (requires review before implementation)
 
-Record the delta in `${aiDir}/features/{feature}/CHANGELOG.md` — it is where the replaced content stays findable. If the file is missing, create it with the header `feature-complete` uses (`| Date | Plan | Summary | Status |`). Prepend:
+Draft the delta row for `${aiDir}/features/{feature}/CHANGELOG.md` — it is where the replaced content stays findable. If the file is missing, "Apply" creates it with the header `feature-complete` uses (`| Date | Plan | Summary | Status |`). The row to prepend:
 `| {date} | spec v{new spec_version} | {requirements added/changed/removed; decisions and steps replaced, naming what they replaced} | updated |`
 
 ### Step 5: Present Diff Summary
@@ -81,14 +83,14 @@ Call `AskUserQuestion` so the choice is selectable:
 question: "Do the proposed changes look correct?"
 header:   "Confirm update"
 options:
-  - "Apply"   → write the changes and continue to Step 6
+  - "Apply"   → write the spec.md, tech-spec.md and CHANGELOG.md changes, then continue to Step 6
   - "Revise"  → describe what to adjust
-  - "Cancel"  → discard the proposed changes
+  - "Cancel"  → discard the drafts; no file was written
 ```
 
 ### Step 6: Re-approve & Hand Off
 
-Step 3 reset both docs to `status: draft`, and `/myspec:feature-plan`'s prerequisites require an approved spec — routing there without re-approval deadlocks. Resolve status first:
+"Apply" set both docs to `status: draft`, and `/myspec:feature-plan`'s prerequisites require an approved spec — routing there without re-approval deadlocks. Resolve status first:
 
 - **Small update** (wording, clarified criteria, no new scope): ask "Changes are minor — re-approve spec.md and tech-spec.md directly?" On yes, set `status: approved` in both.
 - **Substantive update** (new requirements, changed scope or interfaces): recommend `/myspec:feature-spec-review` (and `/myspec:feature-tech-spec-review` if tech-spec changed) — they own the `draft → approved` transition.
@@ -123,7 +125,7 @@ Note: `/myspec:feature-plan` will create a new `implementation-plan.md`. The pre
 - [ ] `spec_version` incremented in spec.md frontmatter
 - [ ] `based_on_spec_version` in tech-spec.md matches new `spec_version`
 - [ ] `last_updated` updated in both files
-- [ ] `status: draft` set in both files at Step 3; re-approval resolved in Step 6 (direct for small updates, via review skills for substantive ones)
+- [ ] `status: draft` set in both files when Step 5 applied the drafts; re-approval resolved in Step 6 (direct for small updates, via review skills for substantive ones)
 - [ ] Only affected sections were modified (no unrelated changes)
 - [ ] New acceptance criteria added for any new requirements
 - [ ] File Inventory in tech-spec.md updated for new/changed files
