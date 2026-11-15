@@ -55,7 +55,7 @@ due for a pass; reach for tier 1 when the user named a surface or tier 0 pointed
    contradicts one*. A `NOTE` about an unresolved plugin root means the `install` group did not
    run; say so in Phase 3 rather than filling the gap by hand.
 
-   Missing script (project predates it) → note "tier 0 unavailable — run /myspec:update" and
+   Missing script (the plugin install is incomplete) → note "tier 0 unavailable — update or reinstall the myspec plugin" and
    run the surfaces the old way, accepting that they will be slower and less reproducible.
 5. Field metrics, only when `.claude/state/metrics/runs.jsonl` exists in the main checkout (the `SessionEnd` hook records it; absent → skip without comment):
 

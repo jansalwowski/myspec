@@ -55,7 +55,7 @@ Prints the claimed ID (e.g. `P053`) and nothing else. It runs the memory conform
 | Result | Meaning | Do |
 |--------|---------|----|
 | Prints `P053` | Claimed | Use that ID |
-| `No such file` — script missing | Project predates the allocator | Stop. Tell the user to run `/myspec:update`, then retry |
+| `No such file` — script missing | The plugin install is incomplete, or `CLAUDE_PLUGIN_ROOT` is unset | Stop. Tell the user to update or reinstall the myspec plugin, then retry |
 | Exit 3 with `ERROR …` lines | Conformance errors: duplicate IDs, memories without `hook:`, malformed anchors | Stop. Show the errors. `memory-index.mjs --backfill` derives missing hooks; the rest are per-file fixes |
 | Exit 1 — could not acquire the lock | Another session held it for > 10 s | Retry once; if it persists, report it |
 
@@ -107,7 +107,7 @@ node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs"          # or `yarn memory:ind
 node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs" --check  # must print: memory indexes are up to date
 ```
 
-The index tables are generated from the memory files on disk, so the row is derived from `hook:` rather than hand-written. The generator refuses to run while any memory lacks `hook:` — that is the check working, not a reason to edit the table by hand. If the generator is missing, the project predates it: run `/myspec:update`.
+The index tables are generated from the memory files on disk, so the row is derived from `hook:` rather than hand-written. The generator refuses to run while any memory lacks `hook:` — that is the check working, not a reason to edit the table by hand. If the generator is missing, the plugin install is incomplete: tell the user to update or reinstall the myspec plugin.
 
 A merge conflict in `index.md` is not a merge to reason about — keep either side and re-run the generator.
 
