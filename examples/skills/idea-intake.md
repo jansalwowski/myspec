@@ -1,6 +1,6 @@
 # `/myspec:idea-intake` — examples
 
-Triages a new idea file in `ideas/` into the priority queue (`ideas/PRIORITY-LISTING.md`). The skill validates format, asks priority + dependency questions, and updates the queue. **Always asks clarifying questions** — there's no auto-priority.
+Triages a new idea file in `ideas/` into the priority queue (`ideas/PRIORITY-LISTING.md`). The skill validates format, asks about priority, dependencies or scope only when the idea file leaves them open, and updates the queue. It never assumes a priority.
 
 **Contents**
 
@@ -44,14 +44,11 @@ The skill reads `ideas/keyboard-shortcut-help.md` and `ideas/PRIORITY-LISTING.md
 
 #### 2. Clarifying questions
 
-Even with everything specified, the skill asks one or two:
+Priority and scope are clear, so the skill does not ask about them. Dependencies are not stated, so it asks one question:
 
-> Quick checks:
->
-> 1. Should the shortcut list be **dynamic** (auto-discovered from registered shortcuts) or **static** (manually curated per page)?
-> 2. Any features in flight that this should wait for, or is it standalone?
+> Does this idea depend on any existing features or ideas, or is it standalone?
 
-**User**: dynamic; standalone.
+**User**: standalone.
 
 #### 3. Validate format
 
@@ -64,7 +61,7 @@ Edits `ideas/PRIORITY-LISTING.md`:
 ```markdown
 ## HIGH
 
-- [ ] **keyboard-shortcut-help** — `?` overlay listing keyboard shortcuts on the current page (dynamic, auto-discovered).
+- [ ] **keyboard-shortcut-help** — `?` overlay listing keyboard shortcuts on the current page.
   - Depends on: (none)
   - Notes: standalone, can ship independently.
 ```
@@ -75,7 +72,7 @@ The skill ends:
 
 ### Why this example matters
 
-- **Even "complete" ideas get one or two questions.** The dynamic-vs-static question is a behavioral fork the idea file didn't address — answering it before queueing prevents `idea-process` from re-asking later.
+- **Only open points get a question.** The file stated its priority and scope, so the skill asked only about dependencies. An idea file that states all three is queued without a question.
 - **Notes column captures the standalone signal.** `idea-process` uses this to know it can pick this idea even when other dependencies are unmet.
 
 ---
