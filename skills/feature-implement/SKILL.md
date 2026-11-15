@@ -221,11 +221,12 @@ Map each tier name to a concrete model the runtime has; never hardcode a model I
 |------|------|
 | Implementer — pure transcription (the task text holds the complete code) or a single-file mechanical fix | `cheap` |
 | Implementer — multi-file, integration, or working from prose | `mid` |
-| Phase reviewer, probe executor | `mid` |
+| Phase reviewer, fix-loop re-reviewer, probe executor | `mid` |
 | Fix-loop rounds 4–5 | one tier above the stuck implementer |
+| Workflow mode: verify agent, standards and spec-contract check | `cheap`; a serious check finding is re-judged on `mid` before it costs a fix |
 | Holistic reviewer | `premium` |
 
-**Name the tier on every dispatch** — an omitted model inherits the session's, often the most expensive. `mid` is the floor for reviewers: the cheapest models take 2-3x the turns on multi-step work.
+**Name the tier on every dispatch** — an omitted model inherits the session's, often the most expensive. `mid` is the floor for any verdict that stands: the cheapest models take 2-3x the turns on multi-step work.
 
 ## Constraints
 
