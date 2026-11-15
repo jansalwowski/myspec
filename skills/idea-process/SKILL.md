@@ -82,7 +82,7 @@ Write both, without offering (Step 4 marks them required; only a standalone `fea
 
 ### Step 8: Update Feature Index
 
-Add the new feature to `${aiDir}/features/index.yaml` with `status: draft` (docs now exist — `planned` is only for manifest entries without docs; see the Status State Machine in `.claude/rules/workflow.md`).
+Add the new feature to `${aiDir}/features/index.yaml` with `status: draft` (docs now exist — `planned` is only for manifest entries without docs; see the Status State Machine in `.claude/rules/feature-docs.md`).
 
 ### Step 9: Move to Processed
 

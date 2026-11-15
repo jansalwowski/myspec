@@ -88,7 +88,7 @@ Steps 1–6 run in a fresh subagent, so the review never reads the tech-spec wit
 9. **Approve & Summary**
    - Show changes made (file paths, sections affected)
    - List remaining issues (if any were rejected)
-   - If no Critical/High remain, ask: "Review passed — mark tech-spec.md `status: approved`?" On yes, set `status: approved` in tech-spec.md frontmatter — the transition `feature-plan` gates on (see the Status State Machine in `.claude/rules/workflow.md`). Otherwise it stays `draft`.
+   - If no Critical/High remain, ask: "Review passed — mark tech-spec.md `status: approved`?" On yes, set `status: approved` in tech-spec.md frontmatter — the transition `feature-plan` gates on (see the Status State Machine in `.claude/rules/feature-docs.md`). Otherwise it stays `draft`.
    - Recommend next step: re-review, `/myspec:feature-plan`, or address open issues first. With `--from-author`, skip it and return to `feature-tech-spec`, which recommends it.
 
 ## Review Dimensions Reference

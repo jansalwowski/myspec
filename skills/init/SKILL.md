@@ -117,6 +117,7 @@ Also create these framework files in `${aiDir}/`:
 - `anti-patterns.md` ← copy from `framework-files/anti-patterns.md`
 - `pre-flight.md` ← copy from `framework-files/pre-flight.md`
 - `work-isolation.md` ← copy from `framework-files/work-isolation.md` (the procedure the isolation hooks' block messages cite; the always-loaded rule of the same name is only its contract)
+- `auto-memory-style.md` ← copy from `framework-files/auto-memory-style.md` (the user-level auto-memory style guide, read before an auto-memory write)
 
 Replace `${aiDir}` placeholders with the configured value in the documents copied above — the `${aiDir}/` tree and `.claude/rules/`. Nothing else is copied: the hooks and their lib run from the plugin and resolve `aiDir` at runtime.
 
@@ -148,8 +149,8 @@ Append `.claude/state/` to `.gitignore` (create the file if absent). The hooks k
 
 Copy `.claude/rules/` framework rules from `framework-files/rules/`:
 - `workflow.md`
+- `feature-docs.md`
 - `memory-system.md`
-- `auto-memory-style.md`
 - `ideas.md`
 - `skill-optimization.md`
 - `paths.md`

@@ -9,7 +9,7 @@ Audit the user-level auto-memory store for this project, triage each entry, and 
 
 **Critical constraints:** never auto-promote (always show destination + exact insertion text); never delete a still-cited memory (grep first); skip DROP for entries <7 days old (COMPRESS is allowed at any age); do not touch project `${aiDir}/memory/`. See [Rules](#rules) for full set.
 
-**Companion rule:** `.claude/rules/auto-memory-style.md` defines the length budget and cut list that COMPRESS rewrites must conform to.
+**Companion docs:** the length caps in `.claude/rules/memory-system.md` (User-level auto-memory) and the keep/cut list in `${aiDir}/auto-memory-style.md`; COMPRESS rewrites conform to both.
 
 ## Scope
 
@@ -37,14 +37,14 @@ For each memory, run cheap verifications and assign ONE bucket:
 | **DROP-duplicate** | Strongly overlaps another memory or a `.claude/rules/` file |
 | **PROMOTE** | Belongs in CLAUDE.md, `.claude/rules/{X}.md`, or a specific `.claude/skills/{X}/SKILL.md` body |
 | **MERGE** | Fires in the same scenario as ≥1 other memory (defer to Phase 3) |
-| **COMPRESS** | Claim is still accurate but body exceeds length budget (see `.claude/rules/auto-memory-style.md`) or contains cut-list items (full code blocks where a one-liner suffices, originating-incident narrative, PR refs, "where applied" sections, date-bound references) |
+| **COMPRESS** | Claim is still accurate but body exceeds length budget (see `${aiDir}/auto-memory-style.md`) or contains cut-list items (full code blocks where a one-liner suffices, originating-incident narrative, PR refs, "where applied" sections, date-bound references) |
 | **CONFLICT** | Contradicts another KEEP/COMPRESS memory (e.g. one says "always X", another says "never X for case Y"). Defer pairwise resolution to Phase 3. |
 
 **Cheap verifications:**
 - File paths cited → check exists
 - Specific symbols/functions → grep once
 - Dep version claims → check `package.json` or relevant config
-- Length budget → `wc -l` against the per-type cap in `auto-memory-style.md`
+- Length budget → `wc -l` against the per-type cap in `memory-system.md`
 - Skip deep semantic verification — flag for human review instead
 
 **Age floor by type:**
@@ -108,7 +108,7 @@ After every executed action:
 ## Rules
 
 - **Never auto-promote.** Destination + exact insertion text shown before each promotion.
-- **Never auto-rewrite (COMPRESS).** Proposed rewrite shown verbatim before each compression. The agent must conform to `.claude/rules/auto-memory-style.md` — no creative reinterpretation, only mechanical removal of cut-list items.
+- **Never auto-rewrite (COMPRESS).** Proposed rewrite shown verbatim before each compression. The agent must conform to `${aiDir}/auto-memory-style.md` — no creative reinterpretation, only mechanical removal of cut-list items.
 - **Never delete a still-cited memory.** Grep across `${aiDir}/`, `.claude/` (excluding `.claude/worktrees/`), `apps/`, `packages/` before any rm.
 - **MEMORY.md edits are atomic with file deletes.** Never leave the index out of sync.
 - **Don't DROP feedback/semantic/reference entries <7 days old.** COMPRESS is allowed at any age. Project-type entries are exempt from the floor — they decay by design.

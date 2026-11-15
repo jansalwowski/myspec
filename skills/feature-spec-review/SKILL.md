@@ -81,7 +81,7 @@ Steps 1–6 run in a fresh subagent, so the review never reads the spec with the
    - Show changes made (file paths, sections affected)
    - List remaining issues (if any)
    - If remaining Critical/High issues → recommend addressing those first; spec stays `status: draft`
-   - If no Critical/High remain, ask: "Review passed — mark spec.md `status: approved`?" On yes, set `status: approved` in spec.md frontmatter. This is the transition `feature-tech-spec` and `feature-plan` gate on — without it the pipeline stalls (see the Status State Machine in `.claude/rules/workflow.md`).
+   - If no Critical/High remain, ask: "Review passed — mark spec.md `status: approved`?" On yes, set `status: approved` in spec.md frontmatter. This is the transition `feature-tech-spec` and `feature-plan` gate on — without it the pipeline stalls (see the Status State Machine in `.claude/rules/feature-docs.md`).
    - Then call `AskUserQuestion`:
      ```
      question: "Spec is approved. What's next?"

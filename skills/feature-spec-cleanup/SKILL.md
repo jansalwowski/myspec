@@ -15,7 +15,7 @@ Clean up spec.md files that violate the business-vs-technical documentation sepa
 Read the target feature's documentation:
 - Read `${aiDir}/features/{feature}/spec.md`
 - Read `${aiDir}/features/{feature}/tech-spec.md` (if exists)
-- Read `.claude/rules/workflow.md` for documentation rules (if it exists)
+- Read `.claude/rules/workflow.md` and `.claude/rules/feature-docs.md` for documentation rules (if they exist)
 
 ### 2. Detect Violations
 
