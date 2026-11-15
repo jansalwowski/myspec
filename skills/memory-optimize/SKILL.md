@@ -13,7 +13,7 @@ The target is **retrieval quality, not size**. Memory bodies load only when `/my
 
 ## Hard rules
 
-- Never `rm` a memory file. An entry that leaves the index gets `status: superseded` in its frontmatter and a one-line redirect body: the index generator filters superseded files out, and `memory-claim-id.sh` still counts the file when computing the high-water ID. Deleting the highest-numbered file hands the next session a colliding ID wherever `jq` is absent — the ID registry is only written when `jq` exists, and the filesystem scan is the fallback.
+- Never `rm` a memory file. An entry that leaves the index gets `status: superseded` in its frontmatter and a one-line redirect body: the index generator filters superseded files out, `memory-claim-id.sh` still counts the file when computing the high-water ID, and a citation of the ID elsewhere still resolves to a file.
 - Never retire a memory whose ID is cited outside its own file. `grep -rn "P019" ${aiDir}/ .claude/` — `memory/sessions/archive/`, feature docs, and other memories' `related:` all count as citations.
 - Never hand-write index rows. Edit the files, then run `node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs"`; `--check` must exit 0 before reporting done.
 - Never retire an entry created less than 30 days ago — a new memory has not had time to be matched even once, so `validation_count: 0` carries no signal yet. RE-ANCHOR, RETUNE, and RELINK are non-destructive and allowed at any age.
