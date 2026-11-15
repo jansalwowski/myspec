@@ -120,7 +120,7 @@ Update `validated`/`verified` date in memory frontmatter.
 
 Layer 1 is always in context, so it holds about 200 tokens: critical anti-patterns and one line per type index. Layer 2, each `${aiDir}/memory/{type}/index.md`, costs about 40 tokens per row and loads per task; memory bodies (Layer 3) load on demand. If the memory is critical enough to always be in context:
 - Ask user: "Should this be promoted to the global index (${aiDir}/memory/index.md)?"
-- If yes: add a one-line summary to the appropriate section.
+- If yes: add one line, `- [ID](type/ID-slug.md) keywords`, under the section for its type: `## Critical Procedural (What NOT to Do)`, `## Must-Know Facts` (semantic) or `## Recent Significant Events` (episodic).
 
 ## Verification Checklist
 

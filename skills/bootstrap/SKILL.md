@@ -33,7 +33,7 @@ From the topology file, identify:
 
 ### 2. Read Memory Index
 
-Read `${aiDir}/memory/index.md` (Layer 1, the global index; `init` copies it from the plugin's `scaffolding/memory/index.md`).
+Read `${aiDir}/memory/index.md` (Layer 1, the global index).
 
 Scan its three sections:
 - Critical Procedural (What NOT to Do)

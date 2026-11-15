@@ -38,7 +38,7 @@ Reads `backbone.yml`: identifies the relevant area for "user-invitations" (the `
 
 Reads `${aiDir}/memory/index.md`:
 
-- **Pinned rules** — three entries. Two are universal (always apply). One is **P017** *Verify webhook signatures in middleware* — task-irrelevant but already loaded by virtue of being pinned.
+- **Critical Procedural (What NOT to Do)** — three entries. Two are universal (always apply). One is **P017** *Verify webhook signatures in middleware* — task-irrelevant but already loaded by virtue of being pinned.
 - **Must-Know Facts** — the marketing-static-only decision (E009), the 50-byte Redis key cap (S007).
 - **Recent Significant Events** — last 30 days. The webhook-signature-bug episode (E010), the marketing-SSR-removal (E009).
 

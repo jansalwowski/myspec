@@ -1,7 +1,7 @@
 ---
 title: Anti-Pattern Index
 purpose: Framework + project anti-patterns, read before any work (the CLAUDE.md and INDEX.md that the setup blueprints generate route here). Distinct from ${aiDir}/memory/index.md, the Layer 1 index of typed memories.
-updated: 2026-11-12
+updated: 2026-11-15
 ---
 
 # Anti-Pattern Index
@@ -37,12 +37,6 @@ Procedural memories and skills without "Not For" / "Do NOT use for" exclusions c
 Memory anchors (file paths, grep patterns) that no longer match indicate potentially outdated knowledge. Flag during pre-flight, verify before relying on.
 
 <!-- myspec:framework-end -->
-
-## Must-Know Facts
-<!-- Critical semantic facts promoted here when they exist -->
-
-## Recent Significant Events
-<!-- Critical episodic events promoted here when they exist -->
 
 <!-- myspec:project-start -->
 
