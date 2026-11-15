@@ -32,7 +32,7 @@ tags: [feature, specification, planning, documentation]
    Create `${aiDir}/features/{feature-name}/spec.md` with the frontmatter, sections, requirement IDs and acceptance-criteria format in [`_shared/spec-template.md`](../_shared/spec-template.md#specmd). `feature-spec-review` checks against the same file.
 
 3. **Create Dependencies Document**
-   Create `${aiDir}/features/{feature-name}/dependencies.md` with the headings in [`_shared/spec-template.md`](../_shared/spec-template.md#dependenciesmd), and a reason for each dependency.
+   Create `${aiDir}/features/{feature-name}/dependencies.md` with the headings in [`_shared/spec-template.md`](../_shared/spec-template.md#dependenciesmd), and a reason for each dependency. Start the file with frontmatter that holds `title:` and `created:`: the frontmatter hook denies a doc under `${aiDir}/` that has no frontmatter block.
 
 4. **Update Feature Manifest**
    Add entry to `${aiDir}/features/index.yaml`:

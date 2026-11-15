@@ -35,6 +35,11 @@ No implementation detail: no file paths, class names, SQL or code.
 ## dependencies.md
 
 ```markdown
+---
+title: "{Feature Title} Dependencies"
+created: {TODAY}
+---
+
 # Dependencies: {feature}
 
 ## Feature Dependencies

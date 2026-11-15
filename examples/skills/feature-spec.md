@@ -133,6 +133,13 @@ The skill drafts:
 **dependencies.md**:
 
 ```markdown
+---
+title: "Scheduled Reports Dependencies"
+created: 2026-04-30
+---
+
+# Dependencies: scheduled-reports
+
 ## Feature Dependencies
 
 - `notification-system` — used for queued email delivery. Hard dependency.
