@@ -115,6 +115,10 @@ MD
   if [ -f "$PLUGIN_ROOT/framework-files/work-isolation.md" ]; then
     _copy_doc "$PLUGIN_ROOT/framework-files/work-isolation.md" "$ai/work-isolation.md"
   fi
+  # Moved out of .claude/rules/ in 3.8.0 (#459); older tags ship it as a rule.
+  if [ -f "$PLUGIN_ROOT/framework-files/auto-memory-style.md" ]; then
+    _copy_doc "$PLUGIN_ROOT/framework-files/auto-memory-style.md" "$ai/auto-memory-style.md"
+  fi
 
   # A rule whose manifest entry carries `when` installs only while its
   # setting holds; myspec_init sets none, so those stay out (a fixture that

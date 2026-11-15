@@ -2,7 +2,7 @@
 title: "Global Pre-flight Checklist"
 purpose: "Preventive checks before starting any work"
 feature: "global"
-updated: 2026-11-12
+updated: 2026-11-15
 ---
 
 # Pre-flight Checklist (Global)
@@ -19,7 +19,7 @@ Run these checks before starting work on any feature or task.
   → **Verify**: Can name 1 anti-pattern relevant to current task
 - [ ] Check `.claude/state/sessions/*.md` for existing sessions (yours lists a path you edited under `## Files touched`):
   - If one is related to this work → Ask user: resume it or complete it first?
-  - If unrelated sessions are dangling: 1–6h stale → report them and route to `/myspec:session-clean`; > 6h → bootstrap sweeps them as abandoned (age policy: Session Lifecycle table in `.claude/rules/memory-system.md`)
+  - If unrelated sessions are dangling → apply the age policy in the Session lifecycle table of `.claude/rules/memory-system.md`
   - Never touch another agent's fresh session (multi-agent workflows keep several active files)
   → **Verify**: No conflicting active session
 
@@ -70,7 +70,7 @@ Template: "I've made {N} attempts without success. What I've tried: [list]. Shou
 - [ ] Set your session file's status to `completed` (own file in `.claude/state/sessions/`)
 - [ ] Fill `Outcome` section in session log
 - [ ] Ask user: "Should we create a memory from this session?"
-- [ ] Archive session log to `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md` in the main checkout, never a linked worktree (all of this is what `/myspec:session-complete` does)
+- [ ] Archive the session log in the main checkout, never a linked worktree (all of this is what `/myspec:session-complete` does)
 
 <!-- myspec:framework-end -->
 

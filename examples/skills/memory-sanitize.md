@@ -2,7 +2,7 @@
 
 Audits the user-level auto-memory store at `<config_dir>/projects/<encoded_cwd>/memory/`. Triages every entry into one of eight buckets (KEEP / DROP-stale / DROP-trivial / DROP-duplicate / PROMOTE / MERGE / COMPRESS / CONFLICT), then drops, promotes, merges, compresses, or supersedes with explicit per-action confirmation. Never touches the project's own `ai/memory/` (myspec system) — that has separate skills.
 
-> **Related**: For *creating* user-level auto-memories, the harness handles that automatically as you work — see the `auto memory` instructions in your system prompt and the project-level rule at `.claude/rules/auto-memory-style.md` (length budget + cut list + pre-write ADD/UPDATE/NO-OP consolidation). For *project-level* memory in `ai/memory/`, use [`/myspec:memory-create`](memorize.md), [`/myspec:memory-lookup`](memory-lookup.md), and [`/myspec:session-clean`](session-clean.md). `memory-sanitize` is the periodic groomer for the *user-level* store only.
+> **Related**: For *creating* user-level auto-memories, the harness handles that automatically as you work — see the `auto memory` instructions in your system prompt, the length caps and pre-write ADD/UPDATE/NO-OP check in `.claude/rules/memory-system.md`, and the keep/cut list in `ai/auto-memory-style.md`. For *project-level* memory in `ai/memory/`, use [`/myspec:memory-create`](memorize.md), [`/myspec:memory-lookup`](memory-lookup.md), and [`/myspec:session-clean`](session-clean.md). `memory-sanitize` is the periodic groomer for the *user-level* store only.
 
 **Contents**
 
@@ -284,7 +284,7 @@ KEEP (1, flagged):
 
 ## Compressing a bloated entry
 
-A KEEP memory whose rule is still correct but whose body exceeds the length budget in `.claude/rules/auto-memory-style.md`. The skill proposes a verbatim rewrite that conforms to the budget.
+A KEEP memory whose rule is still correct but whose body exceeds the length caps in `.claude/rules/memory-system.md`. The skill proposes a verbatim rewrite that conforms to the budget.
 
 ### Setup
 

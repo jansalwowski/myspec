@@ -59,7 +59,7 @@ Run once → analyze WHERE it breaks → investigate THAT component
 **Escalate to the user:**
 > "I've made {N} attempts without success. What I've tried: [list]. Each fix reveals new issues in different places — this may be an architectural problem. Should we step back and reconsider the approach?"
 
-This aligns with the escalation protocol in the memory-system rule.
+This aligns with the escalation triggers in `${aiDir}/pre-flight.md`.
 
 ## Red Flags — return to Phase 1
 

@@ -58,12 +58,12 @@ Only when tech-spec.md still carries checkbox lists (the template's Implementati
 
 **D. Feature Status Validation**
 
-Completion % is computed from **implementation-plan.md checkboxes**, the canonical source per `.claude/rules/workflow.md` — never from tech-spec.md checkboxes or code inspection:
+Completion % is computed from **implementation-plan.md checkboxes**, the canonical source per `.claude/rules/feature-docs.md` — never from tech-spec.md checkboxes or code inspection:
 - Count total tasks, count checked tasks
 - Calculate completion % = checked / total * 100
 - Compare to `status` field in index.yaml
 - Detect: MISMATCH if status doesn't match completion (e.g., status=complete but <100%, status=draft but >80%)
-- No `implementation-plan.md`: nothing to count. `in-progress` needs a live plan, so that pair is a MISMATCH; for any other status the missing plan is informational, as in `feature-status-audit`'s matrix (authoritative per `workflow.md`): `complete` requires only spec.md and tech-spec.md, and `plans/` or `CHANGELOG.md` are never required
+- No `implementation-plan.md`: nothing to count. `in-progress` needs a live plan, so that pair is a MISMATCH; for any other status the missing plan is informational, as in `feature-status-audit`'s matrix (authoritative per `feature-docs.md`): `complete` requires only spec.md and tech-spec.md, and `plans/` or `CHANGELOG.md` are never required
 
 ### 3. Present Findings
 
@@ -148,4 +148,4 @@ After running spec-sync:
 - Never auto-fix without user approval
 - Fuzzy matching helps catch file renames (guide.ts → guides.ts, singular → plural)
 - High-severity issues should be fixed first
-- Status suggestions must respect transition ownership (see the Status State Machine in `.claude/rules/workflow.md`): `in-progress` is set by `/myspec:feature-implement` at execution start, so any completion % is normal for it — suggest `draft` only when no implementation plan exists yet. Never suggest `complete` from checkbox counts — that transition belongs to `/myspec:feature-complete`; at ≥80% suggest running `/myspec:feature-verify` instead
+- Status suggestions must respect transition ownership (see the Status State Machine in `.claude/rules/feature-docs.md`): `in-progress` is set by `/myspec:feature-implement` at execution start, so any completion % is normal for it — suggest `draft` only when no implementation plan exists yet. Never suggest `complete` from checkbox counts — that transition belongs to `/myspec:feature-complete`; at ≥80% suggest running `/myspec:feature-verify` instead
