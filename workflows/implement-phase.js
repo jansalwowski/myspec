@@ -126,6 +126,9 @@ const models = a.models || {}
 for (const t of TIERS) {
   if (typeof models[t] !== 'string' || !models[t].trim()) return invalid('models.' + t + ' is missing: name a concrete model for every tier')
 }
+if (typeof a.feature !== 'string' || !a.feature.trim()) return invalid('feature must name the feature directory')
+if (!(typeof a.phase === 'number' && Number.isFinite(a.phase)) && !(typeof a.phase === 'string' && a.phase.trim())) return invalid('phase must be the phase number')
+if (typeof a.planPath !== 'string' || !a.planPath.trim()) return invalid('planPath must be the plan\'s repo-relative path')
 if (a.mode !== 'sequential' && a.mode !== 'parallel') return invalid('mode must be "sequential" or "parallel"')
 if (typeof a.phaseBase !== 'string' || !/^[0-9a-f]{7,64}$/.test(a.phaseBase)) return invalid('phaseBase must be the recorded PHASE_BASE sha')
 if (typeof a.stateDir !== 'string' || !a.stateDir.startsWith('/')) return invalid('stateDir must be an absolute path')
@@ -138,9 +141,10 @@ for (const t of a.tasks) {
   if (typeof t.workdir !== 'string' || !t.workdir.startsWith('/')) return invalid('task ' + t.id + ': workdir must be an absolute path')
   if (typeof t.implementerPrompt !== 'string' || !t.implementerPrompt.trim()) return invalid('task ' + t.id + ': implementerPrompt is empty')
   if (!Array.isArray(t.files)) return invalid('task ' + t.id + ': files must list the task Files paths')
+  if (typeof t.verifyCommand !== 'string' || !t.verifyCommand.trim()) return invalid('task ' + t.id + ': verifyCommand must be the task\'s Verify at phase review command')
 }
 
-const planPath = typeof a.planPath === 'string' ? a.planPath : ''
+const planPath = a.planPath
 const standards = Array.isArray(a.standards) ? a.standards.filter((s) => typeof s === 'string' && s.trim()) : []
 const reviewDiff = typeof a.reviewDiff === 'string' && a.reviewDiff.trim() ? a.reviewDiff.trim() : null
 // false skips the check and its re-judge: the arm that measures what the
