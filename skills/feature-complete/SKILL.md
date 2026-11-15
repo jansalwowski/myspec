@@ -79,6 +79,8 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
    - Exit 3: the project has no topology file, or the audit refused to run — skip,
      and say which in the completion summary
    - Exit 1 or 2: add the new units, or run `/myspec:backbone-sync`
+   - Exit 0: low and medium findings do not change the exit code, so read the
+     MISSING and STALE blocks and add any new unit listed there
    - Exit 0 with a NOT CHECKED block: the sweep that would have found a new unit
      did not run — compare the new units against the file by hand
 
