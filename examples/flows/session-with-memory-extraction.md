@@ -32,7 +32,7 @@ The skill walks its checklist:
   - **P016** — *Create test users through the auth-service factory* (procedural)
   - **S008** — *Stripe webhook signing secret is per-environment* (semantic)
 - Reads both full files since they matched.
-- Lists `.claude/state/sessions/` — empty (no active sessions). No auto-archive needed.
+- Lists `.claude/state/sessions/` — empty (no active sessions).
 
 The agent reports:
 
