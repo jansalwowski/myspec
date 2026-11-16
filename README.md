@@ -110,7 +110,7 @@ When something is easier to see than to read (layouts to pick between, an archit
 | `/myspec:session-start` | Start tracked work session |
 | `/myspec:session-complete` | Archive session, extract memories, report repeated friction and whose side it is on ([docs/friction-report.md](docs/friction-report.md)) |
 | `/myspec:session-clean` | Sweep dangling auto-created sessions in `.claude/state/sessions/` — deletes empty, archives substantive, never touches the running agent's own session ([examples](examples/skills/session-clean.md)) |
-| `/myspec:memory-sanitize` | Audit the user-level auto-memory store in `<config_dir>/projects/` (`$CLAUDE_CONFIG_DIR`, default `~/.claude`): triage entries (keep/drop/promote/merge/compress/conflict), grep for live citations before any delete, compress bloated bodies against the length budget in `.claude/rules/auto-memory-style.md`, supersede contradictions non-destructively, never auto-promote or auto-rewrite ([examples](examples/skills/memory-sanitize.md)) |
+| `/myspec:memory-sanitize` | Audit the user-level auto-memory store in `<config_dir>/projects/` (`$CLAUDE_CONFIG_DIR`, default `~/.claude`): triage entries (keep/drop/promote/merge/compress/conflict), grep for live citations before any delete, compress bloated bodies against the length caps in `.claude/rules/memory-system.md`, supersede contradictions non-destructively, never auto-promote or auto-rewrite ([examples](examples/skills/memory-sanitize.md)) |
 | **Ideas Pipeline** | |
 | `/myspec:idea-intake` | Process new idea into priority queue |
 | `/myspec:idea-process` | Convert idea to feature specification |
@@ -152,13 +152,13 @@ A project that deliberately customizes a framework-owned file pins it, so `updat
 
 ```json
 "frameworkFiles": {
-  "rules/auto-memory-style.md": {
+  "rules/workflow.md": {
     "pinned": "locally compressed to halve always-loaded context"
   }
 }
 ```
 
-The key is the manifest key, not the destination path. Pinning is the project's decision — `update` reports pinned files and never adds or clears a pin itself. After adding a pin, run `node "<plugin dir>/lib/pin-reconcile.mjs" --record "rules/auto-memory-style.md"` from the project root: it records `hash` (the file) and `upstreamHash` (the plugin copy) on the pin, and `update` then tells a pin the project still edits from one whose edit upstream absorbed (`drop`) or that upstream moved under (`review`). `update` backfills the hashes of a pin that has none.
+The key is the manifest key, not the destination path. Pinning is the project's decision — `update` reports pinned files and never adds or clears a pin itself. After adding a pin, run `node "<plugin dir>/lib/pin-reconcile.mjs" --record "rules/workflow.md"` from the project root: it records `hash` (the file) and `upstreamHash` (the plugin copy) on the pin, and `update` then tells a pin the project still edits from one whose edit upstream absorbed (`drop`) or that upstream moved under (`review`). `update` backfills the hashes of a pin that has none.
 
 An optional `isolation` block configures the work-isolation hooks; every key has a default:
 
@@ -220,20 +220,20 @@ This updates framework-owned files while preserving your project customizations.
 
 ## Framework rules shipped to `.claude/rules/`
 
-`init` (first-time) and `update` (subsequent) install eight rule files into the consuming project's `.claude/rules/` directory. Four load on every turn (`workflow.md`, `memory-system.md`, `auto-memory-style.md`, `work-isolation.md`); the other four carry `paths:` frontmatter and load only for matching work:
+`init` (first-time) and `update` (subsequent) install eight rule files into the consuming project's `.claude/rules/` directory. Three load on every turn (`workflow.md`, `memory-system.md`, `work-isolation.md`); the other five carry `paths:` frontmatter and load only for matching work:
 
 | File | Governs |
 |------|---------|
-| `workflow.md` | Feature workflow phases, the status state machine, when to invoke which skill |
-| `memory-system.md` | Project-level memory (`${aiDir}/memory/` — sessions, procedural/semantic/episodic). Triggers, layer budgets, session lifecycle. |
-| `auto-memory-style.md` | Harness-managed **user-level** auto-memory at `<config_dir>/projects/<encoded_cwd>/memory/`. Length budget per type, cut list, pre-write ADD/UPDATE/NO-OP consolidation, conflict resolution. |
+| `workflow.md` | Code generation policy, the feature pipelines, where new docs go |
+| `feature-docs.md` | Feature doc layout, the status state machine, the sub-feature convention; loads for `${aiDir}/features/**` |
+| `memory-system.md` | Project-level memory (`${aiDir}/memory/` — sessions, procedural/semantic/episodic). Triggers and session lifecycle. |
 | `ideas.md` | Ideas pipeline (intake → priority → processing) |
 | `skill-optimization.md` | Skill-authoring meta-rules (frontmatter, naming, token efficiency) |
 | `paths.md` | Path portability — `${aiDir}` placeholder, `<repo_root>`/`<encoded_cwd>` forms, no absolute paths in shared artifacts |
 | `skill-self-test.md` | Skill `dependencies:` validation (declared packages/paths must exist) |
 | `work-isolation.md` | The develop-vs-worktree contract in about 150 tokens: the user decides before the first source edit, two hooks enforce it, and the session id comes only from a block message. The procedure (the question, worktree creation and provisioning, promotion of develop-mode work to a PR) is `${aiDir}/work-isolation.md`, which the block messages cite |
 
-The two memory rules cover different stores and do not overlap. `memory-system.md` is for the myspec-managed system in `${aiDir}/memory/`; `auto-memory-style.md` is for the harness-managed user-level store.
+The harness-managed **user-level** auto-memory store (`<config_dir>/projects/<encoded_cwd>/memory/`) sits outside the repository, where no `paths:` glob can reach it, so `memory-system.md` carries its always-needed core (length caps per type, the pre-write ADD/UPDATE/NO-OP check) and `${aiDir}/auto-memory-style.md` the rest (keep and cut lists, conflict resolution), which `/myspec:memory-sanitize` reads.
 
 ## Directory Structure (in consuming projects)
 
@@ -252,5 +252,6 @@ ${aiDir}/                       # AI documentation directory (.ai or ai)
   anti-patterns.md              # Framework anti-pattern index (project section appended by setup)
   pre-flight.md                 # Pre-work checklist
   work-isolation.md             # Develop-vs-worktree procedure the isolation hooks cite
+  auto-memory-style.md          # Keep/cut list for user-level auto-memory entries
   INDEX.md                      # Documentation index
 ```
