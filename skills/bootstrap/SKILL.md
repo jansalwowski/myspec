@@ -96,10 +96,10 @@ block message.
 **Matches**: [entries that matched the task / "none" / omit this line when no task was given]
 **Topology**: [{filename} loaded / not configured, use the `setup` skill with `backbone` to create one]
 **Boundaries**: [any never_modify paths relevant to task, or "none relevant"]
-{the lines bootstrap-scan.sh printed, as printed}
+{the lines bootstrap-scan.sh printed, as printed, except the **Memory** line}
 ```
 
-After the `**Memory**` line, add `scanned against "{task}"` or `not scanned, no task yet: run /myspec:memory-preflight when the task is known`.
+Paste every script line unchanged except `**Memory**`: end that one line with `, scanned against "{task}"` or `, not scanned, no task yet: run /myspec:memory-preflight when the task is known`. When the script exits non-zero (2: outside a git work tree and any myspec project; it prints nothing on stdout), print `**Scan**: not run, bootstrap-scan.sh exited {code}: {its stderr line}` in place of its lines.
 
 **Note**: Bootstrap satisfies the `memory-preflight` prerequisite for `session-start` **only when it was given a task**. A no-task bootstrap defers the Layer 2 scan, so `/myspec:memory-preflight` is still required before significant work. Sessions for code-editing work are auto-created by the `mark-code-changed.sh` hook on first code edit. Manual `session-start` is only useful for non-code sessions (pure debugging, discovery, doc-only work). Bootstrap creates, moves and archives no session file.
 
@@ -109,7 +109,7 @@ After the `**Memory**` line, add `scanned against "{task}"` or `not scanned, no 
 - [ ] Topology file was loaded if configured or found at root
 - [ ] Layer 1 index was read; Layer 2 indexes were scanned if a task was given, and only counted if not
 - [ ] `bootstrap-scan.sh` ran once, with the branch flags when the topology file names distinct integration and release branches
-- [ ] Orientation summary printed with the script's lines as printed
+- [ ] Orientation summary printed with the script's lines as printed (only the **Memory** line gets the scan suffix), or the `**Scan**: not run` line on a non-zero exit
 - [ ] No file was created, moved or fixed
 
 ## When NOT to Use

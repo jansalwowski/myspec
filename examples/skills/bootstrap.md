@@ -228,13 +228,12 @@ episodic: 8
 >
 > Example Frontend — Nuxt 3 SSR. Working areas: `server/api/`, `pages/`, `config/cache.js`.
 >
-> **Memory**: Layer 1 empty | Layer 2 available: 58 procedural, 83 semantic, 8 episodic — not
-> scanned, no task yet. I'll run `/myspec:memory-preflight` once you tell me what we're working on.
+> **Memory**: Layer 1 0 entries | Layer 2 58 procedural, 83 semantic, 8 episodic rows, not
+> scanned, no task yet: run /myspec:memory-preflight when the task is known
 >
-> **Layer 1 is empty** while Layer 2 holds 149 entries — the always-loaded layer is returning
-> nothing for its slot. Worth promoting the handful you'd want in front of every session.
+> **Layer 1**: empty while Layer 2 has 149 rows; promote the few critical entries with /myspec:memory-optimize
 >
-> **No active sessions.**
+> **Active sessions**: 0
 >
 > Ready — what are we working on?
 
