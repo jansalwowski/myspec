@@ -409,6 +409,30 @@ check_in "$REPO" block "project prune entry blocks -n"        wt-sess 'git workt
 printf '%s\n' "$MYSPEC_JSON" > "$REPO/.myspec.json"
 check_in "$REPO" allow "default entry keeps the carve-out"     wt-sess 'git worktree prune --dry-run'
 
+# Project entries match as `grep -E` reads them (#524): GNU's \s \S \w \W,
+# which bash gets as POSIX classes, \b, which only grep runs, and a leading
+# `*`, which GNU grep reads as a literal where regcomp rejects it.
+jq '.isolation.blockInMain += ["^terraform\\s+apply\\S*$", "^helm\\b.*\\bupgrade\\b", "^[\\s]x", "*cdk"]' \
+  <<< "$MYSPEC_JSON" > "$REPO/.myspec.json"
+check_in "$REPO" block "project entry with \\s"            wt-sess 'terraform  apply'
+check_in "$REPO" allow "project entry with \\S, no match"  wt-sess 'terraform apply x'
+check_in "$REPO" block "project entry with \\b"            wt-sess 'helm --debug upgrade app'
+check_in "$REPO" allow "project entry with \\b, no match"  wt-sess 'helm upgrades'
+check_in "$REPO" block "[\\s] in a bracket is \\ or s"     wt-sess 'sx'
+# shellcheck disable=SC2063 # the ERE under test, not a glob
+if grep -qE -- '*cdk' <<< 'x*cdk' 2>/dev/null; then want=block; else want=allow; fi
+check_in "$REPO" "$want" "an ERE regcomp rejects, as grep reads it" wt-sess 'x*cdk'
+# A malformed entry is named once and does not stop the grep of the others.
+jq '.isolation.blockInMain += ["^helm\\b.*\\bupgrade\\b", "^npm["]' <<< "$MYSPEC_JSON" > "$REPO/.myspec.json"
+check_in "$REPO" block "a malformed entry leaves the others" wt-sess 'helm upgrade app'
+err=$(run_hook "$REPO" wt-sess 'echo a; echo b' 2>&1 >/dev/null)
+if [ "$(grep -c 'no valid extended regex, so it blocks nothing: \^npm\[' <<< "$err")" = 1 ]; then
+  PASS=$((PASS + 1))
+else
+  FAIL=$((FAIL + 1)); echo "FAIL  a malformed blockInMain entry is named once on stderr (got: $err)" >&2
+fi
+printf '%s\n' "$MYSPEC_JSON" > "$REPO/.myspec.json"
+
 # --- gate B, worktree mode: these stay allowed on purpose --------------------
 check_in "$REPO" allow "read-only lint"       wt-sess 'yarn lint'
 check_in "$REPO" allow "dev server"           wt-sess 'yarn dev'
