@@ -26,11 +26,10 @@ Steps 1–6 (load context, structure and gates, review dimensions, spec alignmen
    - Use diff format: `- old text` / `+ new text`
 
 8. **Execute Changes**
-   - Apply small fixes immediately
-   - Apply confirmed big fixes
+   - Apply `[auto-fix]` proposals and confirmed `[requires confirmation]` proposals
    - Update `last_updated` date in frontmatter
    - If `based_on_spec_version` was stale but spec is unchanged: update it
-   - With `--from-author`, when a confirmed big fix was applied: dispatch the reviewer once more, with `[PRIOR_FINDINGS]` filled, and take its findings through Steps 7–8. There is no third round; what it leaves open is listed in Step 9.
+   - With `--from-author`, when an applied `[requires confirmation]` fix changed the tech-spec: dispatch the reviewer once more, with `[PRIOR_FINDINGS]` filled, and take its findings through Steps 7–8. There is no third round; what it leaves open is listed in Step 9.
 
 9. **Approve & Summary**
    - Show changes made (file paths, sections affected)
