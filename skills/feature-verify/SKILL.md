@@ -23,24 +23,24 @@ Holistic read-only health check across all 8 feature documentation categories. P
 - Read manifest entry from `${aiDir}/features/index.yaml` (or `${aiDir}/features/{parent}/index.yaml` for sub-features)
 - Note: `status`, `phase`, `priority`, `depends-on`, `subfeatures`, `implementation-plan`, `note`
 
-Then run the two scripts once, from the project root. For a sub-feature, pass the parent to `audit.mjs` and read the result whose `name` is the sub-feature path.
+Then run the two scripts once, from the project root, with `{feature}` as given (a sub-feature as `parent/sub`):
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/lib/feature-status-audit/audit.mjs" --only={top-level feature} --json
+node "${CLAUDE_PLUGIN_ROOT}/lib/feature-status-audit/audit.mjs" --only={feature} --json
 node "${CLAUDE_PLUGIN_ROOT}/lib/feature-spec-sync/dead-paths.mjs" --only={feature}
 ```
 
-`audit.mjs` owns status drift, required and expected docs per status, doc status vocabulary, archived plans and parent acceptance criteria. It exits 0 or 2 (2 means a Critical issue); 3 means it could not run. `dead-paths.mjs` lists `MISSING` and `MOVED` paths cited in the feature docs; it exits 0 clean, 1 with findings, 3 when it cannot run. If a script exits 3, report its error and do that step by hand.
+`audit.mjs` owns status drift, required and expected docs per status, doc status vocabulary, archived plans and parent acceptance criteria. For a top-level feature its `results` hold the feature and its sub-features; for a sub-feature, that one result. It exits 0 clean, 2 when any result has a Critical issue, 3 when it cannot run (a name in no manifest included). `dead-paths.mjs` lists `MISSING` and `MOVED` paths cited in the feature's docs and its sub-features' docs; it exits 0 clean, 1 with findings, 3 when it cannot run. If a script exits 3, report its error and show the categories it feeds as `NOT RUN`. Do not redo its checks by hand.
 
-Report every `audit.mjs` issue with the script's severity. Do not check those conditions again by hand. Put each issue in a category:
+Report every `audit.mjs` issue with the script's severity. Do not check those conditions again by hand. An issue on a sub-feature's result goes to Sub-Features. Put each issue on `{feature}`'s own result in a category:
 
 | Script message | Category |
 |----------------|----------|
 | `directory missing`, `required doc missing`, `expected doc missing`, `present but status=` (docs ahead), `draft with no documentation files` | Workflow Phase |
 | `frontmatter status: X is not a doc status` | Spec or Tech-Spec |
 | `implementation-plan.md is ...`, `implementation-plan.md still present`, `archived plans/...` | Plan |
-| `frontmatter status: draft but manifest status=complete` | Index Sync |
-| `subfeatures: true but no index.yaml`, any issue on a sub-feature result, `all N sub-features complete but spec.md acceptance criteria ...` | Sub-Features |
+| `unknown status: "X"`, `frontmatter status: draft but manifest status=complete` | Index Sync |
+| `subfeatures: true but no index.yaml`, `all N sub-features complete but spec.md acceptance criteria ...` | Sub-Features |
 
 ### 2. Check Spec
 
@@ -75,12 +75,12 @@ Use `docs.implementationPlan` and `docs.archivedPlans` from the `audit.mjs` JSON
 
 ### 5. Check Implementation
 
-Dead paths come from `dead-paths.mjs` (Step 1). Drop a `MISSING` path that the tech-spec lists as still to be created in a feature that is not yet implemented.
+Dead paths come from `dead-paths.mjs` (Step 1). Drop a `MISSING` path that the tech-spec lists as still to be created in a feature that is not yet implemented. A finding in a sub-feature's directory goes to Sub-Features, once.
 
 | Check | Severity | Condition |
 |-------|----------|-----------|
-| Cited paths exist | High | `dead-paths.mjs` reports `MISSING` or `MOVED` and status is in-progress or complete |
-| Cited paths exist | Low | `dead-paths.mjs` reports `MISSING` or `MOVED` and status is planned or draft |
+| Cited path missing | High | `dead-paths.mjs` reports `MISSING` (same severity as `feature-spec-sync`) |
+| Cited path moved | Medium | `dead-paths.mjs` reports `MOVED` (same severity as `feature-spec-sync`) |
 | Code ahead of docs | Medium | Files exist in expected directories but not listed in File Inventory |
 
 If tech-spec.md has checkbox task lists (the template uses a numbered outline without checkboxes):
@@ -102,7 +102,7 @@ If manifest entry has `subfeatures: true`:
 
 A missing sub-feature directory or spec.md, a missing sub-feature index.yaml and open parent acceptance criteria come from `audit.mjs` (Step 1).
 
-If user requests recursive check: run Steps 2–5 for each sub-feature and append results.
+If user requests recursive check: run Steps 2–5 for each sub-feature and append results. Its `audit.mjs` issues and dead paths are already in Sub-Features from Step 1: do not report them again.
 
 ### 7. Check Memories
 
@@ -121,6 +121,7 @@ If no memories found and no memory indexes exist: skip this section silently (pe
 | Dependencies exist | Medium | `depends-on` lists a feature not found in any index.yaml |
 | Dependencies ready | Low | `depends-on` lists a feature with status=planned |
 | implementation-plan field | Low | Manifest `implementation-plan:` points to a file that doesn't exist |
+| Status behind code | High | Manifest status is planned or draft but the code the docs describe exists |
 
 Status drift (plan ratio against manifest status) and `subfeatures: true` without an index.yaml come from `audit.mjs` (Step 1).
 
@@ -165,20 +166,15 @@ Health classification:
 
 ### 11. Recommend Actions
 
-List numbered recommendations. Each issue type maps to one fix skill:
+List numbered recommendations. Each issue type maps to one fix skill. For an `audit.mjs` issue, use the fix in `/myspec:feature-status-audit`'s routing table (its Step 3). For the other issues:
 
 | Issue | Recommended Skill |
 |-------|------------------|
 | Spec version mismatch | `/myspec:feature-spec-sync` |
 | Dead or moved path | `/myspec:feature-spec-sync` |
 | Tech-spec checkbox drift | `/myspec:feature-spec-sync` |
-| Plan has open tasks under `complete` | Finish or defer the open tasks, then `/myspec:feature-complete`; or revert the manifest status |
-| Archived plan at 0/N under `complete` | Check that the work happened (git log), then tick the delivered tasks or revert the manifest status |
-| Parent acceptance criteria open, all sub-features complete | Tick the delivered criteria in spec.md, or split the rest into a new sub-feature |
-| Missing spec.md | `/myspec:feature-spec` |
-| Missing tech-spec.md | `/myspec:feature-tech-spec` |
 | Stale or missing plan | `/myspec:feature-plan` |
-| All checkboxes done, status != complete | `/myspec:feature-complete` |
+| Status behind code | Confirm in git what merged, then `/myspec:feature-complete` if it shipped, or `/myspec:feature-plan` for the rest |
 | Spec needs changes for new requirements | `/myspec:feature-update` |
 | Sub-feature status inconsistency | `/myspec:feature-verify {subfeature}` |
 | Relevant memories found | `/myspec:memory-lookup` |
@@ -207,8 +203,8 @@ Wait for user to choose which action to pursue.
 - [ ] Feature path resolved and directory confirmed to exist
 - [ ] Manifest entry found and read
 - [ ] `audit.mjs --json` and `dead-paths.mjs` run once, each issue reported with the script's severity
-- [ ] spec.md checked: existence, frontmatter, status validity
-- [ ] tech-spec.md checked: existence, frontmatter, version alignment
+- [ ] spec.md checked: frontmatter, phase
+- [ ] tech-spec.md checked: frontmatter, version alignment
 - [ ] Plan checked: existence, currency
 - [ ] Sub-features checked (if subfeatures: true)
 - [ ] Memory indexes scanned for feature references

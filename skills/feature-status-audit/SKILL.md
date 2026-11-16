@@ -27,7 +27,7 @@ Useful flags:
 | Flag | Purpose |
 |------|---------|
 | `--ai-dir=<path>` | Override ai dir (e.g. `--ai-dir=docs`) |
-| `--only=<name>` | Restrict to one feature and its sub-features |
+| `--only=<name>` | One feature with its sub-features, or one sub-feature (`parent/sub`). Skips the orphan scan; a name in no manifest exits 3 |
 | `--severity=<critical\|high\|medium\|low>` | Hide issues below this threshold (default: low) |
 | `--json` | Machine-readable output (for piping into other tools) |
 
@@ -46,6 +46,7 @@ The script outputs:
 
 | Issue pattern | Recommended skill |
 |---------------|-------------------|
+| `unknown status: "X"` | set the manifest `status` to `planned`, `draft`, `in-progress`, `complete` or `deprecated` |
 | `directory missing` | restore the directory from git, or delete the manifest entry |
 | `required doc missing for status=complete` | `/myspec:feature-spec` or `/myspec:feature-tech-spec` |
 | `required doc missing for status=in-progress` | `/myspec:feature-spec` |

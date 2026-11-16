@@ -81,7 +81,7 @@ The interesting case: a feature with mid-severity issues. The report routes each
 
 ### Skill flow
 
-The skill runs the two scripts. `audit.mjs` reports no issue. `dead-paths.mjs` reports 2 `MISSING` paths in tech-spec.md, which are High because the feature is `complete`. The skill reads the docs for the other checks and produces:
+The skill runs the two scripts. `audit.mjs` reports no issue. `dead-paths.mjs` reports 2 `MISSING` paths in tech-spec.md, which are High (a `MOVED` path would be Medium, as in `feature-spec-sync`). The skill reads the docs for the other checks and produces:
 
 ```
 Feature Health: team-invites
