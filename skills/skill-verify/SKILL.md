@@ -53,7 +53,7 @@ description: "Use when an existing SKILL.md needs auditing for quality, complian
    - Use the measured cost from step 2 where available; otherwise count lines and words and estimate at ~0.75 words/token, stating that the estimate runs low
    - Flag a body over 5,000 tokens or 500 lines. The consequence is concrete: past 5,000 tokens the skill is truncated when re-injected after `/compact`, so its tail silently stops applying mid-session.
    - **Under-split**: body >300 lines with reference material consulted in only one step → propose moving it to `references/`
-   - **Over-split**: a `references/` file that every run loads anyway is indirection with no payoff → propose inlining it
+   - **Over-split**: a `references/` file that every run loads anyway, and that would leave the body under 5,000 tokens if inlined, is indirection with no payoff → propose inlining it. If inlining would push the body past 5,000 tokens, the split keeps the body whole after `/compact`: not a finding
    - Reference files must sit one level deep from SKILL.md; flag deeper chains. Reference files over 100 lines need a table of contents.
    - Repeated deterministic logic described in prose belongs in `scripts/` — a script beats a paragraph of instructions
    - Guard prose (paragraphs pre-arguing against anticipated excuses) compresses into an Excuse | Reality table, not into deletion. Tag any such cut `[requires confirmation]` and recommend re-testing: cutting one discipline skill's recap regressed compliance from 8/10 to 5/10 runs, and the fix was table rows, not restored prose.
