@@ -132,12 +132,14 @@ The pass is not a gate: continue to Phase 3 whatever the answers.
 1. **Detect worktree** — run:
 
    ```bash
-   [ "$(git rev-parse --path-format=absolute --git-dir)" != "$(git rev-parse --path-format=absolute --git-common-dir)" ] && git rev-parse --show-toplevel
+   gd=$(git rev-parse --path-format=absolute --git-dir) &&
+     common=$(git rev-parse --path-format=absolute --git-common-dir) &&
+     { [ "$gd" = "$common" ] || git rev-parse --show-toplevel; }
    ```
 
-   It prints a path only when the current checkout is a linked worktree. The main checkout is never a worktree here, even on a feature branch: git refuses to remove it.
+   Exit 0 with a path: the current checkout is a linked worktree. Exit 0 with empty output: it is the main checkout, which is never a worktree here, even on a feature branch (git refuses to remove it). Non-zero exit: detection failed; stop and report the error instead of guessing.
 
-   If it printed a path, record that **absolute path and the branch name now**, before any `cd` or checkout. Option 1 and 4 switch to the base branch, so re-deriving the path afterwards (e.g. from `git branch --show-current`) resolves against the wrong tree — detection silently stops matching and step 4 no-ops, leaving the worktree behind.
+   If it printed a path, record that **absolute path and the branch name now**. Step 4 removes the worktree after you may have `cd`'d elsewhere, and from outside the worktree this command no longer describes it, so step 4 must use the recorded values.
 
 2. **Present options:**
    ```
