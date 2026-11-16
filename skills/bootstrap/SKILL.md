@@ -73,7 +73,7 @@ code. Add `--no-fetch` when offline.
 | `**Memory health**` | `memory-doctor.mjs --quiet`. Errors mean `/myspec:memory-create` will refuse to allocate an ID until they are fixed |
 | `**Setup health**` | `setup-doctor.mjs --quiet`: framework files that differ from the plugin copy, hooks wired twice or broken, schema breaks. An error means part of the harness is inert |
 | `**Active sessions**`, `**Dangling**`, `**Stale sessions**` | Live logs in the main checkout's session directory: under 6h listed, 1 to 6h dangling, over 6h stale |
-| `**Worktree health**` | Non-main worktrees older than 3 days or missing on disk; no line without worktrees |
+| `**Worktree health**` | Non-main worktrees older than 3 days, missing on disk or prunable; no line without worktrees |
 | `**Branch lag**` | Only with the two flags, and only when the integration branch lags or the check could not run |
 | `**myspec version**` | `.myspec.json` `frameworkVersion` against the plugin manifest; no line when equal or unreadable |
 

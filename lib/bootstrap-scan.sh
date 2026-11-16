@@ -14,9 +14,9 @@
 #   sessions   live logs (*.md) in the session directory: under 6h listed
 #              as active (id prefix and topic), 1-6h also counted as
 #              possibly dangling, over 6h counted as stale
-#   worktrees  non-main worktrees whose path is gone (orphaned, what
-#              `git worktree prune` would remove) or whose last commit is
-#              older than 3 days (stale)
+#   worktrees  non-main worktrees whose path is gone or that git marks
+#              prunable (orphaned, what `git worktree prune` would remove)
+#              or whose last commit is older than 3 days (stale)
 #   lag        only with --integration and --release (the topology file's
 #              branches.integration and branches.release, when they differ)
 #   version    .myspec.json frameworkVersion against this plugin's manifest
@@ -148,19 +148,22 @@ step_sessions() {
 
 # --- worktrees --------------------------------------------------------------
 step_worktrees() {
-  local line path="" first=1 bare=0 total=0 bad=0 ct
+  local line path="" first=1 bare=0 prunable=0 total=0 bad=0 ct
   [ "$GIT" -eq 1 ] || return
   while IFS= read -r line; do
     case "$line" in
-      "worktree "*) path="${line#worktree }"; bare=0 ;;
+      "worktree "*) path="${line#worktree }"; bare=0; prunable=0 ;;
       bare) bare=1 ;;
+      prunable*) prunable=1 ;;
       "")
         if [ -n "$path" ]; then
           if [ "$first" -eq 1 ] || [ "$bare" -eq 1 ]; then
             first=0
           else
             total=$((total + 1))
-            if [ ! -d "$path" ]; then
+            # A prunable entry can keep its directory (its .git file gone):
+            # git log there would walk up to the parent repository.
+            if [ "$prunable" -eq 1 ] || [ ! -d "$path" ]; then
               bad=$((bad + 1))
             else
               ct=$(git -C "$path" log -1 --format=%ct 2>/dev/null) || ct=""

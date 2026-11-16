@@ -128,6 +128,17 @@ OUT=$("$SCRIPT" 2>/dev/null)
 has '**Worktree health**: WARNING, 2 of 2 stale or orphaned; use the worktree-clean skill' && ok \
   || fail "an old and a missing worktree are flagged (got: $OUT)"
 git_ worktree prune
+# A prunable worktree whose directory is still there (its .git file gone):
+# git log inside it would read the parent repository's fresh commit.
+git_ -C "$ROOT/fresh" commit -q --allow-empty -m fresh
+mkdir -p "$REPO/.claude/worktrees"
+git_ worktree add -q -b kept "$REPO/.claude/worktrees/kept" >/dev/null 2>&1
+rm -f "$REPO/.claude/worktrees/kept/.git"
+OUT=$("$SCRIPT" 2>/dev/null)
+has '**Worktree health**: WARNING, 1 of 2 stale or orphaned; use the worktree-clean skill' && ok \
+  || fail "a prunable worktree with its directory is flagged (got: $OUT)"
+git_ worktree prune
+rm -rf "$REPO/.claude/worktrees"
 
 # --- from a linked worktree: the main checkout's sessions ---------------------
 OUT=$(cd "$ROOT/fresh" && "$SCRIPT" 2>/dev/null)
