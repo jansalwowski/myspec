@@ -57,7 +57,7 @@ For each implementation step in the tech-spec:
 
 **Milestone rule:** group tasks into milestones, each a vertical slice that delivers one coherent piece of functionality and leaves the branch working. Never an "all backend" milestone followed by an "all frontend" one.
 - Within a milestone, classify each task by project layer (backend/frontend, server/client, data/presentation — the project's own conventions) and order lower layers (data, services, APIs) before higher ones (UI, presentation). Across milestones, Milestone 2's backend may follow Milestone 1's frontend — that is the whole point.
-- Size: 3-7 phases and 3-10 tasks per milestone; past 10 tasks, split it. A feature under ~8 tasks is one milestone — never force more. Size a milestone as one session's work: `feature-implement` pauses at each checkpoint and recommends a fresh session past five tasks.
+- Size: 3-10 tasks per milestone, in as few phases as the phase grouping rule allows; past 10 tasks, split it. A feature under ~8 tasks is one milestone — never force more. Size a milestone as one session's work: `feature-implement` pauses at each checkpoint and recommends a fresh session past five tasks.
 
 **Parallel candidates:** extractors or parsers for different data types, independent UI components that share no state, services for unrelated entities, test suites for independent modules. **Barriers:** shared config or types, database migrations, orchestrators that call other modules, integration tests over several components. Tag a group `[parallel:descriptiveName]`.
 
@@ -66,6 +66,8 @@ For each implementation step in the tech-spec:
 ### Step 3: Expand to Execution Tasks
 
 **REQUIRED:** read [references/plan-templates.md](references/plan-templates.md) before writing any task — it carries the front-matter, Execution Order, task, and barrier templates. Convert each tech-spec implementation step into a full task using that format.
+
+**Write the plan file as you go:** `${aiDir}/features/{feature}/implementation-plan.md` (sub-features: `${aiDir}/features/{parent}/{subfeature}/implementation-plan.md`). Steps 4 to 4.6 read and fix that file on disk.
 
 **What the tech-spec provides:** High-level step description, file inventory, interfaces
 **What the plan adds:** Exact TDD steps, test code, the phase-review verification command, commit messages, parallel group tags
@@ -132,7 +134,7 @@ Step 5, by exactly one of:
 - **Add or extend a task** so the requirement is realized, then re-quote it into
   that task's `**Spec contract:**` block. This is the default.
 - **Mark it `DEFERRED` with a reason** in the Tasks column, and surface the list
-  of deferrals to the user in Step 6 alongside the plan. A deferral is a scope
+  of deferrals to the user in Step 5 alongside the plan. A deferral is a scope
   decision, so it is the user's to make — never defer a requirement silently,
   and never defer one merely because it is awkward to plan.
 
@@ -144,21 +146,17 @@ it.
 
 ### Step 4.6: Plan Self-Check (REQUIRED, all plans)
 
-Implementers paste the plan's snippets verbatim, and phase reviewers grade the diff against the plan. A defect the plan dictates therefore passes the implementer and costs a fix loop at phase review. Before saving, read the written plan against `spec.md` and `tech-spec.md` and run the four checks in [references/plan-self-check.md](references/plan-self-check.md): snippets vs their spec contract, steps that contradict each other, reader-visible strings, and probe lint. Fix each finding in the plan, record the result in the plan's `## Plan Self-Check` section, then walk that file's "Before presenting" checklist. A probe that depends on an earlier probe's writes is allowed if the probe line declares the dependency.
+Implementers paste the plan's snippets verbatim, and phase reviewers grade the diff against the plan. A defect the plan dictates therefore passes the implementer and costs a fix loop at phase review. Read the plan file from disk against `spec.md` and `tech-spec.md` and run the four checks in [references/plan-self-check.md](references/plan-self-check.md): snippets vs their spec contract, steps that contradict each other, reader-visible strings, and probe lint. Fix each finding in the plan, record the result in the plan's `## Plan Self-Check` section, then walk that file's "Before presenting" checklist. A probe that depends on an earlier probe's writes is allowed if the probe line declares the dependency.
 
-### Step 5: Save Plan
+### Step 5: Present for Approval
 
-Save to `${aiDir}/features/{feature}/implementation-plan.md` (sub-features: `${aiDir}/features/{parent}/{subfeature}/implementation-plan.md`).
+Present the plan. If Step 4.5 recorded any `DEFERRED` row, list those requirements and their reasons here and get the user's decision — the plan is otherwise approved with a scope cut nobody named. On approval, go to Step 6.
 
-### Step 6: Present and Hand Off
-
-Present the plan. If Step 4.5 recorded any `DEFERRED` row, list those requirements and their reasons here and get the user's decision before handing off — the plan is otherwise approved with a scope cut nobody named. On approval, hand off to `/myspec:feature-implement`.
-
-### Step 7: Commit Decision (BLOCKING before feature-implement)
+### Step 6: Commit, then Hand Off (BLOCKING before feature-implement)
 
 The plan must be committed before `/myspec:feature-implement` runs, or the spec and plan files dangle on the current branch and are left behind when implement makes its worktree.
 
-Resolve the default branch, `HEAD` and working-tree state (REQUIRED reference: [`_shared/git-helpers.md`](../_shared/git-helpers.md)), then call `AskUserQuestion` — question "Plan is ready. Commit before /feature-implement to avoid dangling files.", header "Commit plan" — with the recommended option first and `(Recommended)` appended:
+Run `"${CLAUDE_PLUGIN_ROOT}/lib/git-state.sh"` once for the default branch, `HEAD` and working-tree state (REQUIRED reference: [`_shared/git-helpers.md`](../_shared/git-helpers.md)), then call `AskUserQuestion` — question "Plan is ready. Commit before /feature-implement to avoid dangling files.", header "Commit plan" — with the recommended option first and `(Recommended)` appended:
 
 | Option | Does |
 |--------|------|
@@ -168,6 +166,8 @@ Resolve the default branch, `HEAD` and working-tree state (REQUIRED reference: [
 - "Leave uncommitted" is **not** offered — it is the failure this prompt exists to prevent. A user who needs it has AskUserQuestion's "Other".
 - Default message: `feat({name}): add implementation plan` (or `feat({name}): add spec, tech-spec, and implementation plan` when those are uncommitted too). Show it, accept or edit, commit.
 - Stage only the feature's files (no `git add -A`).
+
+After the commit, hand off to `/myspec:feature-implement`.
 
 ## Task Expansion Rules
 
@@ -192,12 +192,12 @@ Resolve the default branch, `HEAD` and working-tree state (REQUIRED reference: [
 The full per-rule checklist is "Before presenting" in [references/plan-self-check.md](references/plan-self-check.md) (Step 4.6). Before handing off:
 
 - [ ] Every gate in When to Use passed; a draft tech-spec was planned from only on the user's explicit answer
-- [ ] `## Spec Coverage` has a row for every requirement, acceptance criterion and tech-spec step, each mapped to tasks and a test, or `DEFERRED` with a reason the user saw in Step 6
+- [ ] `## Spec Coverage` has a row for every requirement, acceptance criterion and tech-spec step, each mapped to tasks and a test, or `DEFERRED` with a reason the user saw in Step 5
 - [ ] `## Plan Self-Check` records the four Step 4.6 checks, and the "Before presenting" checklist was walked
 - [ ] Header holds `planned_against` (HEAD after the Step 1 sync) and `auto_parallel_phases: true`
-- [ ] The plan is committed (Step 7)
+- [ ] The plan is committed (Step 6)
 
 ## Integration
 
 **Called by:** `/myspec:feature-tech-spec` OPTIONAL (after tech-spec is approved)
-**Next:** `/myspec:feature-implement` — REQUIRED: hand off after plan is approved
+**Next:** `/myspec:feature-implement` — REQUIRED: hand off after the plan is approved and committed

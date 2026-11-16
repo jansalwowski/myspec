@@ -20,7 +20,9 @@ Task tool (general-purpose):
 
     ## What Was Requested
 
-    [FULL TEXT of all tasks in this phase from the plan — paste inline]
+    [The task file path of each task in this phase, `$STATE/task-N.md`, one per line. Write a missing one first with `implement-state.sh task` (a run started before task files existed)]
+
+    Read each file: it holds that task's section of the plan.
 
     Plan checkboxes are controller-managed: the controller flips each task
     to `[~]` in implementation-plan.md before dispatching it, and flips the

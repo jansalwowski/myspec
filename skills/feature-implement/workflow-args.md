@@ -21,7 +21,7 @@ Pass `args` as a JSON object, not as a JSON-encoded string.
 |-------|----------|-------|
 | `feature` | yes | the feature directory name |
 | `phase` | yes | the phase number |
-| `mode` | yes | `sequential` or `parallel`, from the phase's Mode column |
+| `mode` | yes | `sequential`, or `parallel` for a phase whose Mode column reads `parallel:groupName` |
 | `phaseBase` | yes | the sha the phase's tasks start from: `PHASE_BASE`, or for a concurrent phase the HEAD its worktree was created from (`git -C <phase worktree> merge-base HEAD <feature branch>` recovers it) |
 | `stateDir` | yes | `$STATE`, absolute. The verify agent writes each task's diff here as `phase-N-task-<id>-r<round>.diff` |
 | `planPath` | yes | the plan's repo-relative path. Its uncommitted checkbox edits are not counted as a dirty tree |
@@ -39,7 +39,7 @@ Each `tasks` entry:
 | `name` | no | the task name |
 | `tier` | yes | `cheap`, `mid` or `premium`: the implementer tier, chosen as in controller mode |
 | `workdir` | yes | absolute path: your checkout for a sequential task, the phase worktree for every task of a concurrent phase, or the task worktree you created for a parallel one |
-| `implementerPrompt` | yes | `implementer-prompt.md`'s prompt, filled exactly as for a controller-mode dispatch (task text, context, plan drift, isolation constraint, Verify command, commit trailers) |
+| `implementerPrompt` | yes | `implementer-prompt.md`'s prompt, filled exactly as for a controller-mode dispatch (task file path, context, plan drift, isolation constraint, Verify command, commit trailers) |
 | `files` | yes | the paths from the task's `**Files:**` lines (Create, Modify, Test). A changed file outside them is a scope finding |
 | `verifyCommand` | yes | the task's `Verify at phase review:` command |
 | `scopedChecks` | no | the file-scoped lint and typecheck commands you would put in the dispatch. Empty or `none` means no scoped check |
