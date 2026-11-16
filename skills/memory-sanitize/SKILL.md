@@ -122,7 +122,7 @@ After every executed action:
 | Output style / response formatting | `CLAUDE.md` Core Principles |
 | Tool selection (e.g. AskUserQuestion preference) | `CLAUDE.md` Core Principles |
 | Workflow phase behavior (e.g. suggest next skill) | `.claude/rules/workflow.md` |
-| Pattern for one area, language or tool of the project | The project rule in `.claude/rules/` that covers the topic, if one exists |
+| Pattern for one area, language or tool of the project | The project rule in `.claude/rules/` that covers the topic; none exists → KEEP and flag, naming the rule file to create |
 | Skill prerequisite or workflow constraint | `.claude/skills/{name}/SKILL.md` body |
 | Skill-authoring meta-rule | `.claude/rules/skill-optimization.md` |
 

@@ -274,6 +274,8 @@ KEEP (1, flagged):
 
 > 0 dropped, 0 promoted (1 deferred, ambiguous routing), 0 merged. To resolve: pick one of `.claude/rules/frontend.md` or `.claude/rules/lint-and-types.md`, then re-run sanitize.
 
+In a project with no rule for the area at all, the outcome is the same KEEP with a flag, and the flag names the rule file to create, such as `.claude/rules/frontend.md`.
+
 ### Why this example matters
 
 - **Ambiguity is a signal, not an obstacle.** When two valid destinations both exist for one rule, the agent shouldn't roll dice — it should hand the choice back. The flag stays in the audit log so the user can resolve it deliberately.
