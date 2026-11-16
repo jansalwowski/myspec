@@ -64,6 +64,16 @@ gitq -C "$ROOT/clone" checkout -q -b develop
 gitq -C "$ROOT/clone" branch -q -D main
 expect_eq "origin/HEAD wins" "$(cd "$ROOT/clone" && "$SCRIPT" | sed -n 1p)" "default: main"
 
+echo "# an unborn branch and a detached HEAD"
+U="$ROOT/unborn"
+mkdir -p "$U" && gitq -C "$U" init -q -b main
+expect_eq "unborn: the branch name, one line" "$(cd "$U" && "$SCRIPT")" "default: unknown
+head: main
+tree: clean"
+gitq -C "$REPO" checkout -q --detach
+expect_eq "detached: HEAD" "$(cd "$REPO" && "$SCRIPT" | sed -n 2p)" "head: HEAD"
+gitq -C "$REPO" checkout -q main
+
 echo "# bad input"
 mkdir -p "$ROOT/nogit"
 if (cd "$ROOT/nogit" && "$SCRIPT" >/dev/null 2>&1); then nok "outside git: exit 1"; else ok "outside git: exit 1"; fi

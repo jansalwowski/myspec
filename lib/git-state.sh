@@ -39,7 +39,9 @@ if [ -z "$default" ]; then
   fi
 fi
 printf 'default: %s\n' "$default"
-printf 'head: %s\n' "$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)"
+# symbolic-ref, not rev-parse --abbrev-ref: on an unborn branch that prints
+# `HEAD` and exits 128, so a fallback would add a second line.
+printf 'head: %s\n' "$(git symbolic-ref -q --short HEAD 2>/dev/null || echo HEAD)"
 
 status=$(git status --porcelain)
 if [ -z "$status" ]; then
