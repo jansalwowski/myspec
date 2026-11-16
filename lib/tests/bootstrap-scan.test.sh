@@ -87,6 +87,31 @@ OUT=$("$SCRIPT" 2>/dev/null)
 has "**myspec version**: project on vnext, plugin has v$PLUGIN_VERSION" && ok || fail "non-semver (got: $OUT)"
 git_ checkout -q -- .myspec.json
 
+# --- without jq: the Node reader's aiDir is used, not .ai --------------------
+# nojq_path -> a PATH holding every command on this one but jq, in a
+# directory of symlinks (jq can sit in /usr/bin, so dropping PATH entries is
+# not enough).
+nojq_path() {
+  local bin="$ROOT/nojq-bin" d f
+  if [ ! -d "$bin" ]; then
+    mkdir -p "$bin"
+    local IFS=:
+    for d in $PATH; do
+      for f in "$d"/*; do
+        [ -x "$f" ] && [ ! -d "$f" ] || continue
+        [ "${f##*/}" != jq ] || continue
+        [ -e "$bin/${f##*/}" ] || ln -s "$f" "$bin/${f##*/}"
+      done
+    done
+  fi
+  printf '%s' "$bin"
+}
+if command -v node >/dev/null 2>&1; then
+  OUT=$(PATH="$(nojq_path)" "$SCRIPT" 2>/dev/null)
+  has '**Memory**: Layer 1 2 entries | Layer 2 2 procedural, 1 semantic, 0 episodic rows' && ok \
+    || fail "without jq, memory counts read from the configured aiDir (got: $OUT)"
+fi
+
 # --- worktrees ------------------------------------------------------------------
 git_ worktree add -q -b fresh "$ROOT/fresh" >/dev/null 2>&1
 OUT=$("$SCRIPT" 2>/dev/null)

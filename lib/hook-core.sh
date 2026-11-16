@@ -417,7 +417,7 @@ hook_repo_root() {
 ai_dir() {
   local ai="" dflt
   if read_setting aiDir "$1"; then
-    ai=$(printf '%s' "$SETTING" | jq -r 'if type == "string" then . else empty end' 2>/dev/null || printf '')
+    ai=$(json_string "$SETTING")
     [ -z "$SETTING_NOTES" ] || printf '%s\n' "$SETTING_NOTES" | sed 's/^/myspec-config: /' >&2
   fi
   ai="${ai#./}"
