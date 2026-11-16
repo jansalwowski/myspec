@@ -68,8 +68,11 @@ const m=JSON.parse(readFileSync(join(plugin,"framework-files","manifest.json"),"
 const V=m.frameworkVersion;
 // init and update substitute ${aiDir} into the DOCUMENTS they copy, so copying
 // those verbatim would compare plugin bytes against plugin bytes and could
-// never catch a drift check that forgot the substitution.
-const put=(src,dest)=>{mkdirSync(join(root,dirname(dest)),{recursive:true});writeFileSync(join(root,dest),readFileSync(src,"utf8").split("${aiDir}").join(aiDir));return dest;};
+// never catch a drift check that forgot the substitution. `$${aiDir}` is the
+// escape for a literal placeholder (lib/aidir-render.mjs, #464), written out
+// here again so a broken renderer cannot agree with itself.
+const render=(text)=>text.replace(/\$?\$\{aiDir\}/g,(x)=>x.startsWith("$$")?"${aiDir}":aiDir);
+const put=(src,dest)=>{mkdirSync(join(root,dirname(dest)),{recursive:true});writeFileSync(join(root,dest),render(readFileSync(src,"utf8")));return dest;};
 for(const k of Object.keys(m.files)){
   const dest = k.startsWith("templates/") ? aiDir+"/.templates/"+k.slice(10) : aiDir+"/"+k;
   put(join(plugin,"framework-files",k),dest);
@@ -128,6 +131,16 @@ expect_line 'setup doctor: 0 error\(s\)' "summary counts zero errors"
 run_doctor --quiet wiring schema
 expect_exit 0 "the blocking groups exit 0 on a clean install"
 expect_no_line '^ERROR' "the blocking groups report no errors on a clean install"
+
+# --- pass 1a: a literal placeholder rendered away (#464) ---------------------
+# rules/paths.md shows `$${aiDir}` as the literal placeholder. A copy that
+# replaced it like any other placeholder is not what init or update write.
+
+# shellcheck disable=SC2016 # literal text, not an expansion
+sed 's/\$\$\{aiDir\}/ai/g; s/\${aiDir}/ai/g' "$PLUGIN/framework-files/rules/paths.md" > "$REPO/.claude/rules/paths.md"
+run_doctor
+expect_line 'ERROR framework-drift: .claude/rules/paths.md' "a paths.md whose literal placeholder was substituted is drift"
+build_fixture
 
 # --- pass 1b: framework hooks still wired in a settings file (#262) ----------
 # Since 3.0 the plugin's hooks.json runs the framework hooks, and the harness
@@ -1067,11 +1080,11 @@ expect_no_line '(^|[^/[:alnum:]_.-])docs/' "containers: no finding points at a b
 # shellcheck disable=SC2016 # a literal $ in the pattern
 # shellcheck disable=SC2016 # a literal $ in the pattern
 expect_line '^WARN +verification-runin-no-workdir: .*check C2 has runIn but its container exec passes neither -w/--workdir nor \$MYSPEC_CHECK_WORKDIR' "containers: a runIn exec without the workdir is warned about"
-expect_no_line 'check C3 ' "containers: a -Tw <dir> cluster sets the workdir"
+expect_no_line 'runin-no-workdir: .*check C3 ' "containers: a -Tw <dir> cluster sets the workdir"
 expect_line '^WARN +verification-runin-no-workdir: .*check C4 ' "containers: -ew is -e w, not a workdir"
-expect_no_line 'check C5 ' "containers: --workdir= sets the workdir"
-expect_no_line 'check C6 ' "containers: -w \"\$MYSPEC_CHECK_WORKDIR\" is the workdir"
-expect_no_line 'check C7 ' "containers: a command that names MYSPEC_CHECK_WORKDIR is trusted"
+expect_no_line 'runin-no-workdir: .*check C5 ' "containers: --workdir= sets the workdir"
+expect_no_line 'runin-no-workdir: .*check C6 ' "containers: -w \"\$MYSPEC_CHECK_WORKDIR\" is the workdir"
+expect_no_line 'runin-no-workdir: .*check C7 ' "containers: a command that names MYSPEC_CHECK_WORKDIR is trusted"
 expect_line '^WARN +verification-runin-no-workdir: .*check C8 ' "containers: a -w after the service name belongs to the inner command"
 expect_no_line 'check C9 |check C10 ' "containers: a compose run and a host command raise nothing"
 
@@ -1083,6 +1096,44 @@ exec_checks "$(printf '%s\n' "$FORMS" | jq -Rnc '[inputs | [. + " app make lint"
 run_doctor_env -- verification-exec-no-runin
 N=$(printf '%s\n' "$OUTPUT" | grep -cE '^WARN +verification-exec-no-runin')
 [ "$N" -eq "$(printf '%s\n' "$FORMS" | grep -c .)" ] && ok || fail "containers: every hook exec form is warned about without runIn (got $N)"
+
+# A container or remote check without cleanup (#465): the cap's kill stops
+# only the local client. Read from the command, from runIn, and one level down
+# through a wrapper script or a package.json script.
+build_fixture
+mkdir -p "$REPO/scripts" "$REPO/bin" "$REPO/api"
+# shellcheck disable=SC2016 # literal text, not an expansion
+printf '#!/bin/sh\nset -e\nexec docker compose exec app yarn "$1"\n' > "$REPO/scripts/check.sh"
+printf '#!/bin/sh\nssh build-host \\\n  make lint\n' > "$REPO/bin/remote-lint"
+printf '#!/bin/sh\n# was: docker compose exec app eslint .\neslint .\n' > "$REPO/scripts/host.sh"
+printf '#!/bin/sh\ndocker exec app make lint\n' > "$REPO/api/check.sh"
+printf '{"scripts": {"lint": "docker compose exec app eslint .", "test": "jest"}}\n' > "$REPO/package.json"
+set_json .claude/verification.json "d.containers={app:{mountSource:'.', mountTarget:'/srv/app'}}; d.checks=[
+  {name:'W0', command:'bash scripts/check.sh lint', required:true},
+  {name:'W1', command:'bash scripts/check.sh lint', required:true, cleanup:'scripts/stop.sh'},
+  {name:'W2', command:'./bin/remote-lint', required:true},
+  {name:'W3', command:'yarn lint', required:true},
+  {name:'W4', command:'sh -e scripts/check.sh lint', required:true, runIn:'app'},
+  {name:'W5', command:'bash scripts/host.sh && npm test', required:true},
+  {name:'W6', command:'docker compose exec app make lint', required:true},
+  {name:'W7', command:'bash check.sh', required:true, cwd:'api'},
+  {name:'W8', command:'bash ../outside.sh; bash /etc/profile; bash \$X/check.sh', required:true}
+];"
+run_doctor_env -- schema
+expect_exit 0 "cleanup: the findings are warnings, not errors"
+expect_line '^WARN +verification-exec-no-runin: .*check W0 runs a container exec through scripts/check.sh without runIn — the stop gate cannot see it there' "wrapper: an exec inside a called script is warned about (#465 repro)"
+expect_line '^WARN +verification-remote-no-cleanup: .*check W0 runs a container exec or remote command through scripts/check.sh but declares no cleanup' "cleanup: a wrapper-hidden exec without cleanup is warned about (#465 repro)"
+expect_no_line 'remote-no-cleanup: .*check W1 ' "cleanup: a declared cleanup satisfies it"
+expect_line '^WARN +verification-remote-no-cleanup: .*check W2 runs a container exec or remote command through bin/remote-lint' "cleanup: ssh on a continued line of a directly run script counts"
+expect_no_line 'exec-no-runin: .*check W2 ' "wrapper: ssh is remote but not a container mount"
+expect_line '^WARN +verification-exec-no-runin: .*check W3 runs a container exec through package.json scripts.lint' "wrapper: a package.json script run by yarn is followed"
+expect_line '^WARN +verification-remote-no-cleanup: .*check W3 ' "cleanup: a package.json script exec without cleanup is warned about"
+expect_line '^WARN +verification-runin-no-workdir: .*check W4 has runIn but its container exec in scripts/check.sh passes neither' "wrapper: a runIn check's script exec without the workdir is warned about"
+expect_line '^WARN +verification-remote-no-cleanup: .*check W4 has runIn app but declares no cleanup' "cleanup: runIn alone means the work runs in a container"
+expect_no_line 'check W5 ' "wrapper: a commented-out exec and a plain package script raise nothing"
+expect_line '^WARN +verification-remote-no-cleanup: .*check W6 runs a container exec or remote command but declares no cleanup' "cleanup: a direct exec without cleanup is warned about"
+expect_line '^WARN +verification-exec-no-runin: .*check W7 runs a container exec through api/check.sh' "wrapper: the script is found from the check's cwd"
+expect_no_line 'check W8 ' "wrapper: a script outside the repository or behind a variable is not read"
 
 # runIn naming an undefined container: an error before a stop refuses it.
 build_fixture

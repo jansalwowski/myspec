@@ -14,7 +14,8 @@
 #   0. Run the conformance check (memory-doctor.mjs). A tree the tooling
 #      cannot read — duplicate IDs, missing hooks — is not a tree to allocate
 #      into; refusing here is cheaper than a collision found by hand.
-#   1. Take a lock in the MAIN checkout (mkdir is atomic even over NFS).
+#   1. Take a lock file in the MAIN checkout, created with bash's noclobber
+#      (O_CREAT|O_EXCL), not mkdir: see section 1.
 #   2. High-water = max(IDs on disk in the main checkout AND every linked
 #      worktree, IDs at the tip of every local and remote-tracking ref,
 #      registry high-water).
@@ -159,46 +160,83 @@ fi
 mkdir -p "$STATE_DIR"
 
 # --- 1. Lock ----------------------------------------------------------------
+# The lock is a file bash itself creates with noclobber, which opens it
+# O_CREAT|O_EXCL: exactly one creator succeeds, whatever coreutils is
+# installed. It used to be `mkdir`, and the uutils coreutils that Ubuntu
+# 26.04 ships returns success from `mkdir` when a concurrent mkdir has just
+# made the directory, so two claims held the lock at once and returned the
+# same ID (#470).
+#
 # The trap goes in BEFORE the acquire loop: a crash between acquire and trap
 # used to wedge the repo for 60 s. LOCKED keeps the trap from removing a lock
 # some other process holds when this one gives up waiting.
 LOCKED=0
+BREAKING=0
+
+# take_lock <path> — create <path> only when it does not exist yet.
+take_lock() {
+  ( set -C; printf '%s\n' "$$" > "$1" ) 2>/dev/null
+}
+
+# A lock this script wrote, or a directory an older version made with mkdir.
+drop_lock() {
+  rm -f "$1" 2>/dev/null || rmdir "$1" 2>/dev/null || true
+}
+
 cleanup() {
   if [ "$LOCKED" = 1 ]; then
-    rmdir "$LOCK" 2>/dev/null || true
+    drop_lock "$LOCK"
   fi
-  rmdir "$LOCK.stale.$$" 2>/dev/null || true
+  if [ "$BREAKING" = 1 ]; then
+    drop_lock "$LOCK.break"
+  fi
+  drop_lock "$LOCK.stale.$$"
   rm -f "$REGISTRY.tmp.$$" 2>/dev/null || true
 }
 trap cleanup EXIT
 
+# Seconds since the lock was made, or nothing when it cannot be read. A
+# failed stat means the lock was just released, and that is no evidence of a
+# stale lock: the old fallback to mtime 0 read it as 50 years old, so a
+# waiter renamed away the lock the next claimer had just taken, and two
+# claims ran at once (#470).
 lock_age() {
   local mtime
-  mtime=$(stat -f %m "$LOCK" 2>/dev/null || stat -c %Y "$LOCK" 2>/dev/null || echo 0)
-  # GNU stat accepts -f (filesystem mode) and may print a non-number for %m;
-  # fall through to the GNU form rather than feeding garbage to arithmetic.
+  mtime=$(stat -c %Y "$LOCK" 2>/dev/null) || mtime=$(stat -f %m "$LOCK" 2>/dev/null) || return 0
   case "$mtime" in
-    ''|*[!0-9]*) mtime=$(stat -c %Y "$LOCK" 2>/dev/null || echo 0) ;;
-  esac
-  case "$mtime" in
-    ''|*[!0-9]*) mtime=0 ;;
+    ''|*[!0-9]*) return 0 ;;
   esac
   echo $(( $(date +%s) - mtime ))
 }
 
+# True when the lock exists and is older than 60 s.
+lock_stale() {
+  local age
+  age=$(lock_age)
+  [ -n "$age" ] && [ "$age" -gt 60 ]
+}
+
 ATTEMPTS=0
-until mkdir "$LOCK" 2>/dev/null; do
+until take_lock "$LOCK"; do
   ATTEMPTS=$((ATTEMPTS + 1))
   if [ "$ATTEMPTS" -gt 100 ]; then
     echo "memory-claim-id: could not acquire $LOCK after 10s" >&2
     exit 1
   fi
 
-  # Stale-lock breaking, so a crashed claim cannot wedge the repo. The rename
-  # is the atomic step: exactly one waiter wins it and removes the directory,
-  # every other waiter fails the mv and just retries.
-  if [ "$(lock_age)" -gt 60 ] && mv "$LOCK" "$LOCK.stale.$$" 2>/dev/null; then
-    rmdir "$LOCK.stale.$$" 2>/dev/null || true
+  # Stale-lock breaking, so a crashed claim cannot wedge the repo. Breakers
+  # take $LOCK.break first and look at the lock's age again inside it: a
+  # check made before that could be about a lock another waiter has since
+  # broken and a new claimer re-made, and renaming that one away lets two
+  # claims run at once. Inside it nothing but the stale owner can remove the
+  # lock, and that owner has crashed.
+  if lock_stale && take_lock "$LOCK.break"; then
+    BREAKING=1
+    if lock_stale && mv "$LOCK" "$LOCK.stale.$$" 2>/dev/null; then
+      drop_lock "$LOCK.stale.$$"
+    fi
+    drop_lock "$LOCK.break"
+    BREAKING=0
     continue
   fi
 
