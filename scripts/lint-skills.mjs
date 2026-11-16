@@ -10,7 +10,9 @@
 //
 // Usage:
 //   node scripts/lint-skills.mjs                      lint <root>/skills/*/SKILL.md, plus
-//                                                     PLUGIN-ROOT-REF on every other skills/**/*.md
+//                                                     PLUGIN-ROOT-REF on every other skills/**/*.md,
+//                                                     SKILL-XREF on all of them and on
+//                                                     blueprints/ and framework-files/
 //   node scripts/lint-skills.mjs --files a.md b.md    lint only these files
 //   options: --root <dir>  repo root (default: this script's repo)
 //            --json        machine-readable output on stdout
@@ -287,6 +289,55 @@ function proseLines(bodyLines) {
   return unfencedLines(bodyLines).map((l) => ({ text: l.text.replace(/(`+)[^`]*?\1/g, (s) => ' '.repeat(s.length)), line: l.line }));
 }
 
+// Step numbers a body defines: step headings, numbered headings, top-level
+// numbered items, bold "**Step N**" lead-ins.
+function definedSteps(bodyLines) {
+  const defined = new Set();
+  for (const { text: t } of unfencedLines(bodyLines)) {
+    const h = t.match(/^#{1,6}\s+(.*)$/);
+    if (h) {
+      for (const s of h[1].matchAll(/\bStep\s+(\d+(?:\.\d+)?[a-z]?)\b/gi)) defined.add(s[1].toLowerCase());
+      const num = h[1].match(/^(?:\*\*)?(\d+(?:\.\d+)?[a-z]?)[.:)]?\s/);
+      if (num) defined.add(num[1].toLowerCase());
+    }
+    const item = t.match(/^(\d+)\.\s/);
+    if (item) defined.add(item[1]);
+    const bold = t.match(/^\s*(?:[-*]\s+)?\*\*Step\s+(\d+(?:\.\d+)?[a-z]?)\b/i);
+    if (bold) defined.add(bold[1].toLowerCase());
+  }
+  return defined;
+}
+
+// SKILL-XREF — `/myspec:<name>` must name a skill under skills/, and
+// `/myspec:<name> step N` a step that skill defines. STEP-REF sees only its own
+// file, so a renamed skill (#513: blueprints/workflow.md routed to
+// `/myspec:spec-review`) or a renumbered step (#519: skill-self-test.md cited
+// skill-verify "step 4.5") rotted unseen. Code fences are checked too: a
+// blueprint's Output Format template is fenced and lands in projects verbatim.
+const XREF_RE = /\/myspec:([a-z0-9][a-z0-9-]*)(?:`?\)?\s+step\s+(\d+(?:\.\d+)?[a-z]?)(?!\w|\.\d))?/gi;
+
+function lintXrefs(absPath, root, cache) {
+  const findings = [];
+  const steps = (name) => {
+    if (!cache.has(name)) {
+      const f = path.join(root, 'skills', name, 'SKILL.md');
+      cache.set(name, fs.existsSync(f)
+        ? definedSteps(fs.readFileSync(f, 'utf8').split(/\r?\n/).map((text, k) => ({ text, line: k + 1 })))
+        : null);
+    }
+    return cache.get(name);
+  };
+  fs.readFileSync(absPath, 'utf8').split(/\r?\n/).forEach((t, i) => {
+    for (const m of t.matchAll(XREF_RE)) {
+      const defined = steps(m[1]);
+      const add = (message) => findings.push({ line: i + 1, rule: 'SKILL-XREF', message, severity: 'error' });
+      if (!defined) add(`\`/myspec:${m[1]}\` names no skill under skills/`);
+      else if (m[2] && !defined.has(m[2].toLowerCase())) add(`"${m[0]}" points at a step skills/${m[1]}/SKILL.md does not define`);
+    }
+  });
+  return findings;
+}
+
 // ── rules ────────────────────────────────────────────────────────────────────
 
 function lintFile(absPath, ctx) {
@@ -384,19 +435,7 @@ function lintFile(absPath, ctx) {
   // defines — the class of bug a3562ed fixed. Pointers qualified with another
   // document ("Step 4 of memory-create", "Step 3 in feature-implement") and
   // bare mentions ("the Step 2 answers") are not checked.
-  const defined = new Set();
-  for (const { text: t } of unfencedLines(body)) {
-    const h = t.match(/^#{1,6}\s+(.*)$/);
-    if (h) {
-      for (const s of h[1].matchAll(/\bStep\s+(\d+(?:\.\d+)?[a-z]?)\b/gi)) defined.add(s[1].toLowerCase());
-      const num = h[1].match(/^(?:\*\*)?(\d+(?:\.\d+)?[a-z]?)[.:)]?\s/);
-      if (num) defined.add(num[1].toLowerCase());
-    }
-    const item = t.match(/^(\d+)\.\s/);
-    if (item) defined.add(item[1]);
-    const bold = t.match(/^\s*(?:[-*]\s+)?\*\*Step\s+(\d+(?:\.\d+)?[a-z]?)\b/i);
-    if (bold) defined.add(bold[1].toLowerCase());
-  }
+  const defined = definedSteps(body);
   const POINTER_RE = /\b(?:(?:skip|go|jump|return|proceed|continue|move|loop|resume|restart)(?:s|ing|ed)?\s+(?:back\s+)?(?:to|at)|see)\s+(?:the\s+)?(?:Workflow\s+)?Step\s+(\d+(?:\.\d+)?[a-z]?)(?!\w|\.\d)(?!\s+(?:of|in|from)\b)/gi;
   for (const { text: t, line } of prose) {
     for (const m of t.matchAll(POINTER_RE)) {
@@ -499,12 +538,22 @@ function main() {
 
   // Default mode also walks every other Markdown file under skills/, _shared/
   // included, for PLUGIN-ROOT-REF; --files routes a non-SKILL.md path there.
-  if (!opts.files) files = files.concat(referenceFiles(path.join(opts.root, 'skills')).sort());
+  // It also walks blueprints/ and framework-files/ for SKILL-XREF only.
+  if (!opts.files) {
+    files = files.concat(referenceFiles(path.join(opts.root, 'skills')).sort());
+    for (const d of ['blueprints', 'framework-files']) {
+      const dir = path.join(opts.root, d);
+      if (fs.existsSync(dir)) files = files.concat(referenceFiles(dir).sort());
+    }
+  }
+  const xrefOnly = (f) => /^(blueprints|framework-files)\//.test(path.relative(opts.root, f).split(path.sep).join('/'));
 
   const results = [];
+  const xrefCache = new Map();
   for (const f of files) {
     const rel = path.relative(process.cwd(), f) || f;
-    const found = path.basename(f) === 'SKILL.md' ? lintFile(f, opts) : lintReference(f);
+    const found = xrefOnly(f) ? [] : path.basename(f) === 'SKILL.md' ? lintFile(f, opts) : lintReference(f);
+    found.push(...lintXrefs(f, opts.root, xrefCache));
     for (const x of found) results.push({ path: rel, ...x });
   }
   const errors = results.filter((r) => r.severity === 'error').length;

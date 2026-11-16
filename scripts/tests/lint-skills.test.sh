@@ -479,6 +479,24 @@ run --files skills/demo/references/ref.md
 expect_exit 1 "--files routes a reference file to PLUGIN-ROOT-REF"
 expect_line "^skills/demo/references/ref\.md:4: PLUGIN-ROOT-REF" "--files reports the reference finding"
 
+# ── SKILL-XREF: /myspec:<name> and its step pointers across files (#513, #519)
+# The base demo skill defines Steps 1 and 2. A blueprint routed to a renamed
+# skill (#513) and a rule cited a renumbered step (#519); neither is in the file
+# STEP-REF reads.
+fresh
+{ printf -- '---\nname: demo\n%s\n---\n' "$GOOD"; body; printf '\nThen run `/myspec:gone`.\n'; } | skill demo
+mkdir -p "$FIX/blueprints" "$FIX/framework-files/rules"
+printf '# BP\n\n```markdown\n| Plan | `/myspec:spec-review` |\n```\n\nUse `/myspec:demo`, `/myspec:<name>`.\n' > "$FIX/blueprints/wf.md"
+printf '# Rule\n\n`/myspec:demo` step 4.5 validates it.\n`/myspec:demo` step 2 writes. /myspec:demo Step 1.\n' > "$FIX/framework-files/rules/r.md"
+run
+expect_exit 1 "SKILL-XREF fails the run"
+expect_line "skills/demo/SKILL\.md:[0-9]+: SKILL-XREF .*/myspec:gone" "a dead skill name in a SKILL.md body is reported"
+expect_line "^blueprints/wf\.md:4: SKILL-XREF .*/myspec:spec-review" "a dead skill name inside a blueprint code fence is reported (#513)"
+expect_line "^framework-files/rules/r\.md:3: SKILL-XREF .*step 4\.5" "a cross-file pointer to a missing step is reported (#519)"
+expect_no_line "r\.md:4:" "pointers to defined steps are quiet"
+expect_no_line "wf\.md:7:" "a live name and a <name> placeholder are quiet"
+expect_no_line "PLUGIN-ROOT-REF|FM-MISSING" "blueprints and framework files get SKILL-XREF only"
+
 # ── the real repo lints clean ───────────────────────────────────────────────
 OUTPUT=$(cd "$REPO_ROOT" && node "$SCRIPT" 2>&1); STATUS=$?
 expect_exit 0 "the real repo has no error findings"
