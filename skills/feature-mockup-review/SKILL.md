@@ -144,7 +144,7 @@ For each approved fix (bundled or individual):
 2. Run the configured `compileCheck` for the file → must succeed (skip with a note if not configured)
 3. Emit `{File} · {dimension} ✓`
 
-After the last approved fix, run the configured `verify` command once → must exit 0 (skip with a note if not configured). It checks the whole suite, so one run covers every edit. On failure, name the failing files and fix them before the wrap up.
+After the last approved fix, run the configured `verify` command once → must exit 0 (skip with a note if not configured). It checks the whole suite, so one run covers every edit. On failure, show the failures. Propose a fix only for a mockup file this batch edited, with approval per fix as in step 6; report any other failure as a handoff.
 
 Skip any fix the user rejected.
 
