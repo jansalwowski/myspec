@@ -80,9 +80,9 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
      and say which in the completion summary
    - Exit 1 or 2: add the new units, or run `/myspec:backbone-sync`
    - Exit 0: low and medium findings do not change the exit code, so read the
-     MISSING and STALE blocks and add any new unit listed there
-   - Exit 0 with a NOT CHECKED block: the sweep that would have found a new unit
-     did not run — compare the new units against the file by hand
+     MISSING and STALE blocks and add any new unit listed there. If a NOT CHECKED
+     block has entries, the sweep that would have found a new unit did not run:
+     also compare the new units against the file by hand
 
 10. **Compact tech-spec.md** — the tech-spec describes the feature as it now stands; history lives in `CHANGELOG.md` and `plans/`. Skipping this lets every iteration stack another layer until the doc contradicts the code.
     - Remove checkbox task lists (`- [ ]` / `- [x]`) anywhere in the file; a checkbox Implementation Steps list becomes the numbered outline from the `feature-tech-spec` template
