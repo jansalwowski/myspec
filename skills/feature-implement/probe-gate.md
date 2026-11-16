@@ -1,6 +1,6 @@
 # Milestone Probe Gate
 
-Read from SKILL.md Step 4b (b), before dispatching the probe executor. It applies only when the milestone carries a `**Checkpoint probes:**` block. `<plugin lib>` is the path SKILL.md resolves.
+Read from SKILL.md Step 5 (b), before dispatching the probe executor. It applies only when the milestone carries a `**Checkpoint probes:**` block. `<plugin lib>` is the path SKILL.md resolves.
 
 ## Dispatch
 
@@ -34,4 +34,4 @@ The gate passes only on `PROBES_PASSED`, with an observed value and artifact on 
 
 - **fix** → run the finding through the Step 4d fix loop (or, for a `NEED:` line, get what it names from the user), then re-dispatch the executor with the same probes, the next `run-R` directory, and any Target override the user gave
 - **waive <P|D><n>** → log `Waiver (Milestone N): …`; the probe stays unrun, and the completion report says so
-- **stop** → as in Step 4b (c)
+- **stop** → as in Step 5 (c)

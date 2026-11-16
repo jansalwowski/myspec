@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Python billing app on branch feat/invoice-due-dates with both tasks of an
 # approved single-milestone plan done and committed, and its Checkpoint probes
-# not yet run. Resume lands on the Step 4b probe gate, which must dispatch the
+# not yet run. Resume lands on the Step 5 probe gate, which must dispatch the
 # plugin agent myspec:probe-executor, not a general-purpose subagent (#171).
 set -euo pipefail
 . "$(dirname "${BASH_SOURCE[0]}")/../_fixtures/lib.sh"

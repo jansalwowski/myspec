@@ -285,14 +285,15 @@ Shown to the user by SKILL.md Step 8:
 - ✅ {feature}/spec.md - Added sub-features table, removed moved content
 - ✅ {feature}/dependencies.md - Added sub-features section
 - ✅ {feature}/tech-spec.md - Added sub-feature mapping
-- ✅ ${aiDir}/features/index.yaml - Added sub-features array
+- ✅ ${aiDir}/features/{feature}/index.yaml - Created with the sub-features list
+- ✅ ${aiDir}/features/index.yaml - Added `subfeatures: true` to the parent entry
 
 ### Verification
 
 - ✅ All sub-features have required files
 - ✅ No duplicate content
 - ✅ All links work
-- ✅ Verification checks pass
+- ✅ audit.mjs and dead-paths.mjs report nothing the decomposition caused
 
 ### Next Steps
 

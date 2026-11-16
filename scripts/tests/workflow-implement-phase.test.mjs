@@ -271,6 +271,17 @@ const statusOf = (r, id) => r.out.tasks.find((t) => t.id === String(id))?.status
   check('bad args: missing tier model refused', noModels.out.started === false && noModels.out.reason === 'bad-args')
   const badTier = await run(payload([task(1, { tier: 'huge' })]), {})
   check('bad args: unknown tier refused', badTier.out.started === false)
+  // #478: the four fields workflow-args.md marks required that went unchecked.
+  for (const [name, p] of [
+    ['feature', payload([task(1)], { feature: undefined })],
+    ['phase', payload([task(1)], { phase: undefined })],
+    ['planPath', payload([task(1)], { planPath: '' })],
+    ['verifyCommand', payload([task(1, { verifyCommand: undefined })])],
+  ]) {
+    const r = await run(p, { 'implement 1': [done()], 'verify 1': [verified(1)], 'check 1': [clean] })
+    check('bad args: missing ' + name + ' refused', r.out.started === false && r.out.reason === 'bad-args' && r.out.detail.includes(name), JSON.stringify(r.out))
+    check('bad args: missing ' + name + ' dispatches nothing', r.calls.length === 0)
+  }
   const asString = await run(JSON.stringify(payload([task(1)])), { 'implement 1': [done()], 'verify 1': [verified(1)], 'check 1': [clean] })
   check('args as JSON text: read as its value', asString.out.started === true)
 }

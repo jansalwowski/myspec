@@ -54,6 +54,8 @@ Apply these question categories:
 - What are the relationships to existing entities?
 - What validation rules apply?
 
+The data model answers become testable user stories and acceptance criteria in spec.md; spec.md has no Data Model section.
+
 Present the questions, then wait for responses before proceeding — answers shape the spec sections in Steps 5–7.
 
 ### Step 4: Create Feature Directory
@@ -70,19 +72,19 @@ ${aiDir}/features/{feature-name}/
 
 ### Step 5: Write spec.md
 
-Read template from `references/templates.md` — Section "spec.md Template".
+Write it as [feature-spec](../feature-spec/SKILL.md) Step 2 does: the same frontmatter (`status: draft`) and the same required sections, filled from the idea and the answers to Step 3. Do not use another template here. Map the idea's queue priority to `priority:`: HIGHEST is `P0`, HIGH is `P1`, MEDIUM is `P2`, LOW and LOWEST are `P3`.
 
 ### Step 6: Write dependencies.md
 
-Read template from `references/templates.md` — Section "dependencies.md Template".
+Write the sections [feature-spec](../feature-spec/SKILL.md) Step 3 lists. Start the file with frontmatter that holds `title:` and `created:`, because the frontmatter hook denies a doc under `${aiDir}/` without an identity field and a date field.
 
 ### Step 7: Write scenarios.md and seed.json
 
-Write both, without offering (Step 4 marks them required; only a standalone `feature-spec` makes them optional). Follow the two reference procedures feature-spec owns, with the clarified answers and the spec's Data Model as input: scenarios per [feature-spec/references/scenarios.md](../feature-spec/references/scenarios.md), then seed data per [feature-spec/references/seed-data.md](../feature-spec/references/seed-data.md). Do not re-derive the procedure here.
+Write both, without offering (Step 4 marks them required; only a standalone `feature-spec` makes them optional). Follow the two reference procedures feature-spec owns, with the clarified answers and spec.md as input: scenarios per [feature-spec/references/scenarios.md](../feature-spec/references/scenarios.md), then seed data per [feature-spec/references/seed-data.md](../feature-spec/references/seed-data.md). Do not re-derive the procedure here.
 
 ### Step 8: Update Feature Index
 
-Add the new feature to `${aiDir}/features/index.yaml` with `status: draft` (docs now exist — `planned` is only for manifest entries without docs; see the Status State Machine in `.claude/rules/feature-docs.md`).
+Add the new feature to `${aiDir}/features/index.yaml` with `status: draft` and the `priority:` from Step 5 (docs now exist — `planned` is only for manifest entries without docs; see the Status State Machine in `.claude/rules/feature-docs.md`).
 
 ### Step 9: Move to Processed
 
@@ -96,8 +98,7 @@ Add the new feature to `${aiDir}/features/index.yaml` with `status: draft` (docs
 ### Specification
 - [ ] Overview clearly explains the problem and solution
 - [ ] User stories cover all user types
-- [ ] Data model is complete with types
-- [ ] Business rules are explicit
+- [ ] Entities, relationships and validation rules from Step 3 appear as testable user stories or acceptance criteria
 
 ### Scenarios and Seed Data
 - [ ] scenarios.md and seed.json pass the checklists in feature-spec's references

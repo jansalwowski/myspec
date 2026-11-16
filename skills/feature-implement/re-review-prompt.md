@@ -7,7 +7,7 @@ Build the fix-diff package first: `review-diff.sh` over `FIX_BASE..HEAD` as `$ST
 ```
 Task tool (general-purpose):
   description: "Re-review Phase N fix round R"
-  model: "<cheap-to-mid tier for small fix diffs — REQUIRED; controller picks concrete model. An omitted model inherits the session's model, often the most expensive tier>"
+  model: "<tier from the Model Selection table in SKILL.md (mid) — REQUIRED; controller picks concrete model. An omitted model inherits the session's model, often the most expensive tier>"
   prompt: |
     You are re-reviewing one phase's fix round. A previous review produced
     findings; an implementer has attempted to fix them. Your job is to

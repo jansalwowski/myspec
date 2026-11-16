@@ -18,13 +18,13 @@ description: "Use when an approved implementation-plan.md is ready to execute �
 
 | When | Read |
 |------|------|
-| A phase holds a `**parallel:groupName**` group or a dual-stream fork | [parallel-tasks.md](parallel-tasks.md) |
+| A phase holds a `parallel:groupName` group | [parallel-tasks.md](parallel-tasks.md) |
 | Front-matter sets `auto_parallel_phases: true` | [parallel-phases.md](parallel-phases.md) |
 | Step 1 chose workflow mode | [workflow-args.md](workflow-args.md) |
 | Triage leaves a Critical or Important finding (4d) | [fix-loop.md](fix-loop.md) |
 | At startup, the plan already holds a `[x]` or `[~]` task or an Execution Log | [resume.md](resume.md) |
 | A milestone carries `**Checkpoint probes:**` | [probe-gate.md](probe-gate.md) |
-| Every milestone is complete (Step 5) | [completion.md](completion.md) |
+| Every milestone is complete (Step 6) | [completion.md](completion.md) |
 
 ## Execution Model
 
@@ -38,7 +38,7 @@ A **milestone** is a vertical slice of the feature and ends at a checkpoint with
 | `[~]` in progress | Before dispatching the task's subagent. It stays through retries and through a stopped session, which is how resume finds it |
 | `[x]` done | Only after the phase review passes for that task — never before |
 
-Flip a task with `"${CLAUDE_PLUGIN_ROOT}/lib/plan-checkbox.sh" <plan> <N> doing|done`, never an ad-hoc edit script — it touches only that task's section. Barrier sub-steps use `[ ]`/`[x]` only.
+Flip tasks with `"${CLAUDE_PLUGIN_ROOT}/lib/plan-checkbox.sh" <plan> <N>... doing|done` (one call for several tasks), never an ad-hoc edit script — it touches only those tasks' sections. Barrier sub-steps use `[ ]`/`[x]` only.
 
 ## Execution Log (plan section)
 
@@ -76,7 +76,7 @@ Non-catastrophic conflicts — a plan ambiguity, two tasks that disagree on a de
 
 Confirm where implementation will happen before parsing the plan. Always ask — even when prior state makes the answer obvious.
 
-1. **Inspect** (REQUIRED reference: [`_shared/git-helpers.md`](../_shared/git-helpers.md)): default branch, current `HEAD` branch, `git status --porcelain`, an existing worktree for this feature (`git worktree list` contains `feat-{name}`), and whether the plan has `[parallel:*]` groups.
+1. **Inspect** (REQUIRED reference: [`_shared/git-helpers.md`](../_shared/git-helpers.md)): run `"${CLAUDE_PLUGIN_ROOT}/lib/git-state.sh" {name}` once, and note whether the plan has `parallel:*` groups.
 2. **A dirty tree is resolved first.** Ask the user to commit or stash; never switch branches or create a worktree on top of unrelated changes. If the dirty files are exactly the feature's spec/plan files, offer to commit them.
 3. **Ask via `AskUserQuestion`** — question "How should implementation proceed?", header "Impl flow" — with the recommended option first and `(Recommended — {why})` appended:
 
@@ -99,7 +99,7 @@ Read the implementation plan, front-matter first.
 **Build the DAG:**
 
 1. Each `### Milestone N:` heading scopes a milestone; a plan with no milestone heading is one milestone.
-2. Per milestone, read the Execution Order table: nodes = tasks + barriers, edges = the `Depends On` column, phases = task groups separated by barriers. Note parallel groups (`**parallel:groupName**` in Mode) and dual-stream forks (`3a`/`3b` rows).
+2. Per milestone, read the Execution Order table: nodes = tasks + barriers, edges = the `Depends On` column, phases = task groups separated by barriers. Note parallel groups: Mode `parallel:groupName` (older plans: `**parallel:groupName**`).
 3. Only when the front-matter sets `auto_parallel_phases: true`: find concurrent phase sets (parallel-phases.md). Without the key, phases run serially.
 4. A milestone whose first phase says `Depends On: Milestone N` starts only after that milestone is complete.
 
@@ -123,7 +123,7 @@ Read the implementation plan, front-matter first.
    "${CLAUDE_PLUGIN_ROOT}/lib/implement-state.sh" init {feature}
    ```
 
-   It prints the directory's absolute path: that is `$STATE`. Run it alone, as written — folded into a chain it costs the user a permission prompt for the whole chain.
+   It prints the directory's absolute path: that is `$STATE`. Run it alone: folded into a chain it costs the user a permission prompt for the whole chain.
 4. Set the feature's `status: in-progress` in `${aiDir}/features/index.yaml`, and create task tracking with all tasks.
 5. Set the orchestration marker. Mid-run the tree is red by design; while the marker is set, the Stop hook warns instead of blocking every turn end.
 
@@ -131,21 +131,21 @@ Read the implementation plan, front-matter first.
    "${CLAUDE_PLUGIN_ROOT}/lib/session-event.sh" implement start
    ```
 
-   Run it as written, as a Bash command: a hook records it from the command itself. The marker expires after 8h, so re-run it before each phase's first dispatch. Remove it (`… implement stop`) on **stop** or **fresh** at a checkpoint and at the start of Step 5.
+   Run it as written: a hook records it from the command itself. It expires after 8h; Step 3 refreshes it per phase. Remove it (`… implement stop`) on **stop** or **fresh** at a checkpoint and at the start of Step 6.
 
 ### Step 3: Execute Milestones
 
 Walk milestones in order, and each milestone's DAG topologically.
 
-**Before a phase's first dispatch:** refresh the orchestration marker and record `PHASE_BASE=$(git rev-parse HEAD)`, logging `Base (Phase N): <sha>` — once per phase: a resumed phase keeps its entry's base; a concurrent phase logs it at its merge (parallel-phases.md), not here. Stamp each stage as it starts, for 4f's timings: `"${CLAUDE_PLUGIN_ROOT}/lib/implement-state.sh" stamp {feature} N implement`, then `barrier` (4a), `review` (4b), `fix-R` (each 4d round), and `done` (4e).
+**Before a phase's first dispatch:** refresh the orchestration marker, then run `"${CLAUDE_PLUGIN_ROOT}/lib/implement-state.sh" phase-start {feature} N`. It stamps `implement` and prints `PHASE_BASE`: log `Base (Phase N): <sha>`, once per phase (a resumed phase keeps its entry's base; a concurrent phase logs it at its merge, parallel-phases.md). Stamp each later stage as it starts: `… stamp {feature} N barrier` (4a), then `review` (4b), `fix-R` (each 4d round), and `done` (4e).
 
-**Verification tiers.** An implementer runs its task's `Verify at phase review` command plus lint and typecheck scoped to the files it touched — never the full suite, a build, or an install. You run the full suite once per phase (4a), at each milestone checkpoint, and at Final Verification.
+**Verification tiers.** An implementer runs only its task's Verify command plus file-scoped lint and typecheck. You run the full suite once per phase (4a), at each milestone checkpoint, and at completion.
 
 **Dispatch one implementer per task** with [implementer-prompt.md](implementer-prompt.md), sequential tasks one at a time. Fill each dispatch with:
 
-- The full task text inline — a subagent never reads the plan file.
+- The task file path, never pasted text: `"${CLAUDE_PLUGIN_ROOT}/lib/implement-state.sh" task {feature} <plan> N` writes its plan section to `$STATE/task-N.md` and prints that path. A subagent never reads the plan.
 - Its Verify command and the file-scoped lint/typecheck commands ("none" when a tool cannot take a file list).
-- `[Commit trailers]`: the lines your own instructions say end a commit message (a harness attribution reminder, a CLAUDE.md or project commit rule), copied verbatim, never one tool's trailer from memory. A subagent never sees those instructions. Your own commits carry the same lines. The prompt puts `Plan-Task: N` above them, which is how resume finds a committed task (resume.md).
+- `[Commit trailers]`: the lines your own instructions say end a commit message (a harness attribution reminder, a CLAUDE.md or project commit rule), copied verbatim, never one tool's trailer from memory. A subagent never sees those instructions. Your own commits carry the same lines.
 - A named model tier (Model Selection).
 
 | Report | Action |
@@ -157,13 +157,13 @@ Walk milestones in order, and each milestone's DAG topologically.
 
 After 3 attempts on one task, whatever it reported, escalate: "I've made N attempts. What I tried: [list]."
 
-**Parallel groups, dual-stream forks, concurrent phases and workflow mode** replace only this step's dispatches, per their files (Read on demand); barriers and reviews stay per phase.
+**Parallel groups, concurrent phases and workflow mode** replace only this step's dispatches, per their files (Read on demand); barriers and reviews stay per phase.
 
 ### Step 4: Phase Review
 
 After all tasks in a phase complete:
 
-**a) Barrier.** Merge parallel task worktrees first (parallel-tasks.md). Then run the full suite once — the plan's barrier commands plus each required `.claude/verification.json` check (its `diffCommand` when non-empty, with `MYSPEC_BASE_REF=$(git merge-base HEAD <default branch>)`) — and capture everything to `VERIFY_LOG="$STATE/phase-N-verify.log"`, each check headed by its command and exit code. A red run still goes to review, where each failure is attributed. Export a fresh `MYSPEC_CHECK_RUN_ID` per check; a check that is killed or times out keeps running wherever its client sent it, so run its `cleanup` with the same id before the next run.
+**a) Barrier.** Merge parallel task worktrees first (parallel-tasks.md). Then run the full suite once — the plan's barrier commands plus each required `.claude/verification.json` check (its `diffCommand` when non-empty, with `MYSPEC_BASE_REF=$(git merge-base HEAD <default branch>)`) — and capture everything to `VERIFY_LOG="$STATE/phase-N-verify.log"`: first `HEAD <sha>`, then each check headed by its command and exit code. A red run still goes to review, where each failure is attributed. Export a fresh `MYSPEC_CHECK_RUN_ID` per check; a check that is killed or times out keeps running wherever its client sent it, so run its `cleanup` with the same id before the next run.
 
 **b) Build the review package, then dispatch the phase reviewer** ([phase-reviewer-prompt.md](phase-reviewer-prompt.md), `mid` tier):
 
@@ -195,13 +195,13 @@ Hand the reviewer the path, never a pasted diff. Every review package in this sk
   Next: Phase N+1 — [phase name] ([N tasks])
 ```
 
-Durations come from `$STATE/phase-N.times` (a stage runs until the next stamp; one with no stamp shows as `?`). Log the same line as `Timing (Phase N)`.
+`"${CLAUDE_PLUGIN_ROOT}/lib/implement-state.sh" timing {feature} N` prints the durations. Log the same line as `Timing (Phase N)`.
 
-### Step 4b: Milestone Checkpoint
+### Step 5: Milestone Checkpoint
 
-After all phases in a milestone complete. For the final milestone run only (b), then continue at Step 5.
+After all phases in a milestone complete. For the final milestone run only (b), then continue at Step 6.
 
-**a) Verify completion:** every task in the milestone is `[x]`, and the full suite — every required check in `.claude/verification.json` — passes over the milestone's tree.
+**a) Verify completion:** every task in the milestone is `[x]`, and the full suite — every required check in `.claude/verification.json` — passes over the milestone's tree. Reuse the last phase's `VERIFY_LOG` when it names the current HEAD and every check exited 0, and print `Suite: reused the Phase N barrier run`.
 
 **b) Probe gate** — only when the milestone carries a `**Checkpoint probes:**` block. Read [probe-gate.md](probe-gate.md), then dispatch the plugin agent `myspec:probe-executor` (`subagent_type: "myspec:probe-executor"`) — never general-purpose. You never run, reword, or drop a probe yourself, and tests green is not a substitute. The gate passes only on a `PROBES_PASSED` report or a logged user `Waiver` — it is the one check you do not grade; FAIL, BLOCKED or a missing report is a hard stop.
 
@@ -209,9 +209,9 @@ After all phases in a milestone complete. For the final milestone run only (b), 
 
 Mark `fresh` as `(Recommended)` when the plan has more than five tasks: the controller's context degrades across milestones. On **stop** or **fresh**, remove the orchestration marker, commit everything, and say how to resume: `/myspec:feature-implement` detects progress from the `[x]` checkboxes.
 
-### Step 5: Completion
+### Step 6: Completion
 
-Read [completion.md](completion.md) and follow it: Final Verification, the mandatory `premium` holistic review, the report (evidence first), then ask the user what comes next — never auto-hand-off.
+Read [completion.md](completion.md) and follow it: the required checks, the mandatory `premium` holistic review, the report (evidence first), then ask the user what comes next — never auto-hand-off.
 
 ## Model Selection
 
@@ -221,11 +221,12 @@ Map each tier name to a concrete model the runtime has; never hardcode a model I
 |------|------|
 | Implementer — pure transcription (the task text holds the complete code) or a single-file mechanical fix | `cheap` |
 | Implementer — multi-file, integration, or working from prose | `mid` |
-| Phase reviewer, probe executor | `mid` |
+| Phase reviewer, fix-loop re-reviewer, probe executor | `mid` |
 | Fix-loop rounds 4–5 | one tier above the stuck implementer |
+| Workflow mode: verify agent, standards and spec-contract check | `cheap`; its serious findings are re-judged on `mid` |
 | Holistic reviewer | `premium` |
 
-**Name the tier on every dispatch** — an omitted model inherits the session's, often the most expensive. `mid` is the floor for reviewers: the cheapest models take 2-3x the turns on multi-step work.
+**Name the tier on every dispatch** — an omitted model inherits the session's, often the most expensive. `mid` is the floor for any verdict that stands: the cheapest models take 2-3x the turns on multi-step work.
 
 ## Constraints
 
@@ -239,7 +240,7 @@ Map each tier name to a concrete model the runtime has; never hardcode a model I
 ## Verification Checklist
 
 - [ ] No `[~]` or `[ ]` task left in implementation-plan.md
-- [ ] Every required `.claude/verification.json` check and the plan's Final Verification pass, run after `session-event.sh implement stop`
+- [ ] Every required `.claude/verification.json` check passes, run after `session-event.sh implement stop`
 - [ ] The holistic verdict is READY TO MERGE, or the user accepted a lesser one; `holistic-review.md` is committed and its deferred minors triaged
 - [ ] Every logged `Ruling:`, `Decision` and `Waiver:` line is in the completion report
 - [ ] `git status --porcelain` is empty

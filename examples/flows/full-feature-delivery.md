@@ -27,7 +27,7 @@ Roughly two milestones of work, touches the data layer, a background job system,
 | 13 | `/myspec:feature-verify` | Health report (drift check) | — |
 | 14 | `/myspec:feature-complete` | Status flipped, plan archived, branch merged | merge confirmation |
 
-Steps 5–10 each stop on `AskUserQuestion` gates. Saying "autopilot" (or passing `--autopilot`) lets them take each recommended option and approve reviewer-passed docs on their own, printing every choice; they still stop on Critical findings, failing checkpoint probes, and push/PR/merge/deploy (`skills/_shared/autopilot.md`).
+Steps 5–10 each stop on `AskUserQuestion` gates. Saying "autopilot" (or passing `--autopilot`) lets them take each recommended option and approve reviewer-passed docs on their own, printing every choice. `feature-implement` then continues past each milestone checkpoint instead of stopping for a fresh session. They still stop on Critical findings, failing checkpoint probes, and push/PR/merge/deploy (`skills/_shared/autopilot.md`).
 
 This walkthrough runs each review as its own step. `feature-tech-spec` (and `feature-spec`, when it writes the spec) first asks whether to review the document as soon as it is written. On "Yes", the review runs then, and the user sees the reviewed draft with one approval gate; steps 7 and 8 merge. Either way the review's analysis runs in a fresh subagent that gets only the file paths.
 

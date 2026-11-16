@@ -26,7 +26,7 @@ dependencies:
 - `paths`: repo-relative; each must exist in the working tree.
 - Explicit only — do not list transitive deps.
 
-`/myspec:skill-verify` step 4.5 validates the block: a missing package or path is a **Critical** finding (never auto-fixed — the fix is human judgment: install the dependency, or repair/delete the skill).
+`/myspec:skill-verify` step 5 (Validate Frontmatter) validates the block: a missing package or path is a **Critical** finding (never auto-fixed — the fix is human judgment: install the dependency, or repair/delete the skill).
 
 ## Sweep recipe (no separate skill)
 

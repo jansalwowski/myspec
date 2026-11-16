@@ -132,15 +132,21 @@ payload_parse "$(cat)" COMMAND=.tool_input.command SESSION_ID=.session_id \
 # The directory the command starts in: the payload's cwd, else the hook's own.
 START_DIR=$(first_dir "$CWDS") || START_DIR="$PWD"
 
-ALLOW_BRANCH_OPS=0
 # Here-strings, not `printf | grep -q`, throughout: grep -q exits on the
 # first match, a long input then kills printf with SIGPIPE, and under
 # pipefail the match reads as a miss.
-if grep -qE '(^|[[:space:]])MYSPEC_ALLOW_BRANCH_OPS=1[[:space:]]' <<< "$COMMAND"; then
+# The overrides are matched by bash, with no grep (#524). The blank after
+# `=1` is any space but a newline, as grep read the command line by line:
+# an assignment alone on its line applies to no command.
+ALLOW_BLANK=$' \t\r\v\f'
+ALLOW_RE="(^|[[:space:]])MYSPEC_ALLOW_BRANCH_OPS=1[$ALLOW_BLANK]"
+ALLOW_BRANCH_OPS=0
+if [[ "$COMMAND" =~ $ALLOW_RE ]]; then
   ALLOW_BRANCH_OPS=1
 fi
+ALLOW_RE="(^|[[:space:]])MYSPEC_ALLOW_MAIN_CHECKOUT=1[$ALLOW_BLANK]"
 ALLOW_MAIN_CHECKOUT=0
-if grep -qE '(^|[[:space:]])MYSPEC_ALLOW_MAIN_CHECKOUT=1[[:space:]]' <<< "$COMMAND"; then
+if [[ "$COMMAND" =~ $ALLOW_RE ]]; then
   ALLOW_MAIN_CHECKOUT=1
 fi
 
@@ -778,7 +784,8 @@ Full procedure: $(procedure_doc "$root")"
 # heavy_patterns <main root> -> sets HEAVY to that checkout's
 # isolation.blockInMain minus isolation.ignoreBlockInMain, read once per root,
 # and HEAVY_DEFAULT[i] to 1 when HEAVY[i] is one of the schema's defaults
-# (myspec-config.schema.json, beside the reader).
+# (myspec-config.schema.json, beside the reader). HEAVY holds what bash can
+# match (ere_for_bash), HEAVY_GREP an `-e <entry>` pair for each other entry.
 # The reader's notes go to stderr. When the reader fails (a partial install)
 # there is no list: the first such command of the session is denied with the
 # reader's error, recorded as a `notice` event, and later ones pass, as the
@@ -786,12 +793,14 @@ Full procedure: $(procedure_doc "$root")"
 HEAVY_ROOT=""
 HEAVY=()
 HEAVY_DEFAULT=()
+HEAVY_GREP=()
 heavy_patterns() {
   local p schema="$HOOK_LIB/myspec-config.schema.json"
   [ "$1" != "$HEAVY_ROOT" ] || return 0
   HEAVY_ROOT="$1"
   HEAVY=()
   HEAVY_DEFAULT=()
+  HEAVY_GREP=()
   [ -f "$schema" ] || schema=/dev/null
   if ! read_setting isolation "$1"; then
     [ -z "$SETTING_NOTES" ] || printf 'guard-worktree-context: %s\n' "$SETTING_NOTES" >&2
@@ -812,8 +821,16 @@ heavy_patterns() {
     case "$p" in
       x*) printf 'guard-worktree-context: isolation.ignoreBlockInMain entry matches no isolation.blockInMain entry, so it drops nothing: %s\n' "${p#?$'\t'}" >&2 ;;
       *)
-        HEAVY+=("${p#?$'\t'}")
-        HEAVY_DEFAULT+=("${p%%$'\t'*}") ;;
+        # An entry grep rejects matched nothing: name it once and drop it,
+        # so that it cannot fail the one grep of the others.
+        if ere_for_bash "${p#?$'\t'}"; then
+          HEAVY+=("$ERE_BASH")
+          HEAVY_DEFAULT+=("${p%%$'\t'*}")
+        elif grep -qE -- "${p#?$'\t'}" <<< "" 2>/dev/null || [ $? -ne 2 ]; then
+          HEAVY_GREP+=(-e "${p#?$'\t'}")
+        else
+          printf 'guard-worktree-context: isolation.blockInMain entry is no valid extended regex, so it blocks nothing: %s\n' "${p#?$'\t'}" >&2
+        fi ;;
     esac
   done < <(jq -r --slurpfile schema "$schema" '
     ($schema[0].keys["isolation.blockInMain"].default // []) as $def
@@ -824,25 +841,89 @@ heavy_patterns() {
       ($skip[] | strings | select(. as $p | $all | index([$p]) | not) | "x\t" + .)' <<< "$SETTING" 2>/dev/null)
 }
 
+# ere_for_bash <ERE> -> sets ERE_BASH to the ERE for bash's own `[[ =~ ]]`,
+# which spares a grep per pattern per segment (#524), with GNU grep's `\s`
+# `\S` `\w` `\W` outside a bracket expression rewritten as POSIX classes,
+# since the macOS regex library lacks them. Fails when only grep runs the
+# entry as the project wrote it: another backslash before a letter, digit,
+# `<` or `>` (`\b`, `\<`, a back-reference), or an ERE this platform's
+# regcomp rejects while grep may read it (`a{1`, a leading `*`) or report it
+# (`^npm[`).
+ERE_BASH=""
+ere_for_bash() {
+  local re="$1" c n rest tail i=0
+  ERE_BASH=""
+  case "$re" in
+    *\\*) ;;
+    *) ERE_BASH="$re"; i=${#re} ;;
+  esac
+  while [ "$i" -lt "${#re}" ]; do
+    c=${re:i:1}
+    i=$((i + 1))
+    case "$c" in
+      \\)
+        n=${re:i:1}
+        i=$((i + 1))
+        case "$n" in
+          s) ERE_BASH="${ERE_BASH}[[:space:]]" ;;
+          S) ERE_BASH="${ERE_BASH}[^[:space:]]" ;;
+          w) ERE_BASH="${ERE_BASH}[[:alnum:]_]" ;;
+          W) ERE_BASH="${ERE_BASH}[^[:alnum:]_]" ;;
+          [A-Za-z0-9\<\>]) return 1 ;;
+          *) ERE_BASH="$ERE_BASH\\$n" ;;
+        esac ;;
+      '[')
+        # A bracket expression, copied as is: a backslash is literal in it,
+        # a leading `]` (after an optional `^`) is a member, and `[:`, `[.`
+        # and `[=` run to their own closing pair.
+        ERE_BASH="${ERE_BASH}["
+        [ "${re:i:1}" != '^' ] || { ERE_BASH="$ERE_BASH^"; i=$((i + 1)); }
+        [ "${re:i:1}" != ']' ] || { ERE_BASH="$ERE_BASH]"; i=$((i + 1)); }
+        while [ "$i" -lt "${#re}" ]; do
+          c=${re:i:1}
+          i=$((i + 1))
+          ERE_BASH="$ERE_BASH$c"
+          [ "$c" != ']' ] || break
+          n=${re:i:1}
+          case "$c$n" in
+            '[:' | '[.' | '[=')
+              rest=${re:i+1}
+              tail=${rest#*"$n]"}
+              [ "$tail" != "$rest" ] || return 1
+              ERE_BASH="$ERE_BASH$n${rest:0:${#rest}-${#tail}}"
+              i=$((i + 1 + ${#rest} - ${#tail})) ;;
+          esac
+        done ;;
+      *) ERE_BASH="$ERE_BASH$c" ;;
+    esac
+  done
+  # Status 2: this platform's regcomp rejects the ERE.
+  c=0
+  # shellcheck disable=SC2319 # the status of `[[ =~ ]]` is the one wanted
+  [[ "" =~ $ERE_BASH ]] || c=$?
+  [ "$c" != 2 ]
+}
+
 # heavy_match <segment> -> 0 when an entry of HEAVY matches the segment, the
-# dry-run carve-out excepted for the default entries.
+# dry-run carve-out excepted for the default entries, or one grep finds an
+# entry of HEAVY_GREP in it (a project's own: no carve-out).
 heavy_match() {
   local i
   for ((i = 0; i < ${#HEAVY[@]}; i++)); do
-    grep -qE -- "${HEAVY[i]}" <<< "$1" || continue
-    if [ "${HEAVY_DEFAULT[i]}" = 1 ] && grep -qE -- "$HEAVY_CARVE_OUT" <<< "$1"; then
+    [[ "$1" =~ ${HEAVY[i]} ]] || continue
+    if [ "${HEAVY_DEFAULT[i]}" = 1 ] && [[ "$1" =~ $HEAVY_CARVE_OUT ]]; then
       continue
     fi
     return 0
   done
-  return 1
+  [ "${#HEAVY_GREP[@]}" -gt 0 ] && grep -qE "${HEAVY_GREP[@]}" <<< "$1"
 }
 
 matches_any() {  # matches_any <segment> <pattern>...
   local segment="$1" pattern
   shift
   for pattern in "$@"; do
-    if grep -qE -- "$pattern" <<< "$segment"; then
+    if [[ "$segment" =~ $pattern ]]; then
       return 0
     fi
   done
@@ -969,7 +1050,7 @@ check_segment() {
 
   if [ "$ALLOW_BRANCH_OPS" = 0 ]; then
     if matches_any "$segment" "${BRANCH_PATTERNS[@]}" \
-        && ! grep -qE -- "$BRANCH_CARVE_OUT" <<< "$segment"; then
+        && ! [[ "$segment" =~ $BRANCH_CARVE_OUT ]]; then
       classify "$dir" "$gitdir"
       if [ -n "$CLS_ROOT" ]; then
         verdict=$(branch_op_verdict "$segment" "$CLS_ROOT" "$unres")
@@ -1216,7 +1297,8 @@ walk() {
   # A backslash in a removal's text: the scanner blanked it, so the path it
   # reads is not the one git gets (note_segment).
   # shellcheck disable=SC1003 # an ERE: the backslashes are literal
-  if grep -qE 'worktree[[:space:]\\]+remove[^;&|()]*\\' <<< "$cmd"; then esc=1; fi
+  if [[ "$cmd" == *worktree* ]] \
+      && grep -qE 'worktree[[:space:]\\]+remove[^;&|()]*\\' <<< "$cmd"; then esc=1; fi
   # A git dir substituted into a word (`GIT_DIR=$(...)/.git git switch`,
   # `git --git-dir=`...` switch`) splits that word across segments: the git
   # before the substitution is seen with no command, the one after it with no

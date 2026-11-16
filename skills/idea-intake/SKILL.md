@@ -25,7 +25,7 @@ Read the idea file completely. Note:
 
 ### 2. Analyze and Ask Questions
 
-**Always ask clarifying questions before adding to queue.**
+Ask only about what the idea file leaves open (priority, dependencies, scope). If nothing is open, add it to the queue without a question.
 
 #### Priority Questions
 
@@ -39,6 +39,8 @@ If priority is not specified or unclear:
 > - **LOWEST**: Long-term vision, may never happen
 
 #### Dependency Questions
+
+If dependencies are not stated or unclear:
 
 > Does this idea depend on any existing features or ideas?
 
@@ -88,7 +90,7 @@ Report back to user:
 
 ## Rules
 
-- **Always ask before adding**: Never add an idea to the queue without user confirmation on priority
+- **Never assume a priority**: If the idea file states none, ask before adding it to the queue
 - **One idea per file**: If an idea contains multiple features, ask user about splitting (Step 2 scope questions)
 - **Preserve existing queue order**: Only insert into the correct priority section, never reorder existing entries
 - **Dependencies must be explicit**: If a dependency is unclear, ask — never assume "None"

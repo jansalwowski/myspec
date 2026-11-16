@@ -214,6 +214,40 @@ expect_line '"planProgress": \{' "json exposes planProgress"
 expect_line '"specStatus": "draft"' "json exposes specStatus"
 expect_no_line '"gitHint"' "no git hint outside a git repository"
 
+# ═══ --only narrows to one feature and skips the orphan scan ═════════════════
+
+mkdir -p "$F/unregistered"
+run_audit --json
+expect_line '"orphans": \[\s*$' "control: a full run lists orphan directories"
+expect_line '^\s*"unregistered"' "control: the unregistered directory is an orphan"
+
+run_audit --only=parent-mixed/b --json
+expect_line '"name": "parent-mixed/b"' "--only=parent/sub returns that sub-feature"
+expect_no_line '"name": "parent-mixed(/a)?"' "--only=parent/sub leaves out the parent and its siblings"
+expect_line '"orphans": \[\]' "--only skips the orphan scan (sub-feature path)"
+
+run_audit --only=parent-mixed --json
+expect_line '"name": "parent-mixed/a"' "--only=parent keeps its sub-features"
+expect_no_line '"name": "healthy-complete"' "--only=parent leaves out other features"
+expect_line '"orphans": \[\]' "--only skips the orphan scan (top-level name)"
+
+(cd "$REPO" && node "$SCRIPT" --only=nope --json >/dev/null 2>&1); STATUS=$?
+if [ "$STATUS" -eq 3 ]; then ok; else fail "--only naming no manifest entry exits 3 (got $STATUS)"; fi
+(cd "$REPO" && node "$SCRIPT" --only=parent-mixed/nope --json >/dev/null 2>&1); STATUS=$?
+if [ "$STATUS" -eq 3 ]; then ok; else fail "--only naming no sub-feature exits 3 (got $STATUS)"; fi
+rmdir "$F/unregistered"
+
+# ═══ an unreadable directory exits 3, not 1 ══════════════════════════════════
+
+chmod 000 "$F/healthy-complete/plans"
+if ls "$F/healthy-complete/plans" >/dev/null 2>&1; then
+  ok  # running as root: permissions are not enforced, nothing to test
+else
+  (cd "$REPO" && node "$SCRIPT" --json >/dev/null 2>&1); STATUS=$?
+  if [ "$STATUS" -eq 3 ]; then ok; else fail "an unreadable plans/ directory exits 3 (got $STATUS)"; fi
+fi
+chmod 755 "$F/healthy-complete/plans"
+
 # ═══ git log hint for merge-without-complete ═════════════════════════════════
 
 (cd "$REPO" && git init -q && git add -A \

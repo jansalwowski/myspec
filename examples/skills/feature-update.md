@@ -47,9 +47,9 @@ The skill asks:
 
 **User**: Bulk invite via CSV upload, max 200 addresses per upload, throttle to one bulk-invite per admin per hour. No changes to existing single-invite flow. Permission-wise, only admins (not regular team members) can use bulk.
 
-#### 3. Update spec.md
+#### 3. Draft spec.md changes
 
-The skill edits **only the affected sections**:
+The skill drafts changes to **only the affected sections**. Nothing is written until the user picks "Apply" in step 5:
 
 - **User Stories**: appends US7 (admin uploads CSV) and US8 (admin sees per-row results). US1–US6 unchanged.
 - **Acceptance Criteria**: appends AC12–AC16 covering CSV format, validation, partial-failure handling, throttle, admin-only access. AC1–AC11 unchanged.
@@ -59,9 +59,9 @@ The skill edits **only the affected sections**:
 
 Existing sections (Overview, Goals) untouched.
 
-#### 4. Update tech-spec.md
+#### 4. Draft tech-spec.md changes
 
-Edits affected sections only:
+Drafts affected sections only:
 
 - **Architecture**: appends a paragraph about the bulk endpoint and worker queue (re-uses the existing notification-system queue for throttling).
 - **Implementation Steps**: replaces the v1 outline with 5 numbered steps for this version only (CSV parser, bulk endpoint, throttle middleware, results modal, e2e test). The v1 steps already live in the archived plan under `plans/`.
@@ -71,7 +71,7 @@ Edits affected sections only:
 - **Decisions**: appends ADR-4: *"CSV parsing client-side with server-side validation rather than upload-and-parse."* Reason: small files (200 rows), simpler error UX.
 - **Frontmatter**: `based_on_spec_version: 2`, `last_updated: 2026-04-30`, `status: draft`.
 
-Then prepends a row to `CHANGELOG.md`:
+Then drafts the row to prepend to `CHANGELOG.md`:
 
 ```
 | 2026-04-30 | spec v2 | Added bulk CSV invites (US7-US8, AC12-AC16); replaced the v1 step outline with 5 bulk-invite steps | updated |
@@ -96,17 +96,17 @@ Then prepends a row to `CHANGELOG.md`:
 >
 > **CHANGELOG.md**: +1 `updated` row for spec v2
 >
-> Status flipped to `draft` on both files (re-approval needed). spec_version: 1 → 2.
+> Apply will set status to `draft` on both files (re-approval needed). spec_version: 1 → 2.
 >
-> Confirm?
+> **Do the proposed changes look correct?** Apply / Revise / Cancel
 
-#### 6. User confirms, hand-off
+#### 6. User picks Apply, hand-off
 
 ```
-yes
+Apply
 ```
 
-The skill ends with the cross-spec routing prompt:
+The skill writes the spec.md, tech-spec.md and CHANGELOG.md changes, then ends with the cross-spec routing prompt:
 
 > **What's next?**
 >
@@ -192,15 +192,15 @@ tech-spec.md changes:
 
 CHANGELOG.md: +1 updated row (spec v3: magic-link removed; steps replaced with the removal step)
 
-Status flipped to draft. spec_version: 2 → 3.
+Apply will set status to draft on both files. spec_version: 2 → 3.
 
-Confirm?
+Do the proposed changes look correct?  Apply / Revise / Cancel
 ```
 
-#### 6. User confirms, hand-off
+#### 6. User picks Apply, hand-off
 
 ```
-yes
+Apply
 ```
 
 > **What's next?**

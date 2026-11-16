@@ -7,10 +7,10 @@
 ```markdown
 ## Acceptance Criteria
 
-- [ ] AC-001: User can create a guide with title (1-255 chars) and slug (validated format)
-- [ ] AC-002: System displays error "Title required" when title is empty on submit
-- [ ] AC-003: Guide appears in user's guide list within 2 seconds of creation
-- [ ] AC-004: Guide status is set to "draft" on creation
+- [ ] AC-1: User can create a guide with title (1-255 chars) and slug (validated format)
+- [ ] AC-2: System displays error "Title required" when title is empty on submit
+- [ ] AC-3: Guide appears in user's guide list within 2 seconds of creation
+- [ ] AC-4: Guide status is set to "draft" on creation
 ```
 
 **Why good**: Specific constraints, measurable outcomes, clear error messages, defined timings.
@@ -130,7 +130,7 @@ REQ-006: Integration with Google Drive, Dropbox, OneDrive
 
 ### Finding: Contradiction
 
-**Issue**: REQ-003 requires admin approval, but AC-007 allows auto-approval.
+**Issue**: REQ-003 requires admin approval, but AC-7 allows auto-approval.
 
 **Fix**:
 ```diff
@@ -144,13 +144,9 @@ REQ-006: Integration with Google Drive, Dropbox, OneDrive
 **Issue**: Spec mentions "notification system" but it's not in dependencies.md.
 
 **Fix**: Add to dependencies.md:
-```yaml
-depends_on:
-  - name: notifications
-    reason: Send email when guide is approved/rejected
-    required_capabilities:
-      - Email delivery
-      - Template rendering
+```markdown
+## Feature Dependencies
+- `notifications`: sends the email when a guide is approved or rejected (email delivery, template rendering)
 ```
 
 ### Finding: Vague Language

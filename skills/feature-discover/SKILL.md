@@ -27,15 +27,17 @@ If only a description is provided, proceed directly to exploration.
 
 ### 2. Exploration
 
-Explore the codebase to build a complete picture of the feature. Use grep, file reads, and import tracing. Start from known paths or grep description keywords to locate entry points.
+Explore the codebase to build a complete picture of the feature. Read the project's stack first from the topology file (`.myspec.json` → `topologyFile`, falling back to `backbone.yml` at the project root) or `${aiDir}/conventions/`, so the categories below map to its real file types. Use grep, file reads, and import tracing. Start from known paths or grep description keywords to locate entry points.
 
 **What to look for:**
 
 | Category | Look for |
 |----------|----------|
-| Entry points | Routes, page components, navigation entries, event triggers |
-| Components | Vue components, composables, mixins involved |
-| State | Vuex/Pinia stores, getters, actions, mutations |
+| Entry points | Routes, controllers, CLI commands, page components, navigation entries, event triggers |
+| UI components | Components, templates, views, and their shared helpers (hooks, composables, partials) |
+| Client or server state | Stores, sessions, caches, and the code that reads or changes them |
+| Data models and persistence | Models, entities, repositories, migrations, schemas |
+| Background jobs | Queued jobs, workers, scheduled tasks, event listeners |
 | API | GraphQL queries/mutations, REST calls, endpoint URLs |
 | Gates / flags | Feature flags, server gates, environment-based conditions |
 | Translations | i18n keys, translation files |
@@ -43,7 +45,7 @@ Explore the codebase to build a complete picture of the feature. Use grep, file 
 | Shared utilities | Common helpers, validators, formatters used |
 
 **Exploration rules:**
-- Trace outward from entry points: component → store → API → types → shared utilities
+- Trace outward from entry points: entry point → UI or handler → state → API → models and types → shared utilities
 - Follow imports to find all involved files
 - Note every external API call, external service reference, or cross-app dependency as you go
 - Do NOT stop to ask about each finding — keep exploring until you have a complete picture
@@ -105,9 +107,25 @@ If yes: write discovery first, then follow the feature-decompose workflow.
 
 Note the answer — decomposition (if agreed) happens AFTER Step 8.
 
-### 6. Write discovery.md
+### 6. Output Decision
 
-Write this file immediately after confirmation. Do not wait for the output location decision (Step 7) — this is the durable checkpoint.
+Ask where the output goes before writing any file, so `discovery.md` is written once, to a known path:
+
+```
+Findings confirmed. Where should the docs go?
+
+A) Discovery only — save to `${aiDir}/discoveries/{TODAY}-{feature-slug}/`
+   Good when: knowledge is partial, no time for full spec, or this feeds into a larger feature
+
+B) Full feature docs — save to `${aiDir}/features/{feature-name}/` with spec.md + tech-spec.md
+   Good when: findings are solid and you want this in the feature pipeline
+
+C) Both — discovery in `${aiDir}/discoveries/` + full feature docs in `${aiDir}/features/`
+```
+
+### 7. Write discovery.md
+
+Write this file now, before any other output file. It is the durable checkpoint. The path comes from the Step 6 answer: `${aiDir}/features/{feature-name}/discovery.md` for B, `${aiDir}/discoveries/{TODAY}-{feature-slug}/discovery.md` for A and C.
 
 Use the **discovery.md Frontmatter** from [references/templates.md](references/templates.md).
 
@@ -124,8 +142,8 @@ All involved files and their roles:
 
 | File | Type | Role |
 |------|------|------|
-| `path/to/Component.vue` | Vue component | [role] |
-| `path/to/store.ts` | Pinia store | [role] |
+| `path/to/{file}` | UI component | [role] |
+| `path/to/{file}` | Data model | [role] |
 
 #### Behavior
 Step-by-step: what happens from user action to final state. Include:
@@ -136,7 +154,7 @@ Step-by-step: what happens from user action to final state. Include:
 #### Integration Points
 
 **Internal**
-- [Other modules, stores, or features this depends on]
+- [Other modules, state, or features this depends on]
 
 **External**
 - [External APIs, third-party services, webhooks — with purpose from Q&A answers]
@@ -154,47 +172,30 @@ Step-by-step: what happens from user action to final state. Include:
 
 #### Open Questions
 Unresolved items after Q&A. Format:
-- **[Q]** What does X do exactly? — *Found at `path/to/file.ts:42`*
+- **[Q]** What does X do exactly? — *Found at `path/to/{file}:42`*
 
 #### Complexity Assessment
 **Rating**: Simple / Moderate / Complex
 **Reasoning**: [brief explanation]
 **Decompose candidate**: yes / no
 
-### 7. Output Decision
-
-After writing discovery.md, ask:
-
-```
-discovery.md is written. What would you like to do next?
-
-A) Discovery only — save to `${aiDir}/discoveries/{TODAY}-{feature-slug}/`
-   Good when: knowledge is partial, no time for full spec, or this feeds into a larger feature
-
-B) Full feature docs — save to `${aiDir}/features/{feature-name}/` with spec.md + tech-spec.md
-   Good when: findings are solid and you want this in the feature pipeline
-
-C) Both — discovery in `${aiDir}/discoveries/` + full feature docs in `${aiDir}/features/`
-```
-
 ### 8. Write Output Files
 
 Load format templates from [references/templates.md](references/templates.md) before generating any files.
 
 #### Option A — Discovery only
-- Write `discovery.md` to `${aiDir}/discoveries/{TODAY}-{feature-slug}/discovery.md`
+- Nothing more to write: `discovery.md` is in `${aiDir}/discoveries/` (Step 7)
 - No index.yaml update needed
 
 #### Option B — Full feature
 - Create `${aiDir}/features/{feature-name}/` if it doesn't exist
-- Write `discovery.md` to `${aiDir}/features/{feature-name}/discovery.md`
 - Generate `spec.md` using the **spec.md Format** template
 - Generate `tech-spec.md` using the **tech-spec.md Format** template
 - Create `dependencies.md` using the **dependencies.md Format** template
 - Add entry to `${aiDir}/features/index.yaml`
 
 #### Option C — Both
-Do A and B.
+Do B. `discovery.md` stays in `${aiDir}/discoveries/` (Step 7) and is not copied into the feature directory.
 
 ### 9. Decompose (if flagged in Step 5)
 
@@ -221,12 +222,12 @@ If yes: follow `/myspec:feature-decompose` [OPTIONAL — only when decomposition
 ## Verification Checklist
 
 - [ ] Description or paths collected before exploration started
-- [ ] All file categories explored: components, stores, APIs, gates, translations, external deps
+- [ ] All file categories explored: entry points, UI, state, models, jobs, APIs, gates, translations, external deps
 - [ ] Unknowns grouped by topic and asked in batches (not one-by-one)
 - [ ] User explicitly confirmed findings before any file was written
-- [ ] `discovery.md` written immediately after confirmation
+- [ ] Output location chosen by user (A / B / C) before any file was written
+- [ ] `discovery.md` written once, to the path that option names
 - [ ] `discovery.md` contains all required sections: Overview, Entry Points, Components & Structure, Behavior, Integration Points, Feature Flags, Translations, Open Questions, Complexity Assessment
-- [ ] Output location chosen by user (A / B / C)
 - [ ] If full feature (B or C): spec.md, tech-spec.md, dependencies.md created; index.yaml updated
 - [ ] `tech-spec.md` File Inventory uses `Action: exists` for all discovered files
 - [ ] Open Questions carried through from discovery.md into spec.md

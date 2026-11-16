@@ -89,9 +89,10 @@ The skill:
 1. Creates `ai/features/notifications-v2/{notifications-toasts, notifications-preferences, notifications-email-digest}/` with `spec.md` and `dependencies.md` per sub-feature.
 2. Rewrites the parent `spec.md` as an umbrella doc with the Sub-Features table.
 3. Creates `ai/features/notifications-v2/index.yaml` listing the three sub-features.
-4. Updates the top-level `ai/features/index.yaml`: parent flips to `status: in-progress` and references the per-feature index.
+4. Updates the top-level `ai/features/index.yaml`: the parent entry gains `subfeatures: true`. The sub-feature list stays in the per-feature index.
 5. Writes `ideas/notifications-push.md` and `ideas/notifications-slack.md` as one-paragraph stubs that reference the parent.
 6. Adds those two ideas to `ideas/PRIORITY-LISTING.md` under **LOW** with a note pointing back at `notifications-v2`.
+7. Runs `audit.mjs --only=notifications-v2` and `dead-paths.mjs --only=notifications-v2`. Both are clean, so no doc needs a fix.
 
 ### Result
 
