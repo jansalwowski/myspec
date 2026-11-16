@@ -111,7 +111,7 @@ step_health() {  # step_health <label> <script>
   out=$(cd "$HERE" && node "$LIB/$2" --quiet 2>/dev/null | tail -n 1)
   case "$out" in
     *': clean') echo "**$1**: clean" ;;
-    *' error(s)'*) echo "**$1**: ${out#*: }, run \`node \"\${CLAUDE_PLUGIN_ROOT}/lib/$2\"\` for details" ;;
+    *' error(s)'*) echo "**$1**: ${out#*: }, run \`node \"$LIB/$2\"\` for details" ;;
     *' doctor: '*) echo "**$1**: ${out#*: }" ;;
     *) echo "**$1**: not checked, $2 gave no summary" ;;
   esac

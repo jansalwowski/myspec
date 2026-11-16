@@ -67,6 +67,10 @@ for dir in "${TEST_BASH_DIRS[@]}"; do
   has '**Dangling**: 1 session(s) 1-6h stale, run /myspec:session-clean' && ok || fail "$label: the 1-6h log is dangling (got: $OUT)"
   has '**Stale sessions**: 1 log(s) older than 6h, run /myspec:session-clean' && ok || fail "$label: the old log is counted (got: $OUT)"
   has '**Memory health**: ' && has '**Setup health**: ' && ok || fail "$label: both doctors report (got: $OUT)"
+  # The fixture has setup errors; the hint names a path the Bash tool can run.
+  has "**Setup health**: " && has " error(s)" && has "run \`node \"$(cd "$(dirname "$SCRIPT")" && pwd)/setup-doctor.mjs\"\` for details" && ok \
+    || fail "$label: the doctor hint names the resolved lib path (got: $OUT)"
+  has 'CLAUDE_PLUGIN_ROOT' && fail "$label: no unresolved variable is printed (got: $OUT)" || ok
   has 'myspec version' && fail "$label: equal versions print no version line (got: $OUT)" || ok
   has 'Worktree health' && fail "$label: no worktrees, no worktree line (got: $OUT)" || ok
   has 'Branch lag' && fail "$label: no branch flags, no lag line (got: $OUT)" || ok
