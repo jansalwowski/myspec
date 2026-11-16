@@ -204,7 +204,7 @@ Decomposition threshold met:
 - 4 distinct capabilities, each shippable independently ✓ (>3)
 - Integrations with 3 different external services ✓ (>2)
 
-The skill stops before the output-decision step:
+The skill presents the case before asking where the docs go:
 
 > This feature looks large enough to benefit from decomposition.
 >
@@ -216,13 +216,17 @@ The skill stops before the output-decision step:
 >
 > An umbrella spec covering all four would produce ~30 acceptance criteria and a tech-spec referencing 60+ files. That's hard to review and harder to keep in sync.
 >
-> Would you like to decompose into sub-features? If yes, I'll write `discovery.md` first (single source of truth), then follow `feature-decompose` using the discovery as source material instead of a spec.
+> Would you like to decompose into sub-features? If yes, I'll write `discovery.md` and the feature docs first, then follow `feature-decompose` using the discovery as source material instead of a spec.
 
 **User**: yes, decompose.
 
+### Output decision
+
+The skill still asks Step 6 (A / B / C) before writing any file. **User**: C, keep the discovery in `discoveries/` and write full feature docs too.
+
 ### Result — discovery first, then decomposition
 
-The skill writes `discovery.md` to `.ai/discoveries/2026-04-30-admin-panel/discovery.md` — the full record of what was found, all four capability areas in one document.
+The skill writes `discovery.md` to `.ai/discoveries/2026-04-30-admin-panel/discovery.md` (the option C path), the full record of what was found, all four capability areas in one document. Step 8 then writes `.ai/features/admin-panel/{spec.md, tech-spec.md, dependencies.md}` and its manifest row.
 
 Then it hands off into the decompose flow:
 
@@ -243,16 +247,17 @@ The decompose skill takes over. Final state:
 
 ```
 .ai/discoveries/2026-04-30-admin-panel/discovery.md   # umbrella record
+.ai/features/admin-panel/{spec.md, tech-spec.md, dependencies.md}   # parent, split by feature-decompose
 .ai/features/admin-user-management/{spec.md, tech-spec.md, dependencies.md}
 .ai/features/admin-audit-log/{spec.md, tech-spec.md, dependencies.md}
 .ai/features/admin-feature-flags/{spec.md, tech-spec.md, dependencies.md}
 .ai/features/admin-billing-overrides/{spec.md, tech-spec.md, dependencies.md}
 ```
 
-Four manifest rows added, all `status: shipped`, `origin: discovered`.
+Four sub-feature manifest rows added next to the parent row from Step 8, all `status: shipped`, `origin: discovered`.
 
 ### Why this example matters
 
 - **Discovery happens before decomposition, never instead of it** — the umbrella discovery is the source of truth that the decomposition draws from. Without it, each sub-feature would be re-discovered in isolation and the cross-cutting context would be lost.
 - **The complexity check fires after exploration, not before** — the skill needs to actually see the code to know whether decomposition is warranted. Pre-judging from a one-line user description (*"document the admin panel"*) would route some genuinely simple features through unnecessary decomposition.
-- **Output-decision step is skipped when decomposition wins** — if the user agrees to decompose, the skill goes straight to writing discovery.md + handing off, rather than asking "A / B / C." Decomposition implies option B (full feature docs) by definition, just split across multiple feature directories.
+- **The output decision still comes first.** Agreeing to decompose does not skip Step 6: the A / B / C answer fixes where `discovery.md` is written, so it is written once. Under option B it would go to `.ai/features/admin-panel/discovery.md` instead.
