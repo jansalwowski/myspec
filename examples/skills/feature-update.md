@@ -96,9 +96,9 @@ Then drafts the row to prepend to `CHANGELOG.md`:
 >
 > **CHANGELOG.md**: +1 `updated` row for spec v2
 >
-> Status flipped to `draft` on both files (re-approval needed). spec_version: 1 → 2.
+> Apply will set status to `draft` on both files (re-approval needed). spec_version: 1 → 2.
 >
-> Confirm?
+> **Do the proposed changes look correct?** Apply / Revise / Cancel
 
 #### 6. User picks Apply, hand-off
 
@@ -192,15 +192,15 @@ tech-spec.md changes:
 
 CHANGELOG.md: +1 updated row (spec v3: magic-link removed; steps replaced with the removal step)
 
-Status flipped to draft. spec_version: 2 → 3.
+Apply will set status to draft on both files. spec_version: 2 → 3.
 
-Confirm?
+Do the proposed changes look correct?  Apply / Revise / Cancel
 ```
 
-#### 6. User confirms, hand-off
+#### 6. User picks Apply, hand-off
 
 ```
-yes
+Apply
 ```
 
 > **What's next?**
