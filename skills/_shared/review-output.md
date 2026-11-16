@@ -32,7 +32,9 @@ One block per proposed fix:
 
 ## Tagging and application rules
 
-- `[auto-fix]` — mechanical, meaning-preserving (typos, formatting, frontmatter dates, stub sections): apply immediately without asking.
-- `[requires confirmation]` — anything changing meaning, scope, structure, or strategy: show the proposal and WAIT for explicit approval. End such proposals with `**ACTION REQUIRED**: Confirm or reject before proceeding.`
+This is the one definition of `[auto-fix]` for every review skill. A skill may list its own examples, never a wider scope.
+
+- `[auto-fix]` — mechanical, meaning-preserving (typos, formatting, frontmatter dates, an empty heading for a missing required section): apply immediately without asking.
+- `[requires confirmation]` — anything changing meaning, scope, structure, or strategy: show the proposal and WAIT for explicit approval. Adding content (an edge case, a requirement, a step, a file inventory row) or rewording unclear text changes meaning, so it belongs here. When in doubt, use this tag. End such proposals with `**ACTION REQUIRED**: Confirm or reject before proceeding.`
 - Never downgrade a severity to make a verdict look cleaner.
 - Findings without a locatable line use `—` in Line(s), never a guessed number.

@@ -51,7 +51,7 @@ last_updated: 2026-04-30
 ---
 ```
 
-Required sections all present — Overview, Goals, User Stories (US1 star, US2 unstar, US3 favorites pin to top), Acceptance Criteria (AC1–AC5), Out of Scope (sharing, tagging, max count), Open Questions (none).
+Required sections all present, per `_shared/spec-template.md` — Overview, Goals, Requirements (REQ-001–REQ-004), User Stories (star, unstar, favorites pin to top), Acceptance Criteria (`- [ ] AC-1:` to `AC-5`), Out of Scope (sharing, tagging, max count), Open Questions (none).
 
 `dependencies.md` is short — no feature deps, just a one-liner external dep on the existing `react-icons` star glyph.
 
@@ -133,14 +133,21 @@ The skill drafts:
 **dependencies.md**:
 
 ```markdown
-## Feature Dependencies (this feature requires)
+---
+title: "Scheduled Reports Dependencies"
+created: 2026-04-30
+---
+
+# Dependencies: scheduled-reports
+
+## Feature Dependencies
 
 - `notification-system` — used for queued email delivery. Hard dependency.
 - `email-templates` — provides the report email template. Hard dependency. Note: `email-templates` is currently in-progress; this feature blocks on its completion.
 
-## Dependent Features (require this feature)
+## Dependent Features
 
-(none yet)
+None.
 
 ## External Dependencies
 
@@ -271,10 +278,10 @@ The skill drafts `spec.md` and `dependencies.md` as usual, then runs `/myspec:fe
 | Severity | Dimension | Issue | File | Line(s) | Finding |
 |----------|-----------|-------|------|---------|---------|
 | High | Completeness | No failure state | spec.md | 22-30 | Nothing says what happens when the reminder email bounces |
-| Low | Clarity | Vague wording | spec.md | 14 | "shortly before" in Goals; REQ-001 says three days |
+| Low | Clarity | Typo | spec.md | 14 | "remider" in Goals |
 ```
 
-The Low fix is `[auto-fix]` and is applied at once. The High fix adds a requirement, so it is `[requires confirmation]`:
+The Low fix is a typo, so it is `[auto-fix]` and is applied at once. A rewording that changed meaning would wait for the user. The High fix adds a requirement, so it is `[requires confirmation]`:
 
 > **Which fixes should I apply?** All (Recommended) / Critical+High / Individually / None
 

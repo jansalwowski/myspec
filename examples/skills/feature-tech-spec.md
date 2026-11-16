@@ -264,9 +264,9 @@ Step 1 still asks, with the earlier answer marked as the default:
 
 **User**: Yes.
 
-After drafting, the skill runs `/myspec:feature-tech-spec-review invoice-reminders --from-author`. Its reviewer subagent reads the spec, the tech-spec and the project conventions, and reports a Critical: REQ-003 (no reminder for an invoice paid in the meantime) has no implementation step. The fix adds a step, a big fix under the review's Fix Policy, so it waits for the user. Two Medium findings (a missing edge case, a missing File Inventory row) are small fixes and are applied at once.
+After drafting, the skill runs `/myspec:feature-tech-spec-review invoice-reminders --from-author`. Its reviewer subagent reads the spec, the tech-spec and the project conventions, and reports a Critical: REQ-003 (no reminder for an invoice paid in the meantime) has no implementation step. The fix adds a step, so it is `[requires confirmation]` and waits for the user. Two Medium findings (a missing edge case, a missing File Inventory row) add content, so they wait too. A Low typo fix is `[auto-fix]` and is applied at once.
 
-**User**: apply the REQ-003 step.
+**User**: apply all three.
 
 The reviewer runs once more and confirms REQ-003 now maps to step 4. The user approves the tech-spec.
 
