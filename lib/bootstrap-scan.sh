@@ -8,7 +8,7 @@
 #
 # Steps:
 #   memory     Layer 1 entries in <aiDir>/memory/index.md (list lines and
-#              table rows) and the row count of each Layer 2 index
+#              table rows that start with a memory ID) and the row count of each Layer 2 index
 #   health     memory-doctor.mjs --quiet and setup-doctor.mjs --quiet, the
 #              summary line of each
 #   sessions   live logs (*.md) in the session directory: under 6h listed
@@ -90,7 +90,7 @@ count_rows() {
 
 step_memory() {
   local mem="$HERE/$AI/memory" l1 p s e
-  l1=$(count_rows '^(- +[^ <]|\| *\[[pse][0-9]+)' "$mem/index.md")
+  l1=$(count_rows '^(- +(\[|\*\*)[pse][0-9]+|\| *\[[pse][0-9]+)' "$mem/index.md")
   p=$(count_rows '^\| *\[[pse][0-9]+' "$mem/procedural/index.md")
   s=$(count_rows '^\| *\[[pse][0-9]+' "$mem/semantic/index.md")
   e=$(count_rows '^\| *\[[pse][0-9]+' "$mem/episodic/index.md")

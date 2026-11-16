@@ -91,6 +91,17 @@ OUT=$("$SCRIPT" 2>/dev/null)
 has "**myspec version**: project on vnext, plugin has v$PLUGIN_VERSION" && ok || fail "non-semver (got: $OUT)"
 git_ checkout -q -- .myspec.json
 
+# --- Layer 1 counts memory IDs, not every bullet --------------------------------
+cp "$M/index.md" "$ROOT/index.bak"
+printf '# Memory Index\n\n- procedural/index.md\n- semantic/index.md\n- episodic/index.md\n' > "$M/index.md"
+OUT=$("$SCRIPT" 2>/dev/null)
+has '**Memory**: Layer 1 0 entries' && has '**Layer 1**: empty while Layer 2 has 3 rows' && ok \
+  || fail "pointer bullets are not entries (got: $OUT)"
+printf '# Memory Index\n\n- **P001** never x\n' > "$M/index.md"
+OUT=$("$SCRIPT" 2>/dev/null)
+has '**Memory**: Layer 1 1 entries' && ok || fail "the bold-ID form is an entry (got: $OUT)"
+cp "$ROOT/index.bak" "$M/index.md"
+
 # --- without jq: the Node reader's aiDir is used, not .ai --------------------
 # nojq_path -> a PATH holding every command on this one but jq, in a
 # directory of symlinks (jq can sit in /usr/bin, so dropping PATH entries is
