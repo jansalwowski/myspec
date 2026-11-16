@@ -131,7 +131,7 @@ Regexes and the exact caps are in `references/detection-patterns.md`; the portab
 | 13 | **Unexplained all-caps imperatives** | MUST/ALWAYS/NEVER with no rationale nearby. Flag only caps with no stated *why* — escalating to MUST for a rule that is actually being missed is legitimate | Low |
 | 14 | **Explanations the model already knows** | Tutorials for mainstream libraries, definitions of common terms. Test: "Does the model need this? Does this paragraph justify its token cost?" | Medium |
 | 15 | **Guidance form mismatched to failure** | Form does not match the targeted failure (see `references/guidance-form-rules.md`) | High |
-| 16 | **Nuance and exemption clauses** | "unless it matters", "except when necessary" appended to a rule; "this limit doesn't apply to..." carve-outs | High |
+| 16 | **Nuance and exemption clauses** | "unless it matters", "except when necessary" appended to a rule; "this limit doesn't apply to..." carve-outs (see `references/guidance-form-rules.md`) | High |
 | 17 | **Trigger-style description on a manual-only skill** | `disable-model-invocation: true` with a "Use when..." description. The description never enters context — trigger phrasing is dead tokens. Write a human-readable label | Low |
 | 18 | **`context: fork` with no task** | `context: fork` on a skill that states conventions rather than a task. The subagent receives guidelines and no actionable prompt, and returns nothing useful | Medium |
 
