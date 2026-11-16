@@ -9,9 +9,10 @@ points to this file.
 `"<plugin lib>/git-state.sh" [<feature-name>]` prints the default branch, the
 current branch and the tree state (with the porcelain lines when dirty), plus,
 with a feature name, the `feat-{name}` worktree and whether `feat/{name}`
-exists. `<plugin lib>` is the plugin's `lib` directory, whose resolved path the
-skill that sent you here states. Run it once instead of the commands below;
-they are the fallback when the script cannot run.
+exists. `<plugin lib>` is the plugin's `lib` directory. When the skill that
+sent you here gives the script's resolved path, run it once instead of the
+commands below. Otherwise, or when the script cannot run, use the commands
+below: never guess the path.
 
 ## Detect the default branch
 
