@@ -27,7 +27,7 @@ Useful flags:
 | Flag | Purpose |
 |------|---------|
 | `--ai-dir=<path>` | Override ai dir (e.g. `--ai-dir=docs`) |
-| `--only=<name>` | Restrict to one feature and its sub-features |
+| `--only=<name>` | One feature with its sub-features, or one sub-feature (`parent/sub`). Skips the orphan scan; a name in no manifest exits 3 |
 | `--severity=<critical\|high\|medium\|low>` | Hide issues below this threshold (default: low) |
 | `--json` | Machine-readable output (for piping into other tools) |
 
@@ -46,7 +46,8 @@ The script outputs:
 
 | Issue pattern | Recommended skill |
 |---------------|-------------------|
-| `directory missing` (status ≥ in-progress) | `/myspec:feature-spec-sync` or delete the manifest entry |
+| `unknown status: "X"` | set the manifest `status` to `planned`, `draft`, `in-progress`, `complete` or `deprecated` |
+| `directory missing` | restore the directory from git, or delete the manifest entry |
 | `required doc missing for status=complete` | `/myspec:feature-spec` or `/myspec:feature-tech-spec` |
 | `required doc missing for status=in-progress` | `/myspec:feature-spec` |
 | `tech-spec/implementation-plan present but status=planned` (docs ahead) | bump manifest status |
@@ -55,10 +56,10 @@ The script outputs:
 | `implementation-plan.md still present though status=complete` | archive into `plans/` via `/myspec:feature-complete` |
 | `implementation-plan.md is N/N [x] but status=draft\|in-progress` | confirm the merge (see the `git log:` hint line), then `/myspec:feature-complete` |
 | `status=complete but implementation-plan.md is k/N [x]` | finish or defer the open tasks, then `/myspec:feature-complete`; or revert status |
-| `archived plans/... is 0/N [x]` | `/myspec:feature-verify <name>` — the plan was archived without being ticked, or the work never happened |
+| `archived plans/... is 0/N [x]` | check in git whether the work happened, then tick the delivered tasks in the archived plan, or revert the manifest status |
 | `spec.md` / `tech-spec.md frontmatter status: draft` under `complete` | bump the doc's frontmatter `status` |
 | `spec.md` / `tech-spec.md frontmatter status: X is not a doc status` | `complete`/`implemented`/`superseded` (the message names the target): `/myspec:update` runs the `3.1.0-doc-status` migration, or set it by hand; any other value: ask what it meant, then set `draft`, `approved` or `deprecated` |
-| `all N sub-features complete but spec.md acceptance criteria are k/M [x]` | `/myspec:feature-verify <parent>` — tick delivered ACs or split the rest into a new sub-feature |
+| `all N sub-features complete but spec.md acceptance criteria are k/M [x]` | tick the delivered ACs in the parent spec.md, or split the rest into a new sub-feature |
 | Orphan directory | register in manifest or delete |
 
 ### 4. Hand off

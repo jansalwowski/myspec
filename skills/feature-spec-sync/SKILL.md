@@ -8,7 +8,7 @@ tags: [documentation, maintenance, verification, sync]
 
 Detect and fix discrepancies between feature documentation (spec.md, tech-spec.md) and actual code. Interactive workflow with user confirmation for all changes.
 
-**Paths mode** (`--paths`, or the user asks only about dead or stale paths): run check A without `--only` to sweep every feature, then steps 3-7 on its findings. Skip B-D and the prerequisites.
+**Paths mode** (`--paths`, or the user asks only about dead or stale paths): run check A without `--only` to sweep every feature, then steps 3-7 on its findings. Skip B, C and the prerequisites.
 
 ## Prerequisites
 
@@ -26,7 +26,7 @@ Read the target feature's documentation:
 
 ### 2. Detect Discrepancies
 
-Scan for four types of issues:
+Scan for three types of issues. Manifest status drift (plan checkboxes against the `index.yaml` status) is not checked here: `lib/feature-status-audit/audit.mjs` owns it, through `/myspec:feature-status-audit` or `/myspec:feature-verify`.
 
 **A. Dead Paths**
 
@@ -56,15 +56,6 @@ Only when tech-spec.md still carries checkbox lists (the template's Implementati
 - For checked items `[x]`, verify files still exist
 - Categorize: SHOULD_BE_CHECKED (files exist but unchecked), SHOULD_BE_UNCHECKED (checked but files missing)
 
-**D. Feature Status Validation**
-
-Completion % is computed from **implementation-plan.md checkboxes**, the canonical source per `.claude/rules/feature-docs.md` — never from tech-spec.md checkboxes or code inspection:
-- Count total tasks, count checked tasks
-- Calculate completion % = checked / total * 100
-- Compare to `status` field in index.yaml
-- Detect: MISMATCH if status doesn't match completion (e.g., status=complete but <100%, status=draft but >80%)
-- No `implementation-plan.md`: nothing to count. `in-progress` needs a live plan, so that pair is a MISMATCH; for any other status the missing plan is informational, as in `feature-status-audit`'s matrix (authoritative per `feature-docs.md`): `complete` requires only spec.md and tech-spec.md, and `plans/` or `CHANGELOG.md` are never required
-
 ### 3. Present Findings
 
 Show table with all discrepancies:
@@ -77,14 +68,14 @@ Discrepancies Found in {feature}
 |---|------|----------|----------|-------------|--------|
 | 1 | File Path | High | tech-spec.md:145 | apps/api/src/services/guide.ts | MISSING |
 | 2 | File Path | Medium | tech-spec.md:146 | apps/api/src/services/guides.ts | MOVED (guide.ts → guides.ts) |
-| 3 | Spec Version | High | Frontmatter | spec_version=3 vs based_on_spec_version=2 | MISMATCH |
+| 3 | Spec Version | Critical | Frontmatter | spec_version=3 vs based_on_spec_version=2 | MISMATCH |
 | 4 | Checkbox | Medium | tech-spec.md:89 | "Create GuideService" (file exists) | SHOULD_BE_CHECKED |
-| 5 | Feature Status | Medium | index.yaml | 12/15 steps (80%) but status=draft | MISMATCH |
 ```
 
 **Severity Levels**:
-- **High**: Spec version mismatch, file paths that are completely missing
-- **Medium**: Files that moved, checkboxes out of sync, status mismatch
+- **Critical**: Spec version mismatch (same severity as `feature-verify` and `feature-tech-spec-review`)
+- **High**: File paths that are completely missing
+- **Medium**: Files that moved, checkboxes out of sync
 - **Low**: Minor inconsistencies
 
 ### 4. Ask User for Action
@@ -137,7 +128,6 @@ After running spec-sync:
 - [ ] `dead-paths.mjs` exits 0, or every remaining finding was triaged with the user
 - [ ] `spec_version` matches `based_on_spec_version`
 - [ ] Implementation checkboxes reflect actual code state
-- [ ] Feature status in index.yaml matches completion %
 - [ ] No edits made without user confirmation
 - [ ] Summary report lists all changes and skips
 
@@ -147,5 +137,5 @@ After running spec-sync:
 - Always present findings before making changes
 - Never auto-fix without user approval
 - Fuzzy matching helps catch file renames (guide.ts → guides.ts, singular → plural)
-- High-severity issues should be fixed first
-- Status suggestions must respect transition ownership (see the Status State Machine in `.claude/rules/feature-docs.md`): `in-progress` is set by `/myspec:feature-implement` at execution start, so any completion % is normal for it — suggest `draft` only when no implementation plan exists yet. Never suggest `complete` from checkbox counts — that transition belongs to `/myspec:feature-complete`; at ≥80% suggest running `/myspec:feature-verify` instead
+- Critical and High issues should be fixed first
+- Never change the manifest `status` here. Status transitions belong to the skills named in the Status State Machine in `.claude/rules/feature-docs.md`
