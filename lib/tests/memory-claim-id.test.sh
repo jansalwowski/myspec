@@ -271,6 +271,14 @@ fi
 cd "$REPO" || exit 1
 
 # --- (h) two concurrent claims -----------------------------------------------
+# DEBUG PROBE (to be dropped): does this mkdir succeed twice on one path?
+echo "     PROBE $(mkdir --version 2>&1 | head -1)"
+both=0; d=$(mktemp -d)
+for i in $(seq 1 200); do mkdir "$d/x$i" 2>/dev/null & a=$!; mkdir "$d/x$i" 2>/dev/null & b=$!; ra=0; rb=0; wait $a || ra=$?; wait $b || rb=$?; [ "$ra$rb" = 00 ] && both=$((both + 1)); done
+echo "     PROBE both mkdirs succeeded: $both/200"
+both=0
+for i in $(seq 1 200); do ( set -C; : > "$d/f$i" ) 2>/dev/null & a=$!; ( set -C; : > "$d/f$i" ) 2>/dev/null & b=$!; ra=0; rb=0; wait $a || ra=$?; wait $b || rb=$?; [ "$ra$rb" = 00 ] && both=$((both + 1)); done
+echo "     PROBE both noclobber creates succeeded: $both/200"
 
 new_repo h
 mem procedural P001-first.md "P001"
@@ -292,10 +300,30 @@ else
   pass "(h) lock released after both claims"
 fi
 
+# Eight at once, ten times (#470). Two causes let two claims hold the lock at
+# once: a waiter whose stat found the lock just released read it as 50 years
+# old and renamed away the next claimer's lock (macOS), and uutils `mkdir`
+# (Ubuntu 26.04) returned success for a directory a concurrent mkdir had just
+# made.
+h_dups=0
+for round in 1 2 3 4 5 6 7 8 9 10; do
+  new_repo "h$round"
+  for k in 1 2 3 4 5 6 7 8; do
+    MYSPEC_SKIP_MEMORY_DOCTOR=1 "$SCRIPT" procedural > "$ROOT/h$round-$k.out" 2>/dev/null &
+  done
+  wait
+  got=$(cat "$ROOT"/h"$round"-?.out | sort | tr '\n' ' ')
+  [ "$got" = "P001 P002 P003 P004 P005 P006 P007 P008 " ] || { h_dups=$((h_dups + 1)); echo "     round $round: $got"; }
+  find .claude/state -maxdepth 1 -name 'memory-id.lock*' | grep -q . && { h_dups=$((h_dups + 1)); echo "     round $round: lock left behind"; }
+done
+check "(h) eight concurrent claims, ten rounds: P001-P008 each time, no lock left" 0 "$h_dups"
+cd "$REPO" || exit 1
+
 # --- (i) stale and live locks ------------------------------------------------
 
 new_repo i
-mkdir -p .claude/state/memory-id.lock
+mkdir -p .claude/state
+printf '99999\n' > .claude/state/memory-id.lock
 touch -t 202001010000 .claude/state/memory-id.lock
 got=$(claim)
 rc=$?
@@ -305,16 +333,31 @@ if [ -e .claude/state/memory-id.lock ]; then
 else
   pass "(i) stale lock removed"
 fi
-stale_left=$(find .claude/state -maxdepth 1 -name 'memory-id.lock.stale.*' | wc -l | tr -d ' ')
-check "(i) no stale rename left behind" 0 "$stale_left"
+stale_left=$(find .claude/state -maxdepth 1 -name 'memory-id.lock.*' | wc -l | tr -d ' ')
+check "(i) no stale rename or break lock left behind" 0 "$stale_left"
 
 # A live lock held briefly by someone else must be waited on, not broken.
+printf '99999\n' > .claude/state/memory-id.lock
+( sleep 0.5; rm -f .claude/state/memory-id.lock ) &
+got=$(claim)
+rc=$?
+wait
+check "(i) live lock is waited on, then the claim succeeds" "0 P002" "$rc $got"
+
+# Versions before 3.8 locked with a directory (mkdir). A stale one left
+# behind is broken the same way; a live one is waited on.
+mkdir .claude/state/memory-id.lock
+touch -t 202001010000 .claude/state/memory-id.lock
+got=$(claim)
+rc=$?
+check "(i) stale directory lock from an older version is broken" "0 P003" "$rc $got"
+if [ -e .claude/state/memory-id.lock ]; then fail "(i) stale directory lock still present"; else pass "(i) stale directory lock removed"; fi
 mkdir .claude/state/memory-id.lock
 ( sleep 0.5; rmdir .claude/state/memory-id.lock ) &
 got=$(claim)
 rc=$?
 wait
-check "(i) live lock is waited on, then the claim succeeds" "0 P002" "$rc $got"
+check "(i) live directory lock is waited on, then the claim succeeds" "0 P004" "$rc $got"
 
 # --- (j) conformance gate ----------------------------------------------------
 
