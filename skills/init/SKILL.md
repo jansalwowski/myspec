@@ -84,7 +84,7 @@ ${aiDir}/
   features/
     index.yaml         ← copy from scaffolding/features/index.yaml
   memory/
-    index.md           ← create with basic Layer 1 template
+    index.md           ← copy from scaffolding/memory/index.md
     procedural/
       index.md         ← copy from scaffolding/memory/procedural/index.md
     semantic/

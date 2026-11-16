@@ -109,7 +109,7 @@ After every executed action:
 
 - **Never auto-promote.** Destination + exact insertion text shown before each promotion.
 - **Never auto-rewrite (COMPRESS).** Proposed rewrite shown verbatim before each compression. The agent must conform to `${aiDir}/auto-memory-style.md` — no creative reinterpretation, only mechanical removal of cut-list items.
-- **Never delete a still-cited memory.** Grep across `${aiDir}/`, `.claude/` (excluding `.claude/worktrees/`), `apps/`, `packages/` before any rm.
+- **Never delete a still-cited memory.** Grep across `${aiDir}/`, `.claude/` (excluding `.claude/worktrees/`) and the project's source directories (from the topology file, else the top-level code directories) before any rm.
 - **MEMORY.md edits are atomic with file deletes.** Never leave the index out of sync.
 - **Don't DROP feedback/semantic/reference entries <7 days old.** COMPRESS is allowed at any age. Project-type entries are exempt from the floor — they decay by design.
 - **CONFLICT supersession is non-destructive.** The loser's file stays on disk with a one-line stub; only the `MEMORY.md` line is removed.
@@ -122,10 +122,7 @@ After every executed action:
 | Output style / response formatting | `CLAUDE.md` Core Principles |
 | Tool selection (e.g. AskUserQuestion preference) | `CLAUDE.md` Core Principles |
 | Workflow phase behavior (e.g. suggest next skill) | `.claude/rules/workflow.md` |
-| Backend-specific pattern | `.claude/rules/backend.md` |
-| Frontend-specific pattern | `.claude/rules/frontend.md` |
-| Lint/TS rule | `.claude/rules/lint-and-types.md` |
-| Dep-management policy (visual regression, plan location, cluster rules) | `.claude/rules/deps.md` |
+| Pattern for one area, language or tool of the project | The project rule in `.claude/rules/` that covers the topic; none exists → KEEP and flag, naming the rule file to create |
 | Skill prerequisite or workflow constraint | `.claude/skills/{name}/SKILL.md` body |
 | Skill-authoring meta-rule | `.claude/rules/skill-optimization.md` |
 

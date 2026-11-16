@@ -33,7 +33,7 @@ execution:
 
     | When | Action |
     |------|--------|
-    | Session start | `/myspec:bootstrap` — Layer 1, memory health, session sweep; Layer 2 only when given a task |
+    | Session start | `/myspec:bootstrap` — Layer 1, memory health, session count; Layer 2 only when given a task |
     | Before work | Significant (new feature, multi-file change, debugging): `/myspec:memory-preflight`, unless bootstrap already scanned Layer 2 for this task. Trivial (single-file fix, typo, config): read `.ai/memory/index.md` only |
     | First code edit | Automatic — `mark-code-changed.sh` appends every code path, Bash writes included, to `## Files touched` in `.claude/state/sessions/{session_id}.md`, shared with subagents |
     | Non-code session (debugging without edits, discovery, doc-only) | `/myspec:session-start` |
@@ -54,8 +54,8 @@ execution:
     | Own session | The live file whose `## Files touched` lists a path you edited untagged, or tags your subagent; several or none → newest mtime, and confirm |
     | Archive file | `.ai/memory/sessions/archive/YYYY-MM-DD-{slug}.md` in the main checkout |
     | Terminal statuses | `completed` (via `/myspec:session-complete`) or `abandoned` (swept). Archive is a location, not a status |
-    | Age policy | mtime < 1h: live, never touch. 1–6h: ambiguous, route to `/myspec:session-clean`. > 6h: sweep as `abandoned` |
-    | Ownership | Own → `/myspec:session-complete`; others' → `/myspec:session-clean` or bootstrap's > 6h sweep |
+    | Age policy | mtime < 1h: live, never touch. 1–6h: ambiguous, `/myspec:session-clean` asks. > 6h: `/myspec:session-clean` deletes it when empty, else archives it as `abandoned` |
+    | Ownership | Own → `/myspec:session-complete`; others' → `/myspec:session-clean` |
 
     ## User-level auto-memory
 

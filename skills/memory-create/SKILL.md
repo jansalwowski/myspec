@@ -55,7 +55,7 @@ Prints the claimed ID (e.g. `P053`) and nothing else. It runs the memory conform
 | Result | Meaning | Do |
 |--------|---------|----|
 | Prints `P053` | Claimed | Use that ID |
-| `No such file` — script missing | Project predates the allocator | Stop. Tell the user to run `/myspec:update`, then retry |
+| `No such file` — script missing | The plugin install is incomplete, or `CLAUDE_PLUGIN_ROOT` is unset | Stop. Tell the user to update or reinstall the myspec plugin, then retry |
 | Exit 3 with `ERROR …` lines | Conformance errors: duplicate IDs, memories without `hook:`, malformed anchors | Stop. Show the errors. `memory-index.mjs --backfill` derives missing hooks; the rest are per-file fixes |
 | Exit 1 — could not acquire the lock | Another session held it for > 10 s | Retry once; if it persists, report it |
 
@@ -85,42 +85,37 @@ Use the type-appropriate template from `${aiDir}/.templates/memory-{type}.md`:
 - Extract: context, decision, outcome, consequence
 - Set `outcome`: success | failure | partial | abandoned
 - Set `persistent: true` only if this has indefinite relevance
-- Default `persistent: false` -- will auto-archive after 30 days
+- Default `persistent: false`: after 30 days `/myspec:memory-optimize` proposes to consolidate or expire it
 - Add `anchors:` (file + pattern) only if code-specific; otherwise leave the key out, since the doctor warns on an empty one
 - Set `related`: IDs of related procedural/semantic memories (e.g., ["P009", "S001"])
 
 **Anchor patterns.** A pattern is a POSIX extended regex (`grep -E`), case-sensitive, matched one line at a time: `^` and `$` mean line start and end, and nothing matches across a line break. Write alternation as `|`; `\|`, `\+`, `\(` are literal characters, and so is a backslash inside brackets. Matching is by Unicode character, so `.` and `[[:alpha:]]` cover non-ASCII text. A pattern that appears literally on a line also counts, so `$this->load(` needs no escaping. Pick a line that names the thing (`^composer:`, `function resolveSkillName`), not one that spans lines. Check it before writing: `node "${CLAUDE_PLUGIN_ROOT}/lib/memory-anchor.mjs" <file> "<pattern>"` must exit 0 — the doctor and `memory-optimize` run the same check.
 
-### 5. Update Type-Specific Index
+### 5. Present to User for Refinement
 
-Set `hook:` in the new memory's frontmatter — a one-line keyword/topic summary — then regenerate and verify:
+Set `hook:` in the draft's frontmatter: a one-line keyword/topic summary. **CRITICAL**: the hook shows keywords/topics/summaries ONLY, never solutions or procedures. It is what an agent scans; the file body is what it loads on a match.
+
+Show the drafted memory in the reply and write nothing yet. Ask:
+"Does this capture the key insight? Any adjustments?"
+
+### 6. Write the File, then Regenerate the Index
+
+After approval, save the memory file (for UPDATE, the edited existing file) with the `validated`/`verified` date set. Then regenerate and verify:
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs"          # or `yarn memory:index` where wired up
 node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs" --check  # must print: memory indexes are up to date
 ```
 
-The index tables are generated from the memory files, so the row is derived from `hook:` rather than hand-written. The generator refuses to run while any memory lacks `hook:` — that is the check working, not a reason to edit the table by hand. If the generator is missing, the project predates it: run `/myspec:update`.
-
-**CRITICAL**: the hook shows keywords/topics/summaries ONLY, never solutions or procedures. It is what an agent scans; the file body is what it loads on a match.
+The index tables are generated from the memory files on disk, so the row is derived from `hook:` rather than hand-written. The generator refuses to run while any memory lacks `hook:` — that is the check working, not a reason to edit the table by hand. If the generator is missing, the plugin install is incomplete: tell the user to update or reinstall the myspec plugin.
 
 A merge conflict in `index.md` is not a merge to reason about — keep either side and re-run the generator.
 
-### 6. Present to User for Refinement
+### 7. Consider Layer 1 Promotion
 
-Show the drafted memory. Ask:
-"Does this capture the key insight? Any adjustments?"
-
-### 7. Write Final Files
-
-Save memory file and updated index.
-Update `validated`/`verified` date in memory frontmatter.
-
-### 8. Consider Layer 1 Promotion
-
-Layer 1 is always in context, so it holds about 200 tokens: critical anti-patterns and one line per type index. Layer 2, each `${aiDir}/memory/{type}/index.md`, costs about 40 tokens per row and loads per task; memory bodies (Layer 3) load on demand. If the memory is critical enough to always be in context:
+Layer 1 is always in context, so it holds about 200 tokens: one line per critical memory, no pointer lines to the type indexes. Layer 2, each `${aiDir}/memory/{type}/index.md`, costs about 40 tokens per row and loads per task; memory bodies (Layer 3) load on demand. If the memory is critical enough to always be in context:
 - Ask user: "Should this be promoted to the global index (${aiDir}/memory/index.md)?"
-- If yes: add a one-line summary to the appropriate section.
+- If yes: add one line, `- [ID](type/ID-slug.md) keywords`, under the section for its type: `## Critical Procedural (What NOT to Do)`, `## Must-Know Facts` (semantic) or `## Recent Significant Events` (episodic).
 
 ## Verification Checklist
 
@@ -129,7 +124,7 @@ Layer 1 is always in context, so it holds about 200 tokens: critical anti-patter
 - [ ] If UPDATE / NO-OP: no new file created, no ID claimed
 - [ ] If ADD: memory file uses correct template from `${aiDir}/.templates/memory-{type}.md`
 - [ ] ID came from `memory-claim-id.sh`; a missing script or an exit-3 refusal stopped the write instead of being worked around
-- [ ] `hook:` set in frontmatter; index regenerated and `--check` clean
+- [ ] `hook:` set in frontmatter; index regenerated after the approved file was written, and `--check` clean
 - [ ] Index row contains keywords/topics only — no solutions leaked
 - [ ] `anchors` field set for code-specific memories; each pattern passes `memory-anchor.mjs`
 - [ ] `related` field cross-references other memory types

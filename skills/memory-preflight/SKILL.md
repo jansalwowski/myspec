@@ -31,32 +31,23 @@ Match the Hook column against the current task domain/feature.
 The Anchor column names the file that proves the fact.
 
 → If match: read full memory file at `${aiDir}/memory/semantic/{id}-{slug}.md`
-→ If ⚠️ stale: verify anchor before relying on the fact.
 
 ### 4. Scan Episodic Index
 
 Read `${aiDir}/memory/episodic/index.md`.
 
-Check for recent episodes (< 30 days) related to current feature.
+Check for recent episodes (< 30 days) related to current feature. Older episodes are `/myspec:memory-optimize`'s to consolidate or expire.
 
 → If match: read full memory file for context.
 
-### 5. Check Episodic Consolidation
-
-For each episodic entry where `persistent: false` and date is > 30 days old:
-
-1. Check if the episode has already produced procedural or semantic memories (check its `related` field for P/S references)
-2. If not yet consolidated: Flag to user: "Episode {id} ({title}) is > 30 days old. Consolidate into semantic fact, mark persistent, or archive?"
-3. If already consolidated: The episode can be removed from the index (the knowledge lives in the related procedural/semantic memories)
-
-### 6. Run Staleness Checks
+### 5. Run Staleness Checks
 
 For any loaded memory with anchors:
 
 - Does the anchored file still hold the pattern? (`node "${CLAUDE_PLUGIN_ROOT}/lib/memory-anchor.mjs" {file} "{pattern}"` exits 0; a missing file exits 1 too)
-- If either fails: flag memory as ⚠️ stale in its type index. Warn before applying.
+- If it fails: warn in the reply before applying the memory, and suggest `/myspec:memory-optimize`, which re-anchors or retires it. Do not edit any index: the tables are generated.
 
-### 7. Check for Active Session
+### 6. Check for Active Session
 
 List `.claude/state/sessions/*.md` (the primary checkout's, gitignored).
 
@@ -64,7 +55,7 @@ List `.claude/state/sessions/*.md` (the primary checkout's, gitignored).
 → If other sessions are > 6h stale: note them and suggest `/myspec:session-clean` — do not archive them yourself. 1–6h is ambiguous (a sibling agent may still be working): report only.
 → If none exist: proceed (one is auto-created on first code edit).
 
-### 8. Ready to Start Work
+### 7. Ready to Start Work
 
 After completing all steps, proceed with implementation.
 
@@ -72,8 +63,7 @@ After completing all steps, proceed with implementation.
 
 - [ ] Layer 1 index loaded (can name 1 relevant entry)
 - [ ] All 3 type indexes scanned
-- [ ] Episodic consolidation checked (episodes > 30 days reviewed)
-- [ ] Staleness checks run on anchored memories
+- [ ] Staleness checks run on anchored memories; failures warned in the reply, no index edited
 - [ ] No active session conflict
 
 ## When NOT to Use

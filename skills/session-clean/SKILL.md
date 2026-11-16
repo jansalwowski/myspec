@@ -63,8 +63,8 @@ If `mtime` is 1–6h old OR the worktree marker matches a live worktree but no c
 | Location | Classification | Liveness | Action |
 |---|---|---|---|
 | `active/` | Empty / no value (any `status:`) | safe | DELETE (`rm`) |
-| `active/` | Substantive, `status: active` | safe | ARCHIVE (`mv` to `archive/YYYY-MM-DD-{slug}.md`, set `status: abandoned` in frontmatter; the archive is committed content, so `git add` it and tell the user) |
-| `active/` | Substantive, `status:` already terminal | safe | ARCHIVE (misplaced, not dangling — `mv` to `archive/YYYY-MM-DD-{slug}.md` and `git add`; keep the existing `status:`) |
+| `active/` | Substantive, `status: active` | safe | ARCHIVE (`mv` to `archive/YYYY-MM-DD-{slug}.md`, set `status: abandoned` in frontmatter; staging per Step 6) |
+| `active/` | Substantive, `status:` already terminal | safe | ARCHIVE (misplaced, not dangling — `mv` to `archive/YYYY-MM-DD-{slug}.md`; keep the existing `status:`; staging per Step 6) |
 | `active/` | Empty or Substantive | ambiguous | ASK per file |
 | `archive/` (untracked, orphaned) | Empty / no value | safe | ASK per file — recommend DELETE (`rm`); orphan with no value and no git history to preserve |
 | `archive/` (untracked, orphaned) | Substantive | safe | SKIP — already in archive, content has value, leave for the user to commit |

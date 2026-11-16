@@ -13,7 +13,7 @@ The target is **retrieval quality, not size**. Memory bodies load only when `/my
 
 ## Hard rules
 
-- Never `rm` a memory file. An entry that leaves the index gets `status: superseded` in its frontmatter and a one-line redirect body: the index generator filters superseded files out, and `memory-claim-id.sh` still counts the file when computing the high-water ID. Deleting the highest-numbered file hands the next session a colliding ID wherever `jq` is absent — the ID registry is only written when `jq` exists, and the filesystem scan is the fallback.
+- Never `rm` a memory file. An entry that leaves the index gets `status: superseded` in its frontmatter and a one-line redirect body: the index generator filters superseded files out, `memory-claim-id.sh` still counts the file when computing the high-water ID, and a citation of the ID elsewhere still resolves to a file.
 - Never retire a memory whose ID is cited outside its own file. `grep -rn "P019" ${aiDir}/ .claude/` — `memory/sessions/archive/`, feature docs, and other memories' `related:` all count as citations.
 - Never hand-write index rows. Edit the files, then run `node "${CLAUDE_PLUGIN_ROOT}/lib/memory-index.mjs"`; `--check` must exit 0 before reporting done.
 - Never retire an entry created less than 30 days ago — a new memory has not had time to be matched even once, so `validation_count: 0` carries no signal yet. RE-ANCHOR, RETUNE, and RELINK are non-destructive and allowed at any age.
@@ -42,7 +42,7 @@ The target is **retrieval quality, not size**. Memory bodies load only when `/my
 | Related graph | all | every id in `related` resolves, and the target lists this id back | RELINK |
 | Hook leakage | all | row states a solution: imperative verb, "use X instead of Y", a code span, a file path | RETUNE |
 | Feature orphan | all | `feature:` names something absent from `${aiDir}/features/index.yaml` | RELINK or clear the field |
-| Layer 1 drift | all | Layer 1 line points at a superseded id; or `validation_count >= 3` and absent from Layer 1 | DEMOTE / PROMOTE — Layer 1 is always in context (its budget: `/myspec:memory-create` step 8), so propose a PROMOTE only alongside the DEMOTE it displaces |
+| Layer 1 drift | all | Layer 1 line points at a superseded id; or `validation_count >= 3` and absent from Layer 1 | DEMOTE / PROMOTE — Layer 1 is always in context (its budget: `/myspec:memory-create` step 7), so propose a PROMOTE only alongside the DEMOTE it displaces |
 
 **A never-fired memory is a triggers bug until proven otherwise.** When `validation_count` is 0 but the anchor still resolves, the pattern is usually real and filed under keywords nobody types — implementation nouns instead of the symptom text. Rewrite `triggers` to what a person actually meets (error strings, observed behavior) and keep the memory. Retire it only after a retune that still cannot name a scenario that would surface it.
 

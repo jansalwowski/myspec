@@ -81,16 +81,6 @@ NOW=$(date +%s)
 VERB="removed"
 [ "$DRY" -eq 1 ] && VERB="would remove"
 
-# mtime_of <path> -> its mtime as epoch seconds, or 0 (GNU stat first: BSD's
-# -f means --file-system to GNU and succeeds with text, see branch-cleanup.sh).
-mtime_of() {
-  local t
-  t=$(stat -c %Y "$1" 2>/dev/null) || t=""
-  case "$t" in ''|*[!0-9]*) t=$(stat -f %m "$1" 2>/dev/null) || t="" ;; esac
-  case "$t" in ''|*[!0-9]*) t=0 ;; esac
-  printf '%s' "$t"
-}
-
 # --- branches ---------------------------------------------------------------
 step_branches() {
   local audit names=() kept held tail n out

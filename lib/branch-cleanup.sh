@@ -128,12 +128,14 @@ fi
 
 CURRENT=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
 
+# mtime_of
+# shellcheck source=lib/hook-core.sh
+. "$(dirname "${BASH_SOURCE[0]}")/hook-core.sh"
+
 # The session files the unattended vetoes read live with the main checkout,
 # and only lib/session-event.sh reads them.
 SESSION_HOME=""
 if [ "$UNATTENDED" -eq 1 ]; then
-  # shellcheck source=lib/hook-core.sh
-  . "$(dirname "${BASH_SOURCE[0]}")/hook-core.sh"
   # shellcheck source=lib/session-event.sh
   . "$(dirname "${BASH_SOURCE[0]}")/session-event.sh"
   SESSION_HOME=$(session_home "$REPO_ROOT") || SESSION_HOME="$REPO_ROOT"
@@ -144,21 +146,6 @@ worktree_for_branch() {
     /^worktree /  { path = $2 }
     /^branch /    { if ($2 == want) { print path; exit } }
   '
-}
-
-# Echoes a file's mtime as a Unix timestamp, or 0.
-#
-# Chaining `stat -f %m || stat -c %Y` does not work: on GNU, -f is
-# --file-system, so it SUCCEEDS on a directory and prints a non-numeric block.
-# The || fallback therefore never fires, and the result reaches $(( )), where
-# bash reads the word `File` as a variable name and `set -u` aborts the script
-# mid-run. Try the GNU form first and validate that what came back is a number.
-mtime_of() {
-  local p="$1" t
-  t=$(stat -c %Y "$p" 2>/dev/null) || t=""
-  case "$t" in ''|*[!0-9]*) t=$(stat -f %m "$p" 2>/dev/null) || t="" ;; esac
-  case "$t" in ''|*[!0-9]*) t=0 ;; esac
-  printf '%s' "$t"
 }
 
 # The base as a branch name, to compare with a PR's base branch.

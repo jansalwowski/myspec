@@ -5,7 +5,7 @@ Loads project context, scans memory indexes for task-relevant entries, and check
 **Contents**
 
 - [Standard bootstrap with task-relevant memory pickup](#standard-bootstrap-with-task-relevant-memory-pickup)
-- [Stale active session — auto-archive triggers](#stale-active-session--auto-archive-triggers)
+- [Stale active session: reported, not archived](#stale-active-session-reported-not-archived)
 - [Fresh project — no memories yet](#fresh-project--no-memories-yet)
 
 ---
@@ -38,7 +38,7 @@ Reads `backbone.yml`: identifies the relevant area for "user-invitations" (the `
 
 Reads `${aiDir}/memory/index.md`:
 
-- **Pinned rules** — three entries. Two are universal (always apply). One is **P017** *Verify webhook signatures in middleware* — task-irrelevant but already loaded by virtue of being pinned.
+- **Critical Procedural (What NOT to Do)** — three entries. Two are universal (always apply). One is **P017** *Verify webhook signatures in middleware* — task-irrelevant but already loaded by virtue of being pinned.
 - **Must-Know Facts** — the marketing-static-only decision (E009), the 50-byte Redis key cap (S007).
 - **Recent Significant Events** — last 30 days. The webhook-signature-bug episode (E010), the marketing-SSR-removal (E009).
 
@@ -54,19 +54,19 @@ The invocation carried a task, so the Layer 2 scan runs. Task: "CSV import to us
 
 #### 4. Check for active sessions
 
-Lists `.claude/state/sessions/`. One file: `2026-04-30-1027-uierror.md` with mtime 8 minutes ago. Well inside the live window (< 1 hour — sessions over 6 hours stale get auto-archived as `abandoned`; 1–6 hours only gets reported with a `/myspec:session-clean` suggestion). Auto-created by the hook.
+Step 4 runs `"${CLAUDE_PLUGIN_ROOT}/lib/bootstrap-scan.sh"`. Its session line reads `**Active sessions**: 1: 2026-04- (auto: ui error)`: one log in `.claude/state/sessions/`, `2026-04-30-1027-uierror.md`, with mtime 8 minutes ago. A log 1 to 6 hours old would add a `**Dangling**` line, and one over 6 hours a `**Stale sessions**` line; both point to `/myspec:session-clean`. Auto-created by the hook.
 
 The skill notes:
 
 > Active session detected: `2026-04-30-1027-uierror.md` (auto-created 8 min ago). Topic still says "auto: ...". When you start the new task, I'll either refine that session's frontmatter or — if it's truly a different topic — close it via `/myspec:session-complete` first.
 
-#### 5. Check health, worktrees, branch lag, and framework version
+#### 5. The rest of the scan: health, worktrees, branch lag, and framework version
 
-Both doctors run and both come back clean, so neither adds a line beyond its summary: `node "${CLAUDE_PLUGIN_ROOT}/lib/memory-doctor.mjs" --quiet` prints `memory doctor: clean`, and `node "${CLAUDE_PLUGIN_ROOT}/lib/setup-doctor.mjs" --quiet` prints `setup doctor: clean` after about a second of mechanical checks (framework files still matching the plugin copy, every hook wired and executable, configs parsing). Neither fixes anything — bootstrap only reports.
+The same script run prints the other lines. Both doctors come back clean, so the script prints `**Memory health**: clean` and `**Setup health**: clean` (the setup doctor checks that framework files still match the plugin copy, every hook is wired and executable, and configs parse). Neither fixes anything: bootstrap only reports.
 
 `git worktree list` shows only the main checkout — worktree health clean, line omitted from the summary. `.myspec.json` `frameworkVersion` matches the plugin manifest — version line omitted too. (A stale worktree would surface a `worktree-clean` warning; a version gap would surface a `/myspec:update` prompt, and would also downgrade any framework-file drift the setup doctor found from an error to a warning, since a pending update explains it.)
 
-`backbone.yml` sets `branches.integration: develop` and `branches.release: main`, so step 5b runs `git merge-base --is-ancestor origin/main origin/develop`. It exits 1: a hotfix merged into `main` last week never reached `develop`. Bootstrap reports the lag and merges nothing — a plan written now would target code without that fix.
+`backbone.yml` sets `branches.integration: develop` and `branches.release: main`, so the script ran with `--integration develop --release main`. It found that a hotfix merged into `main` last week never reached `develop`, and printed a `**Branch lag**` line. Bootstrap reports the lag and merges nothing: a plan written now would target code without that fix.
 
 #### 6. Reports back
 
@@ -102,13 +102,13 @@ Both doctors run and both come back clean, so neither adds a line beyond its sum
 
 ---
 
-## Stale active session — auto-archive triggers
+## Stale active session: reported, not archived
 
-A session was left active for hours when the user closed their laptop. Bootstrap notices and auto-archives.
+A session was left active when the user closed their laptop. Bootstrap notices it and hands it to `/myspec:session-clean`.
 
 ### Setup
 
-The user opens Claude after a few days off. Their last session ended with their laptop closing — the session log was never archived.
+The user opens Claude after a few days off. Their last session ended with their laptop closing, and the session log was never archived.
 
 ```
 /myspec:bootstrap
@@ -116,40 +116,29 @@ The user opens Claude after a few days off. Their last session ended with their 
 
 ### Skill flow
 
-Steps 1–3 proceed normally.
+Steps 1 to 3 proceed normally.
 
-#### 4. Active session check — stale detection
+#### 4. The scan counts the stale log
 
-Lists active sessions. One file: `2026-04-26-1530-checkoutbug.md`, mtime: 4 days ago.
-
-Auto-archive policy: >60 minutes stale = orphaned. 4 days is well beyond.
-
-The skill auto-archives:
+`bootstrap-scan.sh` reads the live logs from `session-event.sh dir`, which is the main checkout's session directory, also when bootstrap runs in a linked worktree. One file, `2026-04-26-1530-checkoutbug.md`, has an mtime 4 days ago. The script prints:
 
 ```
-Detected stale active session (4 days old, no activity). Auto-archiving:
-
-  .claude/state/sessions/2026-04-26-1530-checkoutbug.md
-    → ai/memory/sessions/archive/2026-04/2026-04-26-1530-checkoutbug.md
-
-  Frontmatter updated: status: orphaned, archived_at: 2026-04-30
-  Note added: "Auto-archived during bootstrap — agent stopped without
-              running session-complete. Outcome section may be empty."
+**Active sessions**: 0
+**Stale sessions**: 1 log(s) older than 6h, run /myspec:session-clean
 ```
 
-The sweep reads the live logs from `session-event.sh dir` and writes the archive under the main checkout that `lib/main-checkout.sh` prints, also when bootstrap runs in a linked worktree, so removing that worktree cannot delete it. The archive is left unstaged. The session is moved without losing its log table — a future agent investigating that period can still read what was tried.
+It does not move, edit or stage the file.
 
 #### 5. Bootstrap continues
 
 Reports back:
 
-> Cleaned up 1 stale session (auto-archived as orphaned). Otherwise: project context loaded as usual.
+> One session log is more than 6 hours old. Run `/myspec:session-clean` to review it. Otherwise: project context loaded as usual.
 
 ### Why this example matters
 
-- **Auto-archive prevents accumulation.** Without it, the active sessions directory accumulates ghosts; future bootstrap calls get noisier; multiple-active-session warnings start firing.
-- **Orphaned ≠ deleted.** The session file lives in the archive with full log preserved, just marked as `orphaned` so future searches know it didn't end cleanly.
-- **The 60-minute threshold is the right floor.** Shorter would archive sessions during a normal lunch break; longer would let real orphans pile up.
+- **One skill owns the decision.** `/myspec:session-clean` reads the log, deletes it when it holds only boilerplate, archives it when it has content, and asks first when its `worktree:` marker names a live worktree. Bootstrap cannot make those calls without reading every log, so it only counts.
+- **Nothing lands in the doc tree unasked.** The hook creates a log on the first code edit of every session, so an archive-on-sight rule would add an untracked file for every session that ended without `/myspec:session-complete`, even an empty one.
 
 ---
 
@@ -239,13 +228,12 @@ episodic: 8
 >
 > Example Frontend — Nuxt 3 SSR. Working areas: `server/api/`, `pages/`, `config/cache.js`.
 >
-> **Memory**: Layer 1 empty | Layer 2 available: 58 procedural, 83 semantic, 8 episodic — not
-> scanned, no task yet. I'll run `/myspec:memory-preflight` once you tell me what we're working on.
+> **Memory**: Layer 1 0 entries | Layer 2 58 procedural, 83 semantic, 8 episodic rows, not
+> scanned, no task yet: run /myspec:memory-preflight when the task is known
 >
-> **Layer 1 is empty** while Layer 2 holds 149 entries — the always-loaded layer is returning
-> nothing for its slot. Worth promoting the handful you'd want in front of every session.
+> **Layer 1**: empty while Layer 2 has 149 rows; promote the few critical entries with /myspec:memory-optimize
 >
-> **No active sessions.**
+> **Active sessions**: 0
 >
 > Ready — what are we working on?
 

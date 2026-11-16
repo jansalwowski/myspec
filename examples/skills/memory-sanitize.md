@@ -246,11 +246,11 @@ Why: half-typed files were causing import resolution failures in the build.
 How to apply: any new file under apps/web/src/ uses .tsx, even if it has no JSX in it yet.
 ```
 
-The promotion routing table offers two plausible destinations:
-- `.claude/rules/frontend.md` (frontend-specific pattern) ✓
-- `.claude/rules/lint-and-types.md` (a TS rule) ✓
+The promotion routing table sends a pattern for one area or tool to the project rule that covers the topic. This project has two:
+- `.claude/rules/frontend.md` (its frontend rules) ✓
+- `.claude/rules/lint-and-types.md` (its lint and type rules) ✓
 
-Both fit. Neither file currently exists in the repo.
+Both fit.
 
 ### Skill flow (excerpt)
 
@@ -261,8 +261,8 @@ PROMOTE (1):
   feedback_tsx_only.md  →  AMBIGUOUS
 
   Routing candidates:
-    A) .claude/rules/frontend.md       (does not yet exist)
-    B) .claude/rules/lint-and-types.md (does not yet exist)
+    A) .claude/rules/frontend.md
+    B) .claude/rules/lint-and-types.md
 
   Per skill rule: when destination is ambiguous, leave as KEEP and flag. Reclassifying.
 
@@ -272,7 +272,9 @@ KEEP (1, flagged):
 
 #### Final summary
 
-> 0 dropped, 0 promoted (1 deferred, ambiguous routing), 0 merged. To resolve: pick one of `.claude/rules/frontend.md` or `.claude/rules/lint-and-types.md`, create it, then re-run sanitize.
+> 0 dropped, 0 promoted (1 deferred, ambiguous routing), 0 merged. To resolve: pick one of `.claude/rules/frontend.md` or `.claude/rules/lint-and-types.md`, then re-run sanitize.
+
+In a project with no rule for the area at all, the outcome is the same KEEP with a flag, and the flag names the rule file to create, such as `.claude/rules/frontend.md`.
 
 ### Why this example matters
 

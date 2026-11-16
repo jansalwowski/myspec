@@ -135,7 +135,7 @@ Report to user:
 ## When NOT to Use
 
 - Work is not finished (still implementing, debugging, or testing)
-- Session was abandoned without resolution (use `status: abandoned` and let `/myspec:bootstrap` auto-archive it on next session)
+- Session was abandoned without resolution (use `status: abandoned`; once the log is more than 6 hours old, `/myspec:session-clean` archives or deletes it)
 - Quick tasks where no session log was created
 
 ## Example Outcome Section

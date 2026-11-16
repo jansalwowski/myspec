@@ -46,7 +46,7 @@ The review pass that runs on built code before completion. For bugs in the diff,
 
 | Skill | Scenarios covered |
 |-------|-------------------|
-| [skills/bootstrap.md](skills/bootstrap.md) | Standard bootstrap with task-relevant memory · Stale session auto-archive · Fresh project (no memories yet) |
+| [skills/bootstrap.md](skills/bootstrap.md) | Standard bootstrap with task-relevant memory · Stale session reported, not archived · Fresh project (no memories yet) |
 | [skills/memory-lookup.md](skills/memory-lookup.md) | Direct procedural match · Partial match across types · No match (clean miss) |
 | [skills/memorize.md](skills/memorize.md) | Simple procedural rule · Semantic fact with anchor · Anti-pattern (negative polarity) · Critical decision with Layer 1 promotion |
 | [skills/memorify.md](skills/memorify.md) | Single candidate from a debugging session · Multiple candidates with cross-links · Nothing worth saving |
@@ -79,7 +79,7 @@ The review pass that runs on built code before completion. For bugs in the diff,
 | Skill | Scenarios covered |
 |-------|-------------------|
 | [skills/brainstorm.md](skills/brainstorm.md) | Generate mode (infer + name, go wide then converge) · Topic too large (scope check → decompose) · Sharpen mode that pivots to Generate |
-| [skills/root-cause-debugging.md](skills/root-cause-debugging.md) | Single-component bug found in Phase 1 · Multi-component bug with boundary tracing · Stuck in a loop (3-attempt escalation) |
+| [skills/root-cause-debugging.md](skills/root-cause-debugging.md) | Single-component bug found in Phase 1 · Multi-component bug with boundary tracing · Stuck in a loop (escalation after 2 failed fixes) |
 
 ---
 
