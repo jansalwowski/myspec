@@ -79,8 +79,10 @@ tags: [feature, documentation, completion, workflow, branch, merge, pr]
    - Exit 3: the project has no topology file, or the audit refused to run — skip,
      and say which in the completion summary
    - Exit 1 or 2: add the new units, or run `/myspec:backbone-sync`
-   - Exit 0 with a NOT CHECKED block: the sweep that would have found a new unit
-     did not run — compare the new units against the file by hand
+   - Exit 0: low and medium findings do not change the exit code, so read the
+     MISSING and STALE blocks and add any new unit listed there. If a NOT CHECKED
+     block has entries, the sweep that would have found a new unit did not run:
+     also compare the new units against the file by hand
 
 10. **Compact tech-spec.md** — the tech-spec describes the feature as it now stands; history lives in `CHANGELOG.md` and `plans/`. Skipping this lets every iteration stack another layer until the doc contradicts the code.
     - Remove checkbox task lists (`- [ ]` / `- [x]`) anywhere in the file; a checkbox Implementation Steps list becomes the numbered outline from the `feature-tech-spec` template
@@ -127,9 +129,17 @@ The pass is not a gate: continue to Phase 3 whatever the answers.
 
 ### Phase 3 — Branch Integration
 
-1. **Detect worktree** — run `git worktree list | grep $(git branch --show-current)`
+1. **Detect worktree** — run:
 
-   If a worktree exists, record its **absolute path and the branch name now**, before any `cd` or checkout. Option 1 and 4 switch to the base branch, so re-deriving the path afterwards (e.g. from `git branch --show-current`) resolves against the wrong tree — detection silently stops matching and step 4 no-ops, leaving the worktree behind.
+   ```bash
+   gd=$(git rev-parse --path-format=absolute --git-dir) &&
+     common=$(git rev-parse --path-format=absolute --git-common-dir) &&
+     { [ "$gd" = "$common" ] || git rev-parse --show-toplevel; }
+   ```
+
+   Exit 0 with a path: the current checkout is a linked worktree. Exit 0 with empty output: it is the main checkout, which is never a worktree here, even on a feature branch (git refuses to remove it). Non-zero exit: detection failed; stop and report the error instead of guessing.
+
+   If it printed a path, record that **absolute path and the branch name now**. Step 4 removes the worktree after you may have `cd`'d elsewhere, and from outside the worktree this command no longer describes it, so step 4 must use the recorded values.
 
 2. **Present options:**
    ```

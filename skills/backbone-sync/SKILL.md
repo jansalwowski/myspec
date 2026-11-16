@@ -23,7 +23,7 @@ node "${CLAUDE_PLUGIN_ROOT}/lib/backbone-audit/audit.mjs"
 
 | Exit | Meaning | Response |
 |------|---------|----------|
-| `0` | no findings from the checks that ran | read NOT CHECKED before reporting clean |
+| `0` | no high or critical findings from the checks that ran; low and medium findings may still be listed | read NOT CHECKED, then the findings, before reporting clean |
 | `1` | high-severity findings | fix them |
 | `2` | critical findings | fix them first |
 | `3` | the audit could not run | the message says why: no topology file (offer `/myspec:setup backbone`), an unreadable one, or a YAML construct the parser refuses to guess at |
@@ -32,7 +32,7 @@ node "${CLAUDE_PLUGIN_ROOT}/lib/backbone-audit/audit.mjs"
 |------|---------|
 | `--file=<path>` | Audit a topology file `.myspec.json` does not name |
 | `--only=<name>` | One app or package; skips the project-wide sweeps |
-| `--severity=<low\|medium\|high\|critical>` | Hide findings below the threshold (display only — the exit code always reflects every finding) |
+| `--severity=<low\|medium\|high\|critical>` | Hide findings below the threshold (display only: the exit code still counts hidden high and critical findings) |
 | `--stale-days=<n>` | Liveness threshold (default 365, or `audit.stale_days`) |
 | `--no-liveness` | Skip the git-backed sweep |
 | `--json` | Machine-readable |

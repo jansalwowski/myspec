@@ -15,7 +15,7 @@ Audits feature mockups against universal UX dimensions plus project-specific har
 | **Scope** | Only edit files under `${aiDir}/features/{feature}/mockups/`. Never edit production code, schema, or the design system. |
 | **No new mockup files** | If a missing surface is needed (e.g. empty state not mocked), flag as Spec/Coverage gap and hand off to `/myspec:feature-mockup` — never author new mockup files in this skill. |
 | **Never apply silently** | Present every fix for approval before editing. The deterministic batch can be approved as a single bundle; judgement-based fixes are per-item. No edits without an explicit Yes. |
-| **Verify after every edit** | Re-run the configured `verify` command + per-file `compileCheck` after each approved fix (skip with a note when not configured). Inherits `feature-mockup`'s verification discipline. |
+| **Verify every edit** | Run the per-file `compileCheck` after each approved fix, and the whole-suite `verify` command once after the last one (skip with a note when not configured). Inherits `feature-mockup`'s verification discipline. |
 
 ## Workflow
 
@@ -107,7 +107,7 @@ Skipped with a note when `${aiDir}/conventions/mockup-design.md` is absent. Othe
 | Medium | D · Form Hygiene | Placeholder-as-label | EditForm.vue | 45 | "Name" placeholder acts as label — split into label + example placeholder |
 ```
 
-Show **all** Critical/High/Medium. Cap Low at the 5 most-impactful — ranked by repeat-count in `mockup-design.md`'s *Repeated user feedback* section. Footer: "N additional Low findings — see `${aiDir}/conventions/mockup-design.md`."
+Show **all** Critical/High/Medium. Cap Low at the 5 most-impactful — ranked by repeat-count in `mockup-design.md`'s *Repeated user feedback* section. A finding that matches no rule there, or every finding when the file or section is missing, ranks below those by the number of mockup files it occurs in. Footer: "N more Low findings not shown. Ask to see them." Keep them for the session and list them when asked.
 
 ### 6. Present fixes — two groups, both require approval
 
@@ -141,9 +141,10 @@ New empty/error/loading state inline → never propose as a fix; flag as Spec/Co
 
 For each approved fix (bundled or individual):
 1. Apply the edit
-2. Run the configured `verify` command → must exit 0 (skip with a note if not configured)
-3. Run the configured `compileCheck` for the file → must succeed (skip with a note if not configured)
-4. Emit `{File} · {dimension} ✓`
+2. Run the configured `compileCheck` for the file → must succeed (skip with a note if not configured)
+3. Emit `{File} · {dimension} ✓`
+
+After the last approved fix, run the configured `verify` command once → must exit 0 (skip with a note if not configured). It checks the whole suite, so one run covers every edit. On failure, show the failures. Propose a fix only for a mockup file this batch edited, with approval per fix as in step 6; report any other failure as a handoff.
 
 Skip any fix the user rejected.
 
@@ -254,7 +255,7 @@ any input with a placeholder and no associated visible label in the same surface
 - [ ] `mockup-design.md` *Always*, *Detection patterns*, and *Repeated user feedback* walked rule-by-rule (Group E)
 - [ ] Deterministic batch presented for bulk approval as a single `AskUserQuestion`; no edits without an explicit Yes
 - [ ] Judgement-based fixes presented per-item with `[requires confirmation]` and awaited
-- [ ] After each approved fix: configured `verify` + `compileCheck` ran clean (or absence noted)
+- [ ] `compileCheck` ran clean after each approved fix, and `verify` once after the last one (or absence noted)
 - [ ] No new mockup files authored (gaps handed off to `/myspec:feature-mockup`)
 - [ ] No edits outside `${aiDir}/features/{feature}/mockups/**` and `mockup-design.md`
 - [ ] Wrap up ran in order: rule extraction → commit prompt → handoff list
@@ -283,7 +284,7 @@ User: /myspec:feature-mockup-review checkout
 3. Dossier `AskUserQuestion`: confirm siblings + scope + reference mockup
 4. Run all 5 groups, build the findings table
 5. Present the deterministic batch for bulk approval, then judgement fixes per-item
-6. Apply approved fixes, re-verify per file
+6. Apply approved fixes, `compileCheck` per file, then `verify` once
 7. Wrap up: rule extraction (if 2× repeats), commit prompt, handoff list
 
 ```

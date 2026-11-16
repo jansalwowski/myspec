@@ -30,7 +30,6 @@ It complements the holistic review that closes `/myspec:feature-implement`: that
 - Read `${aiDir}/features/{feature}/tech-spec.md` — Implementation Steps and **File Inventory** (the planned paths — ground truth for where code should live).
 - Read `${aiDir}/features/{feature}/implementation-plan.md` if present — task list and checkbox state.
 - Read `${aiDir}/features/{feature}/scenarios.md` if present — behavioral expectations.
-- Read `.claude/rules/` convention files and `.claude/verification.json` if present.
 - Read `${aiDir}/features/{feature}/holistic-review.md` if present. It is **reusable** when `git diff --stat <its head_sha> HEAD -- . ':(exclude)${aiDir}'` exits 0 with empty output — no code changed since it was written. A non-zero exit (the sha is gone after a rebase or squash) makes it stale, even though the output is empty. Otherwise say it is stale and audit in full.
 - If a sub-feature: also read the parent `spec.md` / `tech-spec.md`.
 
@@ -59,7 +58,7 @@ Assemble, to paste inline into the reviewer prompt (the subagent must not parse 
 
 Dispatch one fresh subagent using [`./conformance-reviewer-prompt.md`](./conformance-reviewer-prompt.md) at the `premium` tier (controller maps tier → concrete model). It must:
 
-- Locate code per requirement using **planned paths → diff → reconcile → semantic search within the changed files** (see Code Location below).
+- Locate code per requirement using **planned paths → diff → reconcile → semantic search within the changed files** (order and rules in the prompt file).
 - Build the bidirectional traceability matrix and run the four conformance checks.
 - Run the behavioral layer only where scenarios/tests are executable; where they are not, say so explicitly rather than infer "works" from reading code.
 - Return a report: traceability matrix, findings table by severity, and a verdict.
@@ -134,31 +133,6 @@ options:
 - On the default branch, say that `conformance-report.md` is uncommitted and must be committed with the work. `delivery-metrics` reads only committed reports.
 - If verdict is `conformant` (or all blocking findings resolved/accepted): recommend `/myspec:feature-complete`.
 - If findings were routed to `feature-implement` or `feature-spec-sync`: recommend running those, then re-running this review.
-
-## The Four Conformance Checks
-
-| Check | Failure mode caught | How the reviewer detects it |
-|-------|---------------------|-----------------------------|
-| **Forward trace** | Silent divergence | For each acceptance criterion / plan task, find the implementing code and read whether it does what was specified — not just that something exists |
-| **Reverse trace** | Scope drift | For each changed file/symbol, find the plan item it serves; code with no plan item = undocumented scope, planned-but-absent = skipped/faked step |
-| **Test trace** | No proof / traceability | Each criterion must map to a test that proves it; empty test column is a finding |
-| **Behavioral** | Doesn't actually work | Run `scenarios.md` / the test suite where executable; pass/fail per criterion. Where not runnable, report `not-verifiable` for that criterion — never infer "works" from code reading |
-
-The behavioral check is categorically more expensive and is not always runnable. It is a *layer* on top of the static traceability engine, not an equal — a green static trace with `not-verifiable` behavior is reported as exactly that.
-
-## Constraints
-
-- **Review from fresh context.** The conformance reviewer is a dispatched subagent that sees only the artifacts and the diff, because a reviewer that watched the code get written rationalizes its choices. The skill thread orchestrates; it does not pre-judge conformance.
-- **Never auto-edit implementation code.** Editing code from a spec reading introduces new divergence. Code changes only after the user picks "Fix now" in Step 6, and the reviewer re-runs on the touched scope to confirm the finding closed.
-- **Never infer behavior from reading code.** Run scenarios/tests where executable; where they cannot run, report the criterion as `not-verifiable` rather than concluding it works.
-
-## Code Location
-
-Locate the code implementing each requirement in this order:
-
-1. **Planned paths** — the tech-spec File Inventory says where it should be. Ground truth.
-2. **Diff** — what actually changed in `BASE_SHA..HEAD`. Reconciling planned paths against the diff *is* the scope-drift detector: planned-but-not-in-diff = skipped; in-diff-but-not-planned = creep.
-3. **Semantic search within the changed files** — pin each requirement to a specific symbol/line. Search only inside the diff's file set, not the whole repo, to keep the mapping grounded in what this work changed.
 
 ## Output Format
 

@@ -99,6 +99,10 @@ Agent tool (general-purpose):
     - gaps           — criteria or plan steps with no implementation
     - not-verifiable — static trace clean but behavior could not be exercised
 
+    When more than one applies, write the first in this order: gaps, divergent,
+    not-verifiable, conformant. A clean static trace where any criterion could
+    not be exercised is not-verifiable, not conformant.
+
     Be specific. "Missing validation" is useless. "validateToken in src/auth.ts:88 compares
     exp with <= instead of <, so tokens expiring exactly now are accepted; AC-1 requires
     rejection" is what's needed. Report file:line for everything.
