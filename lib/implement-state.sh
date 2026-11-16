@@ -147,11 +147,13 @@ case "$CMD" in
     ;;
   task)
     [ $# -eq 4 ] || usage
-    id=$(printf '%s' "$4" | sed -E 's/^[Tt]ask[[:space:]]*//; s/^[Tt]//')
-    case "$id" in ''|*[!0-9]*) die "task must be a number, T<n> or 'Task <n>' (got '$4')" ;; esac
+    # plan-checkbox.sh parses and checks <task>; N comes from the heading it prints.
+    text=$("$(dirname "${BASH_SOURCE[0]}")/plan-checkbox.sh" "$3" "$4" text) || exit 1
+    id=$(printf '%s\n' "$text" | sed -nE '1s/^###[[:space:]]+(Task[[:space:]]+|T)([0-9]+).*/\2/p')
+    [ -n "$id" ] || die "no task number in the heading of '$4'"
     ensure
     out="$STATE/task-$id.md"
-    "$(dirname "${BASH_SOURCE[0]}")/plan-checkbox.sh" "$3" "$id" text > "$out.tmp" || { rm -f "$out.tmp"; exit 1; }
+    printf '%s\n' "$text" > "$out.tmp"
     mv "$out.tmp" "$out"
     printf '%s\n' "$out"
     ;;
