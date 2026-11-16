@@ -136,6 +136,7 @@ cmp -s "$FIXTURE" "$PLAN"; ok "and leaves the plan unchanged, the valid task inc
 "$SCRIPT" "$PLAN" 2 11 doing >/dev/null 2>&1
 [ $? -ne 0 ]; ok "one task without checkboxes among several exits non-zero" $?
 cmp -s "$FIXTURE" "$PLAN"; ok "and leaves the plan unchanged" $?
+[ -z "$("$SCRIPT" "$PLAN" 2 1 4 2>/dev/null)" ]; ok "a read with one missing task among several prints nothing" $?
 
 # --- a fence closes only on its own character and length -----------------------
 printf '%s\n' '### Task 1: a' '```bash' 'echo x' '~~~' '```' '- [ ] s' '### Task 2: b' '- [ ] real' > "$ROOT/tilde.md"

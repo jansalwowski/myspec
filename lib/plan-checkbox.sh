@@ -25,7 +25,7 @@
 #
 # Exit 1 when a heading is missing or duplicated, or a section holds no
 # checkbox — the plan is left unchanged in every failure case, including
-# when only one of several tasks fails.
+# when only one of several tasks fails, and a read then prints nothing.
 
 set -euo pipefail
 
@@ -68,7 +68,8 @@ esac
 
 TMP=$(mktemp "${TMPDIR:-/tmp}/plan-checkbox.XXXXXX")
 CUR=$(mktemp "${TMPDIR:-/tmp}/plan-checkbox.XXXXXX")
-trap 'rm -f "$TMP" "$CUR"' EXIT
+OUT=$(mktemp "${TMPDIR:-/tmp}/plan-checkbox.XXXXXX")
+trap 'rm -f "$TMP" "$CUR" "$OUT"' EXIT
 cp "$PLAN" "$CUR"
 
 # one <id> <file>: run the task's pass over <file> into $TMP.
@@ -143,13 +144,14 @@ for ID in "${IDS[@]}"; do
   if [ -n "$STATE" ]; then
     cp "$TMP" "$CUR"
   elif [ -z "$TEXT" ] && [ "${#IDS[@]}" -gt 1 ]; then
-    printf 'Task %s: %s\n' "$ID" "$(cat "$TMP")"
+    printf 'Task %s: %s\n' "$ID" "$(cat "$TMP")" >> "$OUT"
   else
-    cat "$TMP"
+    cat "$TMP" >> "$OUT"
   fi
 done
 
-[ -n "$STATE" ] || exit 0
+# A read prints only after every task passed, like a write applies only then.
+[ -n "$STATE" ] || { cat "$OUT"; exit 0; }
 
 # cat into the file, not mv: keeps the plan's inode, mode and any hard link.
 cat "$CUR" > "$PLAN"
