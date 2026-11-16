@@ -35,7 +35,7 @@ Steps 1–6 (load context, structure and gates, review dimensions, spec alignmen
    - Show changes made (file paths, sections affected)
    - List remaining issues (if any were rejected)
    - If no Critical/High remain, ask: "Review passed — mark tech-spec.md `status: approved`?" On yes, set `status: approved` in tech-spec.md frontmatter — the transition `feature-plan` gates on (see the Status State Machine in `.claude/rules/feature-docs.md`). Otherwise it stays `draft`.
-   - Recommend next step: re-review, `/myspec:feature-plan`, or address open issues first. With `--from-author`, skip it and return to `feature-tech-spec`, which recommends it.
+   - Recommend next step: re-review, `/myspec:feature-plan`, or address open issues first. With Critical/High remaining, do not recommend `/myspec:feature-plan`. With `--from-author`, skip it and return to `feature-tech-spec`, which recommends it.
 
 ## Verification Checklist
 
