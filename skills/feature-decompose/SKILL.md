@@ -92,7 +92,7 @@ node "${CLAUDE_PLUGIN_ROOT}/lib/feature-status-audit/audit.mjs" --only={feature}
 node "${CLAUDE_PLUGIN_ROOT}/lib/feature-spec-sync/dead-paths.mjs" --only={feature}
 ```
 
-The first checks the manifest entries against the files on disk, sub-features included. The second checks that every repo path the moved docs cite still resolves. Fix each finding the decomposition caused before completing.
+The first checks the manifest entries against the files on disk, sub-features included. The second checks the backtick paths cited in spec.md, tech-spec.md, scenarios.md, seed.json and index.yaml. It does not read dependencies.md or Markdown link targets, so check the parent's Sub-Features links and each dependencies.md by hand. Fix each finding the decomposition caused before completing.
 
 ### 8. Present Summary
 
