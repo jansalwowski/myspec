@@ -30,16 +30,16 @@ Two discovery methods — use both:
 
 **A. Dependency Graph (from index.yaml)**
 
-- Read `${aiDir}/features/index.yaml`
-- Find features where target appears in `depends-on`
+- Read `${aiDir}/features/index.yaml` and every feature-level `${aiDir}/features/*/index.yaml` (its `sub-features:` list, written by feature-decompose)
+- Find features and sub-features where target appears in `depends-on`
 - Find features listed in target's `depends-on`
 - Include transitive dependencies one level deep (features that depend on target's dependents)
 
 **B. Keyword Scan (catch undeclared relationships)**
 
 - Extract domain keywords from target spec (model names, field names, API paths, behavioral terms)
-- Grep all `${aiDir}/features/*/spec.md` and `${aiDir}/features/*/tech-spec.md` for those keywords
-- Add any feature with 2+ keyword matches to the related set
+- Grep all `${aiDir}/features/**/spec.md` and `${aiDir}/features/**/tech-spec.md` for those keywords. The `**` covers sub-features at `${aiDir}/features/{feature}/{sub-feature}/`
+- Add any feature or sub-feature with 2+ keyword matches to the related set
 
 Combine both methods. Deduplicate. This is the **blast radius**.
 
@@ -97,7 +97,7 @@ Features checked: {list with discovery method: dep-graph / keyword-scan / both}
 ### High: {finding title}
 **Superseded assumption**: {what changed}
 **Proposed note** for {related-feature}/spec.md:
-> ⚠️ Superseded by {target-feature} (spec_version {N}): {what changed}
+> ⚠️ Superseded by {target-feature} (spec_version {N}, {date}): {what changed}
 ```
 
 ### 6. Wait for Confirmation
@@ -121,10 +121,10 @@ options:
 
 For "superseded by" notes:
 - Add note at the relevant section in the related spec (near the contradicted requirement)
-- Use this format: `> ⚠️ Superseded by {feature} (v{N}, {date}): {what changed}`
-- Do NOT rewrite existing requirements — only annotate
+- Use the note format from Step 5: `> ⚠️ Superseded by {target-feature} (spec_version {N}, {date}): {what changed}`, where N is the target's `spec_version`
+- Do NOT rewrite existing requirements under this option. Only annotate
 
-For spec updates:
+For spec updates (the contradictions picked under "Fix specific"):
 - Show diff before applying
 - Increment `spec_version` in modified specs
 - Update `last_updated` date
@@ -153,7 +153,7 @@ Adapt patterns to target spec content — these are examples, not an exhaustive 
 ## Rules
 
 - Never modify specs without explicit user approval (steps 6-7 are gated)
-- Never rewrite existing requirements — only annotate with "superseded by" notes
+- Under "Apply notes", never rewrite existing requirements. Only annotate with "superseded by" notes. A requirement is rewritten only for a contradiction the user picked under "Fix specific"
 - Always use both discovery methods (dependency graph + keyword scan) — do not skip one
 - Always include specific line numbers in findings — vague references are not actionable
 - If zero related features found, report clean and exit — do not fabricate findings
