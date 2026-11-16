@@ -376,9 +376,7 @@ session_claims() {
   dir=$(session_dir "$home")
   for f in "$dir"/*.jsonl; do
     [ -f "$f" ] || continue
-    t=$(stat -c %Y "$f" 2>/dev/null) || t=""
-    case "$t" in ''|*[!0-9]*) t=$(stat -f %m "$f" 2>/dev/null) || t="" ;; esac
-    case "$t" in ''|*[!0-9]*) t=0 ;; esac
+    t=$(mtime_of "$f")
     [ "$t" -ge "$since" ] || continue
     # shellcheck disable=SC2016 # a jq program: $ev and $s are jq variables
     rec=$(session_query "$home" "$(basename "$f" .jsonl)" '

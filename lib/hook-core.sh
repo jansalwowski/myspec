@@ -521,6 +521,19 @@ json_string() {
   fi
 }
 
+# mtime_of <path> -> its mtime as epoch seconds, or 0. GNU stat first:
+# chaining `stat -f %m || stat -c %Y` does not work, because on GNU -f is
+# --file-system, which succeeds on a directory and prints text. The ||
+# never fires, the text reaches $(( )), and set -u aborts the caller. So
+# try the GNU form, then BSD, and keep only a number.
+mtime_of() {
+  local t
+  t=$(stat -c %Y "$1" 2>/dev/null) || t=""
+  case "$t" in ''|*[!0-9]*) t=$(stat -f %m "$1" 2>/dev/null) || t="" ;; esac
+  case "$t" in ''|*[!0-9]*) t=0 ;; esac
+  printf '%s' "$t"
+}
+
 # lock_paths_for <dir> <pattern>... -> the <dir>-relative regular files the
 # lockfile patterns match there, one per line, in pattern order. A pattern
 # is a shell glob: * and ? stay within one directory, [...] is a class. The

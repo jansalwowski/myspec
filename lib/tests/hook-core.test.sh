@@ -225,6 +225,12 @@ eq "$(old_facts "$ROOT/plain/mods/sub")" "plain/mods/sub|0|1|plain/mods/sub" "gi
 
 eq "$HOOK_DECISION_TTL" "28800" "TTL constant (the isolation and implement lookups: session-event.test.sh)"
 
+# --- mtime_of: a number for a file and a directory, 0 for a missing path ----
+touch "$ROOT/mtime-file"
+case "$(mtime_of "$ROOT/mtime-file")" in ''|0|*[!0-9]*) fail "mtime_of: a file gives epoch seconds" ;; *) ok ;; esac
+case "$(mtime_of "$ROOT")" in ''|0|*[!0-9]*) fail "mtime_of: a directory gives epoch seconds (GNU stat -f prints text)" ;; *) ok ;; esac
+eq "$(mtime_of "$ROOT/no-such-path")" 0 "mtime_of: a missing path gives 0"
+
 # --- ai_dir, read_setting, pretool_deny -------------------------------------------
 
 eq "$(ai_dir "$ROOT/nogit")" ".ai" "ai_dir: no .myspec.json is the default"

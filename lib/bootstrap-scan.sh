@@ -69,16 +69,6 @@ SESSIONS=$(session_dir "$HOME_DIR")
 AI=$(ai_dir "$HERE" 2>/dev/null) || AI=".ai"
 NOW=$(date +%s)
 
-# mtime_of <path> -> epoch seconds, or 0 (GNU stat first: BSD's -f means
-# --file-system to GNU and succeeds with text).
-mtime_of() {
-  local t
-  t=$(stat -c %Y "$1" 2>/dev/null) || t=""
-  case "$t" in ''|*[!0-9]*) t=$(stat -f %m "$1" 2>/dev/null) || t="" ;; esac
-  case "$t" in ''|*[!0-9]*) t=0 ;; esac
-  printf '%s' "$t"
-}
-
 # --- memory -----------------------------------------------------------------
 # grep -c prints 0 itself on no match and exits 1; a missing file prints
 # nothing, so the count falls back to 0.
