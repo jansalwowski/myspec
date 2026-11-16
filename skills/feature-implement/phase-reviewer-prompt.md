@@ -20,7 +20,7 @@ Task tool (general-purpose):
 
     ## What Was Requested
 
-    [The task file path of each task in this phase, `$STATE/task-N.md`, one per line]
+    [The task file path of each task in this phase, `$STATE/task-N.md`, one per line. Write a missing one first with `implement-state.sh task` (a run started before task files existed)]
 
     Read each file: it holds that task's section of the plan.
 
