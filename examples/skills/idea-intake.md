@@ -39,16 +39,12 @@ depends on: nothing
 The skill reads `ideas/keyboard-shortcut-help.md` and `ideas/PRIORITY-LISTING.md`. Notes:
 
 - Priority: HIGH (specified inline).
-- Dependencies: none specified.
+- Dependencies: none (`depends on: nothing`).
 - Scope: clear — single overlay, single trigger key.
 
 #### 2. Clarifying questions
 
-Priority and scope are clear, so the skill does not ask about them. Dependencies are not stated, so it asks one question:
-
-> Does this idea depend on any existing features or ideas, or is it standalone?
-
-**User**: standalone.
+Priority, dependencies and scope are all stated, so the skill asks nothing and goes straight to validation.
 
 #### 3. Validate format
 
@@ -72,7 +68,7 @@ The skill ends:
 
 ### Why this example matters
 
-- **Only open points get a question.** The file stated its priority and scope, so the skill asked only about dependencies. An idea file that states all three is queued without a question.
+- **Only open points get a question.** The file stated its priority, dependencies and scope, so the skill queued it without a question. A file that leaves one of them open gets a question about that one only.
 - **Notes column captures the standalone signal.** `idea-process` uses this to know it can pick this idea even when other dependencies are unmet.
 
 ---
