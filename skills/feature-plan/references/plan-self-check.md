@@ -1,6 +1,6 @@
 # Plan Self-Check
 
-Step 4.6 of `feature-plan`. It runs on every plan, after Spec Coverage and before the plan is saved. Implementers paste plan snippets verbatim and phase reviewers grade the diff against the plan, so a defect the plan mandates passes the implementer and costs a fix loop at phase review. In one two-feature run, about 10 of 11 phase-review findings came from the plan. Each costs a few minutes to fix here.
+Step 4.6 of `feature-plan`. It runs on every plan, after Spec Coverage, on the plan file Step 3 wrote, and before it is presented. Implementers paste plan snippets verbatim and phase reviewers grade the diff against the plan, so a defect the plan mandates passes the implementer and costs a fix loop at phase review. In one two-feature run, about 10 of 11 phase-review findings came from the plan. Each costs a few minutes to fix here.
 
 Read the whole written plan against `spec.md` and `tech-spec.md`, not against your memory of writing it. Fix every finding in the plan itself. A finding the plan cannot fix, such as a spec rule the tech-spec never designed for, is a tech-spec defect: say so and stop.
 
@@ -15,7 +15,7 @@ Read the whole written plan against `spec.md` and `tech-spec.md`, not against yo
 
 ## Probe order
 
-The executor runs a milestone's probes in plan order, in one session (`feature-implement` Step 4b). A probe may depend on an earlier one; don't remove the dependency just to make the probes independent. Declare it on the probe line instead, `P8 [visual] (after P7: layer B hidden): …`, so a reader and the executor know the starting state. A dependency only counts as a finding when it is left undeclared. When reordering costs nothing, put a probe that needs pristine state before the probes that change it.
+The executor runs a milestone's probes in plan order, in one session (`feature-implement` Step 5b, the probe gate). A probe may depend on an earlier one; don't remove the dependency just to make the probes independent. Declare it on the probe line instead, `P8 [visual] (after P7: layer B hidden): …`, so a reader and the executor know the starting state. A dependency only counts as a finding when it is left undeclared. When reordering costs nothing, put a probe that needs pristine state before the probes that change it.
 
 ## Before presenting
 
