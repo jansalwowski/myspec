@@ -4,11 +4,13 @@
 Guide the user through creating project-specific pre-flight checks that supplement the universal framework pre-flight checklist.
 
 ## Framework Defaults (auto-included)
-The framework section of pre-flight.md already includes universal checks:
-1. Read anti-patterns before starting
-2. Check active implementation plans
-3. Verify task routing (read correct docs first)
-4. Confirm scope with user before implementation
+The framework section of pre-flight.md already includes universal checks. Do not ask about these again:
+1. Always: read the memory index and check for existing sessions
+2. Before Implementation: spec is approved, feature dependencies, memory index scan, anchor checks
+3. Before Risky Changes: offer a commit before refactors and other risky edits
+4. During Work: session file and session log
+5. Escalation Triggers: when to stop and ask the user after repeated failed attempts
+6. Completing Work: verify before claiming, close and archive the session
 
 ## Discovery Questions (ask one at a time)
 
