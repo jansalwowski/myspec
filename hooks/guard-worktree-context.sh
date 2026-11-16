@@ -132,18 +132,21 @@ payload_parse "$(cat)" COMMAND=.tool_input.command SESSION_ID=.session_id \
 # The directory the command starts in: the payload's cwd, else the hook's own.
 START_DIR=$(first_dir "$CWDS") || START_DIR="$PWD"
 
-ALLOW_BRANCH_OPS=0
 # Here-strings, not `printf | grep -q`, throughout: grep -q exits on the
 # first match, a long input then kills printf with SIGPIPE, and under
-# pipefail the match reads as a miss. The substring test first skips the
-# grep for a command that cannot match (#524).
-if [[ "$COMMAND" == *MYSPEC_ALLOW_BRANCH_OPS=1* ]] \
-    && grep -qE '(^|[[:space:]])MYSPEC_ALLOW_BRANCH_OPS=1[[:space:]]' <<< "$COMMAND"; then
+# pipefail the match reads as a miss.
+# The overrides are matched by bash, with no grep (#524). The blank after
+# `=1` is any space but a newline, as grep read the command line by line:
+# an assignment alone on its line applies to no command.
+ALLOW_BLANK=$' \t\r\v\f'
+ALLOW_RE="(^|[[:space:]])MYSPEC_ALLOW_BRANCH_OPS=1[$ALLOW_BLANK]"
+ALLOW_BRANCH_OPS=0
+if [[ "$COMMAND" =~ $ALLOW_RE ]]; then
   ALLOW_BRANCH_OPS=1
 fi
+ALLOW_RE="(^|[[:space:]])MYSPEC_ALLOW_MAIN_CHECKOUT=1[$ALLOW_BLANK]"
 ALLOW_MAIN_CHECKOUT=0
-if [[ "$COMMAND" == *MYSPEC_ALLOW_MAIN_CHECKOUT=1* ]] \
-    && grep -qE '(^|[[:space:]])MYSPEC_ALLOW_MAIN_CHECKOUT=1[[:space:]]' <<< "$COMMAND"; then
+if [[ "$COMMAND" =~ $ALLOW_RE ]]; then
   ALLOW_MAIN_CHECKOUT=1
 fi
 

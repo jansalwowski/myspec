@@ -288,6 +288,7 @@ fi
 
 # --- gate A escape hatch, and gate A holds in develop mode too ---------------
 check allow "documented bypass"        'MYSPEC_ALLOW_BRANCH_OPS=1 git checkout develop'
+check block "bypass alone on its line" "MYSPEC_ALLOW_BRANCH_OPS=1"$'\n''git checkout develop'
 mark dev-sess develop 60
 check_in "$REPO" block "develop mode does not lift the branch guard" dev-sess 'git checkout main'
 
