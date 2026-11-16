@@ -27,7 +27,7 @@ If only a description is provided, proceed directly to exploration.
 
 ### 2. Exploration
 
-Explore the codebase to build a complete picture of the feature. Read the project's stack from `backbone.yml` or `${aiDir}/conventions/` first, so the categories below map to its real file types. Use grep, file reads, and import tracing. Start from known paths or grep description keywords to locate entry points.
+Explore the codebase to build a complete picture of the feature. Read the project's stack first from the topology file (`.myspec.json` → `topologyFile`, falling back to `backbone.yml` at the project root) or `${aiDir}/conventions/`, so the categories below map to its real file types. Use grep, file reads, and import tracing. Start from known paths or grep description keywords to locate entry points.
 
 **What to look for:**
 
