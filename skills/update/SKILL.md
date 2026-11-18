@@ -81,7 +81,7 @@ For each file in the manifest whose `when` holds (Step 2, "Conditional entries")
 **`marker-merge` strategy:** the file has two regions. Everything from line 1 through `<!-- myspec:framework-end -->` — frontmatter, title, standing note, and the marked framework section — is framework-owned; everything after the end marker is the project section and is never touched.
 1. Render the source file `framework-files/{filename}` with `lib/aidir-render.mjs`, as for `overwrite`
 2. Read the destination file and locate `<!-- myspec:framework-end -->`
-3. Write the source's framework-owned region (line 1 through its own end marker) followed by the destination's project section, unchanged
+3. Write the source's framework-owned region (line 1 through its own end marker) followed by the destination's project section, unchanged. One exception: keep the destination's frontmatter `updated:` when it is later than the source's, since that date also covers the project section (the doctor compares the header the same way)
 4. If the destination has no end marker, do not guess where the project section starts: read [references/marker-less.md](references/marker-less.md) and ask its replace / prepend / pin question.
 
 If a destination file doesn't exist for `marker-merge`, create it from the source (treat as overwrite for missing files).
@@ -215,7 +215,7 @@ After running the skill:
 - [ ] Every `removed` entry whose `dest` exists handled per `references/removed.md` (deleted, kept when pinned, or moved as a retired copy)
 - [ ] Entries pinned in `.myspec.json` skipped and listed in the summary; when pins exist, `references/pins.md` reconciliation run, every verdict acted on, nothing decided alone
 - [ ] `templates/*` entries written to `{aiDir}/.templates/` (no `{aiDir}/templates/` created)
-- [ ] `marker-merge` files: everything after `<!-- myspec:framework-end -->` left untouched; the region above it taken from the plugin copy
+- [ ] `marker-merge` files: everything after `<!-- myspec:framework-end -->` left untouched; the region above it taken from the plugin copy, a later destination `updated:` kept
 - [ ] Memory health checked when a memory tree exists: `--check` clean (after regeneration or backfill where needed), doctor summary reported, `.claude/state/` gitignored
 - [ ] `${aiDir}` binding refreshed between `myspec:paths` markers; content outside markers unchanged
 - [ ] `.myspec.json` `frameworkVersion` bumped; project fields (`name`, `techStack`) untouched; `frameworkFiles` holds pins only
