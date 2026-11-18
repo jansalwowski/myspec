@@ -39,7 +39,7 @@ due for a pass; reach for tier 1 when the user named a surface or tier 0 pointed
 
 1. Read `.myspec.json` for `aiDir` — the key is required since 2.0; when it is absent the tooling uses `.ai` and the setup doctor reports it. Use it everywhere `${aiDir}` appears below.
 2. Read the project extension if present — `.claude/rules/doctor.md`. Take its `## Project anchors`, `## Read-only`, and `## Extra checks` sections. Not present → note "no project extension; auditing framework surfaces only."
-3. Detect the default branch: `git symbolic-ref --short refs/remotes/origin/HEAD`, falling back to `main`/`master`.
+3. Detect the default branch: the `default:` line of `"${CLAUDE_PLUGIN_ROOT}/lib/git-state.sh"` ([`_shared/git-helpers.md`](../_shared/git-helpers.md)).
 4. Run the deterministic checks and keep the result — it is the ground truth every later phase quotes:
 
    ```bash

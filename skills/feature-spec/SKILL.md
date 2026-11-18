@@ -60,10 +60,10 @@ tags: [feature, specification, planning, documentation]
    Prompt the user about committing the spec. **Why:** uncommitted spec files
    dangle on the current branch by the time `/myspec:feature-implement` runs.
 
-   Detection (REQUIRED reference: [`skills/_shared/git-helpers.md`](../_shared/git-helpers.md)):
-   - Resolve the default branch (main vs master)
-   - Read current `HEAD` and working-tree cleanliness
-   - Decide which option to mark `(Recommended)`
+   Run `"${CLAUDE_PLUGIN_ROOT}/lib/git-state.sh" {name}` once for the default
+   branch, `HEAD`, working-tree state and whether `feat/{name}` exists, and mark
+   the `(Recommended)` option from it (REQUIRED reference:
+   [`_shared/git-helpers.md`](../_shared/git-helpers.md)).
 
    Then call `AskUserQuestion` with:
 
@@ -83,8 +83,8 @@ tags: [feature, specification, planning, documentation]
      — show the draft, accept-or-edit before committing.
    - If working tree has unrelated dirty changes: warn and stage only the spec
      files explicitly (no `git add -A`).
-   - If user picks "New branch" and the branch already exists: offer checkout
-     vs. a numeric suffix (`feat/{name}-2`).
+   - If user picks "New branch" and `git-state.sh` printed `branch: exists`:
+     offer checkout vs. a numeric suffix (`feat/{name}-2`).
    - On the argument route (spec already committed), the question names the
      file actually produced ("scenarios.md is uncommitted. Where should it
      go?"), the stage list is that file only, and the default message is

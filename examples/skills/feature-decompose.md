@@ -86,7 +86,7 @@ yes, but bump notifications-email-digest to P2 status and write the deferred one
 
 The skill:
 
-1. Creates `ai/features/notifications-v2/{notifications-toasts, notifications-preferences, notifications-email-digest}/` with `spec.md` and `dependencies.md` per sub-feature.
+1. Creates `ai/features/notifications-v2/{notifications-toasts, notifications-preferences, notifications-email-digest}/` with `spec.md` and `dependencies.md` per sub-feature, both in the `_shared/spec-template.md` shape plus the "Sub-feature of" back-link.
 2. Rewrites the parent `spec.md` as an umbrella doc with the Sub-Features table.
 3. Creates `ai/features/notifications-v2/index.yaml` listing the three sub-features.
 4. Updates the top-level `ai/features/index.yaml`: the parent entry gains `subfeatures: true`. The sub-feature list stays in the per-feature index.

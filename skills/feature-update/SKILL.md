@@ -38,13 +38,13 @@ Steps 3 and 4 draft the changes without writing any file. Step 5 writes them onl
 
 ### Step 3: Draft `spec.md` changes
 
-Change only the sections affected by the change. Do not touch unrelated sections.
+Change only the sections affected by the change. Do not touch unrelated sections. The sections, requirement IDs and acceptance-criteria format are the ones in [`_shared/spec-template.md`](../_shared/spec-template.md#specmd), which `feature-spec-review` checks against.
 
 Changes to make:
-- **Add** new requirements to the User Stories / Requirements section
+- **Add** new requirements under the next free `REQ-` ID, and user stories for new behavior; an ID is never reused
 - **Modify** existing requirements if behavior is changing
 - **Remove** requirements if behavior is being dropped (or mark as out of scope)
-- **Update** Acceptance Criteria to match the new expected behavior
+- **Update** Acceptance Criteria to match the new expected behavior, new criteria under the next free `AC-` ID
 - **Update** Out of Scope if relevant
 - **Increment** `spec_version` by 1 in the frontmatter
 - **Update** `last_updated` to today

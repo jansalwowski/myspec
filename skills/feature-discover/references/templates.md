@@ -44,22 +44,11 @@ source: code-only
 
 ## spec.md Format
 
-```yaml
-title: "{Feature Title}"
-status: draft
-phase: 1
-priority: P{0|1|2}
-spec_version: 1
-created: {TODAY}
-last_updated: {TODAY}
-source: discovered
-```
-
-Required sections: Overview, Goals, User Stories / Requirements, Acceptance Criteria, Out of Scope, Open Questions.
+The frontmatter, sections, requirement IDs and acceptance-criteria format are the ones in [`_shared/spec-template.md`](../../_shared/spec-template.md#specmd), which `feature-spec-review` checks against. Add `source: discovered` to the frontmatter.
 
 **Generation rules:**
 - Derive everything from observed code behavior — do not invent
-- User stories describe what the feature enables, not how it works internally
+- Requirements and user stories describe what the feature enables, not how it works internally
 - Acceptance criteria come from gate conditions, validation rules, and error states found in code
 - Open Questions carries over verbatim from `discovery.md`
 - No file paths, class names, or code in spec.md
@@ -120,15 +109,7 @@ Carry over from discovery.md.
 
 ## dependencies.md Format
 
-```yaml
-title: "{Feature} — Dependencies"
-purpose: "Cross-feature dependency tracking"
-updated: {TODAY}
-feature: {feature-name}
-source: discovered
-```
-
-Sections:
-- **Upstream Dependencies**: what this feature depends on (other features, modules)
-- **Downstream Dependents**: what depends on this (unknown unless evident from code)
+The frontmatter and headings are the ones in [`_shared/spec-template.md`](../../_shared/spec-template.md#dependenciesmd). Add `source: discovered` to the frontmatter. Fill them from exploration:
+- **Feature Dependencies**: the features this code calls into
+- **Dependent Features**: the features that call into it, or "None." unless evident from code
 - **External Dependencies**: third-party packages and external services found during exploration

@@ -135,7 +135,7 @@ Five files written:
 ```
 .ai/features/report-export/
   discovery.md        # The full reverse-engineering record
-  spec.md             # Generated from discovery — Goals, User Stories (US1 CSV, US2 PDF), Acceptance Criteria
+  spec.md             # Generated from discovery in the _shared/spec-template.md shape — `REQ-` requirements, User Stories (US1 CSV, US2 PDF), `- [ ] AC-n:` criteria
   tech-spec.md        # File Inventory uses Action: exists for all 12 discovered files
   dependencies.md     # External: report-pdf-renderer Lambda; S3 bucket (infra-owned)
 ```
