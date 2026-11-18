@@ -1,3 +1,9 @@
+---
+title: "Visual Questions"
+purpose: "Route visual choices and visual results to Visual Buddy through /myspec:visualize-options"
+updated: 2026-11-18
+---
+
 # Visual questions
 
 This project set `.myspec.json` `visualQuestions` to `auto` (`/myspec:setup visual-questions`; switching it off removes this file). Visual Buddy is the browser tab `/myspec:visualize-options` puts screens on.
@@ -14,7 +20,7 @@ Before every choice you put to the user, whether through AskUserQuestion, as a q
 
 ## Results
 
-Show, don't link or describe. When something visual is on the table (an image, a render, a chart, a screenshot, a before/after), one you produced, or one the user brought or pointed you at as a file or image URL (a pasted image cannot be shown) when the conversation turns on how it looks (comparing renders, judging a result) and not when it is only context for another task (a screenshot of a bug to fix), or when you produce an explanation a diagram or graph carries better than prose (a data flow, a state machine, measurements whose shape matters), and Visual Buddy is running, show it there through `/myspec:visualize-options` (show mode). It is running when you started it in this conversation and its `state_dir` has `server-info` and no `server-stopped`; a session you did not start is not yours to push to. When it is not running, offer it in one line and keep the path or prose as the fallback; do not open it unasked for a result.
+Show, don't link or describe. When something visual is on the table (an image, a render, a chart, a screenshot, a before/after), one you produced, or one the user brought or pointed you at as a file or image URL (a pasted image cannot be shown) when the conversation turns on how it looks (comparing renders, judging a result) and not when it is only context for another task (a screenshot of a bug to fix), or when you produce an explanation a diagram or graph carries better than prose (a data flow, a state machine, measurements whose shape matters), and you have Visual Buddy running, show it there through `/myspec:visualize-options` (show mode), which says how to tell it is running. When it is not, offer it in one line and keep the path or prose as the fallback; do not open it unasked for a result.
 
 Inside `/myspec:brainstorm`, its own offer (a message of its own) decides whether Visual Buddy opens: it replaces these one-line offers, and a clearly visual choice goes through `/myspec:visualize-options` only once the user has accepted it.
 
