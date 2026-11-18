@@ -497,6 +497,30 @@ expect_no_line "r\.md:4:" "pointers to defined steps are quiet"
 expect_no_line "wf\.md:7:" "a live name and a <name> placeholder are quiet"
 expect_no_line "PLUGIN-ROOT-REF|FM-MISSING" "blueprints and framework files get SKILL-XREF only"
 
+# ── GIT-STATE-SOURCE / SPEC-TEMPLATE-SOURCE: point to the shared source ─────
+# feature-spec kept the separate git-helpers commands after lib/git-state.sh
+# landed (#534); feature-update and feature-discover kept the old spec shape
+# after _shared/spec-template.md landed (#531).
+fresh
+mkdir -p "$FIX/skills/_shared" "$FIX/skills/demo/references" "$FIX/skills/runs"
+printf '# Git\n\n1. `git symbolic-ref --short refs/remotes/origin/HEAD` (main vs master)\n' > "$FIX/skills/_shared/git-helpers.md"
+printf '# Template\n\n## spec.md\n\n| Section | Content |\n|---|---|\n| Overview | x |\n| Goals | x |\n| Requirements | x |\n| Acceptance Criteria | x |\n\n## dependencies.md\n\n```markdown\n## Feature Dependencies\n## Dependent Features\n```\n' > "$FIX/skills/_shared/spec-template.md"
+{ printf -- '---\nname: demo\n%s\n---\n' "$GOOD"; body; printf '\nDetection ([git-helpers](../_shared/git-helpers.md)): resolve the default branch (main vs master).\n'; } | skill demo
+{ printf -- '---\nname: runs\n%s\n---\n' "$GOOD"; body; printf '\nRun `"${CLAUDE_PLUGIN_ROOT}/lib/git-state.sh"` once ([git-helpers](../_shared/git-helpers.md)).\n'; } | skill runs
+printf '# Ref\n\nRequired sections: Overview, Goals, Requirements, Out of Scope.\n\n- **Upstream Dependencies**: x\n\n```markdown\n## Overview\n\n## Goals\n\n## Acceptance Criteria\n```\n\nSections: Feature Dependencies and Dependent Features.\n' > "$FIX/skills/demo/references/tpl.md"
+printf '# Ok\n\nThe Overview, Goals and Requirements are the ones in `_shared/spec-template.md`.\n' > "$FIX/skills/runs/ok.md"
+run
+expect_exit 1 "shared-source findings fail the run"
+expect_line "skills/demo/SKILL\.md:[0-9]+: GIT-STATE-SOURCE .*cascade" "a restated default-branch cascade is reported (#534)"
+expect_line "skills/demo/SKILL\.md:[0-9]+: GIT-STATE-SOURCE .*never gives" "citing git-helpers without git-state.sh is reported (#534)"
+expect_no_line "skills/runs/SKILL\.md:[0-9]+: GIT-STATE" "a skill that runs git-state.sh is quiet"
+expect_no_line "^skills/_shared/" "the shared sources themselves are quiet"
+expect_line "tpl\.md:3: SPEC-TEMPLATE-SOURCE .*Overview, Goals, Requirements" "a one-line list of spec sections is reported (#531)"
+expect_line "tpl\.md:5: SPEC-TEMPLATE-SOURCE .*Upstream Dependencies.*retired" "a retired dependencies heading is reported (#531)"
+expect_line "tpl\.md:7: SPEC-TEMPLATE-SOURCE .*Acceptance Criteria" "a fenced spec template is reported once, at its fence"
+expect_line "tpl\.md:15: SPEC-TEMPLATE-SOURCE .*Feature Dependencies, Dependent Features" "a list of dependencies headings is reported"
+expect_no_line "ok\.md" "a file citing spec-template.md is quiet"
+
 # ── the real repo lints clean ───────────────────────────────────────────────
 OUTPUT=$(cd "$REPO_ROOT" && node "$SCRIPT" 2>&1); STATUS=$?
 expect_exit 0 "the real repo has no error findings"
