@@ -241,5 +241,21 @@ if [ -z "$RENAME_BAD" ]; then ok; else fail "manifest renamedFrom: $RENAME_BAD";
 if [ "$(jq -r '.files["auto-memory-style.md"].renamedFrom // empty' "$MANIFEST")" = "rules/auto-memory-style.md" ]; then ok; else fail "auto-memory-style.md carries renamedFrom rules/auto-memory-style.md"; fi
 if [ "$(jq -r '.removed | has("rules/auto-memory-style.md")' "$MANIFEST")" = false ]; then ok; else fail "rules/auto-memory-style.md is a rename, not a removed entry"; fi
 
+# --- 7. each migration's procedure is its own reference file (#506) -----------
+# update reads skills/update/references/migrations/<id>.md only for an id the
+# project has not recorded, so a new migration adds a file instead of growing
+# the SKILL.md body every run loads. An id without a file cannot run; a file
+# without an id is a dropped migration's prose nothing reads.
+MIG_DIR="$PLUGIN/skills/update/references/migrations"
+while IFS= read -r id; do
+  [ -n "$id" ] || continue
+  if [ -f "$MIG_DIR/$id.md" ]; then ok; else fail "migration $id has no skills/update/references/migrations/$id.md"; fi
+done <<< "$(jq -r '(.migrations // [])[]' "$MANIFEST")"
+for f in "$MIG_DIR"/*.md; do
+  [ -e "$f" ] || continue
+  id=$(basename "$f" .md)
+  if jq -e --arg id "$id" '(.migrations // []) | index($id)' "$MANIFEST" >/dev/null; then ok; else fail "skills/update/references/migrations/$id.md names no manifest migration"; fi
+done
+
 printf '%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
