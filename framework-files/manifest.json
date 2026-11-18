@@ -23,7 +23,8 @@
       "type": "overwrite"
     },
     "auto-memory-style.md": {
-      "type": "overwrite"
+      "type": "overwrite",
+      "renamedFrom": "rules/auto-memory-style.md"
     },
     "templates/memory-procedural.md": {
       "type": "overwrite"
@@ -235,10 +236,6 @@
     "templates/index-episodic.md": {
       "dest": "${aiDir}/.templates/index-episodic.md",
       "since": "3.0.0"
-    },
-    "rules/auto-memory-style.md": {
-      "dest": ".claude/rules/auto-memory-style.md",
-      "since": "3.8.0"
     }
   }
 }

@@ -29,7 +29,7 @@ fail() { FAIL=$((FAIL + 1)); printf 'FAIL  %s\n' "$1" >&2; }
 # and framework files the cases below move.
 PLUGIN="$ROOT/plugin"
 mkdir -p "$PLUGIN/lib" "$PLUGIN/framework-files/rules" "$PLUGIN/framework-files/templates"
-cp "$SCRIPT" "$REAL_PLUGIN/lib/aidir-render.mjs" "$REAL_PLUGIN/lib/myspec-config.mjs" "$REAL_PLUGIN/lib/myspec-config.schema.json" "$REAL_PLUGIN/lib/plugin-root.mjs" "$PLUGIN/lib/"
+cp "$SCRIPT" "$REAL_PLUGIN/lib/aidir-render.mjs" "$REAL_PLUGIN/lib/myspec-config.mjs" "$REAL_PLUGIN/lib/myspec-config.schema.json" "$REAL_PLUGIN/lib/plugin-root.mjs" "$REAL_PLUGIN/lib/manifest-keys.mjs" "$PLUGIN/lib/"
 cat > "$PLUGIN/framework-files/manifest.json" <<'EOF'
 {
   "frameworkVersion": "3.0.0",
@@ -37,6 +37,7 @@ cat > "$PLUGIN/framework-files/manifest.json" <<'EOF'
   "files": {
     "pre-flight.md": { "type": "marker-merge" },
     "work-isolation.md": { "type": "overwrite" },
+    "style.md": { "type": "overwrite", "renamedFrom": "rules/style.md" },
     "templates/session-log.md": { "type": "overwrite" }
   },
   "rules": {
@@ -56,6 +57,7 @@ printf -- '---\ntitle: Workflow\n---\n# Workflow\n\nSpecs live in ${aiDir}/featu
 printf -- '---\ntitle: Pre-flight\n---\n# Pre-flight\n\n<!-- myspec:framework-start -->\n- [ ] Read ${aiDir}/memory/index.md\n<!-- myspec:framework-end -->\n\n## Project checks\n' > "$PLUGIN/framework-files/pre-flight.md"
 printf -- '# Work isolation\n\nWorktrees live under .claude/worktrees/.\n' > "$PLUGIN/framework-files/work-isolation.md"
 printf -- '# Session {date}\n' > "$PLUGIN/framework-files/templates/session-log.md"
+printf -- '# Style\n\nKeep entries short.\n' > "$PLUGIN/framework-files/style.md"
 
 # project <aiDir> -> a fresh checkout with the plugin's files installed
 # (${aiDir} substituted), no pins yet.
@@ -236,6 +238,21 @@ printf '\nOur worktrees live elsewhere.\n' >> "$REPO/docs/ai/work-isolation.md"
 run --json
 printf '%s' "$OUT" | node -e 'const r=JSON.parse(require("fs").readFileSync(0,"utf8")); const w=r.find((x)=>x.key==="work-isolation.md"); process.exit(w && w.verdict==="keep" && /^[0-9a-f]{64}$/.test(w.hashes.file) ? 0 : 1)' && ok \
   || fail "--json carries key, verdict and hashes"
+
+# A pin on a key the manifest renamed, across blocks (#473): rules/style.md
+# became the files entry style.md. Until update moves the file and the key,
+# the pin still names the old key and the file still sits at the rule's dest;
+# it is reconciled against the new entry's plugin copy there, not reported
+# unknown (which offers to drop the pin update is about to carry across).
+project .ai
+cp "$PLUGIN/framework-files/style.md" "$REPO/.claude/rules/style.md"
+pin rules/style.md "trimmed"
+run
+expect_verdict rules/style.md drop "a pin on a renamed rule key is reconciled at the old dest against the new plugin copy"
+printf '%s\n' "$OUT" | grep -q 'renamed upstream to style.md' && ok || fail "the detail names the key update moves the pin to"
+printf '\nLocal line.\n' >> "$REPO/.claude/rules/style.md"
+run --backfill
+expect_verdict rules/style.md keep "a renamed key's pin can be backfilled before update moves it"
 
 # A files entry whose rendered copy equals the project's under docs/ai: drop
 # only after ${aiDir} substitution (the raw plugin text never matches).
