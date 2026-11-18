@@ -47,6 +47,10 @@ myspec runs in JS, PHP, Python, Go, Ruby and JVM repos alike. Everything in `ski
 - **Examples name the variable, not the command or address.** A command or address copied from an example reads as the rule. Name the variable and what it must point at (`$SCRATCH_API_URL`, "`DATABASE_URL` → the scratch database"), never `localhost:<port>` — moving to a less common port is not a fix, and the common defaults are the ones a developer's own dev server holds. Where a command is needed, give a placeholder or pair it with a non-JS one (`npm run lint` / `ruff check .`). `scripts/check-no-localhost-ports.sh` enforces the address part in CI across skills, blueprints, framework files, templates, and examples. It is not a shipped hook, because downstream projects legitimately write their own localhost URLs.
 - **Before a PR**, run `git grep -niE 'prisma|pnpm|bullmq|node_modules|eslint|localhost:[0-9]' -- skills blueprints framework-files templates lib hooks examples` and read every hit you added: a multi-stack list, a test fixture, a JS-only template (`templates/mockup-preview/vue/`), or a worked example narrating one project's session is fine; a single-stack rule is not. The grep is not in CI because those legitimate hits outnumber the bugs.
 
+## Framework file headers
+
+Every `framework-files/**/*.md` starts with frontmatter (rules and docs: `title`, `purpose`, `updated`), and a change to one sets its `updated:` to the day of the change. `update` copies the header as framework-owned, so a stale date reaches every project and the project cannot fix it (#462). `scripts/check-framework-headers.sh` enforces both through `scripts/tests/framework-headers.test.sh`.
+
 ## Skill quality
 
 When writing or editing skills, follow the principles enforced by the `skill-verify` skill (`skills/skill-verify/SKILL.md`). The two highest-impact rules:

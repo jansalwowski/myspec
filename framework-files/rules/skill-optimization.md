@@ -5,7 +5,7 @@ paths:
   - .claude/skills/**
   - skills/**
   - plugins/*/skills/**
-updated: 2026-08-22
+updated: 2026-11-18
 ---
 
 # Skill Optimization Reference
