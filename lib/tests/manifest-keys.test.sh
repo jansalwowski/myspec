@@ -22,7 +22,7 @@ fail() { FAIL=$((FAIL + 1)); printf 'FAIL  %s\n' "$1" >&2; }
 
 PLUGIN="$ROOT/plugin"
 mkdir -p "$PLUGIN/lib" "$PLUGIN/framework-files"
-cp "$REAL_PLUGIN/lib/manifest-keys.mjs" "$REAL_PLUGIN/lib/myspec-config.mjs" "$REAL_PLUGIN/lib/myspec-config.schema.json" "$REAL_PLUGIN/lib/plugin-root.mjs" "$PLUGIN/lib/"
+cp "$REAL_PLUGIN/lib/manifest-keys.mjs" "$REAL_PLUGIN/lib/myspec-config.mjs" "$REAL_PLUGIN/lib/myspec-config.schema.json" "$REAL_PLUGIN/lib/plugin-root.mjs" "$REAL_PLUGIN/lib/memory-files.mjs" "$REAL_PLUGIN/lib/markdown.mjs" "$PLUGIN/lib/"
 cat > "$PLUGIN/framework-files/manifest.json" <<'EOF'
 {
   "frameworkVersion": "3.9.0",
@@ -59,6 +59,21 @@ printf '{}\n' > "$REPO/.myspec.json"
 OUT=$(node "$PLUGIN/lib/manifest-keys.mjs" renames --root "$REPO" --plugin-root "$PLUGIN" 2>&1)
 DEFAULT=$(jq -r '.keys.aiDir.default' "$PLUGIN/lib/myspec-config.schema.json" | sed 's#^\./##; s#/*$##')
 expect_row "rules/style.md	.claude/rules/style.md	style.md	$DEFAULT/style.md" "an unset aiDir resolves to the schema default"
+
+# aiDir "./" normalises to empty, which aiDirFor (the doctor's reader) treats
+# as unset. A copy of the normalisation sent every aiDir dest to "/<name>".
+printf '{\n  "aiDir": "./"\n}\n' > "$REPO/.myspec.json"
+OUT=$(node "$PLUGIN/lib/manifest-keys.mjs" renames --root "$REPO" --plugin-root "$PLUGIN" 2>&1)
+expect_row "rules/style.md	.claude/rules/style.md	style.md	$DEFAULT/style.md" "aiDir ./ resolves as aiDirFor does, to the schema default"
+printf '{}\n' > "$REPO/.myspec.json"
+
+# A malformed manifest is the documented exit 2, not a stack trace and 1.
+BAD="$ROOT/bad-plugin"
+mkdir -p "$BAD/framework-files"
+printf '{"files": {\n' > "$BAD/framework-files/manifest.json"
+ERR=$(node "$PLUGIN/lib/manifest-keys.mjs" renames --root "$REPO" --plugin-root "$BAD" 2>&1 >/dev/null); RC=$?
+[ "$RC" -eq 2 ] && ok || fail "a malformed manifest exits 2 (rc=$RC: $ERR)"
+case "$ERR" in *"    at "*) fail "a malformed manifest prints no stack trace: $ERR" ;; *) ok ;; esac
 
 node "$PLUGIN/lib/manifest-keys.mjs" --root "$REPO" --plugin-root "$PLUGIN" >/dev/null 2>&1; RC=$?
 [ "$RC" -eq 2 ] && ok || fail "no command is a usage error (rc=$RC)"
