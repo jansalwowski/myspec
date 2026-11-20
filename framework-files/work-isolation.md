@@ -1,7 +1,7 @@
 ---
 title: "Work Isolation Procedure"
 purpose: "How to ask, record, and carry out the develop-vs-worktree decision once an isolation hook blocks"
-updated: 2026-10-20
+updated: 2026-11-18
 ---
 
 # Work Isolation Procedure (develop vs worktree)
