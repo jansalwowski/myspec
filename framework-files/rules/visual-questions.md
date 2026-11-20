@@ -1,7 +1,7 @@
 ---
 title: "Visual Questions"
 purpose: "Route visual choices and visual results to Visual Buddy through /myspec:visualize-options"
-updated: 2026-11-18
+updated: 2026-11-20
 ---
 
 # Visual questions
