@@ -29,7 +29,7 @@ fail() { FAIL=$((FAIL + 1)); printf 'FAIL  %s\n' "$1" >&2; }
 # and framework files the cases below move.
 PLUGIN="$ROOT/plugin"
 mkdir -p "$PLUGIN/lib" "$PLUGIN/framework-files/rules" "$PLUGIN/framework-files/templates"
-cp "$SCRIPT" "$REAL_PLUGIN/lib/aidir-render.mjs" "$REAL_PLUGIN/lib/myspec-config.mjs" "$REAL_PLUGIN/lib/myspec-config.schema.json" "$REAL_PLUGIN/lib/plugin-root.mjs" "$REAL_PLUGIN/lib/memory-files.mjs" "$REAL_PLUGIN/lib/markdown.mjs" "$REAL_PLUGIN/lib/manifest-keys.mjs" "$PLUGIN/lib/"
+cp "$SCRIPT" "$REAL_PLUGIN/lib/aidir-render.mjs" "$REAL_PLUGIN/lib/myspec-config.mjs" "$REAL_PLUGIN/lib/myspec-config.schema.json" "$REAL_PLUGIN/lib/plugin-root.mjs" "$REAL_PLUGIN/lib/memory-files.mjs" "$REAL_PLUGIN/lib/markdown.mjs" "$REAL_PLUGIN/lib/manifest-keys.mjs" "$REAL_PLUGIN/lib/framework-header.mjs" "$PLUGIN/lib/"
 cat > "$PLUGIN/framework-files/manifest.json" <<'EOF'
 {
   "frameworkVersion": "3.0.0",
@@ -213,6 +213,22 @@ sed -i.bak 's#memory/index.md#memory/index.md and the local tiering#' "$REPO/.ai
 sed -i.bak 's#memory/index.md#memory/index.md first#' "$PLUGIN/framework-files/pre-flight.md" && rm -f "$PLUGIN/framework-files/pre-flight.md.bak"
 run
 expect_verdict pre-flight.md diverged "both sides edited a marker-merge pin's framework region: diverged"
+cp "$ROOT/pre-flight.orig" "$PLUGIN/framework-files/pre-flight.md"
+
+# A marker-merge header's updated: also covers the project section, so a
+# later installed date is the project's own and does not keep a pin alive; an
+# earlier one is a real difference (#545).
+cp "$PLUGIN/framework-files/pre-flight.md" "$ROOT/pre-flight.orig"
+perl -0pi -e 's/^title: Pre-flight$/title: Pre-flight\nupdated: 2026-01-10/m' "$PLUGIN/framework-files/pre-flight.md"
+project .ai
+pin pre-flight.md "dated locally"
+perl -0pi -e 's/^updated: .*$/updated: 2026-02-01/m' "$REPO/.ai/pre-flight.md"
+run
+expect_verdict pre-flight.md drop "a later updated: in a marker-merge header still equals the plugin copy"
+printf '%s\n' "$OUT" | grep -q 'apart from a later updated: date' && ok || fail "a drop by a later date says the region differs by its date (got: $OUT)"
+perl -0pi -e 's/^updated: .*$/updated: 2026-01-01/m' "$REPO/.ai/pre-flight.md"
+run
+expect_verdict pre-flight.md unrecorded "an earlier updated: differs from the plugin copy"
 cp "$ROOT/pre-flight.orig" "$PLUGIN/framework-files/pre-flight.md"
 
 # --- missing, retired, unknown, and a non-default aiDir -----------------------

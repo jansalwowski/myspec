@@ -1273,6 +1273,36 @@ expect_no_line 'conditional.md' "pinned and condition false: a deliberate keep, 
 
 unset RUN_PLUGIN
 
+# --- pass 3b: updated: in a marker-merge header (#545) -------------------------
+# The header's one updated: date also covers the project section, so it holds
+# the later of the framework's date and the project's last edit. A later or
+# equal installed date is not drift; an earlier one, or any other header
+# change, still is.
+
+build_fixture
+set_updated() {  # set_updated <file> <date>
+  perl -0pi -e "s/^updated: .*\$/updated: $2/m" "$REPO/$1"
+}
+shipped_date=$(sed -n 's/^updated: //p' "$PLUGIN/framework-files/pre-flight.md" | head -1)
+
+printf '\n- [ ] Project check added today\n' >> "$REPO/ai/pre-flight.md"
+set_updated ai/pre-flight.md 2999-01-01
+run_doctor install
+expect_no_line 'framework-drift: ai/pre-flight.md' "a project edit below the end marker with a later updated: is not drift"
+
+set_updated ai/pre-flight.md "$shipped_date"
+run_doctor install
+expect_no_line 'framework-drift: ai/pre-flight.md' "an updated: equal to the shipped one is not drift"
+
+set_updated ai/pre-flight.md 2000-01-01
+run_doctor install
+expect_line 'ERROR framework-drift: ai/pre-flight.md: header above' "an updated: earlier than the shipped one is still drift"
+
+set_updated ai/pre-flight.md 2999-01-01
+perl -0pi -e 's/^title: .*$/title: "Renamed Locally"/m' "$REPO/ai/pre-flight.md"
+run_doctor install
+expect_line 'ERROR framework-drift: ai/pre-flight.md: header above' "a later updated: does not hide another header change"
+
 # --- pass 4: argument handling ------------------------------------------------
 
 OUTPUT=$(node "$SCRIPT" --list-checks 2>&1); STATUS=$?
