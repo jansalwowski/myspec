@@ -72,10 +72,66 @@ run
 expect_eq "$STATUS" 1 "a header without a temporal field fails"
 expect_has "$OUTPUT" "missing temporal field" "names the missing field"
 
+# A rule needs the sibling header, not just any identity and temporal field.
+file rules/bare.md <<'MD'
+---
+name: x
+created: 2026-01-01
+---
+MD
+run
+expect_eq "$STATUS" 1 "a rule with name and created but no title, purpose, updated fails"
+expect_has "$OUTPUT" "framework-files/rules/bare.md: missing 'title'" "names the missing title"
+expect_has "$OUTPUT" "framework-files/rules/bare.md: missing 'purpose'" "names the missing purpose"
+expect_has "$OUTPUT" "framework-files/rules/bare.md: missing 'updated'" "names the missing updated"
+
+# A `---` block below line 1 is not frontmatter.
+file rules/bare.md <<'MD'
+# Bare
+
+---
+title: "Bare"
+purpose: "p"
+updated: 2026-11-01
+---
+MD
+run
+expect_eq "$STATUS" 1 "a --- block below line 1 fails"
+expect_has "$OUTPUT" "framework-files/rules/bare.md: frontmatter must start on line 1" "says it must start on line 1"
+
 # An untracked file is not shipped and is not judged.
 git -C "$FIX" rm -q --cached framework-files/rules/bare.md
+rm "$FIX/framework-files/rules/bare.md"
 run
 expect_eq "$STATUS" 0 "untracked files are skipped"
+
+# Paths are read raw: non-ASCII, `&` and `|` print as they are.
+good_header() { printf -- '---\ntitle: "G"\npurpose: "p"\nupdated: 2026-11-01\n---\n'; }
+good_header | file "rules/zażółć.md"
+run
+expect_eq "$STATUS" 0 "a non-ASCII path with a header passes: $OUTPUT"
+printf '# no header\n' | file "rules/a&b.md"
+printf '# no header\n' | file "rules/c|d.md"
+run
+expect_eq "$STATUS" 1 "headerless files with & and | in the path fail"
+expect_has "$OUTPUT" "framework-files/rules/a&b.md: missing frontmatter block entirely" "an & path prints verbatim"
+expect_has "$OUTPUT" "framework-files/rules/c|d.md: missing frontmatter block entirely" "a | path prints verbatim"
+
+# A tracked file that cannot be read is an error (2), not a finding (1), even
+# when a finding follows it. Here the missing file sorts before the findings.
+good_header | file "rules/0-gone.md"
+rm "$FIX/framework-files/rules/0-gone.md"
+run
+expect_eq "$STATUS" 2 "an unreadable file exits 2 even with findings after it"
+expect_has "$OUTPUT" "ERROR framework-files/rules/0-gone.md: could not read its frontmatter" "names the unreadable file"
+git -C "$FIX" rm -q --cached "framework-files/rules/0-gone.md" "framework-files/rules/a&b.md" "framework-files/rules/c|d.md"
+# ...and when a finding comes first.
+good_header | file "rules/zz-gone.md"
+rm "$FIX/framework-files/rules/zz-gone.md"
+printf '# no header\n' | file "rules/a-bare.md"
+run
+expect_eq "$STATUS" 2 "an unreadable file exits 2 after a finding"
+git -C "$FIX" rm -q --cached "framework-files/rules/zz-gone.md" "framework-files/rules/a-bare.md"
 
 # This repo.
 OUTPUT=$(bash "$SCRIPT" 2>&1); STATUS=$?

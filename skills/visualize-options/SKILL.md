@@ -34,7 +34,7 @@ What AskUserQuestion takes: 1–4 questions, each with its text, a header, 2–4
 
 ### 1. Start or reuse Visual Buddy
 
-If a Visual Buddy session you started in this conversation is still running (its `state_dir` has `server-info` and no `server-stopped`), push to it; a session you did not start is not yours to push to. Otherwise:
+If a Visual Buddy session is already running (its `state_dir` has `server-info` and no `server-stopped`), push to it. Otherwise:
 
 ```bash
 bash <plugin lib>/brainstorm-server/start-server.sh --open
