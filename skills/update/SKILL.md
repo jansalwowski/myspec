@@ -92,7 +92,7 @@ If a destination file doesn't exist for `marker-merge`, create it from the sourc
 node "${CLAUDE_PLUGIN_ROOT}/lib/setup-doctor.mjs" wiring
 ```
 
-`hook-wired-locally` and `hook-copy-retired` must be gone (a leftover means a copy came back: move it as `3.0.0-plugin-hooks` does). Report what remains with the `run:` or `fix:` line it carries: a project-owned hook that is missing, not executable, fails `bash -n` or runs by a relative path is the project's to fix, and a framework entry in `settings.local.json` is deleted by hand. Never add, remove, or reorder anything else in that file.
+`hook-wired-locally` and `hook-copy-retired` must be gone (a leftover means a copy came back: move it as part (b) of [references/migrations/3.0.0-plugin-hooks.md](references/migrations/3.0.0-plugin-hooks.md) does). Report what remains with the `run:` or `fix:` line it carries: a project-owned hook that is missing, not executable, fails `bash -n` or runs by a relative path is the project's to fix, and a framework entry in `settings.local.json` is deleted by hand. Never add, remove, or reorder anything else in that file.
 
 **State gitignore.** Ensure `.gitignore` contains a `.claude/state/` line; append it if missing (create `.gitignore` if absent). The hooks write per-checkout state there (session logs, isolation decisions, field metrics in `.claude/state/metrics/`, the retired copies under `retired-3.0/`), and the metrics recorder refuses to write while the line is missing.
 
@@ -180,7 +180,7 @@ Pinned (skipped — locally customized):
   {list each pinned file with its reason, or "none"}
 
 Hooks: run from the plugin (hooks.json); {unwired N framework entries from .claude/settings.json / none wired locally}
-       {the lines references/migrations/3.0.0-plugin-hooks.md gives, when it ran / omit}
+       {the lines references/migrations/3.0.0-plugin-hooks.md gives, when it ran or a returned copy was moved / omit}
        {N finding(s) remain — see above / omit}
 Memory: {indexes up to date / regenerated N, backfilled M hook: lines (K from heading — review) / skipped — no memory tree}
         doctor: {clean / N error(s), M warning(s) — see above}

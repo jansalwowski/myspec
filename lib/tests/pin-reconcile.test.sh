@@ -29,7 +29,7 @@ fail() { FAIL=$((FAIL + 1)); printf 'FAIL  %s\n' "$1" >&2; }
 # and framework files the cases below move.
 PLUGIN="$ROOT/plugin"
 mkdir -p "$PLUGIN/lib" "$PLUGIN/framework-files/rules" "$PLUGIN/framework-files/templates"
-cp "$SCRIPT" "$REAL_PLUGIN/lib/aidir-render.mjs" "$REAL_PLUGIN/lib/myspec-config.mjs" "$REAL_PLUGIN/lib/myspec-config.schema.json" "$REAL_PLUGIN/lib/plugin-root.mjs" "$REAL_PLUGIN/lib/manifest-keys.mjs" "$REAL_PLUGIN/lib/framework-header.mjs" "$PLUGIN/lib/"
+cp "$SCRIPT" "$REAL_PLUGIN/lib/aidir-render.mjs" "$REAL_PLUGIN/lib/myspec-config.mjs" "$REAL_PLUGIN/lib/myspec-config.schema.json" "$REAL_PLUGIN/lib/plugin-root.mjs" "$REAL_PLUGIN/lib/memory-files.mjs" "$REAL_PLUGIN/lib/markdown.mjs" "$REAL_PLUGIN/lib/manifest-keys.mjs" "$REAL_PLUGIN/lib/framework-header.mjs" "$PLUGIN/lib/"
 cat > "$PLUGIN/framework-files/manifest.json" <<'EOF'
 {
   "frameworkVersion": "3.0.0",
@@ -275,6 +275,14 @@ project docs/ai
 pin rules/ideas.md "stale"
 run
 expect_verdict rules/ideas.md drop "drop compares the plugin copy with \${aiDir} substituted"
+
+# aiDir "./" is unset, as lib/memory-files.mjs aiDirFor reads it: the
+# schema default (.ai), not an empty aiDir that sent dests to "/<name>".
+project .ai
+node -e 'const fs=require("fs"),p=process.argv[1],d=JSON.parse(fs.readFileSync(p,"utf8"));d.aiDir="./";fs.writeFileSync(p,JSON.stringify(d,null,2)+"\n")' "$REPO/.myspec.json"
+pin pre-flight.md "stale"
+run
+expect_verdict pre-flight.md drop "aiDir ./ resolves to the default aiDir, as aiDirFor does"
 
 # --- no pins, usage, help ---------------------------------------------------------
 project .ai
