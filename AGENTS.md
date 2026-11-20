@@ -49,7 +49,7 @@ myspec runs in JS, PHP, Python, Go, Ruby and JVM repos alike. Everything in `ski
 
 ## Framework file headers
 
-Every `framework-files/**/*.md` starts with frontmatter (rules and docs: `title`, `purpose`, `updated`), and a change to one sets its `updated:` to the day of the change. `update` copies the header as framework-owned, so a stale date reaches every project and the project cannot fix it (#462). `scripts/check-framework-headers.sh` enforces both through `scripts/tests/framework-headers.test.sh`.
+Every `framework-files/**/*.md` starts with frontmatter (rules and docs: `title`, `purpose`, `updated`), and a change to one sets its `updated:` to the day of the change. `update` copies the header as framework-owned, so a stale date reaches every project and the project cannot fix it (#462). `scripts/check-framework-headers.sh` enforces both through `scripts/tests/framework-headers.test.sh`. In CI it compares each changed file with the PR's base branch, not with commit dates, so a squash merge cannot fail it on main.
 
 ## Skill quality
 
