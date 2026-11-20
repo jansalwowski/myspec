@@ -37,11 +37,11 @@ It complements the holistic review that closes `/myspec:feature-implement`: that
 
 Resolve the diff range that represents "what was built" (REQUIRED reference: [`skills/_shared/git-helpers.md`](../_shared/git-helpers.md)):
 
-1. Resolve the default branch (main vs master).
+1. Run `"${CLAUDE_PLUGIN_ROOT}/lib/git-state.sh"` once; its `default:` and `head:` lines give the default branch and `HEAD`.
 2. `BASE_SHA = git merge-base HEAD <default-branch>`.
 3. Review range is `BASE_SHA..HEAD`. Capture `git diff BASE_SHA..HEAD --stat` for the changed-file set.
 
-If `HEAD` is the default branch (work was committed straight to main), tell the user the diff range is ambiguous and ask for an explicit base ref before continuing.
+If `HEAD` is the default branch (work was committed straight to main), or the default is `unknown`, tell the user the diff range is ambiguous and ask for an explicit base ref before continuing.
 
 ### Step 3: Build the Reviewer Input Packet
 

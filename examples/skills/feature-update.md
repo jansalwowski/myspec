@@ -49,10 +49,11 @@ The skill asks:
 
 #### 3. Draft spec.md changes
 
-The skill drafts changes to **only the affected sections**. Nothing is written until the user picks "Apply" in step 5:
+The skill drafts changes to **only the affected sections** of the `_shared/spec-template.md` shape. Nothing is written until the user picks "Apply" in step 5:
 
+- **Requirements**: appends REQ-007 (admins bulk-invite up to 200 addresses from one CSV) and REQ-008 (one bulk invite per admin per hour). REQ-001–REQ-006 unchanged.
 - **User Stories**: appends US7 (admin uploads CSV) and US8 (admin sees per-row results). US1–US6 unchanged.
-- **Acceptance Criteria**: appends AC12–AC16 covering CSV format, validation, partial-failure handling, throttle, admin-only access. AC1–AC11 unchanged.
+- **Acceptance Criteria**: appends `- [ ] AC-12:` to `AC-16` covering CSV format, validation, partial-failure handling, throttle, admin-only access. AC-1–AC-11 unchanged.
 - **Out of Scope**: adds "CSV files larger than 200 addresses" and "scheduled bulk imports."
 - **Open Questions**: empty (user answered all of them).
 - **Frontmatter**: `spec_version: 2`, `last_updated: 2026-04-30`, `status: draft` (was `approved`).
@@ -74,15 +75,16 @@ Drafts affected sections only:
 Then drafts the row to prepend to `CHANGELOG.md`:
 
 ```
-| 2026-04-30 | spec v2 | Added bulk CSV invites (US7-US8, AC12-AC16); replaced the v1 step outline with 5 bulk-invite steps | updated |
+| 2026-04-30 | spec v2 | Added bulk CSV invites (REQ-007-REQ-008, US7-US8, AC-12-AC-16); replaced the v1 step outline with 5 bulk-invite steps | updated |
 ```
 
 #### 5. Present diff summary
 
 > **spec.md changes** (v1 → v2):
 >
+> - Requirements: +REQ-007, +REQ-008 (bulk CSV invite, hourly throttle)
 > - User Stories: +US7, +US8 (admin CSV upload, per-row results)
-> - Acceptance Criteria: +AC12–AC16 (CSV format, validation, partial-failure, throttle, admin-only)
+> - Acceptance Criteria: +AC-12–AC-16 (CSV format, validation, partial-failure, throttle, admin-only)
 > - Out of Scope: +200-row limit, +scheduled imports
 >
 > **tech-spec.md changes**:

@@ -11,7 +11,8 @@
 // Usage:
 //   node scripts/lint-skills.mjs                      lint <root>/skills/*/SKILL.md, plus
 //                                                     PLUGIN-ROOT-REF on every other skills/**/*.md,
-//                                                     SKILL-XREF on all of them and on
+//                                                     GIT-STATE-SOURCE, SPEC-TEMPLATE-SOURCE and
+//                                                     SKILL-XREF on all of them, and SKILL-XREF on
 //                                                     blueprints/ and framework-files/
 //   node scripts/lint-skills.mjs --files a.md b.md    lint only these files
 //   options: --root <dir>  repo root (default: this script's repo)
@@ -268,20 +269,29 @@ function hasAnchor(slugs, anchor) {
   return slugs.has(a) || slugs.has(a.toLowerCase());
 }
 
-// Body lines outside fenced code blocks, raw.
-function unfencedLines(bodyLines) {
-  const out = [];
-  let fence = null;
+// Body lines split at code fences: each line outside a fence is its own
+// segment, and each fenced block is one segment holding its inner lines. A
+// fence closes only on its own character at the same or greater length, so a
+// ```yaml block inside a ````markdown block stays inside it.
+function fenceSegments(bodyLines) {
+  const segs = [];
+  let block = null;
   for (const l of bodyLines) {
     const f = l.text.match(/^\s*(`{3,}|~{3,})/);
-    if (fence) {
-      if (f && f[1][0] === fence[0] && f[1].length >= fence.length) fence = null;
+    if (block) {
+      if (f && f[1][0] === block.fence[0] && f[1].length >= block.fence.length) block = null;
+      else block.lines.push(l);
       continue;
     }
-    if (f) { fence = f[1]; continue; }
-    out.push(l);
+    if (f) { block = { fenced: true, fence: f[1], line: l.line, lines: [] }; segs.push(block); continue; }
+    segs.push({ fenced: false, line: l.line, lines: [l] });
   }
-  return out;
+  return segs;
+}
+
+// Body lines outside fenced code blocks, raw.
+function unfencedLines(bodyLines) {
+  return fenceSegments(bodyLines).filter((s) => !s.fenced).flatMap((s) => s.lines);
 }
 
 // The same, with inline code spans blanked: prose a reader acts on.
@@ -335,6 +345,105 @@ function lintXrefs(absPath, root, cache) {
       else if (m[2] && !defined.has(m[2].toLowerCase())) add(`"${m[0]}" points at a step skills/${m[1]}/SKILL.md does not define`);
     }
   });
+  return findings;
+}
+
+// GIT-STATE-SOURCE / SPEC-TEMPLATE-SOURCE — a skill that restates a shared
+// definition in its own words drifts when the definition changes. After
+// lib/git-state.sh (#533) feature-spec still ran the git-helpers commands one
+// by one (#534); after _shared/spec-template.md (#530) feature-update,
+// feature-discover and feature-decompose still described the older spec and
+// dependencies shape (#531). A skill points to the single source instead.
+const GIT_HELPERS = 'skills/_shared/git-helpers.md';
+const SPEC_TEMPLATE = 'skills/_shared/spec-template.md';
+// The default-branch cascade only git-helpers.md (and git-state.sh) spells out.
+const GIT_CASCADE_RE = /refs\/remotes\/origin\/HEAD|\bmain vs\.? master\b/i;
+// Section names the template replaced; they match no current heading.
+const RETIRED_SPEC_SHAPES = ['User Stories / Requirements', 'Upstream Dependencies', 'Downstream Dependents'];
+
+// The spec.md section names (the template's table rows) and the dependencies.md
+// headings (its fenced `## ` lines), read from the template so they follow it.
+function specTemplateNames(root) {
+  const f = path.join(root, SPEC_TEMPLATE);
+  if (!fs.existsSync(f)) return null;
+  const spec = [];
+  const deps = [];
+  let part = '';
+  const lines = fs.readFileSync(f, 'utf8').split(/\r?\n/).map((text, k) => ({ text, line: k + 1 }));
+  for (const seg of fenceSegments(lines)) {
+    for (const { text: t } of seg.lines) {
+      const h = t.match(/^## (.+?)\s*$/);
+      if (seg.fenced) { if (h && part === 'dependencies.md') deps.push(h[1]); continue; }
+      if (h) { part = h[1]; continue; }
+      const row = t.match(/^\|\s*([A-Z][A-Za-z ]+?)\s*\|/);
+      if (part === 'spec.md' && row && row[1] !== 'Section') spec.push(row[1]);
+    }
+  }
+  return { spec, deps };
+}
+
+function lintSharedSources(absPath, root, cache) {
+  const rel = path.relative(root, absPath).split(path.sep).join('/');
+  if (!rel.startsWith('skills/')) return [];
+  const findings = [];
+  const add = (line, rule, message) => findings.push({ line, rule, message, severity: 'error' });
+  const lines = fs.readFileSync(absPath, 'utf8').split(/\r?\n/);
+  const text = lines.join('\n');
+  // Only a SKILL.md body gets ${CLAUDE_PLUGIN_ROOT} substituted; any other
+  // file must name <plugin lib> or PLUGIN-ROOT-REF rejects the advice.
+  const gitState = path.basename(absPath) === 'SKILL.md'
+    ? '`"${CLAUDE_PLUGIN_ROOT}/lib/git-state.sh"`'
+    : '`"<plugin lib>/git-state.sh"` (the routing SKILL.md states the resolved path)';
+
+  if (rel !== GIT_HELPERS) {
+    lines.forEach((t, i) => {
+      if (GIT_CASCADE_RE.test(t)) add(i + 1, 'GIT-STATE-SOURCE', `restates the default-branch cascade; read git state with one ${gitState} call (${GIT_HELPERS}, #534)`);
+    });
+    if (path.basename(absPath) === 'SKILL.md' && !/lib\/git-state\.sh/.test(text)) {
+      const i = lines.findIndex((t) => t.includes('_shared/git-helpers.md'));
+      if (i >= 0) add(i + 1, 'GIT-STATE-SOURCE', `cites _shared/git-helpers.md but never gives \`"\${CLAUDE_PLUGIN_ROOT}/lib/git-state.sh"\`, so the reader falls back to the separate git commands (#534)`);
+    }
+  }
+
+  if (rel === SPEC_TEMPLATE) return findings;
+  if (!cache.has('spec')) cache.set('spec', specTemplateNames(root));
+  const names = cache.get('spec');
+  const esc = (n) => n.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+  // A chunk is one line outside code fences, or one whole fenced block. Three
+  // spec.md sections or two dependencies.md headings in one chunk is a list of
+  // the template's sections written out again. Outside fences a section name
+  // counts as a word; inside a fence only as a whole heading, so "Goals of the
+  // refactor" or "## Requirements traced" in another template is not one. A
+  // markdown section (heading to next heading) that cites the template is
+  // exempt, and only that section: a citation in Step 1 does not excuse a list
+  // written out again in Step 6.
+  const has = (c, n) => (c.fenced
+    ? new RegExp(`^\\s{0,3}#{1,6}\\s+${esc(n)}\\s*#*\\s*$`, 'm')
+    : new RegExp(`(^|[^A-Za-z])${esc(n)}([^A-Za-z]|$)`)).test(c.text);
+  const chunks = [];
+  const cited = new Set();
+  let section = 0;
+  for (const seg of fenceSegments(lines.map((t, k) => ({ text: t, line: k + 1 })))) {
+    const c = { ...seg, text: seg.lines.map((l) => l.text).join('\n') };
+    if (!c.fenced && /^ {0,3}#{1,6}\s/.test(c.text)) section += 1;
+    c.section = section;
+    if (c.text.includes('spec-template.md')) cited.add(section);
+    chunks.push(c);
+  }
+  for (const c of chunks) {
+    if (cited.has(c.section)) continue;
+    for (const l of c.lines) {
+      for (const s of RETIRED_SPEC_SHAPES) {
+        if (l.text.includes(s)) add(l.line, 'SPEC-TEMPLATE-SOURCE', `"${s}" is a retired spec/dependencies section; cite ${SPEC_TEMPLATE} (#531)`);
+      }
+    }
+    if (!names) continue;
+    const spec = names.spec.filter((n) => has(c, n));
+    const deps = names.deps.filter((n) => has(c, n));
+    if (spec.length >= 3 || deps.length >= 2) {
+      add(c.line, 'SPEC-TEMPLATE-SOURCE', `lists the spec.md or dependencies.md sections (${[...spec, ...deps].join(', ')}) without citing ${SPEC_TEMPLATE}; point to it instead (#531)`);
+    }
+  }
   return findings;
 }
 
@@ -550,10 +659,12 @@ function main() {
 
   const results = [];
   const xrefCache = new Map();
+  const sharedCache = new Map();
   for (const f of files) {
     const rel = path.relative(process.cwd(), f) || f;
     const found = xrefOnly(f) ? [] : path.basename(f) === 'SKILL.md' ? lintFile(f, opts) : lintReference(f);
     found.push(...lintXrefs(f, opts.root, xrefCache));
+    found.push(...lintSharedSources(f, opts.root, sharedCache));
     for (const x of found) results.push({ path: rel, ...x });
   }
   const errors = results.filter((r) => r.severity === 'error').length;

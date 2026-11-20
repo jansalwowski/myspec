@@ -497,6 +497,102 @@ expect_no_line "r\.md:4:" "pointers to defined steps are quiet"
 expect_no_line "wf\.md:7:" "a live name and a <name> placeholder are quiet"
 expect_no_line "PLUGIN-ROOT-REF|FM-MISSING" "blueprints and framework files get SKILL-XREF only"
 
+# ── GIT-STATE-SOURCE / SPEC-TEMPLATE-SOURCE: point to the shared source ─────
+# feature-spec kept the separate git-helpers commands after lib/git-state.sh
+# landed (#534); feature-update and feature-discover kept the old spec shape
+# after _shared/spec-template.md landed (#531).
+fresh
+mkdir -p "$FIX/skills/_shared" "$FIX/skills/demo/references" "$FIX/skills/runs"
+printf '# Git\n\n1. `git symbolic-ref --short refs/remotes/origin/HEAD` (main vs master)\n' > "$FIX/skills/_shared/git-helpers.md"
+printf '# Template\n\n## spec.md\n\n| Section | Content |\n|---|---|\n| Overview | x |\n| Goals | x |\n| Requirements | x |\n| Acceptance Criteria | x |\n\n## dependencies.md\n\n```markdown\n## Feature Dependencies\n## Dependent Features\n```\n' > "$FIX/skills/_shared/spec-template.md"
+{ printf -- '---\nname: demo\n%s\n---\n' "$GOOD"; body; printf '\nDetection ([git-helpers](../_shared/git-helpers.md)): resolve the default branch (main vs master).\n'; } | skill demo
+{ printf -- '---\nname: runs\n%s\n---\n' "$GOOD"; body; printf '\nRun `"${CLAUDE_PLUGIN_ROOT}/lib/git-state.sh"` once ([git-helpers](../_shared/git-helpers.md)).\n'; } | skill runs
+printf '# Ref\n\nRequired sections: Overview, Goals, Requirements, Out of Scope.\n\n- **Upstream Dependencies**: x\n\n```markdown\n## Overview\n\n## Goals\n\n## Acceptance Criteria\n```\n\nSections: Feature Dependencies and Dependent Features.\n' > "$FIX/skills/demo/references/tpl.md"
+printf '# Ok\n\nThe Overview, Goals and Requirements are the ones in `_shared/spec-template.md`.\n' > "$FIX/skills/runs/ok.md"
+run
+expect_exit 1 "shared-source findings fail the run"
+expect_line "skills/demo/SKILL\.md:[0-9]+: GIT-STATE-SOURCE .*cascade" "a restated default-branch cascade is reported (#534)"
+expect_line "skills/demo/SKILL\.md:[0-9]+: GIT-STATE-SOURCE .*never gives" "citing git-helpers without git-state.sh is reported (#534)"
+expect_no_line "skills/runs/SKILL\.md:[0-9]+: GIT-STATE" "a skill that runs git-state.sh is quiet"
+expect_no_line "^skills/_shared/" "the shared sources themselves are quiet"
+expect_line "tpl\.md:3: SPEC-TEMPLATE-SOURCE .*Overview, Goals, Requirements" "a one-line list of spec sections is reported (#531)"
+expect_line "tpl\.md:5: SPEC-TEMPLATE-SOURCE .*Upstream Dependencies.*retired" "a retired dependencies heading is reported (#531)"
+expect_line "tpl\.md:7: SPEC-TEMPLATE-SOURCE .*Acceptance Criteria" "a fenced spec template is reported once, at its fence"
+expect_line "tpl\.md:15: SPEC-TEMPLATE-SOURCE .*Feature Dependencies, Dependent Features" "a list of dependencies headings is reported"
+expect_no_line "ok\.md" "a file citing spec-template.md is quiet"
+
+# The rules' advice must pass the other rules, fences follow unfencedLines, and
+# a citation excuses only its own section (PR #538 review).
+cat > "$FIX/skills/demo/references/git.md" <<'MD'
+# Git
+
+Resolve the default branch (main vs master).
+MD
+cat > "$FIX/skills/demo/references/git-ok.md" <<'MD'
+# Git
+
+Run `"<plugin lib>/git-state.sh"` once.
+MD
+cat > "$FIX/skills/demo/references/migrate.md" <<'MD'
+# Migrate
+
+Rename the old ## Upstream Dependencies heading to ## Feature Dependencies (see spec-template.md).
+MD
+cat > "$FIX/skills/demo/references/other-tpl.md" <<'MD'
+# Tech spec
+
+```markdown
+## Overview
+
+Goals of the refactor.
+
+## Requirements traced
+```
+MD
+cat > "$FIX/skills/demo/references/nested.md" <<'MD'
+# Nested
+
+````markdown
+## Overview
+
+```yaml
+title: x
+```
+
+## Goals
+
+## Requirements
+````
+MD
+cat > "$FIX/skills/demo/references/steps.md" <<'MD'
+# Steps
+
+## Step 1
+
+Read the template in skills/_shared/spec-template.md.
+
+## Step 2
+
+Write the sections Overview, Goals, Requirements, Acceptance Criteria.
+MD
+run
+expect_line "git\.md:3: GIT-STATE-SOURCE .*<plugin lib>/git-state\.sh" "a reference file is told to use <plugin lib>"
+expect_no_line "git\.md:3: GIT-STATE-SOURCE .*CLAUDE_PLUGIN_ROOT" "a reference file is not told to use \${CLAUDE_PLUGIN_ROOT}"
+expect_no_line "git-ok\.md" "a reference file that follows the advice is quiet"
+expect_no_line "migrate\.md" "a retired name on a line that cites the template is quiet"
+expect_no_line "other-tpl\.md" "section names that are not whole headings in a fence are quiet"
+expect_line "nested\.md:3: SPEC-TEMPLATE-SOURCE .*Overview, Goals, Requirements" "a nested fence does not split the outer block"
+expect_line "steps\.md:9: SPEC-TEMPLATE-SOURCE .*Acceptance Criteria" "a citation in another section does not excuse a list"
+
+# Template names go into a RegExp escaped, and the template parser keeps a
+# nested fence inside its dependencies.md block.
+fresh
+mkdir -p "$FIX/skills/_shared" "$FIX/skills/demo/references"
+printf '# Template\n\n## dependencies.md\n\n````markdown\n```yaml\ntitle: x\n```\n\n## Feature Dependencies\n## Services (C++)\n````\n' > "$FIX/skills/_shared/spec-template.md"
+printf '# Ref\n\nSections: Feature Dependencies and Services (C++).\n' > "$FIX/skills/demo/references/deps.md"
+run --files skills/demo/references/deps.md
+expect_line "deps\.md:3: SPEC-TEMPLATE-SOURCE .*Feature Dependencies, Services \(C\+\+\)" "a section name with RegExp characters is matched literally"
+
 # ── the real repo lints clean ───────────────────────────────────────────────
 OUTPUT=$(cd "$REPO_ROOT" && node "$SCRIPT" 2>&1); STATUS=$?
 expect_exit 0 "the real repo has no error findings"

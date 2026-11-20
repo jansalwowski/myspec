@@ -11,81 +11,18 @@ Full templates for creating sub-feature files during feature decomposition.
 
 ## Sub-Feature spec.md Template
 
-```yaml
----
-title: "{Parent} -- {SubFeature Title}"
-status: draft | approved | deprecated
-phase: 1 | 2 | 3
-priority: P0 | P1 | P2 | P3
-spec_version: 1
-created: YYYY-MM-DD
-last_updated: YYYY-MM-DD
-load_when: "implementing {parent} {sub-feature} functionality"
-see_also:
-  - ../spec.md
----
+Frontmatter, sections, requirement IDs and acceptance-criteria format are the ones in [`_shared/spec-template.md`](../../_shared/spec-template.md#specmd), which `feature-spec-review` checks against. Fill each section with what moves from the parent spec. On top of the template:
 
-# {SubFeature Title}
-
-> Sub-feature of [{Parent}](../spec.md)
-
-## Overview
-
-[2-3 sentence summary extracted from parent]
-
-## Goals
-
-- [Extracted goals specific to this sub-feature]
-
-## Requirements
-
-[Extracted requirements from parent spec]
-
-## Acceptance Criteria
-
-[Extracted criteria from parent spec]
-
-## Dependencies
-
-See [dependencies.md](./dependencies.md)
-
-## Out of Scope
-
-[Items not covered by this sub-feature]
-```
+- `title: "{Parent} -- {SubFeature Title}"`, `status:` `draft`, `approved` or `deprecated` (never `in-progress`, a manifest-only status), and `see_also: [../spec.md]` in the frontmatter
+- `> Sub-feature of [{Parent}](../spec.md)` under the `# {SubFeature Title}` heading
 
 ## Sub-Feature dependencies.md Template
 
-```yaml
----
-title: "{Parent} {SubFeature} -- Dependencies"
-purpose: "Cross-feature dependency tracking"
-load_when: "planning {parent} {sub-feature} implementation"
-updated: YYYY-MM-DD
-feature: {parent}/{sub-feature}
----
+Frontmatter and headings are the ones in [`_shared/spec-template.md`](../../_shared/spec-template.md#dependenciesmd), with `title: "{Parent} {SubFeature} -- Dependencies"` and the `> Sub-feature of [{Parent}](../spec.md)` line. Fill them from the parent:
 
-# {SubFeature} Dependencies
-
-> Sub-feature of [{Parent}](../spec.md)
-
-## Upstream Dependencies (Required First)
-
-- **{parent}**: Core {parent} feature must exist
-- [Other dependencies extracted from parent]
-
-## Downstream Dependents (Depends on This)
-
-- [Features that depend on this sub-feature]
-
-## Internal Sub-Feature Dependencies
-
-- [Other sub-features this depends on, if any]
-
-## Technical Dependencies
-
-[Extracted technical deps from parent dependencies.md]
-```
+- **Feature Dependencies**: the parent `{parent}` first, then the sibling sub-features and other features this one needs
+- **Dependent Features**: the features and sub-features that depend on this one
+- **External Dependencies**: the parent's external dependencies that this sub-feature uses
 
 ## Sub-Feature tech-spec.md Template
 
