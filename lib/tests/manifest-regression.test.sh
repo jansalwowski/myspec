@@ -249,7 +249,9 @@ if [ "$(jq -r '.removed | has("rules/auto-memory-style.md")' "$MANIFEST")" = fal
 MIG_DIR="$PLUGIN/skills/update/references/migrations"
 while IFS= read -r id; do
   [ -n "$id" ] || continue
-  if [ -f "$MIG_DIR/$id.md" ]; then ok; else fail "migration $id has no skills/update/references/migrations/$id.md"; fi
+  if [ -f "$MIG_DIR/$id.md" ]; then ok; else fail "migration $id has no skills/update/references/migrations/$id.md"; continue; fi
+  # Step 1.5 records an id only once its *Done when* line holds.
+  if grep -q '^Done when: ' "$MIG_DIR/$id.md"; then ok; else fail "skills/update/references/migrations/$id.md has no 'Done when:' line"; fi
 done <<< "$(jq -r '(.migrations // [])[]' "$MANIFEST")"
 for f in "$MIG_DIR"/*.md; do
   [ -e "$f" ] || continue
