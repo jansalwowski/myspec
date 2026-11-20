@@ -521,6 +521,78 @@ expect_line "tpl\.md:7: SPEC-TEMPLATE-SOURCE .*Acceptance Criteria" "a fenced sp
 expect_line "tpl\.md:15: SPEC-TEMPLATE-SOURCE .*Feature Dependencies, Dependent Features" "a list of dependencies headings is reported"
 expect_no_line "ok\.md" "a file citing spec-template.md is quiet"
 
+# The rules' advice must pass the other rules, fences follow unfencedLines, and
+# a citation excuses only its own section (PR #538 review).
+cat > "$FIX/skills/demo/references/git.md" <<'MD'
+# Git
+
+Resolve the default branch (main vs master).
+MD
+cat > "$FIX/skills/demo/references/git-ok.md" <<'MD'
+# Git
+
+Run `"<plugin lib>/git-state.sh"` once.
+MD
+cat > "$FIX/skills/demo/references/migrate.md" <<'MD'
+# Migrate
+
+Rename the old ## Upstream Dependencies heading to ## Feature Dependencies (see spec-template.md).
+MD
+cat > "$FIX/skills/demo/references/other-tpl.md" <<'MD'
+# Tech spec
+
+```markdown
+## Overview
+
+Goals of the refactor.
+
+## Requirements traced
+```
+MD
+cat > "$FIX/skills/demo/references/nested.md" <<'MD'
+# Nested
+
+````markdown
+## Overview
+
+```yaml
+title: x
+```
+
+## Goals
+
+## Requirements
+````
+MD
+cat > "$FIX/skills/demo/references/steps.md" <<'MD'
+# Steps
+
+## Step 1
+
+Read the template in skills/_shared/spec-template.md.
+
+## Step 2
+
+Write the sections Overview, Goals, Requirements, Acceptance Criteria.
+MD
+run
+expect_line "git\.md:3: GIT-STATE-SOURCE .*<plugin lib>/git-state\.sh" "a reference file is told to use <plugin lib>"
+expect_no_line "git\.md:3: GIT-STATE-SOURCE .*CLAUDE_PLUGIN_ROOT" "a reference file is not told to use \${CLAUDE_PLUGIN_ROOT}"
+expect_no_line "git-ok\.md" "a reference file that follows the advice is quiet"
+expect_no_line "migrate\.md" "a retired name on a line that cites the template is quiet"
+expect_no_line "other-tpl\.md" "section names that are not whole headings in a fence are quiet"
+expect_line "nested\.md:3: SPEC-TEMPLATE-SOURCE .*Overview, Goals, Requirements" "a nested fence does not split the outer block"
+expect_line "steps\.md:9: SPEC-TEMPLATE-SOURCE .*Acceptance Criteria" "a citation in another section does not excuse a list"
+
+# Template names go into a RegExp escaped, and the template parser keeps a
+# nested fence inside its dependencies.md block.
+fresh
+mkdir -p "$FIX/skills/_shared" "$FIX/skills/demo/references"
+printf '# Template\n\n## dependencies.md\n\n````markdown\n```yaml\ntitle: x\n```\n\n## Feature Dependencies\n## Services (C++)\n````\n' > "$FIX/skills/_shared/spec-template.md"
+printf '# Ref\n\nSections: Feature Dependencies and Services (C++).\n' > "$FIX/skills/demo/references/deps.md"
+run --files skills/demo/references/deps.md
+expect_line "deps\.md:3: SPEC-TEMPLATE-SOURCE .*Feature Dependencies, Services \(C\+\+\)" "a section name with RegExp characters is matched literally"
+
 # ── the real repo lints clean ───────────────────────────────────────────────
 OUTPUT=$(cd "$REPO_ROOT" && node "$SCRIPT" 2>&1); STATUS=$?
 expect_exit 0 "the real repo has no error findings"

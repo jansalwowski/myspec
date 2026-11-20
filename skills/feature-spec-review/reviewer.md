@@ -81,6 +81,8 @@ Headings are the ones in [`_shared/spec-template.md`](../_shared/spec-template.m
 - Every feature under "Dependent Features" must exist in ${aiDir}/features/index.yaml
 
 ### dependencies.md Bidirectional Check
+The back-link rule is in [`_shared/spec-template.md`](../_shared/spec-template.md#dependenciesmd).
+
 - If Feature A lists Feature B under "Feature Dependencies", then Feature B should list Feature A under "Dependent Features"
 - Circular dependencies are an error: A depends on B, B depends on A
 
