@@ -216,5 +216,30 @@ if [ -z "$WHEN_BAD" ]; then ok; else fail "manifest when conditions: $WHEN_BAD";
 WHEN_COUNT=$(jq '[(.files // {}), (.rules // {})] | map(to_entries[] | select(.value | has("when"))) | length' "$MANIFEST")
 if [ "$WHEN_COUNT" -ge 1 ]; then ok; else fail "the manifest has no conditional entry, so check 5 checks nothing"; fi
 
+# --- 6. a `renamedFrom` names a key update can resolve (#473) -----------------
+# `renamedFrom` is a .myspec.json frameworkFiles key: `rules/<name>` for a
+# rule, bare for an ${aiDir} file, so a rename may cross blocks.
+# lib/manifest-keys.mjs derives the old key's dest from its spelling alone,
+# because the old entry is gone: a rule's is .claude/rules/<name>. A rules
+# entry installed anywhere else, or a files key spelled like another block,
+# would make that derivation wrong. An old key that is still live, retired in
+# `removed`, a hooks/lib copy, or claimed by two entries has no single meaning.
+RENAME_BAD=$(jq -r '
+  ([(.files // {}) | keys[]] + [(.rules // {}) | keys[] | "rules/\(.)"]) as $live |
+  ([(.files // {}), (.rules // {})] | map(to_entries[] | select(.value | has("renamedFrom")) | {key, from: .value.renamedFrom})) as $ren |
+  ((.rules // {}) | to_entries[] | select(.value.dest != ".claude/rules/\(.key)") | "rules \(.key): dest is \(.value.dest), not .claude/rules/\(.key)"),
+  ((.files // {}) | keys[] | select(test("^(rules|hooks|lib)/")) | "files \(.): a files key spelled as another block"),
+  ($ren[] | select((.from | type) != "string" or (.from | test("^(hooks|lib)/"))) | "\(.key): renamedFrom \(.from | tojson) is not a files or rules key"),
+  ($ren[] | select(.from as $f | $live | index($f)) | "\(.key): renamedFrom \(.from) is still a live manifest key"),
+  ($ren[] | .key as $k | .from as $f | select($ren | map(select(.from == $f)) | length > 1) | "\($k): renamedFrom \($f) is claimed by another entry too"),
+  (.removed // {} | keys[] as $r | $ren[] | select(.from == $r) | "\(.key): renamedFrom \(.from) is also a removed entry")
+' "$MANIFEST")
+if [ -z "$RENAME_BAD" ]; then ok; else fail "manifest renamedFrom: $RENAME_BAD"; fi
+# The first cross-block rename: #459 moved the auto-memory style guide from an
+# always-loaded rule to an ${aiDir} file. Shipped in 3.8.0 as a removal, which
+# deleted a customised copy and left a pinned one loaded every turn.
+if [ "$(jq -r '.files["auto-memory-style.md"].renamedFrom // empty' "$MANIFEST")" = "rules/auto-memory-style.md" ]; then ok; else fail "auto-memory-style.md carries renamedFrom rules/auto-memory-style.md"; fi
+if [ "$(jq -r '.removed | has("rules/auto-memory-style.md")' "$MANIFEST")" = false ]; then ok; else fail "rules/auto-memory-style.md is a rename, not a removed entry"; fi
+
 printf '%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

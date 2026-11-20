@@ -538,6 +538,60 @@ expect_no_line 'framework-renamed' "a pinned moved file leaves no rename finding
 
 unset RUN_PLUGIN
 
+# --- pass 3b-iii: a rename across manifest blocks (#473) ---------------------
+#
+# `renamedFrom` names the old file by its .myspec.json frameworkFiles key, the
+# spelling pins and `removed` use, so it can name a key in the other block:
+# `rules/x.md` for a rule, bare `x.md` for an ${aiDir} file. Resolving it as a
+# key of the entry's own block sent a rule's old name to ${aiDir}/rules/x.md,
+# and a rule renamed to a rule resolved to nothing at all: either way the old
+# file was invisible and the new one read as missing.
+
+CROSS="$ROOT/plugin-cross"
+mkdir -p "$CROSS"
+cp -R "$PLUGIN/framework-files" "$CROSS/"
+for d in hooks lib templates skills scaffolding hooks.json; do ln -s "$PLUGIN/$d" "$CROSS/$d"; done
+jq '.files["auto-memory-style.md"].renamedFrom = "rules/auto-memory-style.md"
+  | del(.removed["rules/auto-memory-style.md"])
+  | .rules["workflow.md"].renamedFrom = "rules/old-workflow.md"' \
+  "$PLUGIN/framework-files/manifest.json" > "$CROSS/framework-files/manifest.json"
+RUN_PLUGIN="$CROSS"
+
+build_fixture
+mv "$REPO/ai/auto-memory-style.md" "$REPO/.claude/rules/auto-memory-style.md"
+mv "$REPO/.claude/rules/workflow.md" "$REPO/.claude/rules/old-workflow.md"
+
+run_doctor install
+expect_exit 0 "an unmigrated cross-block rename does not fail the run"
+expect_line 'WARN +framework-renamed: .claude/rules/auto-memory-style.md: the framework renamed this to ai/auto-memory-style.md' "a rule renamed to an aiDir file is reported as a pending rename"
+# An overwrite entry is moved and then overwritten with the plugin copy: the
+# finding says so, and promises no carried section.
+expect_line 'framework-renamed: .claude/rules/auto-memory-style.md: .*replaces it with the plugin copy, so any local edit is lost' "an unpinned overwrite rename says edits are lost"
+expect_no_line 'framework-renamed: .claude/rules/auto-memory-style.md: .*project section' "an overwrite rename promises no project section"
+expect_no_line 'framework-missing: ai/auto-memory-style.md' "the aiDir file a rule was renamed to is not reported missing"
+expect_no_line 'framework-removed' "a cross-block rename is not a removal"
+expect_line 'WARN +framework-renamed: .claude/rules/old-workflow.md: the framework renamed this to .claude/rules/workflow.md' "a rule renamed to a rule is reported as a pending rename"
+expect_no_line 'framework-missing: .claude/rules/workflow.md' "the renamed rule is not reported missing"
+set_json .myspec.json 'd.frameworkFiles = {"rules/auto-memory-style.md": {pinned: "trimmed"}}'
+run_doctor install
+expect_line 'framework-renamed: .claude/rules/auto-memory-style.md: .*moves it and its pin, and keeps its content' "a pinned overwrite rename says its content is kept"
+
+# Both names present: a project that ran the 3.8.0 update with the old rule
+# pinned kept it beside the new file.
+# shellcheck disable=SC2016 # literal text, not an expansion
+sed 's/\${aiDir}/ai/g' "$PLUGIN/framework-files/auto-memory-style.md" > "$REPO/ai/auto-memory-style.md"
+set_json .myspec.json 'd.frameworkFiles = {}'
+run_doctor install
+expect_line 'WARN +framework-renamed: .claude/rules/auto-memory-style.md and ai/auto-memory-style.md both exist' "both names of a cross-block rename present is reported"
+expect_line 'fix: neither file has a project section; update shows a diff' "the both-exist fix for an overwrite entry offers what update does"
+expect_no_line 'merge the two project sections' "an overwrite both-exist fix offers no section merge"
+# A pin on the old key is a deliberate keep, as it is for a removed entry.
+set_json .myspec.json 'd.frameworkFiles = {"rules/auto-memory-style.md": {pinned: "trimmed"}}'
+run_doctor install
+expect_no_line 'framework-renamed: .claude/rules/auto-memory-style.md' "a pin on the old key silences the both-exist finding"
+
+unset RUN_PLUGIN
+
 # --- pass 3c: a file the framework retired ----------------------------------
 #
 # The manifest's removed block is how a deletion travels; the real manifest
