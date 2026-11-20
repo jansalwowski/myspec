@@ -1,3 +1,9 @@
+---
+title: "Visual Questions"
+purpose: "Route visual choices and visual results to Visual Buddy through /myspec:visualize-options"
+updated: 2026-11-20
+---
+
 # Visual questions
 
 This project set `.myspec.json` `visualQuestions` to `auto` (`/myspec:setup visual-questions`; switching it off removes this file). Visual Buddy is the browser tab `/myspec:visualize-options` puts screens on.
