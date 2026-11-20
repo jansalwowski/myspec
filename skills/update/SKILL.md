@@ -58,7 +58,7 @@ When `.myspec.json` has no `visualQuestions` key, run the `setup` skill with blu
 From `manifest.json`, collect all files. Each file has a `type`:
 
 - **`overwrite`** — replace the destination file entirely with the plugin's version
-- **`marker-merge`** — replace the framework-owned region (line 1 through `<!-- myspec:framework-end -->`), preserving the project section after it
+- **`marker-merge`** — replace the framework-owned region (line 1 through `<!-- myspec:framework-end -->`), keeping a later destination `updated:`, preserving the project section after it
 
 A `files` entry installs to `{aiDir}/{filename}`, except `templates/{name}`, which goes to `{aiDir}/.templates/{name}` (never create `{aiDir}/templates/`). A `rules` entry's source is `framework-files/rules/{filename}` and its destination is its `dest`.
 **Conditional entries.** A `files` or `rules` entry may carry `when: {"<setting key>": <value>, …}`. It applies only while every named setting has that effective value, schema defaults included: run `node "${CLAUDE_PLUGIN_ROOT}/lib/myspec-config.mjs" when '<the entry's when, as JSON>'` from the project root, which prints `true` or `false`. `true` → the entry is processed like any other (rename, pin, apply, hash). `false` → it is not installed: when its `dest` exists, delete it (`git rm` if tracked) and list it under `Removed`, unless it is pinned, in which case leave the file and the pin and report it as "condition off, kept locally".
@@ -79,9 +79,9 @@ For each file in the manifest whose `when` holds (Step 2, "Conditional entries")
 2. Write the output to the destination, replacing the existing file entirely
 
 **`marker-merge` strategy:** the file has two regions. Everything from line 1 through `<!-- myspec:framework-end -->` — frontmatter, title, standing note, and the marked framework section — is framework-owned; everything after the end marker is the project section and is never touched.
-1. Render the source file `framework-files/{filename}` with `lib/aidir-render.mjs`, as for `overwrite`
+1. Render the source file `framework-files/{filename}` with `lib/aidir-render.mjs`, as for `overwrite`, and pipe the output through `node "${CLAUDE_PLUGIN_ROOT}/lib/framework-header.mjs" keep-date <destination>`. It keeps the destination's frontmatter `updated:` when that is later, since the date also covers the project section; never set the date by hand, since the doctor compares by the same rule
 2. Read the destination file and locate `<!-- myspec:framework-end -->`
-3. Write the source's framework-owned region (line 1 through its own end marker) followed by the destination's project section, unchanged. One exception: keep the destination's frontmatter `updated:` when it is later than the source's, since that date also covers the project section (the doctor compares the header the same way)
+3. Write that output's framework-owned region (line 1 through its own end marker) followed by the destination's project section, unchanged
 4. If the destination has no end marker, do not guess where the project section starts: read [references/marker-less.md](references/marker-less.md) and ask its replace / prepend / pin question.
 
 If a destination file doesn't exist for `marker-merge`, create it from the source (treat as overwrite for missing files).

@@ -225,6 +225,7 @@ pin pre-flight.md "dated locally"
 perl -0pi -e 's/^updated: .*$/updated: 2026-02-01/m' "$REPO/.ai/pre-flight.md"
 run
 expect_verdict pre-flight.md drop "a later updated: in a marker-merge header still equals the plugin copy"
+printf '%s\n' "$OUT" | grep -q 'apart from a later updated: date' && ok || fail "a drop by a later date says the region differs by its date (got: $OUT)"
 perl -0pi -e 's/^updated: .*$/updated: 2026-01-01/m' "$REPO/.ai/pre-flight.md"
 run
 expect_verdict pre-flight.md unrecorded "an earlier updated: differs from the plugin copy"
