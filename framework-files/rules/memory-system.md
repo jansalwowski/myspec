@@ -1,7 +1,7 @@
 ---
 title: "Agent Memory System"
 purpose: "Prevent debugging loops and preserve knowledge across sessions"
-updated: 2026-11-15
+updated: 2026-11-21
 ---
 
 # Agent Memory System
@@ -33,8 +33,7 @@ Governs the project-level memory under `${aiDir}/memory/`. Procedures are in the
 | Own session | The live file whose `## Files touched` lists a path you edited untagged, or tags your subagent; several or none → newest mtime, and confirm |
 | Archive file | `${aiDir}/memory/sessions/archive/YYYY-MM-DD-{slug}.md` in the main checkout |
 | Terminal statuses | `completed` (via `/myspec:session-complete`) or `abandoned` (swept). Archive is a location, not a status |
-| Age policy | mtime < 1h: live, never touch. 1–6h: ambiguous, `/myspec:session-clean` asks. > 6h: `/myspec:session-clean` deletes it when empty, else archives it as `abandoned` |
-| Ownership | Own → `/myspec:session-complete`; others' → `/myspec:session-clean` |
+| Ownership | Own → `/myspec:session-complete`. Another session's live file: never touch it; `/myspec:session-clean` owns its age policy |
 
 ## User-level auto-memory
 
