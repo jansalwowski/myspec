@@ -145,6 +145,8 @@ user starts one. Verify such a task deterministically, for example by parsing or
 eval files, and put the paid command on a `**Paid check (user runs):**` line with its
 narrowest form: one case, one run, no baseline arm, a cost ceiling.)
 
+**Paid check (user runs):** `<narrowest paid command>` (only when the task builds a paid check)
+
 - [ ] **Step 1: Write the failing test**
   [test code]
 
