@@ -2,6 +2,8 @@
 
 Use this template when dispatching an implementer subagent.
 
+When the task's `Verify at phase review:` command is a paid check, an eval or other command that starts model sessions, fill `none` for it here and in every fix round: [paid-checks.md](paid-checks.md).
+
 ```
 Task tool (general-purpose):
   description: "Implement Task N: [task name]"
@@ -85,8 +87,12 @@ Task tool (general-purpose):
     - Static checks on the files you touched: `[scoped lint / typecheck commands, or "none"]`
 
     Run nothing else — not the full test suite, not a build, not an
-    install. The controller runs the full suite once at the phase barrier,
-    and a second run in the same checkout competes for caches, ports, and
+    install, and never a command that starts model sessions or calls a
+    model API (an eval harness such as `claude plugin eval`, an
+    LLM-judged test), even when it is named above: each run costs money
+    and only the user may start one. Report it as not run instead. The
+    controller runs the full suite once at the phase barrier, and a second
+    run in the same checkout competes for caches, ports, and
     test databases, producing flakes someone must then chase.
 
     Fix a failing check in the code, not in the check. Loosening an

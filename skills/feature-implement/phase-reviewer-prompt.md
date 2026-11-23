@@ -133,8 +133,11 @@ Task tool (general-purpose):
     - Do all tests pass? Every failure in the barrier log is attributed
       below. Then run each task's `Verify at phase review:` command
       yourself, plus any further check needed to prove a risk you name —
-      never the whole suite. Report the exact command and its output for
-      each. If you run a `.claude/verification.json` check whose
+      never the whole suite, and never a command that starts model
+      sessions or calls a model API (an eval harness such as
+      `claude plugin eval`): only the user may start a paid run, so list
+      what it would prove under Not proven instead. Report the exact
+      command and its output for each. If you run a `.claude/verification.json` check whose
       `diffCommand` is non-empty, run that instead of its `command`, with
       `MYSPEC_BASE_REF` set to `git merge-base HEAD <default branch>`.
       Export a fresh `MYSPEC_CHECK_RUN_ID` for each one. If a check is
