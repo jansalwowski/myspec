@@ -26,6 +26,10 @@ It prints the new `$STATE/probes/milestone-N/run-R/` path (`ART`).
 
 The executor loads no project CLAUDE.md, so what the target needs to start must be on the Target and Scratch env lines; a gap comes back as a `NEED:` line.
 
+## Paid probes
+
+Before dispatch, check each probe line for a paid check ([paid-checks.md](paid-checks.md)). When a probe is one, ask the user before dispatching, naming the command and that each case is a full model session. Offer: **run** it in the narrowest form (one case, one run, no baseline arm, a cost ceiling), which you write into the dispatch next to the probe verbatim as the user's approved form; or **waive** it, logged as a `Waiver` below. Asking is not dropping a probe: the user decides, as for any waiver.
+
 ## Reading the report
 
 You never run, reword, or drop a probe yourself: the agent that did the work must not be the one that decides whether its verification ran, and tests green is not a substitute. Copy each probe line into the Execution Log as `Probe (Milestone N): …`.

@@ -11,7 +11,7 @@ Read the whole written plan against `spec.md` and `tech-spec.md`, not against yo
 | 1 | **Snippets vs spec contract.** Compare every code and test snippet with the Spec contract quotes and Global Constraints its task carries. | The snippet enforces a narrower rule than the quote, such as one variant where the spec says "any". It adds a case or misses one. An update path validates less than the create path the same rule covers. A memo or cache is keyed on less than its result depends on, so it goes stale when an input changes. An eager reference or import-time side effect breaks existing tests' mocks. |
 | 2 | **Steps agree.** Within each task, compare the test step with the implementation step. Then compare each task with the later tasks that touch the same behavior. | Step 1 asserts something Step 3 contradicts, for example a test that expects "no clip-path" while the implementation adds one. A later task's snippet undoes or contradicts an earlier task's. |
 | 3 | **Reader-visible strings.** Check every string the plan dictates that reaches a person: UI text, labels, attribution, messages, emails, exported headers. | An internal ID, a `TODO`, a `FIXME` or an open-question reference reaches rendered output. Placeholder text. Two strings shown together that repeat the same sentence. A string the spec does not supply that the plan made up: take the spec's wording, or name the string in Step 5 for the user to supply. |
-| 4 | **Probe lint.** Check every `**Checkpoint probes:**` line. Skip this check when the plan has no probes. | The target cannot do the action at that milestone, for example zooming a page that renders without zoom, or calling an endpoint a later milestone adds. A probe's expected value contradicts what the tasks build. A probe reads state that an earlier probe in the block wrote, hid or deleted, and does not say so. |
+| 4 | **Probe lint.** Check every `**Checkpoint probes:**` line. Skip this check when the plan has no probes. | The target cannot do the action at that milestone, for example zooming a page that renders without zoom, or calling an endpoint a later milestone adds. A probe's expected value contradicts what the tasks build. A probe reads state that an earlier probe in the block wrote, hid or deleted, and does not say so. A probe runs a paid check (a command that starts model sessions, such as `claude plugin eval`). |
 
 ## Probe order
 
@@ -27,6 +27,7 @@ Walk this after the four checks, against the written plan. Each line restates a 
 - [ ] Task boundaries are right-sized — each task independently rejectable by a reviewer; trivial same-shape changes batched into one task
 - [ ] Every task has exact file paths matching tech-spec file inventory
 - [ ] Every task has TDD steps and a `**Verify at phase review:**` command scoped to the task's own tests
+- [ ] No `Verify at phase review:` command or probe is a paid check; each paid check sits on a `**Paid check (user runs):**` line in its narrowest form
 - [ ] Every algorithm or relied-on library call has a `**Prototype:**` line from a scratch run
 - [ ] If Test Hooks names *Real inputs*: the derivation's core ran on that corpus and the plan quotes the result, or the first task is a spike on it
 - [ ] Parallel groups have zero file overlap (check file lists)

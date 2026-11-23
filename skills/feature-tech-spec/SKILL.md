@@ -97,6 +97,8 @@ Short ordered outline, one line per step, numbered, no checkboxes. `feature-plan
 2. Step (depends on 1)
 3. ...
 
+A step that builds an eval suite or any check that starts model sessions (`claude plugin eval`, an LLM-judged test) delivers the files, reviewed. Running it is not part of the step: each run costs money, so the user or CI runs it, and `feature-plan` puts the command on a paid-check line rather than in a Verify or probe.
+
 ### Database Changes
 ```
 // New models, tables, or field additions (use project's schema language)

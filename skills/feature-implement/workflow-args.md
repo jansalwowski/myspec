@@ -41,7 +41,7 @@ Each `tasks` entry:
 | `workdir` | yes | absolute path: your checkout for a sequential task, the phase worktree for every task of a concurrent phase, or the task worktree you created for a parallel one |
 | `implementerPrompt` | yes | `implementer-prompt.md`'s prompt, filled exactly as for a controller-mode dispatch (task file path, context, plan drift, isolation constraint, Verify command, commit trailers) |
 | `files` | yes | the paths from the task's `**Files:**` lines (Create, Modify, Test). A changed file outside them is a scope finding |
-| `verifyCommand` | yes | the task's `Verify at phase review:` command |
+| `verifyCommand` | yes | the task's `Verify at phase review:` command, or `none` when it is a paid check ([paid-checks.md](paid-checks.md)) |
 | `scopedChecks` | no | the file-scoped lint and typecheck commands you would put in the dispatch. Empty or `none` means no scoped check |
 | `specContract` | no | the task's `**Spec contract:**` block, verbatim |
 
