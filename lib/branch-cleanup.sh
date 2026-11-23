@@ -42,23 +42,31 @@
 # toward KEEP.
 #
 # HARD VETOES — any one keeps the branch, before proofs are considered. The
-# two "may be in use" vetoes (touched in the last hour, and the unattended
-# ones below) add "(otherwise DELETE: <proof>)" when a local proof holds, so
-# the user knows waiting is enough; Proof B is not run for that hint.
+# "may be in use" and "holds ignored files" vetoes add "(otherwise DELETE:
+# <proof>)" when a local proof holds, so the user knows what lifting the hold
+# gives: waiting for the time window, or closing the named process. Proof B
+# is not run for that hint.
 #   - it is the current branch, or the base branch
 #   - its worktree has uncommitted or untracked files
-#   - its worktree was touched in the last hour (possibly a live session)
+#   - its worktree may be in use (the window is the last hour, or the last
+#     24h with --unattended):
+#       - git recorded activity in it within the window: the mtime of HEAD
+#         in its admin dir, or the time in the newest entry of its reflog
+#         (a commit, a checkout, or the worktree's creation). Not the
+#         reflog's mtime: `git gc` rewrites every worktree's reflog.
+#       - a session event within the window names it (lib/session-event.sh
+#         session_claims: a write, a verify, or an isolation decision)
+#       - a running process has its working directory inside it (the detail
+#         names its PID and command; only closing it lifts the hold)
+#     The mtime of the worktree's top-level directory is not a signal: a
+#     dependency re-link or any new top-level entry changes it, and a commit
+#     or edit in a subdirectory does not. A human edit leaves the tree dirty.
 #   - it was never pushed and has no merged PR
 #   - it has commits ahead of its remote-tracking ref
 #
-# UNATTENDED VETOES (--unattended, for callers that remove without asking,
-# such as housekeep.sh) — a worktree is also kept when:
-#   - git recorded activity in it in the last 24h (HEAD or its reflog in
-#     its admin dir: a commit or checkout in a subdirectory never touches
-#     the top-level directory the 1h veto reads)
-#   - a session event in the last 24h names it (lib/session-event.sh
-#     session_claims: a write, a verify, or an isolation decision)
-#   - a running process has its working directory inside it
+# UNATTENDED (--unattended, for callers that remove without asking, such as
+# housekeep.sh) — the in-use window above is 24h, and a worktree is also kept
+# when:
 #   - it holds ignored files that are not regenerable (.env, local config):
 #     `git worktree remove` deletes them, and they exist nowhere else.
 #     Dependency, build and cache output is rebuilt by one install or build,
@@ -132,14 +140,11 @@ CURRENT=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)
 # shellcheck source=lib/hook-core.sh
 . "$(dirname "${BASH_SOURCE[0]}")/hook-core.sh"
 
-# The session files the unattended vetoes read live with the main checkout,
-# and only lib/session-event.sh reads them.
-SESSION_HOME=""
-if [ "$UNATTENDED" -eq 1 ]; then
-  # shellcheck source=lib/session-event.sh
-  . "$(dirname "${BASH_SOURCE[0]}")/session-event.sh"
-  SESSION_HOME=$(session_home "$REPO_ROOT") || SESSION_HOME="$REPO_ROOT"
-fi
+# The session files the in-use veto reads live with the main checkout, and
+# only lib/session-event.sh reads them.
+# shellcheck source=lib/session-event.sh
+. "$(dirname "${BASH_SOURCE[0]}")/session-event.sh"
+SESSION_HOME=$(session_home "$REPO_ROOT") || SESSION_HOME="$REPO_ROOT"
 
 worktree_for_branch() {
   git worktree list --porcelain 2>/dev/null | awk -v want="refs/heads/$1" '
@@ -392,55 +397,80 @@ irreplaceable_ignored() {
   done <<< "$2"
 }
 
-# The working directory of every running process, one per line, read once.
-# lsof where present (macOS, most Linux), else /proc. Neither: nothing, and
-# the other unattended vetoes still hold.
+# load_process_cwds -> sets PROCESS_CWDS to "<pid>\t<command>\t<cwd>" for
+# every running process, one per line. Reads once per run, so call it in the
+# parent shell, never in $(...). lsof where present (macOS, most Linux), else
+# /proc. Neither: nothing, and the other in-use signals still hold.
 PROCESS_CWDS=""
 PROCESS_CWDS_READ=0
-process_cwds() {
+load_process_cwds() {
   local p
-  if [ "$PROCESS_CWDS_READ" -eq 0 ]; then
-    PROCESS_CWDS_READ=1
-    if command -v lsof >/dev/null 2>&1; then
-      PROCESS_CWDS=$(lsof -a -d cwd -Fn 2>/dev/null | sed -n 's/^n//p')
-    elif [ -d /proc/self ]; then
-      PROCESS_CWDS=$(for p in /proc/[0-9]*/cwd; do readlink "$p" 2>/dev/null; done)
-    fi
+  [ "$PROCESS_CWDS_READ" -eq 0 ] || return 0
+  PROCESS_CWDS_READ=1
+  if command -v lsof >/dev/null 2>&1; then
+    PROCESS_CWDS=$(lsof -a -d cwd -Fpcn 2>/dev/null | awk '
+      /^p/ { pid = substr($0, 2) }
+      /^c/ { cmd = substr($0, 2) }
+      /^n/ { print pid "\t" cmd "\t" substr($0, 2) }')
+  elif [ -d /proc/self ]; then
+    PROCESS_CWDS=$(for p in /proc/[0-9]*; do
+      printf '%s\t%s\t%s\n' "${p#/proc/}" "$(cat "$p/comm" 2>/dev/null)" "$(readlink "$p/cwd" 2>/dev/null)"
+    done)
   fi
-  printf '%s\n' "$PROCESS_CWDS"
 }
 
-# unattended_veto <worktree> -> 0, with DETAIL set, when the worktree may be
-# in use or holds files a removal would destroy.
-unattended_veto() {
-  local wt="$1" phys admin f since
+# reflog_time <file> -> the epoch time of the newest entry in a reflog
+# ("<old> <new> <name> <<email>> <time> <tz>\t<message>"); nothing if empty.
+reflog_time() {
+  awk -F '\t' 'END { n = split($1, a, " "); if (n >= 2 && a[n - 1] ~ /^[0-9]+$/) print a[n - 1] }' "$1" 2>/dev/null
+}
+
+# in_use_veto <worktree> <since epoch> <window text> -> 0, with DETAIL set,
+# when the worktree may be in use: git activity or a session event since
+# <since>, or a running process inside it.
+in_use_veto() {
+  local wt="$1" since="$2" window="$3" phys admin t
   phys=$(cd "$wt" 2>/dev/null && pwd -P) || phys="$wt"
-  since=$(( $(date +%s) - 86400 ))
 
   admin=$(git -C "$wt" rev-parse --absolute-git-dir 2>/dev/null) || admin=""
-  # Not index: the dirty-tree veto's `git status` may rewrite it, and a
-  # staged change is already dirty.
-  for f in "$admin/HEAD" "$admin/logs/HEAD"; do
-    if [ -n "$admin" ] && [ -e "$f" ] && [ "$(mtime_of "$f")" -ge "$since" ]; then
-      DETAIL="may be in use: git activity in the last 24h"
+  # HEAD's mtime (a checkout), and the reflog's newest entry (a commit, which
+  # leaves HEAD alone). Not the reflog's mtime, which `git gc` moves for every
+  # worktree, nor index, which the dirty-tree veto's `git status` may
+  # rewrite (and a staged change is already dirty).
+  if [ -n "$admin" ]; then
+    t=""
+    [ -e "$admin/HEAD" ] && t=$(mtime_of "$admin/HEAD")
+    if [ -n "$t" ] && [ "$t" -ge "$since" ]; then
+      DETAIL="may be in use: git activity in $window"
       return 0
     fi
-  done
+    t=$(reflog_time "$admin/logs/HEAD")
+    if [ -n "$t" ] && [ "$t" -ge "$since" ]; then
+      DETAIL="may be in use: git activity in $window"
+      return 0
+    fi
+  fi
 
   if session_claims "$SESSION_HOME" "$since" "$wt" "$phys"; then
-    DETAIL="may be in use: a session worked in it in the last 24h"
+    DETAIL="may be in use: a session worked in it in $window"
     return 0
   fi
 
-  local cwds ignored keep
-  cwds=$(process_cwds)
-  if awk -v a="$wt" -v b="$phys" '
-      $0 == a || $0 == b || index($0, a "/") == 1 || index($0, b "/") == 1 { found = 1; exit }
-      END { exit !found }' <<< "$cwds"; then
-    DETAIL="may be in use: a running process is inside it"
+  local who
+  load_process_cwds
+  who=$(awk -F '\t' -v a="$wt" -v b="$phys" '
+      $3 == a || $3 == b || index($3, a "/") == 1 || index($3, b "/") == 1 { print "PID " $1 " (" $2 ")"; exit }' <<< "$PROCESS_CWDS")
+  if [ -n "$who" ]; then
+    DETAIL="may be in use: a running process is inside it, $who; close it to release the worktree"
     return 0
   fi
+  return 1
+}
 
+# ignored_veto <worktree> -> 0, with DETAIL set, when the worktree holds
+# ignored files a removal would destroy.
+ignored_veto() {
+  local wt="$1" ignored keep
   ignored=$(git -C "$wt" status --porcelain --ignored=matching 2>/dev/null)
   keep=$(irreplaceable_ignored "$wt" "$ignored")
   if [ -n "$keep" ]; then
@@ -475,11 +505,10 @@ classify() {
       return
     fi
 
-    local age veto=""
-    age=$(( $(date +%s) - $(mtime_of "$WT") ))
-    if [ "$age" -lt 3600 ]; then
-      veto="worktree touched $(( age / 60 ))min ago — may be a live session"
-    elif [ "$UNATTENDED" -eq 1 ] && unattended_veto "$WT"; then
+    local veto="" span=3600 window="the last hour"
+    [ "$UNATTENDED" -eq 1 ] && { span=86400; window="the last 24h"; }
+    if in_use_veto "$WT" "$(( $(date +%s) - span ))" "$window" \
+        || { [ "$UNATTENDED" -eq 1 ] && ignored_veto "$WT"; }; then
       veto="$DETAIL"
     fi
 

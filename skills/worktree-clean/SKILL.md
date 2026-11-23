@@ -66,11 +66,11 @@ Any one of these keeps the branch, before proofs are considered:
 
 - it is the current branch, or the base branch
 - its worktree has uncommitted or untracked files
-- its worktree was touched in the last hour (possibly a live session); when a local proof holds, the detail ends `(otherwise DELETE: <proof>)`, so waiting is enough
+- its worktree may be in use: git activity or a session event in it in the last hour, or a running process inside it. When a local proof holds, the detail ends `(otherwise DELETE: <proof>)`. For git activity or a session event, waiting an hour is enough. For a running process, waiting does not help: the detail names its PID and command, so tell the user to close that process (a shell tab, an editor, a dev server) and re-run the audit. A recently changed directory mtime alone does not hold a worktree.
 - it was never pushed and has no merged PR
 - it has commits ahead of its remote-tracking ref
 
-`--unattended`, which `housekeep` passes because it removes without asking, also keeps a worktree with git activity or a session event in it in the last 24h, a running process inside it, or ignored files other than dependencies, build output, caches and editor state (`node_modules`, `.venv`, `target`, …). Do not pass it here: this skill asks, so the shorter rules hold.
+`--unattended`, which `housekeep` passes because it removes without asking, widens the in-use window to 24h and also keeps a worktree with ignored files other than dependencies, build output, caches and editor state (`node_modules`, `.venv`, `target`, …). Do not pass it here: this skill asks, so the shorter rules hold.
 
 ## Constraints
 

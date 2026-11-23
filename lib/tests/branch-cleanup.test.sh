@@ -46,6 +46,22 @@ squash_merge() {
   git merge -q --squash "$1" >/dev/null 2>&1 || true
   git commit -qm "squash: $1 (#999)"
 }
+# ago <seconds> -> that long before now, as touch -t takes it.
+ago() { date -r $(( $(date +%s) - $1 )) +%Y%m%d%H%M 2>/dev/null || date -d "@$(( $(date +%s) - $1 ))" +%Y%m%d%H%M; }
+# old_admin <worktree> [seconds ago] -> back-date the worktree and git's
+# record of activity in it, HEAD's mtime and the time in each reflog entry
+# (2020 unless given): `git worktree add` is itself git activity, which the
+# in-use veto reads.
+old_admin() {
+  local admin t=202001010000 at=1577836800
+  admin=$(git -C "$1" rev-parse --absolute-git-dir)
+  if [ -n "${2:-}" ]; then t=$(ago "$2"); at=$(( $(date +%s) - $2 )); fi
+  awk -v at="$at" 'BEGIN { FS = OFS = "\t" } {
+      n = split($1, a, " "); a[n - 1] = at; l = a[1]
+      for (i = 2; i <= n; i++) l = l " " a[i]
+      $1 = l; print }' "$admin/logs/HEAD" > "$admin/logs/HEAD.tmp" && mv "$admin/logs/HEAD.tmp" "$admin/logs/HEAD"
+  touch -t "$t" "$1" "$admin/HEAD" "$admin/logs/HEAD"
+}
 
 # 1. plain ancestor merge
 mkbranch ff-merged;               seed a.txt A "add a"
@@ -106,18 +122,35 @@ git worktree add -q "$ROOT/wt-clean" wt-clean
 git worktree add -q "$ROOT/wt-dirty" wt-dirty
 echo "scratch notes" > "$ROOT/wt-dirty/NOTES.txt"
 
-# A worktree touched in the last hour is held as a possibly-live session, which
-# would mask the checks below; backdate both so the other rules are what decide.
-touch -t 202001010000 "$ROOT/wt-clean" "$ROOT/wt-dirty"
+# Creating a worktree is git activity in the last hour, which would mask the
+# checks below; backdate both so the other rules are what decide.
+old_admin "$ROOT/wt-clean"; old_admin "$ROOT/wt-dirty"
 
-# 9. merged branch whose worktree is clean but freshly touched
-mkbranch wt-live;                 seed i.txt I i
-squash_merge wt-live
+# 9. merged branches with clean worktrees, each with one sign of use or none.
+# The top-level directory mtime is not a sign: a dependency re-link changes it.
+for b in wt-live live-git live-session live-proc live-oldsession wt-gc; do
+  mkbranch "$b"; seed "$b.txt" "$b" "$b"
+  squash_merge "$b"
+  git push -q origin "$b" 2>/dev/null || true
+  git worktree add -q "$ROOT/$b" "$b"
+  old_admin "$ROOT/$b"
+done
 git checkout -q develop
-git push -q origin wt-live 2>/dev/null || true
-git worktree add -q "$ROOT/wt-live" wt-live
+touch "$ROOT/wt-live"                                   # touched, nothing else
+touch -t "$(ago 600)" "$(git -C "$ROOT/live-git" rev-parse --absolute-git-dir)/HEAD"  # HEAD moved 10min ago
+mkdir -p .claude/state/sessions
+jq -cn --arg r "$ROOT/live-session" --argjson at "$(date +%s)" \
+  '{t:"write",root:$r,rel:"x.txt",kind:"code",via:"tool",at:$at}' > .claude/state/sessions/s0.jsonl
+jq -cn --arg r "$ROOT/live-oldsession" --argjson at "$(( $(date +%s) - 7200 ))" \
+  '{t:"write",root:$r,rel:"x.txt",kind:"code",via:"tool",at:$at}' >> .claude/state/sessions/s0.jsonl
+(cd "$ROOT/live-proc/" && exec sleep 300) & LIVE_PROC=$!
+# git gc rewrites every worktree's reflog, so its mtime is now; the entries
+# keep their times. 2h old survives gc's reflog expiry and is outside 1h.
+old_admin "$ROOT/wt-gc" 7200
+git gc -q
 
 RESULT=$("$SCRIPT" --base develop --no-fetch --no-fetch --json 2>/dev/null)
+kill "$LIVE_PROC" 2>/dev/null; wait "$LIVE_PROC" 2>/dev/null
 
 if [ -n "${DEBUG_VERDICTS:-}" ]; then
   printf '%s' "$RESULT" | jq -r '.[] | "\(.verdict)\t\(.branch)\t\(.proof)\(.detail)"' >&2
@@ -157,8 +190,15 @@ expect base-moved       DELETE "single-commit squash keeps its patch-id, so C se
 expect unpushed         KEEP   "never pushed, no PR"
 expect wt-clean         DELETE "merged, worktree clean and idle"
 expect wt-dirty         KEEP   "worktree holds an untracked file"
-expect wt-live          KEEP   "worktree touched within the hour"
-expect_detail wt-live "may be a live session (otherwise DELETE: " "the 1h veto names the verdict it holds back"
+expect wt-live          DELETE "worktree only touched within the hour: no sign of use"
+expect live-git         KEEP   "git HEAD moved within the hour"
+expect_detail live-git "may be in use: git activity in the last hour (otherwise DELETE: " "the 1h veto names the verdict it holds back"
+expect live-session     KEEP   "a session wrote in the worktree within the hour"
+expect_detail live-session "may be in use: a session worked in it in the last hour (otherwise DELETE: " "the session veto names the verdict it holds back"
+expect live-proc        KEEP   "a process runs inside the worktree"
+expect_detail live-proc "may be in use: a running process is inside it, PID $LIVE_PROC (sleep); close it to release the worktree (otherwise DELETE: " "the process veto names the process and the verdict it holds back"
+expect wt-gc            DELETE "git gc moved the reflog mtime; its newest entry is 2h old"
+expect live-oldsession  DELETE "a session event 2h old is outside the 1h window"
 expect picked           DELETE "every commit cherry-picked into the base"
 expect picked-plus      KEEP   "one commit still only on the branch"
 expect develop          KEEP   "base and current branch"
@@ -367,13 +407,8 @@ git remote set-url origin "$ROOT/origin.git"
 git config --unset "url.$ROOT/origin.git.insteadOf"
 
 # --- --unattended: the vetoes for a caller that removes without asking ------
-# Five merged, pushed branches, each with a clean worktree idle past the 1h
-# veto; one condition each that only --unattended honours.
-old_admin() {  # back-date the worktree and git's record of activity in it
-  local admin
-  admin=$(git -C "$1" rev-parse --absolute-git-dir)
-  touch -t 202001010000 "$1" "$admin/HEAD" "$admin/logs/HEAD"
-}
+# Merged, pushed branches, each with a clean worktree idle past the 1h veto;
+# one condition each that only --unattended honours.
 printf '*.local\nnode_modules/\n__pycache__/\n.idea/\n.env\nout/\n' > .gitignore; git add .gitignore; git commit -qm ignore; git push -q origin develop
 for b in uw-git uw-session uw-proc uw-ignored uw-idle uw-deps uw-nested uw-outenv uw-link; do
   mkbranch "$b"; seed "$b.txt" "$b" "$b"
@@ -384,6 +419,7 @@ for b in uw-git uw-session uw-proc uw-ignored uw-idle uw-deps uw-nested uw-outen
 done
 git checkout -q develop
 for b in uw-session uw-proc uw-ignored uw-idle uw-deps uw-nested uw-outenv uw-link; do old_admin "$ROOT/$b"; done
+old_admin "$ROOT/uw-git" 7200   # inside 24h, outside 1h
 mkdir -p .claude/state/sessions
 jq -cn --arg r "$ROOT/uw-session" --argjson at "$(date +%s)" \
   '{t:"write",root:$r,rel:"x.txt",kind:"code",via:"tool",at:$at}' > .claude/state/sessions/s1.jsonl
@@ -422,6 +458,13 @@ kill "$PROC" 2>/dev/null; wait "$PROC" 2>/dev/null
 RESULT=$("$SCRIPT" --base develop --no-fetch --json 2>/dev/null)
 expect uw-git     DELETE "without --unattended the 24h vetoes do not apply"
 expect uw-ignored DELETE "without --unattended an ignored file does not hold it"
+
+# The process list is read once per run, not once per worktree it checks.
+mkdir -p "$ROOT/lsof-stub"
+printf '#!/bin/sh\necho call >> "%s/lsof-calls"\n' "$ROOT" > "$ROOT/lsof-stub/lsof"; chmod +x "$ROOT/lsof-stub/lsof"
+PATH="$ROOT/lsof-stub:$PATH" "$SCRIPT" --base develop --no-fetch --json >/dev/null 2>&1
+CALLS=$(wc -l < "$ROOT/lsof-calls" 2>/dev/null | tr -d ' ')
+if [ "$CALLS" = 1 ]; then PASS=$((PASS + 1)); else FAIL=$((FAIL + 1)); echo "FAIL  lsof should run once per audit (ran ${CALLS:-0} times)" >&2; fi
 
 # --- #378: empty arrays under bash < 4.4 ---------------------------------------
 # --json with no row to print, under every bash at hand (lib/tests/old-bash.sh).
