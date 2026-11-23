@@ -53,8 +53,8 @@ execution:
     | Live file | `.claude/state/sessions/{session_id}.md` in the edited file's **main checkout** — gitignored, never in a linked worktree (`git worktree remove` would destroy it) |
     | Own session | The live file whose `## Files touched` lists a path you edited untagged, or tags your subagent; several or none → newest mtime, and confirm |
     | Archive file | `.ai/memory/sessions/archive/YYYY-MM-DD-{slug}.md` in the main checkout |
-    | Terminal statuses | `completed` (via `/myspec:session-complete`) or `abandoned` (swept). Archive is a location, not a status |
-    | Ownership | Own → `/myspec:session-complete`. Another session's live file: never touch it; `/myspec:session-clean` owns its age policy |
+    | Terminal statuses | `completed` (via `/myspec:session-complete`) or `abandoned` (swept by `/myspec:session-clean`). Archive is a location, not a status |
+    | Ownership | Own → `/myspec:session-complete`. Others' → `/myspec:session-clean`, which owns the age policy; never touch them outside it |
 
     ## User-level auto-memory
 

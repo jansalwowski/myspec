@@ -2,7 +2,7 @@
 title: "Global Pre-flight Checklist"
 purpose: "Preventive checks before starting any work"
 feature: "global"
-updated: 2026-11-21
+updated: 2026-11-23
 ---
 
 # Pre-flight Checklist (Global)
@@ -19,7 +19,7 @@ Run these checks before starting work on any feature or task.
   → **Verify**: Can name 1 anti-pattern relevant to current task
 - [ ] Check `.claude/state/sessions/*.md` for existing sessions (yours lists a path you edited under `## Files touched`):
   - If one is related to this work → Ask user: resume it or complete it first?
-  - Never touch another session's file; suggest `/myspec:session-clean`, which owns the age policy, for dangling ones
+  - Other sessions' logs → report them and suggest `/myspec:session-clean`, which owns the age policy; never touch them yourself
   → **Verify**: No conflicting active session
 
 ## Before Implementation
