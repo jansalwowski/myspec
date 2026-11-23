@@ -66,7 +66,7 @@ Any one of these keeps the branch, before proofs are considered:
 
 - it is the current branch, or the base branch
 - its worktree has uncommitted or untracked files
-- its worktree may be in use: git activity or a session event in it in the last hour, or a running process inside it; when a local proof holds, the detail ends `(otherwise DELETE: <proof>)`, so waiting is enough. A recently changed directory mtime alone does not hold a worktree.
+- its worktree may be in use: git activity or a session event in it in the last hour, or a running process inside it. When a local proof holds, the detail ends `(otherwise DELETE: <proof>)`. For git activity or a session event, waiting an hour is enough. For a running process, waiting does not help: the detail names its PID and command, so tell the user to close that process (a shell tab, an editor, a dev server) and re-run the audit. A recently changed directory mtime alone does not hold a worktree.
 - it was never pushed and has no merged PR
 - it has commits ahead of its remote-tracking ref
 

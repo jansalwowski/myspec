@@ -48,13 +48,19 @@ squash_merge() {
 }
 # ago <seconds> -> that long before now, as touch -t takes it.
 ago() { date -r $(( $(date +%s) - $1 )) +%Y%m%d%H%M 2>/dev/null || date -d "@$(( $(date +%s) - $1 ))" +%Y%m%d%H%M; }
-# old_admin <worktree> [touch -t time] -> back-date the worktree and git's
-# record of activity in it (2020 unless given): `git worktree add` is itself
-# git activity, which the in-use veto reads.
+# old_admin <worktree> [seconds ago] -> back-date the worktree and git's
+# record of activity in it, HEAD's mtime and the time in each reflog entry
+# (2020 unless given): `git worktree add` is itself git activity, which the
+# in-use veto reads.
 old_admin() {
-  local admin
+  local admin t=202001010000 at=1577836800
   admin=$(git -C "$1" rev-parse --absolute-git-dir)
-  touch -t "${2:-202001010000}" "$1" "$admin/HEAD" "$admin/logs/HEAD"
+  if [ -n "${2:-}" ]; then t=$(ago "$2"); at=$(( $(date +%s) - $2 )); fi
+  awk -v at="$at" 'BEGIN { FS = OFS = "\t" } {
+      n = split($1, a, " "); a[n - 1] = at; l = a[1]
+      for (i = 2; i <= n; i++) l = l " " a[i]
+      $1 = l; print }' "$admin/logs/HEAD" > "$admin/logs/HEAD.tmp" && mv "$admin/logs/HEAD.tmp" "$admin/logs/HEAD"
+  touch -t "$t" "$1" "$admin/HEAD" "$admin/logs/HEAD"
 }
 
 # 1. plain ancestor merge
@@ -122,7 +128,7 @@ old_admin "$ROOT/wt-clean"; old_admin "$ROOT/wt-dirty"
 
 # 9. merged branches with clean worktrees, each with one sign of use or none.
 # The top-level directory mtime is not a sign: a dependency re-link changes it.
-for b in wt-live live-git live-session live-proc live-oldsession; do
+for b in wt-live live-git live-session live-proc live-oldsession wt-gc; do
   mkbranch "$b"; seed "$b.txt" "$b" "$b"
   squash_merge "$b"
   git push -q origin "$b" 2>/dev/null || true
@@ -138,6 +144,10 @@ jq -cn --arg r "$ROOT/live-session" --argjson at "$(date +%s)" \
 jq -cn --arg r "$ROOT/live-oldsession" --argjson at "$(( $(date +%s) - 7200 ))" \
   '{t:"write",root:$r,rel:"x.txt",kind:"code",via:"tool",at:$at}' >> .claude/state/sessions/s0.jsonl
 (cd "$ROOT/live-proc/" && exec sleep 300) & LIVE_PROC=$!
+# git gc rewrites every worktree's reflog, so its mtime is now; the entries
+# keep their times. 2h old survives gc's reflog expiry and is outside 1h.
+old_admin "$ROOT/wt-gc" 7200
+git gc -q
 
 RESULT=$("$SCRIPT" --base develop --no-fetch --no-fetch --json 2>/dev/null)
 kill "$LIVE_PROC" 2>/dev/null; wait "$LIVE_PROC" 2>/dev/null
@@ -186,7 +196,8 @@ expect_detail live-git "may be in use: git activity in the last hour (otherwise 
 expect live-session     KEEP   "a session wrote in the worktree within the hour"
 expect_detail live-session "may be in use: a session worked in it in the last hour (otherwise DELETE: " "the session veto names the verdict it holds back"
 expect live-proc        KEEP   "a process runs inside the worktree"
-expect_detail live-proc "may be in use: a running process is inside it (otherwise DELETE: " "the process veto names the verdict it holds back"
+expect_detail live-proc "may be in use: a running process is inside it, PID $LIVE_PROC (sleep); close it to release the worktree (otherwise DELETE: " "the process veto names the process and the verdict it holds back"
+expect wt-gc            DELETE "git gc moved the reflog mtime; its newest entry is 2h old"
 expect live-oldsession  DELETE "a session event 2h old is outside the 1h window"
 expect picked           DELETE "every commit cherry-picked into the base"
 expect picked-plus      KEEP   "one commit still only on the branch"
@@ -408,7 +419,7 @@ for b in uw-git uw-session uw-proc uw-ignored uw-idle uw-deps uw-nested uw-outen
 done
 git checkout -q develop
 for b in uw-session uw-proc uw-ignored uw-idle uw-deps uw-nested uw-outenv uw-link; do old_admin "$ROOT/$b"; done
-old_admin "$ROOT/uw-git" "$(ago 7200)"   # inside 24h, outside 1h
+old_admin "$ROOT/uw-git" 7200   # inside 24h, outside 1h
 mkdir -p .claude/state/sessions
 jq -cn --arg r "$ROOT/uw-session" --argjson at "$(date +%s)" \
   '{t:"write",root:$r,rel:"x.txt",kind:"code",via:"tool",at:$at}' > .claude/state/sessions/s1.jsonl
@@ -447,6 +458,13 @@ kill "$PROC" 2>/dev/null; wait "$PROC" 2>/dev/null
 RESULT=$("$SCRIPT" --base develop --no-fetch --json 2>/dev/null)
 expect uw-git     DELETE "without --unattended the 24h vetoes do not apply"
 expect uw-ignored DELETE "without --unattended an ignored file does not hold it"
+
+# The process list is read once per run, not once per worktree it checks.
+mkdir -p "$ROOT/lsof-stub"
+printf '#!/bin/sh\necho call >> "%s/lsof-calls"\n' "$ROOT" > "$ROOT/lsof-stub/lsof"; chmod +x "$ROOT/lsof-stub/lsof"
+PATH="$ROOT/lsof-stub:$PATH" "$SCRIPT" --base develop --no-fetch --json >/dev/null 2>&1
+CALLS=$(wc -l < "$ROOT/lsof-calls" 2>/dev/null | tr -d ' ')
+if [ "$CALLS" = 1 ]; then PASS=$((PASS + 1)); else FAIL=$((FAIL + 1)); echo "FAIL  lsof should run once per audit (ran ${CALLS:-0} times)" >&2; fi
 
 # --- #378: empty arrays under bash < 4.4 ---------------------------------------
 # --json with no row to print, under every bash at hand (lib/tests/old-bash.sh).
