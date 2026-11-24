@@ -1,0 +1,3 @@
+# Generated: evals/_fixtures/project-instructions.sh writes the project-instructions block.
+# GitHub collapses these files in PR diffs.
+evals/*/case.yaml linguist-generated=true
