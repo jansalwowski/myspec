@@ -129,6 +129,10 @@ ALLOW_TOOLS+=("Bash(node *lib/setup-doctor.mjs*)")
 # the renderer both copy framework documents through (stdout).
 ALLOW_TOOLS+=("Bash(claude --version)" "Bash(git --version)" "Bash(node *lib/upgrade-route.mjs*)"
   "Bash(node *lib/myspec-config.mjs*)" "Bash(node *lib/memory-doctor.mjs*)" "Bash(node *lib/aidir-render.mjs*)")
+# research reads the web: without these its search and verifier agents have
+# no sources and the run ends in under a minute. ToolSearch loads the deferred
+# web tools. Only the research-* cases list them in allowed_tools.
+ALLOW_TOOLS+=(ToolSearch WebSearch WebFetch)
 
 # ---------------------------------------------------------------- case index
 
