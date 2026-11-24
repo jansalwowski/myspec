@@ -59,7 +59,7 @@ Two sources, both optional — configure with `/myspec:setup mockup`:
 
 ### Phase 1 — Clarify
 
-1. **Resolve feature.** Use any feature slug the user passed; otherwise ask "Which feature directory under `${aiDir}/features/`?". Verify `${aiDir}/features/{feature}/spec.md` exists — if not, refuse. **REQUIRED prerequisite:** `/myspec:feature-spec`, or `feature-requirements` for a brief. A spec with `stage: brief` in its frontmatter (no ACs yet; shape in [../\_shared/spec-template.md](../_shared/spec-template.md)) runs in **brief mode**: surfaces trace to its REQ IDs instead of ACs.
+1. **Resolve feature.** Use any feature slug the user passed; otherwise ask "Which feature directory under `${aiDir}/features/`?". Verify `${aiDir}/features/{feature}/spec.md` exists — if not, refuse. **REQUIRED prerequisite:** `/myspec:feature-spec`, or `/myspec:feature-requirements` for a brief. A spec with `stage: brief` in its frontmatter (no ACs yet; shape in [the brief stage](../_shared/spec-template.md#brief-stage)) runs in **brief mode**: surfaces trace to its REQ IDs instead of ACs.
 2. **Silent recon** — read these without asking the user. **Data-model/spec mismatches are the #1 source of rebuild rounds — never invent enum values or field names from a verbal description.** If the spec is ambiguous about a model shape, ask the user before guessing.
    - `.myspec.json` `mockups` block + `${aiDir}/conventions/mockup-design.md` (scaffold if missing; the *Repeated user feedback* section is authoritative override).
    - `${aiDir}/conventions/accessibility.md` if present — link-vs-button catalogue backing the navigation guard.
@@ -220,7 +220,7 @@ When the same chrome surfaces in two or more features (navbar, footer, hero, pag
 
 ## Integration
 
-**Requires** [REQUIRED]: `/myspec:feature-spec` or `feature-requirements` — a spec.md (full or brief stage) must exist before mocking; `--explore` needs none.
+**Requires** [REQUIRED]: `/myspec:feature-spec` or `/myspec:feature-requirements` — a spec.md (full or brief stage) must exist before mocking; `--explore` needs none.
 **Configured by** [OPTIONAL]: `/myspec:setup mockup` — writes `${aiDir}/conventions/mockup-design.md` and the `.myspec.json` `mockups` block; can install the default preview app.
 **Next** [OPTIONAL]: `/myspec:feature-mockup-review` — audit the built mockups before tech design.
 **Then** [REQUIRED]: `/myspec:feature-tech-spec` — once the spec is visually validated; a brief-stage spec first goes to `/myspec:feature-spec {feature}` to be completed.
