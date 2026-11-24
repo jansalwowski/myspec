@@ -67,7 +67,7 @@ Required sections:
 ### Architecture
 - How this fits into the system
 - Key components and their responsibilities
-- Data flow diagram (if complex)
+- Data flow as a Mermaid diagram when 3 or more components or actors take part, or the design has a state machine
 
 ### Reuse audit
 
