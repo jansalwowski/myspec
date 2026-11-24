@@ -102,6 +102,10 @@ features:
   - name: parent-mixed
     status: in-progress
     subfeatures: true
+  - name: brief-draft
+    status: draft
+  - name: plain-draft
+    status: draft
 YAML
 
   feature healthy-complete
@@ -137,6 +141,12 @@ status: superseded/' "$F/complete-superseded-archive/plans/2026-02-01-v1-plan.md
   doc "$F/offvocab-docs/tech-spec.md" "'superseded'"
   feature unknown-doc-status
   doc "$F/unknown-doc-status/spec.md" shipped
+
+  # A brief-stage spec (feature-requirements) has no dependencies.md yet;
+  # feature-spec writes it when it completes the spec.
+  mkdir -p "$F/brief-draft"
+  printf -- '---\ntitle: "x"\nstatus: draft\nstage: brief\n---\n\n## Overview\n' > "$F/brief-draft/spec.md"
+  doc "$F/plain-draft/spec.md" draft
 
   for p in parent-ticked parent-unticked parent-mixed; do
     feature "$p"
@@ -206,6 +216,13 @@ expect_no_line 'parent-unticked .*acceptance criteria' \
   "a spec that never ticks ACs is not flagged"
 expect_no_line 'parent-mixed .*acceptance criteria' \
   "a parent with an incomplete sub-feature is not flagged"
+
+# ═══ brief-stage spec: dependencies.md not expected yet ═════════════════════
+
+expect_no_line 'brief-draft .*expected doc missing for status=draft: dependencies.md' \
+  "a draft whose spec.md has stage: brief is not flagged for a missing dependencies.md"
+expect_line 'plain-draft .*expected doc missing for status=draft: dependencies.md' \
+  "control: a draft full spec without dependencies.md is still flagged"
 
 # ═══ json carries the ratios ═════════════════════════════════════════════════
 

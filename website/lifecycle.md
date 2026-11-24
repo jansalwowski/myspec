@@ -41,7 +41,7 @@ myspec tracks two things, and keeps them apart.
 ```mermaid
 stateDiagram-v2
     direction LR
-    planned --> draft: feature-spec / idea-process
+    planned --> draft: feature-spec / feature-requirements / idea-process
     draft --> in_progress: feature-implement starts
     in_progress --> complete: feature-complete
     complete --> deprecated: by hand
@@ -58,6 +58,7 @@ Not every feature starts at a blank spec or follows the straight line.
 | Just an idea, not ready to spec | `brainstorm` → `idea-intake` (queues and prioritizes it) → `idea-process` (turns it into a spec) |
 | Code exists, no docs | `feature-discover` writes `discovery.md`, and optionally the spec and tech spec, from the code |
 | Feature too big for one tech spec | `feature-decompose` splits it into sub-features, each with its own lifecycle |
+| Rough requirements, layout still open | `feature-requirements` writes a brief (`spec.md` with `stage: brief`) → `feature-mockup` → `feature-spec` completes the same file. See [Design-first feature](examples/flows/design-first-feature.md) |
 | UI-heavy feature | `feature-mockup` → `feature-mockup-review` between the spec and the tech spec, to check the spec visually |
 | Spec may clash with another feature | `cross-spec-validation` after the spec is approved |
 | Changing a shipped feature | `feature-update` edits the spec and tech spec in place → `feature-plan` → `feature-implement` → `feature-complete` |

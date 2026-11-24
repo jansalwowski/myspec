@@ -11,11 +11,12 @@ tags: [feature, specification, planning, documentation]
 - `/myspec:feature-spec {feature}` — the full workflow below.
 - `/myspec:feature-spec {feature} scenarios` or `… seed-data` — a revisit of an existing feature. Parse this before anything else: when the second argument is one of these, `${aiDir}/features/{feature}/spec.md` must already exist (if it does not, stop and say so — the full workflow creates it); skip to Step 6, do only the named part, and never re-create or rewrite spec.md, dependencies.md or the manifest entry. Then Step 7 for the new file only.
 - `--review` / `--no-review` — answers Step 1's auto-review question in advance.
+- Completion mode: when `${aiDir}/features/{feature}/spec.md` already exists with `stage: brief` in its frontmatter (written by `/myspec:feature-requirements`), the full workflow completes that file in place instead of creating it (Step 2). Detect it before Step 1. The `scenarios` / `seed-data` routes above are unchanged, and they refuse a brief-stage spec: it has no acceptance criteria yet, so say so and offer completion.
 
 ## Workflow
 
 1. **Gather Information**
-   - Ask the user about the feature concept
+   - Ask the user about the feature concept. In completion mode the brief and its mockups are the concept: ask only what they leave open
    - Identify dependencies from `${aiDir}/features/index.yaml`
    - Check for related existing features
    - Ask whether to review the spec as soon as it is written, in the same `AskUserQuestion` call as the concept questions when it has room (a call takes at most 4 questions; otherwise ask it in its own call), unless `--review` / `--no-review` already answered it. Not every spec needs a review before the user reads it, so the user decides per run:
@@ -30,12 +31,13 @@ tags: [feature, specification, planning, documentation]
 
 2. **Create Spec Document**
    Create `${aiDir}/features/{feature-name}/spec.md` with the frontmatter, sections, requirement IDs and acceptance-criteria format in [`_shared/spec-template.md`](../_shared/spec-template.md#specmd). `feature-spec-review` checks against the same file.
+   In completion mode, complete the brief-stage spec.md in place per [references/complete-brief.md](references/complete-brief.md): acceptance criteria from the mockup states, the "what mockups miss" checklist, an AC-to-mockup trace both ways, then `stage: brief` removed.
 
 3. **Create Dependencies Document**
    Create `${aiDir}/features/{feature-name}/dependencies.md` with the headings in [`_shared/spec-template.md`](../_shared/spec-template.md#dependenciesmd), and a reason for each dependency. Start the file with frontmatter that holds `title:` and `created:`: the frontmatter hook denies a doc under `${aiDir}/` that has no frontmatter block.
 
 4. **Update Feature Manifest**
-   Add entry to `${aiDir}/features/index.yaml`:
+   Add entry to `${aiDir}/features/index.yaml` (in completion mode the brief already added it: update its fields, never add a second entry):
 ```yaml
 - name: {feature-name}
   title: "{Feature Title}"
@@ -97,6 +99,7 @@ tags: [feature, specification, planning, documentation]
 ## Verification Checklist
 
 - [ ] `${aiDir}/features/{feature}/spec.md` created with valid YAML frontmatter
+- [ ] Completion mode: the brief-stage file was completed in place, kept its REQ IDs, every AC names its mockup state or `no UI`, and `stage: brief` is gone
 - [ ] `status: draft` field present in frontmatter (`approved` only when the auto-review passed and the user said yes)
 - [ ] Auto-review question asked or answered by argument (Step 1); when on, feature-spec-review ran with `--from-author`
 - [ ] spec.md and dependencies.md match `_shared/spec-template.md`: every required section, `REQ-001` requirement IDs, `- [ ] AC-1:` acceptance criteria, the three dependencies headings
@@ -110,3 +113,4 @@ tags: [feature, specification, planning, documentation]
 
 **Next** [REQUIRED — owns the draft → approved transition]: `/myspec:feature-spec-review` — validate spec before proceeding to technical design. When the auto-review already approved the spec, offer its next step instead: `/myspec:cross-spec-validation` (Recommended) or `/myspec:feature-tech-spec`
 **Next (large features)** [OPTIONAL]: `/myspec:feature-decompose` — split into sub-features before feature-spec-review
+**Called after** [OPTIONAL]: `/myspec:feature-requirements` (the brief) and `/myspec:feature-mockup`, for completion mode

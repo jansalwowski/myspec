@@ -13,6 +13,7 @@ Steps 1–6 of `feature-spec-review`. The reviewer subagent runs them. The main 
 2. **Analyze Structure**
    - Check spec.md and dependencies.md against [`_shared/spec-template.md`](../_shared/spec-template.md): frontmatter fields, every required section, `REQ-001` requirement IDs, `- [ ] AC-1:` acceptance criteria, the dependencies.md headings
    - Check for empty or stub sections
+   - If spec.md's frontmatter has `stage: brief`, run the [Brief-Stage Check](#brief-stage-check) instead of the rest of this step and Steps 3–4, then continue at Step 5
 
 3. **Apply Review Dimensions**: check spec.md against each of the 8 [Review Dimensions](#review-dimensions) and run the [Detection Patterns](#detection-patterns).
 
@@ -21,6 +22,20 @@ Steps 1–6 of `feature-spec-review`. The reviewer subagent runs them. The main 
 5. **Present Findings**: one table per the [Output Format](#output-format), grouped Critical → High → Medium → Low, with line numbers. Rate each finding by the [Severity Classification](#severity-classification).
 
 6. **Propose Fixes**: for each finding, a concrete rewrite or addition in diff format (`- old text` / `+ new text`) with its rationale, tagged per [review-output.md](../_shared/review-output.md#tagging-and-application-rules).
+
+## Brief-Stage Check
+
+A brief-stage spec.md follows the brief shape in [`_shared/spec-template.md`](../_shared/spec-template.md#brief-stage), not the full one. Missing User Stories, Acceptance Criteria or dependencies.md are not findings. Check only:
+
+| Check | Finding when |
+|-------|--------------|
+| Solution-free problem | The Problem line names a screen, button, tool or technology instead of the pain |
+| Vague words | fast, simple, user-friendly, robust, intuitive, several, etc., and/or, should, with no number or example |
+| Tags | An Open Questions line has no status tag (open, assumption, decision, fact) or no source tag (user, ticket, inferred) |
+| Open lines | An `[open]` line has no resolve-by stage or no default |
+| Shape | More than about 25 body lines, prose paragraphs, or fewer than 3 or more than 7 requirements |
+
+Rate every finding Medium or Low: a brief blocks nothing. Add a line before the VERDICT line: `BRIEF: complete with /myspec:feature-spec`.
 
 ## Review Dimensions
 

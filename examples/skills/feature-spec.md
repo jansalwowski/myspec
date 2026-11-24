@@ -1,6 +1,6 @@
 # `/myspec:feature-spec` — examples
 
-Creates `spec.md` + `dependencies.md` for a new feature, and adds a manifest entry. The skill asks clarifying questions, drafts the documents, and waits for approval before writing. After approval it offers the optional `scenarios.md` + `seed.json` step (`/myspec:feature-spec {feature} scenarios` or `seed-data` runs that step alone on an existing spec).
+Creates `spec.md` + `dependencies.md` for a new feature, and adds a manifest entry. When `spec.md` is still a brief (`stage: brief`, from `/myspec:feature-requirements`), it completes that file in place instead. The skill asks clarifying questions, drafts the documents, and waits for approval before writing. After approval it offers the optional `scenarios.md` + `seed.json` step (`/myspec:feature-spec {feature} scenarios` or `seed-data` runs that step alone on an existing spec).
 
 **Contents**
 
@@ -8,6 +8,7 @@ Creates `spec.md` + `dependencies.md` for a new feature, and adds a manifest ent
 - [Feature with cross-feature dependencies](#feature-with-cross-feature-dependencies)
 - [Skill recommends decomposing first](#skill-recommends-decomposing-first)
 - [Auto-review on — the user sees a reviewed draft](#auto-review-on--the-user-sees-a-reviewed-draft)
+- [Completing a brief after mockups](#completing-a-brief-after-mockups)
 
 ---
 
@@ -296,3 +297,44 @@ One gate instead of two: the user read the spec once, after the review, and appr
 ### Why this example matters
 
 The review is opt-in per run. A small spec the user wants to read first takes "No" and keeps the old two-step flow. When it runs, it runs in a subagent: a reviewer that shares the author's context reads the spec as the author meant it and misses what the page leaves out.
+
+---
+
+## Completing a brief after mockups
+
+The spec already exists as a brief, and the mockups are done.
+
+### Setup
+
+`/myspec:feature-requirements accountant-access` wrote `spec.md` with `stage: brief`: four one-line requirements and tagged open questions ([feature-requirements examples](feature-requirements.md)). Then `/myspec:feature-mockup` built three mockups that trace to the REQ IDs. Picks made while iterating were appended as `[decision] ... (user)` lines.
+
+### Invocation
+
+```
+/myspec:feature-spec accountant-access
+```
+
+### Skill flow
+
+The skill sees `stage: brief` and completes the file in place instead of creating a new one. It reads the brief and every mockup with its states.
+
+**Example mapping.** Each mockup state is an example, examples group under a rule, and each rule becomes an acceptance criterion with its origin:
+
+```markdown
+- [ ] AC-3: An accountant with no invoices shared yet sees who invited them and an explanation (mockup: AccountantInvoices / empty)
+- [ ] AC-7: A revoked accountant's next request is refused and they see a signed-out page (no UI)
+```
+
+REQ-001 to REQ-004 keep their IDs and are expanded into testable requirements.
+
+**What mockups miss.** The checklist finds what no screen showed: an invite email that bounces, an invite link opened after it expired, an audit entry when access is revoked, and the export of 10,000 invoices. Two become ACs. Offline use is marked N/A ("web only, same as the rest of the app"). One becomes an open question with a default, after one question to the user.
+
+**Trace both ways.** Every AC names its mockup state or `no UI`. One mockup state, a "resend invite" button, maps to no AC, so the summary lists it as possible scope creep for the user to keep (add an AC) or drop from the mockup.
+
+**Open Questions.** The `[decision]` lines are folded into requirements. The one `[open]` line left is rewritten in the plain template form.
+
+The skill removes `stage: brief`, keeps `status: draft`, writes `dependencies.md`, and updates the existing manifest entry instead of adding a second one. Then it continues as usual: review, scenarios offer, commit question.
+
+### Why this example matters
+
+Mockups came before the full spec, and the spec did not need a rewrite after them. The brief and the finished spec are one file, so a change made by hand between the two stages is not lost. The checklist covers what screens never show: errors, permissions, data rules and side effects.

@@ -66,6 +66,7 @@ nav:
   - Examples:
       - Overview: examples/README.md
       - Full feature delivery: examples/flows/full-feature-delivery.md
+      - Design-first feature: examples/flows/design-first-feature.md
       - Feature decomposition: examples/flows/feature-decomposition.md
       - Spec drift recovery: examples/flows/spec-drift-recovery.md
       - Debugging with memory: examples/flows/debugging-with-memory.md
