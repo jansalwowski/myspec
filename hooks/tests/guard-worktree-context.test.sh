@@ -1032,5 +1032,29 @@ git -C "$R2" checkout -q main
 check_in "$R2" block "#417 develop on the default branch"  dev2 'git pull --ff-only'
 git -C "$R2" checkout -q feat
 
+# --- #552: a develop session's gate A block names the develop route ----------
+mark d552 develop 60
+mark w552 worktree 60 "$WT"
+lacks() {  # lacks <needle> <desc> <cwd> <session-id> <command>
+  if run_hook "$3" "$4" "$5" | jq -r '.hookSpecificOutput.permissionDecisionReason' | grep -qF -- "$1"; then
+    FAIL=$((FAIL + 1))
+    echo "FAIL  $2: reason has $1" >&2
+  else
+    PASS=$((PASS + 1))
+  fi
+}
+reason_has 'promote-to-worktree.sh' "#552 develop: switch -c names promotion"     "$REPO" d552 'git switch -c feat/x'
+reason_has "\`! git switch -c feat/x\`" "#552 develop: switch -c names the ! route" "$REPO" d552 'git switch -c feat/x'
+lacks 'linked worktree'            "#552 develop: switch -c names no worktree"    "$REPO" d552 'git switch -c feat/x'
+reason_has 'promote-to-worktree.sh' "#552 develop: branch -f names promotion"     "$REPO" d552 'git branch -f feat/x HEAD'
+lacks 'linked worktree'            "#552 develop: branch -f names no worktree"    "$REPO" d552 'git branch -f feat/x HEAD'
+printf '{"aiDir":".ai","frameworkVersion":"2.0.0","isolation":{"protectedBranches":["fea*"]}}\n' > "$R2/.myspec.json"
+reason_has 'promote-to-worktree.sh' "#552 develop: protected pull names promotion" "$R2" dev2 'git pull'
+lacks 'linked worktree'            "#552 develop: protected pull names no worktree" "$R2" dev2 'git pull'
+printf '{"aiDir":".ai","frameworkVersion":"2.0.0"}\n' > "$R2/.myspec.json"
+reason_has 'linked worktree'       "#552 no decision keeps the worktree route"    "$REPO" none-sess 'git switch -c feat/x'
+reason_has 'linked worktree'       "#552 worktree mode keeps the worktree route"  "$REPO" w552 'git switch -c feat/x'
+lacks 'promote-to-worktree.sh'     "#552 worktree mode names no promotion"        "$REPO" w552 'git switch -c feat/x'
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
