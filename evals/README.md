@@ -164,7 +164,7 @@ Two cases started in `capability` and moved to `regression` once a skill fix mad
 
 A skill that dispatches a subagent pays for the handoff in latency, cost and whatever the summary drops. Keep the subagent only where the inline run scores worse ([When to fold subagents into your main agent loop](https://claude.com/resources/articles/building-agents-when-to-fold-subagents-into-your-main-agent-loop)). A fold pair measures that for one dispatch:
 
-- Two cases tagged `fold-pair:<name>`, one `fold-arm:subagent` (Agent granted, so the skill dispatches) and one `fold-arm:inline` (Agent not granted, so the skill runs its documented inline fallback).
+- Two cases tagged `fold-pair:<name>`, one `fold-arm:subagent` (Agent granted, so the skill dispatches) and one `fold-arm:inline` (`disallowed_tools: [Agent]`, so the skill runs its documented inline fallback). Leaving Agent out of `allowed_tools` is not enough: that field only grants the permission-gated tools, and Agent is not one, so until 2026-11-24 both inline arms dispatched like their subagent arms. Each inline arm carries a `no-dispatch` grader (Agent, `max: 0`) so that cannot return unnoticed.
 - Same prompt body, fixture, `max_turns` and `timeout_seconds`: a lower cap on one arm would decide the verdict by itself. Outcome graders are the grader files both cases hold with the same name and content. A grader only one arm has, such as the dispatch grader, is not an outcome.
 - `node scripts/evals/fold-compare.mjs --lint` checks the tags, the prompt bodies, the turn and time caps, and that the arms share a grader. It does not compare fixtures, since one arm may build from the other's workspace. `scripts/tests/eval-fold-compare.test.sh` runs it on this suite in CI.
 
