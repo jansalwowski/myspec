@@ -58,7 +58,7 @@ const SIBLINGS = {
   'feature-mockup': ['feature-mockup-review'],
   'feature-mockup-review': ['feature-mockup'],
   'feature-requirements': ['feature-spec', 'brainstorm'],
-  'feature-spec': ['feature-tech-spec'],
+  'feature-spec': ['feature-tech-spec', 'feature-requirements'],
   'feature-spec-review': ['feature-tech-spec-review'],
   'feature-spec-sync': ['backbone-sync', 'feature-status-audit'],
   'feature-status-audit': ['feature-verify'],

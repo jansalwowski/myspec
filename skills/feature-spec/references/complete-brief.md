@@ -45,7 +45,7 @@
    - Write "None." when nothing remains.
 
 6. **Finish the file**
-   - Remove `stage: brief` from the frontmatter. Keep `status: draft` and `spec_version: 1`. Set `last_updated` to today.
+   - Remove `stage: brief` from the frontmatter. Keep `status: draft` and `spec_version` as it is (a light brief check may already have raised it). Set `last_updated` to today.
    - Check the result against the full template: every required section, REQ IDs, AC IDs, no implementation detail.
 
 Then the SKILL.md workflow continues at Step 3 (dependencies.md). The manifest entry already exists from the brief: Step 4 updates it, never adds a second one.

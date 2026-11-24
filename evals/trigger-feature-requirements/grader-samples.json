@@ -26,7 +26,8 @@
     "fail": [
       "---\ntitle: \"Reminder Settings\"\nstatus: draft\nphase: 1\nspec_version: 1\n---\n\n## Overview\nA full spec.\n",
       "---\ntitle: \"Reminder Settings\"\nstatus: approved\nstage: brief\n---\n",
-      "# Reminder Settings\n\nstage: brief\nstatus: draft\n"
+      "# Reminder Settings\n\nstage: brief\nstatus: draft\n",
+      "---\ntitle: \"Reminder Settings\"\nstatus: approved\n---\n\n## Example\n\n```\n---\nstage: brief\nstatus: draft\n---\n```\n"
     ]
   },
   "tagged-assumptions": {

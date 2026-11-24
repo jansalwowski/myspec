@@ -16,7 +16,7 @@ Turns rough input into a brief: a short, tagged `spec.md` in the brief stage tha
 ## Workflow
 
 1. **Read the sources and the feature folder**
-   - Read every source the user gave. An idea file is a source only: leave it and `${aiDir}/ideas/PRIORITY-LISTING.md` unchanged.
+   - Read every source the user gave. An idea file is a source only: leave its text unchanged, and in `${aiDir}/ideas/PRIORITY-LISTING.md` mark its row `[~]` (in progress) so `idea-process` does not pick it up and write a second spec over the brief.
    - Read `${aiDir}/features/index.yaml` for the slug and related features.
    - If `${aiDir}/features/{feature}/spec.md` exists:
      - with `stage: brief`: refine it in place. Keep every REQ ID and every `[decision]` line, and continue from Step 3.
@@ -67,7 +67,7 @@ Turns rough input into a brief: a short, tagged `spec.md` in the brief stage tha
 
 ## Verification Checklist
 
-- [ ] Every source the user gave was read; an idea file was left unchanged
+- [ ] Every source the user gave was read; an idea file's text was left unchanged and its PRIORITY-LISTING row marked `[~]`
 - [ ] An existing full spec was not overwritten; an existing brief kept its REQ IDs and `[decision]` lines
 - [ ] spec.md has `stage: brief` and `status: draft`, and matches the brief shape in `_shared/spec-template.md`
 - [ ] Every Open Questions line has a status tag and a source tag; every `[open]` line has a resolve-by stage and a default

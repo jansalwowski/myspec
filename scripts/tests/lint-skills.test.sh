@@ -254,7 +254,7 @@ run
 expect_exit 0 "a Do-NOT clause naming every sibling passes"
 
 fresh
-{ printf -- '---\nname: feature-spec\ndescription: "Use when starting a feature. Do not use for tech design (feature-tech-spec)."\n---\n'; body; } | skill feature-spec
+{ printf -- '---\nname: feature-spec\ndescription: "Use when starting a feature. Do not use for tech design (feature-tech-spec) or rough requirements (feature-requirements)."\n---\n'; body; } | skill feature-spec
 run
 expect_exit 0 "a lower-case \"Do not use\" clause naming the sibling passes"
 
