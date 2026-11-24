@@ -83,4 +83,14 @@ execution:
     ## Documentation Requirements
 
     New feature → `.ai/features/{feature}/` (layout and status rules: `.claude/rules/feature-docs.md`, loaded with those files); feature changes → update the same directory; architecture decisions → `.ai/decisions/`; a new app, package, or top-level command → the topology file named in `.myspec.json` (`/myspec:backbone-sync` audits it). Every markdown file under `.ai/` carries YAML frontmatter — enforced by the `validate-frontmatter.sh` PreToolUse hook (`.ai/ideas/` exempt).
+
+    ## Diagrams
+
+    Draw a diagram when an explanation for a person covers 3 or more components or actors, a state machine, an architecture, or a before/after change to a flow. Skip it when one sentence covers the flow. Pick the format by where the reader sees it:
+
+    | Destination | Format |
+    |---|---|
+    | A rendered file: spec, tech-spec, PR description, docs | Mermaid. In a before/after pair, mark added, changed and removed steps |
+    | A terminal reply | ASCII boxes and arrows, 15 lines or fewer, because the terminal prints Mermaid as source text. When Visual Buddy is running, show it there instead |
+    | A skill body or agent prompt | No diagram (`.claude/rules/skill-optimization.md`) |
 # END project-instructions

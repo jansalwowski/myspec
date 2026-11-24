@@ -1,7 +1,7 @@
 ---
 title: "AI-First Development Workflow"
 purpose: "Feature development process and code generation policy"
-updated: 2026-11-15
+updated: 2026-11-24
 see_also:
   - ${aiDir}/features/index.yaml
 ---
@@ -24,3 +24,13 @@ All are `/myspec:*` skills.
 ## Documentation Requirements
 
 New feature → `${aiDir}/features/{feature}/` (layout and status rules: `.claude/rules/feature-docs.md`, loaded with those files); feature changes → update the same directory; architecture decisions → `${aiDir}/decisions/`; a new app, package, or top-level command → the topology file named in `.myspec.json` (`/myspec:backbone-sync` audits it). Every markdown file under `${aiDir}/` carries YAML frontmatter — enforced by the `validate-frontmatter.sh` PreToolUse hook (`${aiDir}/ideas/` exempt).
+
+## Diagrams
+
+Draw a diagram when an explanation for a person covers 3 or more components or actors, a state machine, an architecture, or a before/after change to a flow. Skip it when one sentence covers the flow. Pick the format by where the reader sees it:
+
+| Destination | Format |
+|---|---|
+| A rendered file: spec, tech-spec, PR description, docs | Mermaid. In a before/after pair, mark added, changed and removed steps |
+| A terminal reply | ASCII boxes and arrows, 15 lines or fewer, because the terminal prints Mermaid as source text. When Visual Buddy is running, show it there instead |
+| A skill body or agent prompt | No diagram (`.claude/rules/skill-optimization.md`) |

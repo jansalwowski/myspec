@@ -5,7 +5,7 @@ paths:
   - .claude/skills/**
   - skills/**
   - plugins/*/skills/**
-updated: 2026-11-18
+updated: 2026-11-24
 ---
 
 # Skill Optimization Reference
@@ -134,7 +134,7 @@ Do NOT use `@` file links to skill files — they force-load the full content im
 When a skill activates, the body lands in the model's context window — not on a human's screen. Decoration costs tokens on every load and dilutes attention.
 
 **Drop:**
-- `dot` / mermaid / ASCII diagrams — agents read them as text noise; encode the flow as numbered steps or a small table instead
+- `dot` / mermaid / ASCII diagrams in a skill body — agents read them as text noise; encode the flow as numbered steps or a small table instead. This covers skill bodies and agent prompts only; diagrams in output for people follow `.claude/rules/workflow.md`
 - `> Note:` blockquote boxes — promote to a top-level instruction or delete
 - Hard-wrapped prose (let lines run as long as the sentence)
 - 3-deep bullet ladders — flatten or use a table
