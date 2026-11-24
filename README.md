@@ -116,6 +116,7 @@ When something is easier to see than to read (layouts to pick between, an archit
 | `/myspec:idea-process` | Convert idea to feature specification |
 | **Utilities** | |
 | `/myspec:brainstorm` | Explore a problem space before committing to a spec; offers [Visual Buddy](https://jansalwowski.github.io/myspec/visual-buddy/) for mockups, diagrams and visual results |
+| `/myspec:research` | Sourced research on a question: a short brief, parallel search agents, a verifier that never sees the draft, and an answer with confidence per claim. Pins versions from the lockfile for code questions ([examples](examples/skills/research.md)) |
 | `/myspec:root-cause-debugging` | Systematic 4-phase debugging methodology with 3-attempt escalation rule |
 | `/myspec:skill-verify` | Verify a skill file follows optimization guidelines |
 | `/myspec:backbone-sync` | Audit the project topology file against the repo in both directions — stale entries, undocumented workspace members and commands, git-backed liveness signals (`lib/backbone-audit/audit.mjs`) — then fix it. Refuses to run rather than half-read unsupported YAML, and names every check that could not run instead of reporting clean |

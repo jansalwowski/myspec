@@ -79,6 +79,7 @@ The review pass that runs on built code before completion. For bugs in the diff,
 | Skill | Scenarios covered |
 |-------|-------------------|
 | [skills/brainstorm.md](skills/brainstorm.md) | Generate mode (infer + name, go wide then converge) · Topic too large (scope check → decompose) · Sharpen mode that pivots to Generate |
+| [skills/research.md](skills/research.md) | Library behaviour question answered from the pinned version |
 | [skills/root-cause-debugging.md](skills/root-cause-debugging.md) | Single-component bug found in Phase 1 · Multi-component bug with boundary tracing · Stuck in a loop (escalation after 2 failed fixes) |
 
 ---
