@@ -1,6 +1,6 @@
 # `/myspec:feature-mockup` — examples
 
-Builds spec-validation mockups under `${aiDir}/features/{feature}/mockups/`: static, design-system-default surfaces that prove a spec's flows before technical design. Technology-agnostic — file format, component library, and verify/preview commands come from the `.myspec.json` `mockups` block and `${aiDir}/conventions/mockup-design.md`. Every surface must trace to a spec AC; real code or schema needs go to a handoff list, never into the mockup session.
+Builds spec-validation mockups under `${aiDir}/features/{feature}/mockups/`: static, design-system-default surfaces that prove a spec's flows before technical design. Technology-agnostic — file format, component library, and verify/preview commands come from the `.myspec.json` `mockups` block and `${aiDir}/conventions/mockup-design.md`. Every surface must trace to a spec AC, or to a REQ ID when `spec.md` is still in the brief stage (`stage: brief`); real code or schema needs go to a handoff list, never into the mockup session. `--explore` builds rough, greyscale wireframes in `exploration/` instead, before the spec is settled, and writes the user's picks back into `spec.md`.
 
 > **Related**: Configured by `/myspec:setup mockup`. Requires an approved spec from [feature-spec.md](feature-spec.md). Reviewed by [feature-mockup-review.md](feature-mockup-review.md); handoffs route to [feature-update.md](feature-update.md) or [feature-tech-spec.md](feature-tech-spec.md).
 
@@ -9,6 +9,8 @@ Builds spec-validation mockups under `${aiDir}/features/{feature}/mockups/`: sta
 - [First mockups for an approved spec (configured project)](#first-mockups-for-an-approved-spec-configured-project)
 - [Unconfigured project — graceful degradation](#unconfigured-project--graceful-degradation)
 - [Scope-creep flagged, schema need routed to handoff](#scope-creep-flagged-schema-need-routed-to-handoff)
+- [Brief-stage spec: surfaces trace to REQ IDs](#brief-stage-spec-surfaces-trace-to-req-ids)
+- [Explore mode before there is a spec](#explore-mode-before-there-is-a-spec)
 
 ---
 
@@ -88,3 +90,61 @@ Same `billing-portal` project. During iteration the user asks: "add an auto-pay 
    >    → Hand off to: `/myspec:feature-tech-spec` (data-model change)
 
 Both items leave the session as documentation, not code — the mockup session never edits production files.
+
+---
+
+## Brief-stage spec: surfaces trace to REQ IDs
+
+### Setup
+
+`invoice-reminders` has a `spec.md` in the brief stage: frontmatter with `status: draft` and `stage: brief`, five one-line requirements (REQ-001 to REQ-005), no User Stories and no Acceptance Criteria yet. The user wants high-fidelity mockups before the full spec is written.
+
+### Invocation
+
+```
+/myspec:feature-mockup invoice-reminders
+```
+
+### Skill flow
+
+1. **Brief mode** — the skill reads `stage: brief`, says it will trace surfaces to REQ IDs, and runs the normal recon and dossier.
+2. **Inventory** — each entry carries a **Source REQ** instead of a Source AC:
+
+   > 1. `ReminderSettings.html` — REQ-001, REQ-002 · sibling: greenfield · states: success / error
+   > 2. `ReminderPreview.html` — REQ-003 · sibling: greenfield · states: success only
+
+3. **Scope creep** — the user asks for a "snooze reminders for this customer" toggle. No REQ covers it. The skill offers to drop it, or to add it to the brief. The user confirms adding it, and the brief gets `6. REQ-006: Snooze reminders per customer`.
+4. **Variant pick** — `ReminderSettings` was built as A (one page) and B (two steps). The user picks A in `/myspec:visualize-options`, and the skill appends to the brief's Open Questions:
+
+   > - [decision] Reminder settings on one page, not a two-step form (user)
+
+5. **Wrap up** — the commit stages `mockups/**` and `spec.md`, since the session appended a decision line. The skill recommends `/myspec:feature-spec invoice-reminders` to complete the spec before `/myspec:feature-tech-spec`.
+
+`/myspec:feature-mockup-review invoice-reminders` later traces the same REQ IDs: a REQ in no mockup is the Critical finding, not a missing AC.
+
+---
+
+## Explore mode before there is a spec
+
+### Setup
+
+The user has only an idea: "a page where support staff see every overdue invoice and nudge the customer". There is no `${aiDir}/features/overdue-queue/` folder yet.
+
+### Invocation
+
+```
+/myspec:feature-mockup --explore overdue-queue
+```
+
+### Skill flow
+
+1. **No spec needed** — the skill works from the user's words. It skips the design-system recon, the reuse audit, the catalog skim and `verify` / `compileCheck`.
+2. **Dossier** — one `AskUserQuestion` with three questions: audience (support staff), devices (desktop), and what to explore (layout). There is no style question.
+3. **Build** — three greyscale HTML files in `${aiDir}/features/overdue-queue/exploration/`: `queue-a.html` (table with a side panel), `queue-b.html` (cards grouped by age), `queue-c.html` (inbox list with a detail pane). Each starts with an "Exploration, not a design" banner and shows its empty, error and full states side by side. The invented `days_overdue` field is marked `(guess)`. Content is realistic: customer names, amounts and dates, no Lorem ipsum.
+4. **Pick** — `/myspec:visualize-options` shows the three variants side by side. The user picks C and asks for the "Send reminder" action in the detail pane. The skill edits `queue-c.html` only.
+5. **Wrap up** — there is no `spec.md`, so the skill shows and then writes a brief-stage one: Overview, Goals, three REQ lines, Out of Scope, and Open Questions with the session's lines:
+
+   > - [decision] Inbox list with a detail pane, not a table or cards (user)
+   > - [assumption] Each overdue invoice has a days-overdue count (inferred)
+
+   It adds an `index.yaml` entry with `status: draft`, says that `exploration/` stays uncommitted and throwaway, and recommends `/myspec:feature-mockup overdue-queue` for high-fidelity mockups or `/myspec:feature-spec overdue-queue` to complete the spec. The later high-fidelity run may cite the picked layout, but never imports or copies the exploration files.

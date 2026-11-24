@@ -26,13 +26,13 @@ Audits feature mockups against universal UX dimensions plus project-specific har
 - **`<feature> <File>`** → single file.
 - **`<feature> "<focus prompt>"`** → free-text lens. Map keywords to dimensions: "mobile" → state + accessibility + touch-target focus; "scope creep" → A only; "loose ends" → C only; "looks off" → D + E.
 
-Verify `${aiDir}/features/{feature}/spec.md` and the target mockup file(s) exist. Refuse if either is missing.
+Verify `${aiDir}/features/{feature}/spec.md` and the target mockup file(s) exist. Refuse if either is missing. Ignore `exploration/` (`--explore` wireframes, throwaway).
 
 ### 2. Silent recon (no questions)
 
 Read without asking:
 - `.myspec.json` `mockups` block — commands, `siblingRoots`, extension. Absent → note "no mockup configuration; groups A–D only" and suggest `/myspec:setup mockup`.
-- `${aiDir}/features/{feature}/spec.md` — required ACs, user stories, out-of-scope list
+- `${aiDir}/features/{feature}/spec.md` — required ACs, user stories, out-of-scope list. `stage: brief` in its frontmatter → no ACs yet: trace to its REQ IDs wherever this skill says AC
 - `${aiDir}/features/{feature}/mockups/README.md` (if present) and every target mockup file
 - `${aiDir}/features/{feature}/mockups/_*` and `_components/` — shared scaffolding
 - `${aiDir}/conventions/mockup-design.md` — project hard guards (the *Repeated user feedback* section is authoritative)
@@ -53,7 +53,7 @@ Read without asking:
 #### A. Coverage & Scope
 | Sub-dimension | Check |
 |---|---|
-| **Spec Alignment** | Every spec.md AC traceable to a surface; every surface traceable to ≥1 AC. Spec ACs in no mockup → Critical. |
+| **Spec Alignment** | Every spec.md AC traceable to a surface; every surface traceable to ≥1 AC. Spec ACs in no mockup → Critical (brief stage: a REQ in no mockup). |
 | **Scope Discipline** | Every interactive element, settings toggle, secondary action justified by spec. Unjustified surfaces / buttons → High candidate for removal. |
 | **State Coverage** | For each data-driven surface, verify the three highest-leverage states are mocked or referenced: empty / loading / error. Missing empty or error state → Medium. States switched by a toggle rendered inside the mockup instead of `controls:` preview controls → Medium (reviewers read it as design; it shifts the layout). |
 
@@ -246,7 +246,7 @@ any input with a placeholder and no associated visible label in the same surface
 ## Verification Checklist
 
 - [ ] All 5 review groups checked against every target file (or E skipped with a note when unconfigured)
-- [ ] Spec.md ACs cross-validated against the mockup inventory
+- [ ] Spec.md ACs (brief stage: REQ IDs) cross-validated against the mockup inventory
 - [ ] Production siblings confirmed via dossier `AskUserQuestion` (or `greenfield` marked)
 - [ ] Reference mockup confirmed
 - [ ] Findings table follows `_shared/review-output.md`; every issue has file + line(s) or `—`
@@ -279,13 +279,7 @@ any input with a placeholder and no associated visible label in the same surface
 User: /myspec:feature-mockup-review checkout
 ```
 
-1. Load spec.md + all mockup files in `${aiDir}/features/checkout/mockups/`
-2. Sweep configured `siblingRoots` for production siblings; propose candidates
-3. Dossier `AskUserQuestion`: confirm siblings + scope + reference mockup
-4. Run all 5 groups, build the findings table
-5. Present the deterministic batch for bulk approval, then judgement fixes per-item
-6. Apply approved fixes, `compileCheck` per file, then `verify` once
-7. Wrap up: rule extraction (if 2× repeats), commit prompt, handoff list
+Runs the full workflow above on every file in `${aiDir}/features/checkout/mockups/`.
 
 ```
 User: /myspec:feature-mockup-review checkout EditModal.vue "mobile version has really bad ux"
