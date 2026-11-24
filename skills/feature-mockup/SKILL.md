@@ -1,6 +1,6 @@
 ---
 name: "feature-mockup"
-description: "Use when a feature needs mockups before tech design: spec-validation mockups in ${aiDir}/features/{feature}/mockups/, or rough wireframes exploring layout or flow before the spec (--explore). Keywords: mockup, wireframe, explore. Do NOT use for production UI (frontend-design), critique (feature-mockup-review), or ideas with no feature (brainstorm)."
+description: "Use when a feature needs mockups before tech design: spec-validation mockups, or rough wireframes of layout or flow before the spec (--explore). Keywords: mockup, prototype screen, visualize spec, wireframe. Do NOT use for production UI or landing pages (frontend-design), critique (feature-mockup-review), or featureless ideas (brainstorm)."
 tags: [mockup, feature, design, ux, prototyping]
 ---
 
@@ -151,7 +151,7 @@ AskUserQuestion:
     - "No, leave staged"
 ```
 
-Stage only `${aiDir}/features/{feature}/mockups/**`, any `mockup-design.md` updates from Step 1, and `spec.md` when this session appended `[decision]` lines. Never `git add -A`. Use the project's standard commit footer. Confirm with `git status` after the commit.
+Stage only `${aiDir}/features/{feature}/mockups/**`, any `mockup-design.md` updates from Step 1, and `spec.md` when this session changed it (`[decision]` lines, a new REQ or `[open]` line). Never `git add -A`. Use the project's standard commit footer. Confirm with `git status` after the commit.
 
 #### Step 3 — Handoff list
 

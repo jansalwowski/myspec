@@ -147,4 +147,4 @@ The user has only an idea: "a page where support staff see every overdue invoice
    > - [decision] Inbox list with a detail pane, not a table or cards (user)
    > - [assumption] Each overdue invoice has a days-overdue count (inferred)
 
-   It adds an `index.yaml` entry with `status: draft`, says that `exploration/` stays uncommitted and throwaway, and recommends `/myspec:feature-mockup overdue-queue` for high-fidelity mockups or `/myspec:feature-spec overdue-queue` to complete the spec. The later high-fidelity run may cite the picked layout, but never imports or copies the exploration files.
+   It adds an `index.yaml` entry with `status: draft`, says that `exploration/` (throwaway), the new `spec.md` and the `index.yaml` entry are all uncommitted, and recommends `/myspec:feature-mockup overdue-queue` for high-fidelity mockups or `/myspec:feature-spec overdue-queue` to complete the spec. The later high-fidelity run may cite the picked layout, but never imports or copies the exploration files.

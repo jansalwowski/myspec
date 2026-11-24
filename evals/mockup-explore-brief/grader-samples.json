@@ -26,6 +26,23 @@
       ]
     ]
   },
+  "exploration-all-labelled": {
+    "pass": [
+      [
+        { "tool": "Write", "input": { "file_path": "<workspace>/.ai/features/invoice-reminders/exploration/settings-a.html", "content": "<p>Exploration, not a design</p>" } },
+        { "tool": "Write", "input": { "file_path": "<workspace>/.ai/features/invoice-reminders/exploration/settings-b.html", "content": "<p>EXPLORATION, NOT A DESIGN</p>" } }
+      ],
+      [
+        { "tool": "Write", "input": { "file_path": "<workspace>/.ai/features/invoice-reminders/spec.md", "content": "---\nstage: brief\n---\n" } }
+      ]
+    ],
+    "fail": [
+      [
+        { "tool": "Write", "input": { "file_path": "<workspace>/.ai/features/invoice-reminders/exploration/settings-a.html", "content": "<p>Exploration, not a design</p>" } },
+        { "tool": "Write", "input": { "file_path": "<workspace>/.ai/features/invoice-reminders/exploration/settings-b.html", "content": "<h1>Reminders</h1>" } }
+      ]
+    ]
+  },
   "exploration-labelled": {
     "pass": [
       [
