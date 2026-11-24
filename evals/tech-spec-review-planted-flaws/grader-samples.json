@@ -73,7 +73,9 @@
       "### Medium\n\n| Dimension | Issue | File | Line(s) | Finding |\n|---|---|---|---|---|\n| Testability | No verification mode | tech-spec.md | 1-7 | Frontmatter sets no `verification_mode`, yet the export derives CSV rows from invoice data. |",
       "## Medium\n\n### M1. Empty customer name\n\nNo case for it.\n\n### M2. No verification mode\n\nThe design derives output from invoice data but the frontmatter has no `verification_mode`.",
       "### Medium (does not block planning)\n- Edge cases: no case for an empty customer name.\n- `verification_mode` is absent on a data-deriving export; `verification_mode: data` would give each milestone a probe.",
-      "#### 4. Missing verification_mode\n\n- **Severity:** Medium\n- **Dimension:** Testability"
+      "#### 4. Missing verification_mode\n\n- **Severity:** Medium\n- **Dimension:** Testability",
+      "**Medium**\n\n10. **Missing tests** (`tech-spec.md:35`). Step 6 has no test for draft exclusion.\n11. **No `verification_mode`** (`tech-spec.md:1-7`). This export derives a CSV from invoice data.",
+      "**Medium**\n- **There is no `verification_mode` in the frontmatter** (`tech-spec.md:1-7`). A design that derives CSV output from data should declare `data`."
     ],
     "fail": [
       "verification_mode is not set, so the verification-surface gate is skipped.",
@@ -84,7 +86,9 @@
       "### Medium\n\n| Severity | Dimension | Issue |\n|---|---|---|\n| Medium | Completeness | Edge cases |\n| Low | Testability | verification_mode not set |",
       "### High\n\n- REQ-004 has no step.\n\nNotes: the frontmatter has no verification_mode.\n\n### Medium\n\n- Edge cases.",
       "## Findings (1 Critical, 1 High, 1 Medium, 1 Low)\n\n- [Low] Frontmatter has no verification_mode",
-      "#### 3. Missing verification_mode\n- **Severity:** Low\n\n#### 4. Edge cases\n- **Severity:** Medium"
+      "#### 3. Missing verification_mode\n- **Severity:** Low\n\n#### 4. Edge cases\n- **Severity:** Medium",
+      "**Medium**\n- No case for an empty customer name.\n\n**Low**\n- `verification_mode` could be added later.",
+      "**High**\n- REQ-004 has no step.\n- The frontmatter has no `verification_mode`.\n\n**Medium**\n- Edge cases."
     ]
   }
 }
