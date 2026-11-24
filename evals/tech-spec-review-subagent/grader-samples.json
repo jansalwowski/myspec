@@ -169,5 +169,15 @@
         }
       ]
     ]
+  },
+  "returns-coverage-table": {
+    "pass": [
+      "| Requirement | Steps | Fidelity |\n|-------------|-------|----------|\n| REQ-001 | 2, 5 | full |\n| REQ-002 | 2 | full |\n| REQ-003 | 3 | full |\n| REQ-004 | — | — |\n",
+      "**Requirement Coverage**\n\n| **Requirement** | **Steps** | **Fidelity** |\n|---|---|---|\n| REQ-004 | — | — |\n"
+    ],
+    "fail": [
+      "| Severity | Issue |\n|---|---|\n| Critical | REQ-004 has no step |\n",
+      "| Requirement | Steps | Fidelity |\n|---|---|---|\n| REQ-001 | 2 | full |\n\nREQ-004 is not covered.\n"
+    ]
   }
 }

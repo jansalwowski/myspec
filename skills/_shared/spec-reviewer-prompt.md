@@ -41,8 +41,9 @@ Agent tool (general-purpose):
     - Cite file and line for every finding; use — when no line applies.
 
     Return, in this order and nothing else:
-    1. The findings table, grouped Critical → High → Medium → Low
+    1. Any table that file's Output Format says to return first.
+    2. The findings table, grouped Critical → High → Medium → Low
        (an empty table when you found nothing).
-    2. One fix proposal block per finding.
-    3. A last line: VERDICT: <n> Critical, <n> High, <n> Medium, <n> Low
+    3. One fix proposal block per finding.
+    4. A last line: VERDICT: <n> Critical, <n> High, <n> Medium, <n> Low
 ```

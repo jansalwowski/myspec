@@ -15,7 +15,7 @@ tags: [feature, tech-spec, validation, critical-thinking, review]
 
 ## Independent Reviewer
 
-Steps 1–6 are in [reviewer.md](reviewer.md) and run in a fresh subagent, so the review never reads the tech-spec with the context of whoever wrote it. Dispatch it per [`_shared/spec-reviewer-prompt.md`](../_shared/spec-reviewer-prompt.md), with `[REVIEWER_PATH]` set to `${CLAUDE_PLUGIN_ROOT}/skills/feature-tech-spec-review/reviewer.md`. It tags each fix per [`_shared/review-output.md`](../_shared/review-output.md#tagging-and-application-rules). Show the findings table and fix proposals it returns as they came back, then continue at Step 7. When the Agent tool is not available or the dispatch fails, read that file, run Steps 1–6 yourself and say so in one line.
+Steps 1–6 are in [reviewer.md](reviewer.md) and run in a fresh subagent, so the review never reads the tech-spec with the context of whoever wrote it. Dispatch it per [`_shared/spec-reviewer-prompt.md`](../_shared/spec-reviewer-prompt.md), with `[REVIEWER_PATH]` set to `${CLAUDE_PLUGIN_ROOT}/skills/feature-tech-spec-review/reviewer.md`. It tags each fix per [`_shared/review-output.md`](../_shared/review-output.md#tagging-and-application-rules). Show the Requirement Coverage table, findings table and fix proposals it returns as they came back, with the reviewer's wording, then continue at Step 7. When the Agent tool is not available or the dispatch fails, read that file, run Steps 1–6 yourself and say so in one line.
 
 ## Workflow
 
