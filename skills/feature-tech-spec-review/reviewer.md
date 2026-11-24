@@ -140,6 +140,8 @@ When flagging:
 
 ## Output Format
 
+Return the [Requirement Coverage](#requirement-coverage) table first, every row, so the user sees which requirement each step realizes and the Spec Alignment findings can be checked against it.
+
 **REQUIRED:** Follow [../\_shared/review-output.md](../_shared/review-output.md) for the findings table, fix-proposal shape, and tagging rules. Example row for this skill:
 
 ```markdown
