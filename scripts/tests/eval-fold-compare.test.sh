@@ -33,6 +33,7 @@ echo "# lint"
 E="$TMP/evals"
 mkcase "$E" p-sub "skill:x, fold-pair:p, fold-arm:subagent, capability" "Review it." found=A dispatched=D
 mkcase "$E" p-inl "skill:x, fold-pair:p, fold-arm:inline, regression" "Review it." found=A
+sed -i.bak 's/^tags:/disallowed_tools: [Agent]\ntags:/' "$E/p-inl/prompt.md" && rm -f "$E/p-inl/prompt.md.bak"
 out=$(node "$FC" --lint --evals-dir "$E" 2>&1); rc=$?
 expect_eq "a well-formed pair lints clean" "$rc:$out" "0:"
 
@@ -45,6 +46,9 @@ mkcase "$E" t-inl "skill:x, fold-pair:t, fold-arm:inline, capability" "Go." foun
 sed -i.bak 's/^tags:/max_turns: 10\ntimeout_seconds: 360\ntags:/' "$E/t-sub/prompt.md"
 sed -i.bak 's/^tags:/max_turns: 8\ntimeout_seconds: 360\ntags:/' "$E/t-inl/prompt.md"
 rm -f "$E"/t-*/prompt.md.bak
+mkcase "$E" u-sub "skill:x, fold-pair:u, fold-arm:subagent, capability" "Go." found=A
+mkcase "$E" u-inl "skill:x, fold-pair:u, fold-arm:inline, capability" "Go." found=A
+sed -i.bak 's/^tags:/disallowed_tools: [Agent]\ntags:/' "$E/u-sub/prompt.md" && rm -f "$E/u-sub/prompt.md.bak"
 out=$(node "$FC" --lint --evals-dir "$E" 2>&1); rc=$?
 expect_eq "a broken pair fails the lint" "$rc" 1
 expect_has "different prompts are named" "$out" "fold-pair:q: q-sub and q-inl have different prompts"
@@ -53,7 +57,9 @@ expect_has "a pair missing its inline arm is named" "$out" "fold-pair:r: needs o
 expect_has "an unknown arm is named" "$out" "s-odd: fold-arm must be subagent or inline, not both"
 expect_has "a different turn cap is named" "$out" "fold-pair:t: max_turns differs (t-sub 10, t-inl 8)"
 if printf '%s' "$out" | grep -q 'fold-pair:t: timeout_seconds'; then nok "an equal timeout is not named" "$out"; else ok "an equal timeout is not named"; fi
-rm -rf "$E/q-sub" "$E/q-inl" "$E/r-sub" "$E/s-odd" "$E/t-sub" "$E/t-inl"
+expect_has "an inline arm that keeps Agent is named" "$out" "fold-pair:u: u-inl must set disallowed_tools: [Agent]"
+expect_has "a subagent arm that removes Agent is named" "$out" "fold-pair:u: u-sub must not disallow Agent"
+rm -rf "$E/q-sub" "$E/q-inl" "$E/r-sub" "$E/s-odd" "$E/t-sub" "$E/t-inl" "$E/u-sub" "$E/u-inl"
 
 echo "# comparison"
 # results <dir> <model> <case>:<run>,<run>... where a run is grader=0|1 joined by +,

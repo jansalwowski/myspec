@@ -4,6 +4,7 @@ tags: [skill:feature-tech-spec-review, skill:feature-spec-review, planted-flaw, 
 max_turns: 14
 timeout_seconds: 300
 allowed_tools: [Read, Glob, Grep, Skill]
+disallowed_tools: [Agent]
 ---
 
 The tech-spec for invoice-export is written. Can you review it before we move on to planning? Just report what you find; don't edit anything.

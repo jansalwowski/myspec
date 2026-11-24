@@ -4,6 +4,7 @@ tags: [skill:feature-spec-review, planted-flaw, fold-pair:spec-review, fold-arm:
 max_turns: 8
 timeout_seconds: 300
 allowed_tools: [Read, Glob, Grep, Skill]
+disallowed_tools: [Agent]
 ---
 
 Please review the invoice-export spec in .ai/features/invoice-export/ and list every problem you find. Don't change any files.

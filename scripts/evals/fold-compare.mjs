@@ -29,7 +29,8 @@
 // Either verdict on fewer than 3 runs in an arm is marked tentative.
 //
 // --lint checks the pairs in --evals-dir: each fold-pair tag on exactly two
-// cases, one per arm, identical prompt bodies, the same max_turns and
+// cases, one per arm, identical prompt bodies, Agent removed from the inline
+// arm with disallowed_tools and kept in the subagent arm, the same max_turns and
 // timeout_seconds (a lower cap on one arm decides the verdict by itself), and
 // at least one shared grader.
 // Exit: 0 report printed or lint clean, 1 lint problems, 2 bad input.
@@ -84,6 +85,11 @@ export function foldPairs(evalsDir) {
     if (body(path.join(evalsDir, sub, 'prompt.md')) !== body(path.join(evalsDir, inl, 'prompt.md'))) {
       problems.push(`fold-pair:${name}: ${sub} and ${inl} have different prompts`);
     }
+    // allowed_tools only grants permission-gated tools, so it cannot take
+    // Agent away: without disallowed_tools the inline arm dispatches too.
+    const dropsAgent = (c) => /\bAgent\b/.test(fmValue(path.join(evalsDir, c, 'prompt.md'), 'disallowed_tools'));
+    if (!dropsAgent(inl)) problems.push(`fold-pair:${name}: ${inl} must set disallowed_tools: [Agent]`);
+    if (dropsAgent(sub)) problems.push(`fold-pair:${name}: ${sub} must not disallow Agent`);
     for (const key of ['max_turns', 'timeout_seconds']) {
       const [vs, vi] = [sub, inl].map((c) => fmValue(path.join(evalsDir, c, 'prompt.md'), key));
       if (vs !== vi) problems.push(`fold-pair:${name}: ${key} differs (${sub} ${vs}, ${inl} ${vi})`);

@@ -105,5 +105,40 @@
       "| Requirement | Steps | Fidelity |\n|---|---|---|\n| REQ-001 | 2 | full |\n\nREQ-004 is not covered.\n",
       "| Requirement | Steps | Fidelity |\n|---|---|---|\n| REQ-001 | 2 | full |\n\n| Critical | REQ-004 (drafts never exported) has no step |\n"
     ]
+  },
+  "no-dispatch": {
+    "pass": [
+      [
+        {
+          "tool": "Skill",
+          "input": {
+            "skill": "myspec:feature-tech-spec-review"
+          }
+        },
+        {
+          "tool": "Read",
+          "input": {
+            "file_path": "/plugin/skills/x/reviewer.md"
+          }
+        }
+      ]
+    ],
+    "fail": [
+      [
+        {
+          "tool": "Skill",
+          "input": {
+            "skill": "myspec:feature-tech-spec-review"
+          }
+        },
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Independent review of .ai/features/invoice-export",
+            "prompt": "You are an independent reviewer."
+          }
+        }
+      ]
+    ]
   }
 }

@@ -43,5 +43,40 @@
     "fail": [
       "Review passed — mark spec.md status: approved?"
     ]
+  },
+  "no-dispatch": {
+    "pass": [
+      [
+        {
+          "tool": "Skill",
+          "input": {
+            "skill": "myspec:feature-spec-review"
+          }
+        },
+        {
+          "tool": "Read",
+          "input": {
+            "file_path": "/plugin/skills/x/reviewer.md"
+          }
+        }
+      ]
+    ],
+    "fail": [
+      [
+        {
+          "tool": "Skill",
+          "input": {
+            "skill": "myspec:feature-spec-review"
+          }
+        },
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Independent review of .ai/features/invoice-export",
+            "prompt": "You are an independent reviewer."
+          }
+        }
+      ]
+    ]
   }
 }
