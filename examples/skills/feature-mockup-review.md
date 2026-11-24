@@ -9,6 +9,7 @@ Audits mockups in `${aiDir}/features/{feature}/mockups/` across five groups: Cov
 - [Full review with mixed findings](#full-review-with-mixed-findings)
 - [Focus prompt narrows to loose ends](#focus-prompt-narrows-to-loose-ends)
 - [Unconfigured project — Group E skipped, coverage gap handed off](#unconfigured-project--group-e-skipped-coverage-gap-handed-off)
+- [Brief-stage spec — REQ coverage, exploration ignored](#brief-stage-spec--req-coverage-exploration-ignored)
 
 ---
 
@@ -84,3 +85,28 @@ A project with mockups built during the degraded `/myspec:feature-mockup` flow: 
 2. Groups A–D run in full against the `.html` mockups: spec ACs cross-checked, wiring greps run, catalogs loaded per trigger.
 3. Findings include a Medium (zero-results state missing for the filter panel). Because authoring a new state surface is out of scope for the review skill, it is flagged as a Spec/Coverage gap and routed to `/myspec:feature-mockup` in the handoff list — no new files are authored.
 4. With no `verify`/`compileCheck` configured, post-fix verification steps are skipped with a note; the wrap-up summary lists which checks did not run.
+
+---
+
+## Brief-stage spec — REQ coverage, exploration ignored
+
+### Setup
+
+`invoice-reminders` has a `spec.md` with `stage: brief`: REQ-001 to REQ-006, no Acceptance Criteria yet. It has two mockups in `mockups/` and three rough wireframes in `exploration/` from an earlier `/myspec:feature-mockup --explore` run.
+
+### Invocation
+
+```
+/myspec:feature-mockup-review invoice-reminders
+```
+
+### Skill flow
+
+1. Recon reads `stage: brief` and traces surfaces to REQ IDs, since there are no ACs to trace. It reviews the two files in `mockups/` and skips `exploration/` entirely.
+2. Group A finds REQ-004 ("stop reminders once the invoice is paid") in no mockup:
+
+   | Severity | Dimension | Issue | File | Line(s) | Finding |
+   |----------|-----------|-------|------|---------|---------|
+   | Critical | A · Spec Alignment | REQ unmocked | — | — | brief REQ-004 (stop reminders once paid) has no surface in any mockup |
+
+3. The gap goes to the handoff list for `/myspec:feature-mockup`. The rest of the review runs as for a full spec.

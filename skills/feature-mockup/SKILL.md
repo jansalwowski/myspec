@@ -1,12 +1,14 @@
 ---
 name: "feature-mockup"
-description: "Use when a feature needs spec-validation UI mockups under ${aiDir}/features/{feature}/mockups/ before tech design. Keywords: mockup, prototype screen, wireframe, visualize spec. Do NOT use for production UI or aesthetic landing pages (frontend-design), or to critique mockups (feature-mockup-review)."
+description: "Use when a feature needs mockups before tech design: spec-validation mockups, or rough wireframes of layout or flow before the spec (--explore). Keywords: mockup, prototype screen, visualize spec, wireframe. Do NOT use for production UI or landing pages (frontend-design), critique (feature-mockup-review), or featureless ideas (brainstorm)."
 tags: [mockup, feature, design, ux, prototyping]
 ---
 
 # Feature Mockups
 
 Builds spec-validation mockups: static, design-system-default surfaces that prove a spec's flows before technical design. The workflow, guards, and traceability rules are technology-neutral; everything stack-specific (file format, component library, verify/preview commands, authoring idioms) comes from configuration. Mockups render the spec — they never carry aesthetic exploration (that is `frontend-design`'s job) and never touch production code.
+
+**`--explore`** builds rough, greyscale, throwaway wireframes in `exploration/` instead, with most guards below relaxed: follow [references/explore.md](references/explore.md) and skip the rest of this file.
 
 ## Configuration
 
@@ -48,7 +50,7 @@ Two sources, both optional — configure with `/myspec:setup mockup`:
 | **Variants vary structure, not style** | A/B/C variants of one surface differ in layout/IA only — same components, same tokens, same density baseline. Variants are never a vehicle for visual-style comparisons. |
 | **Cross-mockup consistency** | New mockups copy structural idioms (component picks, density, spacing) from the reference mockup chosen in recon. Different style only if the user explicitly opts in. |
 | **Real changes → handoff** | When mockup work surfaces a need for production code, schema, or design-system work, **append to the handoff list, do not implement**. |
-| **Spec-AC traceability** | Every interactive element, settings toggle, secondary action, and entire surface must map to a specific AC in `${aiDir}/features/{feature}/spec.md`. Unjustified surfaces are scope-creep candidates — drop them, or flag the spec gap and pause until resolved. |
+| **Spec traceability** | Every interactive element, settings toggle, secondary action, and entire surface must map to a specific AC in `${aiDir}/features/{feature}/spec.md`, or to a REQ ID in brief mode (a spec.md with `stage: brief`). Unjustified surfaces are scope-creep candidates — drop them, or flag the spec gap and pause until resolved (brief mode: with the user's confirmation, add a REQ or an `[open]` Open Questions line to the brief instead). |
 | **Destructive actions confirm** | Every destructive action (delete, archive, deactivate, force-publish) gets a confirmation modal that names the entity + blast radius and is disabled when usage blocks it. |
 | **One primary CTA per surface** | Exactly one visually-primary action per mockup surface; secondary actions clearly subordinate. |
 | **Project hard guards** | Every rule in `mockup-design.md` *Always* applies on top of this table; on conflict, the project file wins. |
@@ -57,7 +59,7 @@ Two sources, both optional — configure with `/myspec:setup mockup`:
 
 ### Phase 1 — Clarify
 
-1. **Resolve feature.** Use any feature slug the user passed; otherwise ask "Which feature directory under `${aiDir}/features/`?". Verify `${aiDir}/features/{feature}/spec.md` exists — if not, refuse. **REQUIRED prerequisite:** `/myspec:feature-spec`.
+1. **Resolve feature.** Use any feature slug the user passed; otherwise ask "Which feature directory under `${aiDir}/features/`?". Verify `${aiDir}/features/{feature}/spec.md` exists — if not, refuse. **REQUIRED prerequisite:** `/myspec:feature-spec`, or `/myspec:feature-requirements` for a brief. A spec with `stage: brief` in its frontmatter (no ACs yet; shape in [the brief stage](../_shared/spec-template.md#brief-stage)) runs in **brief mode**: surfaces trace to its REQ IDs instead of ACs.
 2. **Silent recon** — read these without asking the user. **Data-model/spec mismatches are the #1 source of rebuild rounds — never invent enum values or field names from a verbal description.** If the spec is ambiguous about a model shape, ask the user before guessing.
    - `.myspec.json` `mockups` block + `${aiDir}/conventions/mockup-design.md` (scaffold if missing; the *Repeated user feedback* section is authoritative override).
    - `${aiDir}/conventions/accessibility.md` if present — link-vs-button catalogue backing the navigation guard.
@@ -68,6 +70,7 @@ Two sources, both optional — configure with `/myspec:setup mockup`:
    - **Reuse audit** — run the configured `audit` command if present and read its output. Then `find ${aiDir}/features -path '*/mockups/_*'` to list shared scaffolding files; for each that overlaps planned chrome, read it and plan to import rather than re-roll.
    - **Pick a reference mockup** for cross-mockup consistency: most-recent mockup in `${aiDir}/features/{feature}/mockups/` → most-recent project-wide mockup → the canonical references named in `mockup-design.md`. Read the chosen reference once.
    - `ls ${aiDir}/features/{feature}/mockups/` — list existing mockups.
+   - `${aiDir}/features/{feature}/exploration/` if present — reference only: cite the layout the user picked there, never import or copy its files.
    - **Production sibling lookup** — for each surface you plan to build, sweep the configured `siblingRoots` for the production sibling component/page and read it. Capture: prop names, modal-vs-dropdown choice, dismissal UX, enum coverage, selection pattern. The mockup must *embrace* the existing flow, not reinvent it. No sibling → mark the surface `greenfield`. No `siblingRoots` configured → mark all surfaces `greenfield` and note it.
    - **Catalog skim — REQUIRED (conditional)** — read [../feature-mockup-review/references/README.md](../feature-mockup-review/references/README.md) (the review skill's load-trigger index) and skim every catalog whose trigger fires for the planned mockups; always skim `core.md` and `accessibility.md`. The review skill will check against these — building to them prevents the round-trip.
 3. **Batched dossier — one `AskUserQuestion` call, ≤4 questions, recommended option first.** Each question is a *proposed answer* the user can accept, swap, or override via free input. Default set:
@@ -78,7 +81,7 @@ Two sources, both optional — configure with `/myspec:setup mockup`:
    Drop questions the spec already answers unambiguously. Never exceed 4 questions per call.
 4. **Propose inventory.** Numbered list, calibrated by the dossier. **Each entry must include**:
    - **Filename** + one-line rationale
-   - **Source AC** — the specific AC from `spec.md` this surface satisfies (required — no AC = scope creep; drop it or flag the spec gap)
+   - **Source AC** — the specific AC from `spec.md` this surface satisfies (required — no AC = scope creep; drop it or flag the spec gap). Brief mode: **Source REQ**, a REQ ID
    - **Production sibling** — path from recon, or `greenfield`
    - **States covered** — which of empty / loading / error / partial / success this mockup renders, or "inherited from {sibling surface}". Data-driven surfaces with unmocked states are spec-coverage gaps, not silent omissions.
    - Existing mockups marked `(exists — update)`
@@ -101,7 +104,7 @@ For each confirmed mockup, in order:
 3. **Compile-check.** If `preview` is configured, ensure the dev server is running (start in background if not). Run the configured `compileCheck` for the file — expect success; on failure read the dev-server log for the transform error and fix. Not configured → skip with a note.
 4. **✓** — emit one-line progress (`{Name} · verify ✓ · compile ✓`), move to the next file.
 
-**Variant pick.** For each surface built as variants, once all its variants are green, ask which one wins through `/myspec:visualize-options`, not AskUserQuestion: one option per variant, its preview an HTML rendering of that variant's layout. Delete the losing variant files and rename the winner to the surface name.
+**Variant pick.** For each surface built as variants, once all its variants are green, ask which one wins through `/myspec:visualize-options`, not AskUserQuestion: one option per variant, its preview an HTML rendering of that variant's layout. Delete the losing variant files and rename the winner to the surface name. Brief mode: record the pick as a `[decision]` line (Phase 3).
 
 After all files: if the project's docs conventions require a `mockups/README.md` (see `mockup-design.md`), write or update it with the required frontmatter.
 
@@ -111,6 +114,7 @@ After all files green, emit "Built N mockups. What's next?" and wait.
 
 For each piece of feedback:
 - **Visual / data / structure change** → edit affected files only → re-verify + re-compile-check only those files → ✓
+- **Brief mode: a pick or settled question** → append `- [decision] {what was decided} (user)` to the spec's Open Questions
 - **Hint of a real code, schema, or design-system need** ("we need a new field on X", "the API is missing Y", "no component exists for this") → DO NOT implement → append to **handoff list**
 
 Loop until the user says "done", "wrap up", or shifts topic.
@@ -147,7 +151,7 @@ AskUserQuestion:
     - "No, leave staged"
 ```
 
-Stage only `${aiDir}/features/{feature}/mockups/**` and any `mockup-design.md` updates from Step 1. Never `git add -A`. Use the project's standard commit footer. Confirm with `git status` after the commit.
+Stage only `${aiDir}/features/{feature}/mockups/**`, any `mockup-design.md` updates from Step 1, and `spec.md` when this session changed it (`[decision]` lines, a new REQ or `[open]` line). Never `git add -A`. Use the project's standard commit footer. Confirm with `git status` after the commit.
 
 #### Step 3 — Handoff list
 
@@ -204,7 +208,8 @@ When the same chrome surfaces in two or more features (navbar, footer, hero, pag
 - [ ] Every new mockup matches the reference mockup's structural idioms unless the user opted out
 - [ ] Phase 1 used a single batched `AskUserQuestion` (≤4 questions) for the dossier
 - [ ] Reuse audit ran (or was noted absent); overlapping chrome imported, not re-rolled
-- [ ] Every mockup surface maps to ≥1 spec.md AC (Source AC populated in inventory)
+- [ ] Every mockup surface maps to ≥1 spec.md AC, or REQ ID in brief mode (Source AC / Source REQ populated in inventory)
+- [ ] Brief mode: every pick and settled question appended as a `[decision] … (user)` line
 - [ ] Production sibling located + read for each non-`greenfield` surface; deviations deliberate and noted
 - [ ] States planned at inventory time match states mocked (or inherited / handed off)
 - [ ] Every destructive action has a confirmation modal mocked (or linked in the inventory)
@@ -215,7 +220,7 @@ When the same chrome surfaces in two or more features (navbar, footer, hero, pag
 
 ## Integration
 
-**Requires** [REQUIRED]: `/myspec:feature-spec` — a spec.md must exist before mocking.
+**Requires** [REQUIRED]: `/myspec:feature-spec` or `/myspec:feature-requirements` — a spec.md (full or brief stage) must exist before mocking; `--explore` needs none.
 **Configured by** [OPTIONAL]: `/myspec:setup mockup` — writes `${aiDir}/conventions/mockup-design.md` and the `.myspec.json` `mockups` block; can install the default preview app.
 **Next** [OPTIONAL]: `/myspec:feature-mockup-review` — audit the built mockups before tech design.
-**Then** [REQUIRED]: `/myspec:feature-tech-spec` — once the spec is visually validated.
+**Then** [REQUIRED]: `/myspec:feature-tech-spec` — once the spec is visually validated; a brief-stage spec first goes to `/myspec:feature-spec {feature}` to be completed.

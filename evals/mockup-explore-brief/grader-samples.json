@@ -1,0 +1,88 @@
+{
+  "exploration-written": {
+    "pass": [
+      [
+        { "tool": "Read", "input": { "file_path": "<workspace>/.ai/features/invoice-reminders/spec.md" } },
+        { "tool": "Write", "input": { "file_path": "<workspace>/.ai/features/invoice-reminders/exploration/reminder-settings-a.html", "content": "<div>Exploration, not a design</div>" } },
+        { "tool": "Write", "input": { "file_path": "<workspace>/.ai/features/invoice-reminders/exploration/reminder-settings-b.html", "content": "<div>Exploration, not a design</div>" } }
+      ],
+      [
+        { "tool": "Write", "input": { "file_path": ".ai/features/invoice-reminders/exploration/settings-list.html", "content": "..." } },
+        { "tool": "Write", "input": { "file_path": ".ai/features/invoice-reminders/exploration/settings-flow.html", "content": "..." } },
+        { "tool": "Write", "input": { "file_path": ".ai/features/invoice-reminders/exploration/settings-cards.html", "content": "..." } }
+      ]
+    ],
+    "fail": [
+      [
+        { "tool": "Write", "input": { "file_path": "<workspace>/.ai/features/invoice-reminders/mockups/ReminderSettingsA.html", "content": "..." } },
+        { "tool": "Write", "input": { "file_path": "<workspace>/.ai/features/invoice-reminders/mockups/ReminderSettingsB.html", "content": "..." } }
+      ],
+      [
+        { "tool": "Write", "input": { "file_path": "<workspace>/.ai/features/invoice-reminders/exploration/reminder-settings.html", "content": "<div>Exploration, not a design</div>" } }
+      ],
+      [
+        { "tool": "Write", "input": { "file_path": "<workspace>/.myspec/brainstorm/1-2/content/layout-a.html", "content": "..." } },
+        { "tool": "Write", "input": { "file_path": "<workspace>/.myspec/brainstorm/1-2/content/layout-b.html", "content": "..." } }
+      ]
+    ]
+  },
+  "exploration-all-labelled": {
+    "pass": [
+      [
+        { "tool": "Write", "input": { "file_path": "<workspace>/.ai/features/invoice-reminders/exploration/settings-a.html", "content": "<p>Exploration, not a design</p>" } },
+        { "tool": "Write", "input": { "file_path": "<workspace>/.ai/features/invoice-reminders/exploration/settings-b.html", "content": "<p>EXPLORATION, NOT A DESIGN</p>" } }
+      ],
+      [
+        { "tool": "Write", "input": { "file_path": "<workspace>/.ai/features/invoice-reminders/spec.md", "content": "---\nstage: brief\n---\n" } }
+      ]
+    ],
+    "fail": [
+      [
+        { "tool": "Write", "input": { "file_path": "<workspace>/.ai/features/invoice-reminders/exploration/settings-a.html", "content": "<p>Exploration, not a design</p>" } },
+        { "tool": "Write", "input": { "file_path": "<workspace>/.ai/features/invoice-reminders/exploration/settings-b.html", "content": "<h1>Reminders</h1>" } }
+      ]
+    ]
+  },
+  "exploration-labelled": {
+    "pass": [
+      [
+        { "tool": "Write", "input": { "file_path": "<workspace>/.ai/features/invoice-reminders/exploration/reminder-settings-a.html", "content": "<!doctype html>\n<div class=\"banner\">Exploration, not a design</div>\n<h1>Reminders</h1>" } }
+      ],
+      [
+        { "tool": "Write", "input": { "file_path": ".ai/features/invoice-reminders/exploration/settings-b.html", "content": "<p style=\"background:#eee\">EXPLORATION — NOT A DESIGN</p>" } }
+      ]
+    ],
+    "fail": [
+      [
+        { "tool": "Write", "input": { "file_path": "<workspace>/.ai/features/invoice-reminders/exploration/reminder-settings-a.html", "content": "<!doctype html>\n<h1>Reminders</h1><p>Variant A: list with toggles</p>" } }
+      ],
+      [
+        { "tool": "Write", "input": { "file_path": "<workspace>/.ai/features/invoice-reminders/mockups/ReminderSettings.html", "content": "<div>Exploration, not a design</div>" } }
+      ]
+    ]
+  },
+  "no-mockups-written": {
+    "pass": [
+      [
+        ".ai/features/invoice-reminders/spec.md",
+        ".ai/features/invoice-reminders/exploration/reminder-settings-a.html",
+        ".ai/features/invoice-reminders/exploration/reminder-settings-b.html"
+      ]
+    ],
+    "fail": [
+      [
+        ".ai/features/invoice-reminders/spec.md",
+        ".ai/features/invoice-reminders/mockups/ReminderSettings.html"
+      ]
+    ]
+  },
+  "spec-stays-brief": {
+    "pass": [
+      "---\ntitle: \"Invoice Reminders\"\nstatus: draft\nphase: 1\npriority: P2\nspec_version: 1\nstage: brief\ncreated: 2026-11-20\nlast_updated: 2026-11-24\n---\n\n# Invoice Reminders\n\n## Open Questions\n- [decision] Reminder settings as a list with one toggle per customer (user)\n"
+    ],
+    "fail": [
+      "---\ntitle: \"Invoice Reminders\"\nstatus: draft\nphase: 1\npriority: P2\nspec_version: 1\ncreated: 2026-11-20\nlast_updated: 2026-11-24\n---\n\n# Invoice Reminders\n\n## User Stories\n- As an owner, I want ...\n\n## Acceptance Criteria\n- [ ] AC-1: ...\n",
+      "---\ntitle: \"Invoice Reminders\"\nstatus: draft\n---\n\nstage: brief\n"
+    ]
+  }
+}
