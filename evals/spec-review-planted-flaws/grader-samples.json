@@ -4,14 +4,18 @@
       "| Critical | Consistency | spec.md | 21, 24 | REQ-002 says every invoice regardless of status, but REQ-004 says drafts must never appear. |",
       "REQ-002 contradicts REQ-004: one includes every status, the other excludes drafts.",
       "### REQ-002 vs REQ-004",
-      "| Critical | Consistency | REQ-002 says every invoice \"regardless of its status\". REQ-004 says drafts must never appear. AC-1 (\"one row per invoice in the range\") cannot be tested until one rule is chosen. | spec.md | 21, 23, 27 |"
+      "| Critical | Consistency | REQ-002 says every invoice \"regardless of its status\". REQ-004 says drafts must never appear. AC-1 (\"one row per invoice in the range\") cannot be tested until one rule is chosen. | spec.md | 21, 23, 27 |",
+      "| 1 | Critical | `spec.md:21`, `:23`, `:27` | REQ-002 says to export every invoice \"regardless of its status\". REQ-004 says drafts must never appear. AC-1 follows REQ-002 and does not mention drafts. |",
+      "| 1 | Critical | spec.md:21, 23 | REQ-002 includes every invoice \"regardless of its status\". REQ-004 says draft invoices \"must never appear\". AC-1 (\"one row per invoice in the range\") follows REQ-002. |"
     ],
     "fail": [
       "REQ-002 is clear and complete. AC-2 needs a number.",
       "REQ-001, REQ-002, REQ-003 and REQ-004 have no acceptance criteria.",
       "REQ-002 and REQ-004 are clear, but AC-2 is vague.",
       "REQ-002 is fine.\nThe export in REQ-004 needs a format.",
-      "| Low | Consistency | REQ-002 and REQ-004 use \"invoice\" and \"bill\" for the same thing. | spec.md | 21, 23 |"
+      "| Low | Consistency | REQ-002 and REQ-004 use \"invoice\" and \"bill\" for the same thing. | spec.md | 21, 23 |",
+      "| 5 | Medium | spec.md:26-29 | Nothing tests the draft exclusion (REQ-004) or the status rule (REQ-002). |",
+      "| 3 | High | spec.md:26-29 | REQ-002 and REQ-004 have no acceptance criterion. |"
     ]
   },
   "flags-untestable-ac": {
@@ -21,12 +25,15 @@
       "**AC-2: \"The export should be fast.\"**\n\nThis is not measurable: there is no threshold in seconds or rows.",
       "AC-2 says \"fast\"; unlike AC-1 and AC-3 it cannot be measured.",
       "> AC-2: The export should be fast.\n\nUnlike AC-1 and AC-3, it gives no threshold, so nobody can test it.",
-      "Three problems: REQ-002 contradicts REQ-004, AC-2 (\"fast\") is not measurable, and no error state is described."
+      "Three problems: REQ-002 contradicts REQ-004, AC-2 (\"fast\") is not measurable, and no error state is described.",
+      "| 2 | High | spec.md:28 | AC-2 (\"The export should be fast\") has no number, no data size and no \"must\". It cannot pass or fail. |",
+      "| 2 | High | AC-2 \"The export should be fast\" has no number, data size or pass/fail condition. It also uses \"should\". | `spec.md:28` |"
     ],
     "fail": [
       "AC-2 is fine as written; REQ-002 contradicts REQ-004.",
       "AC-2 (\"The export should be fast\") is acceptable for a first version.\n\n| Medium | Completeness | spec.md | 22 | REQ-001 sets no threshold for the longest allowed date range. |",
-      "| Medium | Completeness | spec.md | 22 | REQ-001 gives no threshold for the range. |\n| Low | Wording | spec.md | 30 | AC-1 could name the file. |\n\nAC-2 (fast export) reads fine."
+      "| Medium | Completeness | spec.md | 22 | REQ-001 gives no threshold for the range. |\n| Low | Wording | spec.md | 30 | AC-1 could name the file. |\n\nAC-2 (fast export) reads fine.",
+      "| 4 | Medium | REQ-005 \"downloads immediately\" has no number. | spec.md:24 |\n\nAC-2 (fast export) reads fine."
     ]
   },
   "verdict-not-passed": {
