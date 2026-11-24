@@ -1,0 +1,86 @@
+{
+  "cites-official-docs": {
+    "pass": [
+      "Custom subagents load CLAUDE.md ([sub-agents](https://code.claude.com/docs/en/sub-agents))."
+    ],
+    "fail": [
+      "Custom subagents load CLAUDE.md, per a blog post (https://example.com/claude-tips)."
+    ]
+  },
+  "dispatches-search-and-verify": {
+    "pass": [
+      [
+        {
+          "tool": "Skill",
+          "input": {
+            "skill": "myspec:research"
+          }
+        },
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Search sub-question",
+            "subagent_type": "general-purpose",
+            "prompt": "Goal: ... Your sub-question: ..."
+          }
+        },
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Search sub-question",
+            "subagent_type": "general-purpose",
+            "prompt": "Goal: ... Your sub-question: ..."
+          }
+        },
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Verify key claims",
+            "subagent_type": "general-purpose",
+            "prompt": "Check each claim below against its cited source ..."
+          }
+        }
+      ]
+    ],
+    "fail": [
+      [
+        {
+          "tool": "Skill",
+          "input": {
+            "skill": "myspec:research"
+          }
+        },
+        {
+          "tool": "WebFetch",
+          "input": {
+            "url": "https://example.org/docs",
+            "prompt": "..."
+          }
+        },
+        {
+          "tool": "WebFetch",
+          "input": {
+            "url": "https://example.org/docs",
+            "prompt": "..."
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Skill",
+          "input": {
+            "skill": "myspec:research"
+          }
+        },
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Search sub-question",
+            "subagent_type": "general-purpose",
+            "prompt": "Goal: ... Your sub-question: ..."
+          }
+        }
+      ]
+    ]
+  }
+}

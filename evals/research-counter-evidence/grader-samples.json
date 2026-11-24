@@ -1,0 +1,86 @@
+{
+  "dispatches-search-and-verify": {
+    "pass": [
+      [
+        {
+          "tool": "Skill",
+          "input": {
+            "skill": "myspec:research"
+          }
+        },
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Search sub-question",
+            "subagent_type": "general-purpose",
+            "prompt": "Goal: ... Your sub-question: ..."
+          }
+        },
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Search sub-question",
+            "subagent_type": "general-purpose",
+            "prompt": "Goal: ... Your sub-question: ..."
+          }
+        },
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Verify key claims",
+            "subagent_type": "general-purpose",
+            "prompt": "Check each claim below against its cited source ..."
+          }
+        }
+      ]
+    ],
+    "fail": [
+      [
+        {
+          "tool": "Skill",
+          "input": {
+            "skill": "myspec:research"
+          }
+        },
+        {
+          "tool": "WebFetch",
+          "input": {
+            "url": "https://example.org/docs",
+            "prompt": "..."
+          }
+        },
+        {
+          "tool": "WebFetch",
+          "input": {
+            "url": "https://example.org/docs",
+            "prompt": "..."
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Skill",
+          "input": {
+            "skill": "myspec:research"
+          }
+        },
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Search sub-question",
+            "subagent_type": "general-purpose",
+            "prompt": "Goal: ... Your sub-question: ..."
+          }
+        }
+      ]
+    ]
+  },
+  "cites-sources": {
+    "pass": [
+      "Upgrade first. Source: [changelog](https://github.com/example/lib/blob/main/CHANGELOG.md) (high)."
+    ],
+    "fail": [
+      "Upgrade first. The changelog says the ack retry was fixed (high)."
+    ]
+  }
+}
