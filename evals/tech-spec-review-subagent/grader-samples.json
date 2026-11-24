@@ -181,5 +181,56 @@
       "| Requirement | Steps | Fidelity |\n|---|---|---|\n| REQ-001 | 2 | full |\n\nREQ-004 is not covered.\n",
       "| Requirement | Steps | Fidelity |\n|---|---|---|\n| REQ-001 | 2 | full |\n\n| Critical | REQ-004 (drafts never exported) has no step |\n"
     ]
+  },
+  "passes-ai-dir": {
+    "pass": [
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Independent review of .ai/features/invoice-export",
+            "prompt": "You are an independent reviewer.\nRead /x/reviewer.md for the feature in .ai/features/invoice-export.\nIn that file, ${aiDir} means .ai.\n"
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Independent review of .ai/features/invoice-export",
+            "prompt": "Independent reviewer. In that file, ${aiDir} means `.ai`."
+          }
+        }
+      ]
+    ],
+    "fail": [
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Independent review of .ai/features/invoice-export",
+            "prompt": "You are an independent reviewer.\nRead /x/reviewer.md for the feature in .ai/features/invoice-export.\n"
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Independent review of .ai/features/invoice-export",
+            "prompt": "In that file, ${aiDir} means [AI_DIR]."
+          }
+        }
+      ],
+      [
+        {
+          "tool": "Agent",
+          "input": {
+            "description": "Independent review of .ai/features/invoice-export",
+            "prompt": "In that file, ${aiDir} means .ai.\nPrior: [AI_DIR]"
+          }
+        }
+      ]
+    ]
   }
 }
