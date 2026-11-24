@@ -325,15 +325,20 @@ procedure_doc() {
   printf '%s/work-isolation.md' "$(ai_dir "$1")"
 }
 
-# main_route <main root> <command as typed> -> the way forward a gate A block
-# names. A develop session keeps its branch and gets one at promotion (#552):
-# pointing it at a worktree contradicts its recorded decision.
+# main_route <main root> <decoded segment> [<when>] -> the way forward a gate A
+# block names. A develop session keeps its branch and gets one at promotion
+# (#552): pointing it at a worktree contradicts its recorded decision. <when>
+# opens the `!` sentence. The command is quoted only when it appears verbatim
+# in the typed one: a quoted word is scanned to a placeholder no decode undoes.
 main_route() {
+  # shellcheck disable=SC2016 # literal backticks: the message quotes a command
+  local when="${3:-If the user wants this command run on the main checkout}" bang='the `!` prefix'
   session_mode "$1"
   if [ "$ISO_MODE" = develop ]; then
     # shellcheck disable=SC2016 # literal backticks: the message quotes a command
-    printf 'This session chose develop isolation, so the main checkout keeps its current branch: keep editing here and do not commit. The feature branch and its PR come at the end of the work from "%s/promote-to-worktree.sh" --branch <type>/<slug> --title <subject> (procedure: %s). If the user wants the main checkout on another branch, ask them to run the command themselves with the `!` prefix (`! %s`). Do not retry a variant of this command.' \
-      "$HOOK_LIB" "$(procedure_doc "$1")" "$2"
+    [[ "$TOP_COMMAND" == *"$2"* ]] && bang=$(printf 'the `!` prefix (`! %s`)' "$2")
+    printf 'This session chose develop isolation, so the main checkout keeps its current branch: keep editing here and do not commit. The feature branch and its PR come at the end of the work from "%s/promote-to-worktree.sh" --branch <type>/<slug> --title <subject> --only <path>... (procedure: %s). %s, ask the user to run the command themselves with %s. Do not retry a variant of this command.' \
+      "$HOOK_LIB" "$(procedure_doc "$1")" "$when" "$bang"
   else
     printf 'Do the work in a linked worktree (procedure: %s) or pass isolation: "worktree" in your Agent tool call.' "$(procedure_doc "$1")"
   fi
@@ -589,7 +594,9 @@ branch_verdict() {
   if [ "$is_delete" != 1 ]; then
     # `branch -f <name> [<start>]` moves an existing branch ref.
     if [ "$is_force" = 1 ]; then
-      printf 'BLOCKED: git branch -f rewrites a branch ref on the main checkout. %s Blocked: %s' "$(main_route "$root" "${segment:0:200}")" "${segment:0:200}"
+      local shown
+      decode_word_to shown "${segment:0:200}"
+      printf 'BLOCKED: git branch -f rewrites a branch ref on the main checkout. %s Blocked: %s' "$(main_route "$root" "$shown")" "$shown"
     fi
     return 0
   fi
@@ -1030,9 +1037,8 @@ branch_op_verdict() {
     session_mode "$root"
     if [ "$ISO_MODE" = develop ]; then
       protected_checkout "$root" || return 0
-      why="it runs on $PROTECTED_HEAD, which is protected"
       printf 'BLOCKED: this pull or merge only brings the own upstream of the current branch into it, but it runs on %s, which is protected. %s Blocked: %s' \
-        "$PROTECTED_HEAD" "$(main_route "$root" "$shown")" "$shown"
+        "$PROTECTED_HEAD" "$(main_route "$root" "$shown" 'If the main checkout really should be updated here')" "$shown"
       return 0
     fi
     why="this session has not chosen develop isolation for this checkout"

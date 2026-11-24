@@ -1051,7 +1051,13 @@ lacks 'linked worktree'            "#552 develop: branch -f names no worktree"  
 printf '{"aiDir":".ai","frameworkVersion":"2.0.0","isolation":{"protectedBranches":["fea*"]}}\n' > "$R2/.myspec.json"
 reason_has 'promote-to-worktree.sh' "#552 develop: protected pull names promotion" "$R2" dev2 'git pull'
 lacks 'linked worktree'            "#552 develop: protected pull names no worktree" "$R2" dev2 'git pull'
+reason_has 'really should be updated here' "#552 develop: protected pull keeps the update wording" "$R2" dev2 'git pull'
 printf '{"aiDir":".ai","frameworkVersion":"2.0.0"}\n' > "$R2/.myspec.json"
+reason_has '--only <path>'         "#552 develop: the promotion usage passes --only" "$REPO" d552 'git switch -c feat/x'
+reason_has "\`! git branch -f feat/x @{u}\`" "#552 develop: branch -f quotes @{u} as typed" "$REPO" d552 'git branch -f feat/x @{u}'
+lacks "\`! git branch -f"          "#552 develop: a quoted word is not quoted back as a placeholder" "$REPO" d552 'git branch -f "feat/x" HEAD'
+reason_has "with the \`!\` prefix" "#552 develop: a quoted word still names the ! route" "$REPO" d552 'git branch -f "feat/x" HEAD'
+lacks 'another branch'             "#552 develop: a rebase is not told about switching branches" "$REPO" d552 'git rebase origin/main'
 reason_has 'linked worktree'       "#552 no decision keeps the worktree route"    "$REPO" none-sess 'git switch -c feat/x'
 reason_has 'linked worktree'       "#552 worktree mode keeps the worktree route"  "$REPO" w552 'git switch -c feat/x'
 lacks 'promote-to-worktree.sh'     "#552 worktree mode names no promotion"        "$REPO" w552 'git switch -c feat/x'
