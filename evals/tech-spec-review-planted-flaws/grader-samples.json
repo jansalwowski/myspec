@@ -94,11 +94,13 @@
   "returns-coverage-table": {
     "pass": [
       "| Requirement | Steps | Fidelity |\n|-------------|-------|----------|\n| REQ-001 | 2, 5 | full |\n| REQ-002 | 2 | full |\n| REQ-003 | 3 | full |\n| REQ-004 | — | — |\n",
-      "**Requirement Coverage**\n\n| **Requirement** | **Steps** | **Fidelity** |\n|---|---|---|\n| REQ-004 | — | — |\n"
+      "**Requirement Coverage**\n\n| **Requirement** | **Steps** | **Fidelity** |\n|---|---|---|\n| REQ-004 | — | — |\n",
+      "**Requirement coverage**\n\n| Requirement | Steps | Fidelity |\n|---|---|---|\n| REQ-001 (choose a date range) | 1, 2 | Narrowed. No step builds a range picker or form. |\n| REQ-004 (drafts never exported) | none | Not covered |\n"
     ],
     "fail": [
       "| Severity | Issue |\n|---|---|\n| Critical | REQ-004 has no step |\n",
-      "| Requirement | Steps | Fidelity |\n|---|---|---|\n| REQ-001 | 2 | full |\n\nREQ-004 is not covered.\n"
+      "| Requirement | Steps | Fidelity |\n|---|---|---|\n| REQ-001 | 2 | full |\n\nREQ-004 is not covered.\n",
+      "| Requirement | Steps | Fidelity |\n|---|---|---|\n| REQ-001 | 2 | full |\n\n| Critical | REQ-004 (drafts never exported) has no step |\n"
     ]
   }
 }
