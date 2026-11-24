@@ -32,6 +32,42 @@ Required sections, as `##` headings in this order:
 
 No implementation detail: no file paths, class names, SQL or code.
 
+### Brief stage
+
+A spec.md can start as a brief: a few rough requirements, written before mockups or the full spec. `feature-requirements` writes it (so does `feature-mockup --explore` when no spec.md exists), and `feature-spec` completes it in place, so the feature keeps one spec.md from the first line on.
+
+- Frontmatter: the block above plus `stage: brief`. `status` stays `draft`. A brief is never `approved`, so `feature-tech-spec` and `feature-plan` refuse it. `feature-spec` removes `stage` when it completes the spec.
+- Body: one-line bullets of a few words each, no prose paragraphs, about 25 lines in all. Only the sections below, with their names and order from the table above. User Stories and Acceptance Criteria are absent, and dependencies.md is not written yet.
+
+```markdown
+## Overview
+- Problem: {the pain, with no solution words}
+- Who: {actor or actors}
+- Today: {evidence or current workaround, with its source}
+
+## Goals
+- Success: {observable signal: "we will know when ..."}
+- Appetite: {time budget, or "not set"}
+
+## Requirements
+1. REQ-001: {capability, a few words}
+2. REQ-002: {capability}
+
+## Out of Scope
+- {no-go}
+
+## Open Questions
+- [open] {question} (ticket) -> resolve by: mockup | spec | tech-spec | post-launch; default: {value}
+- [assumption] {belief} (inferred)
+- [decision] {what was decided} (user)
+- [fact] {fact} (ticket)
+```
+
+- Requirements: 3 to 7 items. IDs follow the rule in the table above and are never reused, also after completion.
+- Every Open Questions line starts with a status tag (`open`, `assumption`, `decision`, `fact`) and ends with a source tag: `user` (the user said it), `ticket` (any linked source: ticket, issue, document, idea file) or `inferred` (the agent filled a gap). Inferred content is never tagged `user`.
+- An `open` line names the stage that resolves it and a default, so work continues on the default. It is a warning, never a block.
+- A choice made while iterating on mockups is appended as a `[decision] ... (user)` line.
+
 ## dependencies.md
 
 ```markdown

@@ -13,6 +13,20 @@ tags: [feature, specification, validation, critical-thinking]
 - `/myspec:feature-spec-review {feature}`: the workflow below.
 - `--from-author`: `feature-spec` runs this review right after writing the spec. Step 8 adds one re-review round and Step 9 skips its next-step question; control returns to `feature-spec`.
 
+## Brief-Stage Spec
+
+Before dispatching, read spec.md's frontmatter. With `stage: brief` it is a brief from `/myspec:feature-requirements`: User Stories and Acceptance Criteria are missing on purpose, not defects. Say so in one line and call `AskUserQuestion`:
+
+```
+question: "spec.md is still a brief. What should happen?"
+header:   "Brief"
+options:
+  - "Complete it first (Recommended)" → stop here; run /myspec:feature-spec {feature}, which completes the brief in place
+  - "Light brief check"               → dispatch the reviewer as below; reviewer.md checks the brief shape only
+```
+
+Never approve a brief-stage spec: Step 9 skips the approval question and names `/myspec:feature-spec {feature}` as the next step.
+
 ## Independent Reviewer
 
 Steps 1–6 are in [reviewer.md](reviewer.md) and run in a fresh subagent, so the review never reads the spec with the context of whoever wrote it. Dispatch it per [`_shared/spec-reviewer-prompt.md`](../_shared/spec-reviewer-prompt.md), with `[REVIEWER_PATH]` set to `${CLAUDE_PLUGIN_ROOT}/skills/feature-spec-review/reviewer.md`. Show the findings table and fix proposals it returns as they came back, then continue at Step 7. When the Agent tool is not available or the dispatch fails, read that file, run Steps 1–6 yourself and say so in one line.
@@ -46,6 +60,7 @@ Steps 1–6 (load context, structure, review dimensions, dependency cross-check,
    - Show changes made (file paths, sections affected)
    - List remaining issues (if any)
    - If remaining Critical/High issues → recommend addressing those first; spec stays `status: draft`
+   - On a brief-stage spec, stop after the list: no approval question, and the next step is `/myspec:feature-spec {feature}`.
    - If no Critical/High remain, ask: "Review passed — mark spec.md `status: approved`?" On yes, set `status: approved` in spec.md frontmatter. This is the transition `feature-tech-spec` and `feature-plan` gate on — without it the pipeline stalls (see the Status State Machine in `.claude/rules/feature-docs.md`).
    - Then call `AskUserQuestion`:
      ```
@@ -70,6 +85,7 @@ After running the skill:
 - [ ] If changes were made: spec_version was incremented
 - [ ] If changes were made: `last_updated` was set to today
 - [ ] Summary shows files changed and remaining issues
+- [ ] A brief-stage spec was routed to `/myspec:feature-spec` or got the light brief check only, and was not approved
 
 ## Integration
 

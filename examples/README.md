@@ -16,7 +16,8 @@ The eight skills you'll use to take a feature from idea to shipped:
 | Skill | Scenarios covered |
 |-------|-------------------|
 | [skills/feature-discover.md](skills/feature-discover.md) | Discovery only (capture tribal knowledge) · Full feature docs (pull existing code into pipeline) · Complex feature routes to decomposition |
-| [skills/feature-spec.md](skills/feature-spec.md) | Greenfield small feature (with the optional scenarios + seed data step) · Cross-feature dependencies · Skill recommends decomposing first |
+| [skills/feature-requirements.md](skills/feature-requirements.md) | A vague ticket becomes a brief · The user stops after one round · A full spec already exists |
+| [skills/feature-spec.md](skills/feature-spec.md) | Greenfield small feature (with the optional scenarios + seed data step) · Cross-feature dependencies · Skill recommends decomposing first · Completing a brief after mockups |
 | [skills/feature-decompose.md](skills/feature-decompose.md) | Mixed-priority split with deferred sub-features · Skill refuses to decompose |
 | [skills/feature-mockup.md](skills/feature-mockup.md) | First mockups for an approved spec · Unconfigured project (graceful degradation) · Scope-creep flag + schema handoff |
 | [skills/visualize-options.md](skills/visualize-options.md) | Layout and states decision on one screen · feature-mockup variant pick · Answer given in the terminal instead |
@@ -90,6 +91,7 @@ The complex stuff. Each flow stitches together 3–12 skill calls and shows the 
 | Flow | Skills involved | Use it to understand |
 |------|-----------------|----------------------|
 | [flows/full-feature-delivery.md](flows/full-feature-delivery.md) | `brainstorm` → `idea-intake` → `idea-process` → `feature-spec-review` → `cross-spec-validation` → `feature-tech-spec` → `feature-tech-spec-review` → `feature-plan` → `feature-implement` → `feature-implement-review` → built-in `/code-review` → `feature-verify` → `feature-complete` | The full pipeline from "I have an idea" to "merged and shipped." |
+| [flows/design-first-feature.md](flows/design-first-feature.md) | `feature-requirements` → `feature-mockup --explore` → `feature-mockup` → `feature-spec` (completes the brief) → `feature-spec-review` | Starting from rough requirements and mockups when the layout is the open question, then writing the spec once. |
 | [flows/feature-decomposition.md](flows/feature-decomposition.md) | `feature-decompose` → per-sub-feature `feature-tech-spec` + `feature-plan` + `feature-implement` + `feature-complete`, with `cross-spec-validation` between them | Splitting a too-large feature into independently shippable sub-features. |
 | [flows/session-with-memory-extraction.md](flows/session-with-memory-extraction.md) | `bootstrap` → auto-session via hook → `session-complete` (vs. `memorify` as the alternative) | How session tracking, the `mark-code-changed.sh` hook, and memory extraction fit together. |
 | [flows/debugging-with-memory.md](flows/debugging-with-memory.md) | `memory-lookup` → `root-cause-debugging` (4 phases) → `memorize` | The full debugging loop: check what's known, investigate methodically, save the lesson. |

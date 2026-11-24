@@ -91,7 +91,7 @@ The script encodes this policy. Reference when explaining flags:
 | Status | Required | Expected | "Docs ahead" signal |
 |--------|----------|----------|---------------------|
 | `planned` | — | — | `tech-spec.md` or `implementation-plan.md` present |
-| `draft` | `spec.md` | `dependencies.md` | `implementation-plan.md` present |
+| `draft` | `spec.md` | `dependencies.md` (not while spec.md has `stage: brief`) | `implementation-plan.md` present |
 | `in-progress` | `spec.md` | `tech-spec.md`, `dependencies.md` | — |
 | `complete` | `spec.md`, `tech-spec.md` | — | `implementation-plan.md` present (should be archived) |
 | `deprecated` | — | — | — |

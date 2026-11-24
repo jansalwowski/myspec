@@ -83,7 +83,8 @@ When something is easier to see than to read (layouts to pick between, an archit
 | `/myspec:bootstrap` | Load project context, memory indexes, and active session at session start |
 | **Feature Workflow** | |
 | `/myspec:feature-discover` | Reverse-engineer an undocumented feature from existing code into discovery.md (+ optional spec.md / tech-spec.md) ([examples](examples/skills/feature-discover.md)) |
-| `/myspec:feature-spec` | Create feature specification (spec.md + dependencies.md); optional step adds scenarios.md + seed.json |
+| `/myspec:feature-requirements` | Turn rough or ticket-only requirements into a short brief (`spec.md` with `stage: brief`) and challenge what is vague or missing, before mockups or the full spec ([examples](examples/skills/feature-requirements.md)) |
+| `/myspec:feature-spec` | Create feature specification (spec.md + dependencies.md); optional step adds scenarios.md + seed.json; completes a brief-stage spec in place |
 | `/myspec:feature-decompose` | Split large feature into sub-features |
 | `/myspec:feature-spec-review` | Validate spec for completeness and consistency |
 | `/myspec:cross-spec-validation` | Check spec against related specs for contradictions and broken contracts |

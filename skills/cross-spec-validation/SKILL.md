@@ -66,6 +66,8 @@ For each related feature, read its `spec.md` and `tech-spec.md`, then check all 
 | **Medium** | Implicit dependency — related spec doesn't mention target's domain but could be affected | Review and confirm no conflict |
 | **Low** | Terminology drift — same concept named differently across specs | Document for consistency |
 
+**Brief-stage specs.** A spec.md with `stage: brief` in its frontmatter is a few rough requirements written before the full spec (`/myspec:feature-requirements`), so it is lower-confidence input. A clash involving one is at most Low, reported as a note ("brief, not yet decided") with the brief's line, never as a Critical or High contradiction. When the target itself is a brief, say so in one line and recommend `/myspec:feature-spec {feature}` to complete it before relying on the result.
+
 ### 5. Present Contradiction Report
 
 If no contradictions found across any dimension, report clean result and skip to step 8 (no confirmation needed for zero findings).
@@ -157,6 +159,7 @@ Adapt patterns to target spec content — these are examples, not an exhaustive 
 - Always use both discovery methods (dependency graph + keyword scan) — do not skip one
 - Always include specific line numbers in findings — vague references are not actionable
 - If zero related features found, report clean and exit — do not fabricate findings
+- Never rate a clash with a brief-stage spec above Low, and never add a "superseded by" note to one
 
 ## Integration
 

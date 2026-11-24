@@ -86,7 +86,8 @@ Tag a case with **every** skill its graders name, siblings included. A descripti
 
 | Case | Family | What it proves |
 |---|---|---|
-| `trigger-new-feature` | trigger | "start a new feature … write the requirements" → feature-spec, spec.md written; "I'll review afterwards" means no auto-review, so feature-spec-review stays quiet (#356) |
+| `trigger-new-feature` | trigger | "start a new feature … write the requirements" → feature-spec, spec.md written; "I'll review afterwards" means no auto-review, so feature-spec-review stays quiet (#356); the scope is clear, so feature-requirements stays quiet too |
+| `trigger-feature-requirements` | trigger, near-miss | a one-line support ticket and "get the basic requirements straight before screens or a proper spec, push back on what's vague" → feature-requirements, not feature-spec or brainstorm; spec.md written with `stage: brief` and `status: draft`, at least one `[assumption]` or `[open]` line tagged `(inferred)` or `(ticket)`, and no Acceptance Criteria heading |
 | `route-spec-review` | trigger, near-miss | "before the technical design, check the requirements doc" → feature-spec-review, not tech-spec-review or the built-in /code-review |
 | `trigger-memorize` | trigger | a named fact to keep → memorize, not memorify or session-complete |
 | `nearmiss-personal-preference` | near-miss | "remember that I prefer short answers" → auto-memory, not memorize or memorify |
