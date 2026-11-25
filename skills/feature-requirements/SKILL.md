@@ -1,6 +1,6 @@
 ---
 name: "feature-requirements"
-description: "Use when a feature starts from rough, partial or ticket-only requirements to gather and challenge before mockups or a full spec; writes a brief-stage spec.md. Keywords: rough requirements, brief, vague ticket, design first. Do NOT use when the user gives a clear scope and wants the spec written (feature-spec), or for open ideation (brainstorm)."
+description: "Use when a feature starts from rough, partial or ticket-only requirements to gather and challenge before mockups or a full spec. Do NOT use when the scope is clear and the spec is wanted (feature-spec), or for open ideation (brainstorm)."
 tags: [feature, requirements, specification, discovery]
 ---
 

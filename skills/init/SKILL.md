@@ -1,6 +1,7 @@
 ---
 name: "init"
-description: "Use when setting up myspec in a project for the first time. Keywords: initialize, install myspec, new project setup, scaffold AI documentation. Do NOT use on an existing setup (update)."
+description: "Set up myspec in a project for the first time."
+disable-model-invocation: true
 ---
 
 # Init

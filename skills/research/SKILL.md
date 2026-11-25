@@ -1,6 +1,6 @@
 ---
 name: research
-description: Use when a question needs a sourced answer from several sources: picking a library or approach, why a framework or tool behaves a certain way, a migration path, AI tooling setup. Keywords: research, investigate, compare options. Do NOT use for one doc lookup, a reproducible failure in this repo (root-cause-debugging), or ideation (brainstorm).
+description: "Use when a question needs a sourced answer from several sources: picking a library, why a tool behaves a certain way, a migration path. Do NOT use for one doc lookup, a failure in this repo (root-cause-debugging), or ideation (brainstorm)."
 ---
 
 # Research

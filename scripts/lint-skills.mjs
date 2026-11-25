@@ -47,7 +47,8 @@ const KNOWN_BAD_KEYS = {
 // what steers the model away from the wrong skill. Update this map when a
 // description deliberately changes its exclusions. `code-review` is Claude Code's
 // built-in (myspec's own was removed in 3.0, #150); it stays a sibling because
-// it is still the skill these descriptions must steer away from.
+// it is still the skill these descriptions must steer away from. Manual-only
+// skills (disable-model-invocation) have no entry: DESC-DO-NOT skips them.
 const SIBLINGS = {
   'backbone-sync': ['feature-spec-sync', 'setup'],
   brainstorm: ['feature-plan'],
@@ -68,17 +69,13 @@ const SIBLINGS = {
   'feature-verify': ['feature-status-audit'],
   'idea-intake': ['idea-process'],
   'idea-process': ['idea-intake'],
-  init: ['update'],
   memorify: ['memorize', 'session-complete'],
   memorize: ['memorify'],
   'memory-create': ['memorify', 'memorize'],
   'memory-optimize': ['memory-sanitize'],
-  'memory-sanitize': ['memory-optimize'],
   'root-cause-debugging': ['code-review'],
-  'session-clean': ['session-complete'],
   'session-complete': ['session-clean'],
   setup: ['init'],
-  update: ['init'],
 };
 
 // Top-level directories of this repo that exist in no consumer project. A
@@ -91,15 +88,22 @@ const PLUGIN_INTERNAL_DIRS = [
 ];
 
 // Caps. The spec allows 1,024 description chars; this repo caps each shipped
-// skill at 350 (DESC-CAP) so no single skill crowds a consumer's own skills
+// skill at 250 (DESC-CAP) so no single skill crowds a consumer's own skills
 // out of the listing (docs/myspec-2.0-breaking-changes.md, the 2.0 description
-// diet: every description was rewritten to fit, doctor to exactly 350; by 2.11
-// code-review and memorize had grown back over it, issue #264). Repo-local
+// diet set 350; by 2.11 code-review and memorize had grown back over it, issue
+// #264). 3.12 lowered it to 250 and added DESC-TOTAL: Claude Code sizes the
+// whole listing at 1% of the context window and drops the descriptions of the
+// least-used skills first, and the 44 descriptions (11,932 chars) were
+// already past that, so research, root-cause-debugging and three more showed
+// with no description. DESC-TOTAL sums description + when_to_use over the
+// model-invocable shipped skills; a manual-only skill's description is not in
+// the listing, so it does not count. Repo-local
 // maintainer skills under .claude/skills/ never enter a consumer's listing, so
 // DESC-CAP skips them. LISTING_MAX (DESC-LENGTH) is Claude Code's own
 // truncation point and applies everywhere
 // (skills/skill-verify/references/detection-patterns.md).
-const DESCRIPTION_MAX = 350;
+const DESCRIPTION_MAX = 250;
+const LISTING_TOTAL_MAX = 8000; // DESC-TOTAL, all model-invocable shipped skills together
 const LISTING_MAX = 1536; // description + when_to_use, Claude Code listing truncation
 const BODY_TOKEN_BUDGET = 5000; // truncated past this on re-injection after /compact
 const BODY_LINE_BUDGET = 500;
@@ -125,7 +129,7 @@ function usage(msg) {
 }
 
 function parseArgs(argv) {
-  const opts = { root: path.resolve(HERE, '..'), json: false, files: null };
+  const opts = { root: path.resolve(HERE, '..'), json: false, files: null, listing: [] };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--json') opts.json = true;
@@ -506,6 +510,7 @@ function lintFile(absPath, ctx) {
     if (!repoLocal && d.length > DESCRIPTION_MAX) add(desc.line, 'DESC-CAP', `description is ${d.length} chars; the cap is ${DESCRIPTION_MAX} (the 2.0 description diet; rewrite, do not truncate)`);
     const wtu = fields.when_to_use && typeof fields.when_to_use.value === 'string' ? fields.when_to_use.value : '';
     if (d.length + wtu.length > LISTING_MAX) add(desc.line, 'DESC-LENGTH', `description + when_to_use is ${d.length + wtu.length} chars; Claude Code truncates the listing at ${LISTING_MAX}`);
+    if (!repoLocal && !manualOnly && ctx.listing) ctx.listing.push({ skill: dirName, chars: d.length + wtu.length });
     if (!manualOnly) {
       if (!/^Use when\b/.test(d)) add(desc.line, 'DESC-USE-WHEN', 'a model-invocable description must start with "Use when" (skill-optimization.md; d60997b)');
       if (WORKFLOW_RE.test(d)) add(desc.line, 'DESC-WORKFLOW', 'description reads as a workflow summary (verb … then/next/after); the model follows it instead of the body (886a3ab)', 'warning');
@@ -667,6 +672,15 @@ function main() {
     found.push(...lintXrefs(f, opts.root, xrefCache));
     found.push(...lintSharedSources(f, opts.root, sharedCache));
     for (const x of found) results.push({ path: rel, ...x });
+  }
+  // DESC-TOTAL needs every skill, so a --files run (pre-commit) skips it.
+  if (!opts.files) {
+    const total = opts.listing.reduce((n, e) => n + e.chars, 0);
+    if (total > LISTING_TOTAL_MAX) {
+      const top = [...opts.listing].sort((a, b) => b.chars - a.chars).slice(0, 3).map((e) => `${e.skill} ${e.chars}`).join(', ');
+      results.push({ path: path.relative(process.cwd(), path.join(opts.root, 'skills')) || 'skills', line: 1, rule: 'DESC-TOTAL', severity: 'error',
+        message: `the ${opts.listing.length} model-invocable descriptions total ${total} chars; the cap is ${LISTING_TOTAL_MAX} (longest: ${top}). Shorten descriptions or make a user-run skill disable-model-invocation` });
+    }
   }
   const errors = results.filter((r) => r.severity === 'error').length;
   const warnings = results.length - errors;

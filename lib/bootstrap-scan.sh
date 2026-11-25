@@ -167,7 +167,7 @@ step_worktrees() {
   done < <(git -C "$HERE" worktree list --porcelain 2>/dev/null; echo)
   [ "$total" -gt 0 ] || return
   if [ "$bad" -gt 0 ]; then
-    echo "**Worktree health**: WARNING, $bad of $total stale or orphaned; use the worktree-clean skill"
+    echo "**Worktree health**: WARNING, $bad of $total stale or orphaned; run /myspec:worktree-clean"
   else
     echo "**Worktree health**: clean ($total active)"
   fi

@@ -1,6 +1,7 @@
 ---
 name: housekeep
-description: "Use when the everyday leftovers should be swept in one go — merged branches and worktrees, stale session state, idle brainstorm sessions — or housekeep is overdue. Keywords: housekeeping, tidy up, sweep, routine cleanup. Do NOT use for a setup health check (doctor) or to groom memories (memory-optimize, memory-sanitize)."
+description: "Sweep everyday leftovers in one go: merged branches and worktrees, stale session state, idle brainstorm sessions."
+disable-model-invocation: true
 ---
 
 # Housekeep

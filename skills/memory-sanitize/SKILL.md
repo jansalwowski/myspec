@@ -1,6 +1,7 @@
 ---
 name: "memory-sanitize"
-description: "Use when the user-level auto-memory store (<config_dir>/projects/, default ~/.claude) needs grooming — stale entries, bloated bodies, duplicates, contradictions. Keywords: prune memories, compress memory, memory triage. Do NOT use for the project store (memory-optimize)."
+description: "Groom the user-level auto-memory store: stale entries, bloated bodies, duplicates, contradictions."
+disable-model-invocation: true
 ---
 
 # Memory Sanitize

@@ -1,7 +1,7 @@
 ---
 name: "backbone-sync"
-description: "Use when the project topology file (backbone.yml) needs checking against the repository it describes, or has drifted. Keywords: backbone drift, topology audit, backbone out of date, update backbone, stale topology. Do NOT use to create one for the first time (setup backbone) or for feature docs (feature-spec-sync)."
-allowed-tools: [Bash, Read, Edit, Grep, Glob]
+description: "Use when the project topology file (backbone.yml) has drifted from the repository or needs checking against it. Keywords: backbone drift, stale topology. Do NOT use to create one (setup backbone) or for feature docs (feature-spec-sync)."
+allowed-tools: [Read, Edit, Grep, Glob, 'Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/backbone-audit/audit.mjs":*)', 'Bash(git log:*)', 'Bash(git grep:*)']
 tags: [topology, maintenance, verification, sync]
 ---
 

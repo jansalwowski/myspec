@@ -1,6 +1,6 @@
 ---
 name: "session-complete"
-description: "Use when a tracked session is finished and ready to archive. Keywords: end session, wrap up, close session, archive session, extract memories. Archives your own session only. Do NOT use mid-implementation or on another agent's file (session-clean)."
+description: "Use when a tracked session is finished and ready to archive. Keywords: wrap up, end session, extract memories. Your own session only. Do NOT use mid-implementation or on another agent's file (session-clean)."
 ---
 
 # Session Complete

@@ -1,6 +1,6 @@
 ---
 name: "feature-mockup"
-description: "Use when a feature needs mockups before tech design: spec-validation mockups, or rough wireframes of layout or flow before the spec (--explore). Keywords: mockup, prototype screen, visualize spec, wireframe. Do NOT use for production UI or landing pages (frontend-design), critique (feature-mockup-review), or featureless ideas (brainstorm)."
+description: "Use when a feature needs mockups before tech design, or rough wireframes of layout or flow before the spec (--explore). Do NOT use for production UI (frontend-design), critique (feature-mockup-review), or featureless ideas (brainstorm)."
 tags: [mockup, feature, design, ux, prototyping]
 ---
 

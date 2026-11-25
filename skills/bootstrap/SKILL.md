@@ -1,6 +1,6 @@
 ---
 name: "bootstrap"
-description: "Use when a session starts and the agent needs project orientation before answering or changing anything. Keywords: orient, where am I, what is this project, what's the state. Do NOT use mid-task or twice in one session."
+description: "Use when a session starts and the agent needs project orientation before answering or changing anything. Keywords: orient, where am I, project state. Do NOT use mid-task or twice in one session."
 ---
 
 # Bootstrap

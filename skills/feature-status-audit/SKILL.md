@@ -1,7 +1,7 @@
 ---
 name: feature-status-audit
-description: "Use when the whole feature manifest needs auditing against on-disk docs, or delivery metrics across features are wanted. Keywords: manifest drift, index.yaml audit, orphan features, docs ahead of status, stale status, plan checkbox drift, feature inventory, lead time, rework rate. Do NOT use for one feature's deep audit (feature-verify)."
-allowed-tools: [Bash, Read]
+description: "Use when the whole feature manifest needs auditing against on-disk docs, or delivery metrics across features are wanted. Keywords: manifest drift, orphan features, stale status, lead time. Do NOT use for one feature (feature-verify)."
+allowed-tools: [Read, 'Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/feature-status-audit/audit.mjs":*)', 'Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/delivery-metrics/metrics.mjs":*)', 'Bash(git log:*)', 'Bash(ls:*)']
 ---
 
 # Feature Status Audit

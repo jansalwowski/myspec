@@ -1,7 +1,7 @@
 ---
 name: "memory-preflight"
-description: "Use when code work is about to start and relevant past memories should surface first. Keywords: preflight, memory check, pre-work scan, load memory. Do NOT use for research-only tasks, doc updates, or answering questions."
-allowed-tools: [Read, Grep, Glob, Bash]
+description: "Use when code work is about to start and relevant past memories should surface first. Keywords: preflight, memory check. Do NOT use for research-only tasks, doc updates, or answering questions."
+allowed-tools: [Read, Grep, Glob, 'Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/memory-anchor.mjs":*)']
 ---
 
 # Memory Preflight
