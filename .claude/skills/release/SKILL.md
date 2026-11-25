@@ -20,7 +20,7 @@ Cut a myspec release from `main`. Repo-local maintainer skill — lives in `.cla
 
 Run all checks; any failure → report it and stop (fix first, never release around a failure):
 
-1. On `main` (`git rev-parse --abbrev-ref HEAD`), clean tree (`git status --porcelain` empty), synced (`git pull` reports up to date), and not ahead: `git status -sb` must not say `ahead`. `git pull` reports "Already up to date" even when a local commit, such as a `chore(quality)` commit left by an aborted release, sits unpushed; show `git log --oneline origin/main..HEAD` and resolve it (Step 3's Abort) first.
+1. On `main` (`git rev-parse --abbrev-ref HEAD`), clean tree (`git status --porcelain` empty), and level with origin: after `git fetch origin`, `git rev-list --left-right --count origin/main...HEAD` prints `0	0`. Never run `git pull` here: the worktree guard blocks it in the main checkout of a session with no isolation decision. Behind (left count above 0): ask the user to run `! git pull`, then check again. Ahead (right count above 0), such as a `chore(quality)` commit left by an aborted release: show `git log --oneline origin/main..HEAD` and resolve it (Step 3's Abort) first.
 2. Hooks parse: `bash -n` every `hooks/*.sh`.
 3. Latest CI run on main succeeded: `gh run list --branch main --limit 1`. If not green, show the failure and ask for explicit confirmation before continuing.
 
@@ -35,15 +35,15 @@ Run all checks; any failure → report it and stop (fix first, never release aro
 
 ### Step 3: Eval Comparison
 
-`scripts/evals/release-check.sh` runs the release suite on HEAD (Sonnet, adaptive: every case once, plus 2 more runs for a regression case whose run failed; Haiku: 3 runs per regression case, on the `trigger` and `near-miss` cases only; Sonnet judge) and compares it case by case with the previous release. Every run is a real model call on the maintainer's login, so state the cost before starting (measured on v3.2.0):
+`scripts/evals/release-check.sh` runs the release suite on HEAD (Sonnet, adaptive: every case once, plus 2 more runs for a regression case whose run failed; Haiku: 3 runs per regression case, on the `trigger` and `near-miss` cases only; Sonnet judge) and compares it case by case with the previous release. Every run is a real model call on the maintainer's login, so state the cost before starting. The suite grows every release, so take the figures from the previous release's baseline, which records each case's spend, not from a remembered number. HEAD's spend is about the baseline's total, per model: `jq '.models | map_values([.cases[].cost_usd] | add)' quality/baselines/v{prev}.json` (v3.11.0: Sonnet $11.16, Haiku $0.30, about 25 min).
 
 | Situation | Spend | Time |
 |---|---|---|
-| Stored baseline for the previous tag is reused (the usual case: a Claude Code patch release does not re-run it) | about $4 (Sonnet ≈ $3.8, Haiku ≈ $0.2), plus each changed case on the previous tag (≈ $0.07 a routing case, ≈ $0.35 an orchestration one) | about 10 min |
-| One model re-runs on the previous tag (its resolved model id changed) | plus ≈ $0.2 (Haiku) or ≈ $3.8 (Sonnet) | plus 3–5 min |
-| The previous tag's whole suite is re-run (a Claude Code major.minor change, or no stored baseline) | about $8 | about 20 min |
+| Stored baseline for the previous tag is reused (the usual case: a Claude Code patch release does not re-run it) | the baseline's total, plus each case re-run on the previous tag at its `cost_usd` in that file | the previous check's time |
+| One model re-runs on the previous tag (its resolved model id changed) | plus that model's total | plus about half again |
+| The previous tag's whole suite is re-run (a Claude Code major.minor change, or no stored baseline) | about twice the total | about twice |
 
-Each failed Sonnet regression run adds 2 retries of that case. The script prints which applies (`baseline REUSE …`, `RERUN <model> <reason>`, `RERUN-CASE <case> <reason>`, `WORKSPACES …`). RELEASING.md lists the rules: a Claude Code major.minor change (`--cc-match exact`: any version change) or a changed or unresolved model id re-runs the suite; a case whose inputs (project-instructions block aside) or fixture workspace changed re-runs only that case. The check writes nothing to `quality/`; it stages files in its output directory.
+Each failed Sonnet regression run adds 2 retries of that case, and each run that ended in an error is run once more. The script prints which applies (`baseline REUSE …`, `RERUN <model> <reason>`, `RERUN-CASE <case> <reason>`, `WORKSPACES …`). RELEASING.md lists the rules: a Claude Code major.minor change (`--cc-match exact`: any version change) or a changed or unresolved model id re-runs the suite; a case whose inputs (project-instructions block aside) or fixture workspace changed re-runs only that case. The check writes nothing to `quality/`; it stages files in its output directory.
 
 1. Tell the maintainer the estimate. If they choose to skip (quota, outage, docs-only release), run `scripts/evals/release-check.sh --version {X.Y.Z} --skip "<reason>"`, which records the reason in `quality/trend.jsonl`, and go to item 5.
 2. Run `scripts/evals/release-check.sh --version {X.Y.Z}` in the background: it can outlast a 10-minute tool timeout. Wait for it to exit, then show the comparison report and note the output directory it printed (`release-check: output in <out>`).
@@ -53,7 +53,7 @@ Each failed Sonnet regression run adds 2 retries of that case. The script prints
    - **0 with `REGRESSED; report-only`** (only when `"gate": false` was set by hand): show the regressed models, their reasons, and the REGRESSED column. Call `AskUserQuestion`: continue the release, or stop to investigate. On stop, go to Abort.
    - **1** (a model in `"gateModels"`, Sonnet, regressed; `"gate": true` in `quality/release-check.json` is the standing setting): stop and go to Abort. The release does not go out on a gating model's regression while the gate is on.
    - **2 with `gateModels is empty` or `gateModels lists <model>`** (the gate would block on nothing): show the line, fix `quality/release-check.json` or `--models` with the maintainer, and re-run. Never skip the check over it.
-   - **2** (infrastructure error: usage limit, logged out, run failed, interrupted): show the last lines it printed. Call `AskUserQuestion`: retry, skip with a reason (item 1), or stop. When HEAD's run finished, retry with `--head-results <out>/head` so it is not paid for twice.
+   - **2** (infrastructure error: usage limit, logged out, run failed, interrupted, or a run that errored again on its retry): show the last lines it printed. Call `AskUserQuestion`: retry, skip with a reason (item 1), or stop. When HEAD's run finished, retry with `--head-results <out>/head` so it is not paid for twice.
 4. On a go: `scripts/evals/release-check.sh --record <out>` copies the staged baselines and trend line into `quality/`.
 5. Commit them before the bump: `git add quality && git commit -m "chore(quality): record v{X.Y.Z} eval baseline"`. This keeps the bump diff to version files only.
 

@@ -18,8 +18,11 @@
 //          and are graded on what the capped run did.
 //
 // Exit status: 0 all cases at or above threshold, 1 some case below it,
-// 2 no readable result, a partial run, or any run that ended in an error
-// (its score says nothing about the plugin).
+// 2 no readable result, a partial run, or a run that ended in an error and
+// was not replaced (its score says nothing about the plugin). run.sh runs
+// each errored run once more under <job>/infra-retry/<case>; an error counts
+// only while the case has fewer clean retry runs than errored ones, or a
+// retry run errored too.
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -75,15 +78,20 @@ for (const f of files) {
     const right = new Set(skillGraders.filter((g) => g.config?.max !== 0).map((g) => g.name));
     for (const r of Object.values(c.arms ?? {}).flat()) totalCost += (r.costUsd ?? 0) + (r.judgeCostUsd ?? 0);
     const key = `${model}\0${c.name}`;
-    if (!byCase.has(key)) byCase.set(key, { name: c.name, model, right, sibling, allRuns: [] });
-    byCase.get(key).allRuns.push(...(c.arms?.with ?? []));
+    if (!byCase.has(key)) byCase.set(key, { name: c.name, model, right, sibling, allRuns: [], retried: [] });
+    const runsHere = c.arms?.with ?? [];
+    byCase.get(key).allRuns.push(...runsHere);
+    if (path.relative(dir, f).split(path.sep).includes('infra-retry')) byCase.get(key).retried.push(...runsHere);
   }
 }
 
 const rows = [];
-for (const { name, model, right, sibling, allRuns } of byCase.values()) {
-  const runs = allRuns.filter((r) => !r.error || BENIGN_ERROR_RE.test(String(r.error)));
+const isClean = (r) => !r.error || BENIGN_ERROR_RE.test(String(r.error));
+for (const { name, model, right, sibling, allRuns, retried } of byCase.values()) {
+  const runs = allRuns.filter(isClean);
   const errored = allRuns.length - runs.length;
+  const retryErrored = retried.filter((r) => !isClean(r)).length;
+  const replaced = retried.length - retryErrored;
   let fired = 0;
   let wrong = 0;
   let cost = 0;
@@ -94,7 +102,8 @@ for (const { name, model, right, sibling, allRuns } of byCase.values()) {
     secs += r.durationSeconds ?? 0;
     if (r.error) notes.add(`error: ${String(r.error).slice(0, 60)}`);
   }
-  if (errored) infra++;
+  // Errored runs outside the retry, all replaced by clean retry runs, are not infrastructure.
+  if (retryErrored || errored - retryErrored > replaced) infra++;
   for (const r of runs) {
     const byName = Object.fromEntries((r.graders ?? []).map((g) => [g.name, g]));
     if (right.size && [...right].every((n) => byName[n]?.passed)) fired++;
