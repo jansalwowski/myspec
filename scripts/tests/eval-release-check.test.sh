@@ -12,7 +12,9 @@
 # tree has (run.sh evaluates a snapshot of it, #311), and "IGNORED" is logged
 # when the plugin dir holds the fixture's gitignored local/ directory. `-p` answers the
 # model-id probe with stub-<model>-$STUB_MODEL_REV_<model> (default a), or
-# fails when STUB_PROBE_FAIL is set.
+# fails when STUB_PROBE_FAIL is set. On HEAD, the first run of the case named
+# by STUB_ERROR_HEAD ends in an error, except in an infra-retry output dir
+# unless STUB_ERROR_STICKY is set.
 #
 # Usage: scripts/tests/eval-release-check.test.sh
 
@@ -77,8 +79,9 @@ if (a[0] === 'plugin' && a[1] === 'eval') {
     schemaVersion: 1, claudeVersion: env.STUB_CC_VERSION || '2.1.284', durationSeconds: 20, partial: false,
     suite: { modelOverride: opt('--model'), judgeModel: 'sonnet' },
     cases: cases.map((name) => ({ name, graders: [], aggregates: { score: q },
-      arms: { with: Array.from({ length: runsOf(name) }, () => ({ score: q, costUsd: 0.1, judgeCostUsd: 0, durationSeconds: 5,
-        error: !isHead && name === env.STUB_SCAFFOLD_FAIL_PREV ? 'scaffold failed (exit 1): cp: framework-files/x.md: No such file or directory' : null,
+      arms: { with: Array.from({ length: runsOf(name) }, (_, i) => ({ score: q, costUsd: 0.1, judgeCostUsd: 0, durationSeconds: 5,
+        error: !isHead && name === env.STUB_SCAFFOLD_FAIL_PREV ? 'scaffold failed (exit 1): cp: framework-files/x.md: No such file or directory'
+          : isHead && i === 0 && name === env.STUB_ERROR_HEAD && (env.STUB_ERROR_STICKY || !out.includes('infra-retry')) ? 'examining the PATH directories took longer than 5s' : null,
         graders: [{ name: 'g', passed: q >= 1, scored: true }] })) } })),
   }));
   process.exit(0);
@@ -440,6 +443,23 @@ SET_MODEL_TAGS='{"haiku": "trigger"}' set_config true
 rc_run badtags --version 1.2.0 --models sonnet,haiku
 expect_eq "modelTags not a map of tag lists: exit 2 before any eval" "$RC $(grep -c '^EVAL' "$STUB_LOG")" "2 0"
 set_config false
+
+export STUB_ERROR_HEAD=case-c
+echo "# runs that ended in an error are run once more"
+rc_run infra-once --version 1.2.0 --models sonnet --runs 2
+expect_eq "one errored run, replaced by its retry: a verdict, exit 0" "$RC" 0
+expect_has "the retry is announced" "$OUTPUT" "retrying 1 case(s) with runs that ended in an error: case-c"
+expect_eq "the retry runs the errored case once" "$(grep '^RUNS HEAD sonnet case-c' "$STUB_LOG")" "RUNS HEAD sonnet case-c 1"
+expect_eq "the staged baseline keeps the requested run count for the case" "$(jf "$TMP/out-infra-once/staged/baselines/v1.2.0.json" 'd.models.sonnet.cases["case-c"].scores.length')" 2
+STUB_ERROR_STICKY=1 rc_run infra-sticky --version 1.2.0 --models sonnet --runs 2
+expect_eq "a retry that errors again: no verdict, exit 2" "$RC" 2
+expect_eq "a case that never errors is not retried" "$(grep -c '^RUNS HEAD sonnet case-a' "$STUB_LOG")" 0
+unset STUB_ERROR_HEAD
+
+echo "# --case with an extglob alternation runs each matched case by name"
+rc_run case-alt --version 1.2.0 --models sonnet --runs 1 --case '@(case-a|case-f)'
+expect_eq "--case @(a|b): exit 0" "$RC" 0
+expect_eq "each matched case ran on its own, nothing else" "$(grep '^EVAL HEAD' "$STUB_LOG" | awk '{print $5}' | sort | tr '\n' ' ')" "case-a case-f "
 
 echo "# skip and bad arguments"
 rc_run skip --version 1.2.0 --skip "usage limit hit"

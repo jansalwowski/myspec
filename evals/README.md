@@ -40,7 +40,7 @@ scripts/evals/run.sh --mode full --runs 1 --models sonnet --case 'trigger-*'
 MYSPEC_EVALS_DRY_RUN=1 scripts/evals/run.sh --mode changed   # show the selection and the command, spend nothing
 ```
 
-Results go to `.eval-results/<UTC timestamp>-<mode>-<pid>/<model>/` (gitignored): claude's own `aggregate-result.json` and `report.html`, plus `eval.log`. `--mode changed` runs one `claude plugin eval` invocation per selected case (its `--case` takes a single glob), so there each case has its own `<model>/<case>/` directory. The script ends with a table:
+Results go to `.eval-results/<UTC timestamp>-<mode>-<pid>/<model>/` (gitignored): claude's own `aggregate-result.json` and `report.html`, plus `eval.log`. `--mode changed`, and `--mode full` with `--case`, run one `claude plugin eval` invocation per selected case, named exactly (its `--case` takes a single glob), so there each case has its own `<model>/<case>/` directory. `--case` matches like bash, extglob groups included: `--case '@(case-a|case-b)'` selects two cases. A run that ended in an error other than the `max_turns` cap is run once more, as often as it errored, in `<job>/infra-retry/<case>/`. The script ends with a table:
 
 ```
 CASE                       MODEL   SCORE  FIRED  WRONG  ERRORS  COST   TIME  NOTES
@@ -65,7 +65,7 @@ The plugin under test is a temporary copy of the repo's tracked and untracked, n
 | `MYSPEC_EVALS_DRY_RUN` | `0` | `1`: print selection and commands only |
 | `CLAUDE_CODE_PROMPT_CACHE_TTL` | `5m` | prompt cache TTL of each run. A subscription login defaults to `1h`, which bills cache writes at 2x input instead of 1.25x, and no run lasts five minutes. One Sonnet run went from $0.073–0.102 to $0.058 (2026-10-08). `1h` restores the default |
 
-Exit status: `0` ran (report-only), `1` below threshold and strict, `2` infrastructure error (claude missing or logged out, API unreachable, bad `--base`, a case file that failed to load, cost ceiling or deadline hit, or any run that ended in an error other than the `max_turns` cap). An exit 2 says nothing about the plugin; read the eval log it prints.
+Exit status: `0` ran (report-only), `1` below threshold and strict, `2` infrastructure error (claude missing or logged out, API unreachable, bad `--base`, a case file that failed to load, cost ceiling or deadline hit, or a run that ended in an error other than the `max_turns` cap and was not replaced by its one retry). An exit 2 says nothing about the plugin; read the eval log it prints.
 
 ## Which cases `--mode changed` selects
 
@@ -303,7 +303,7 @@ A grader that cannot fail is worthless, and a case that passes whether or not th
 - **Haiku as judge gives false negatives.** The judge is pinned to Sonnet. Prefer a regex for long outputs.
 - **Turns.** A run that hits `max_turns` is recorded with an error but still graded on what it produced. Trigger cases set a low cap on purpose: the Skill call happens in the first turns, and the rest of the skill's work costs money without informing the grade. The ten routing cases graded only on Skill calls (`trigger-doctor`, `-feature-status-audit`, `-feature-verify`, `-implement-review`, `-memorify`, `-memorize`, `-memory-lookup`, `-session-complete`, `route-spec-review`, `nearmiss-skill-verify`) cap at 2. In the stored traces Sonnet's Skill call, and any sibling's, came on the first turn in every run, and Haiku's in all but one, where it loaded bootstrap first. At 2 turns, Sonnet scored 1.00 on 30 of 30 runs with no sibling fired, and its cost for those cases fell from $4.15 to $3.01 against v3.1.0 (2026-10-08). Haiku's scores matched or beat v3.1.0 on every case, at $0.16 against $1.46. Cases that also grade a written file (`trigger-new-feature`, `trigger-feature-spec-scenarios`) keep their longer caps, and so do `nearmiss-personal-preference` and `trigger-memory-sanitize`, which were not measured at 2.
 - **No user.** Runs are non-interactive and `AskUserQuestion` is not granted, so skills that stop for confirmation either stop or carry on. Prompts that need a finished artifact say "don't ask me anything".
-- **`--case` takes one glob.** Braces and repeated `--case` flags don't work (the last one wins). That is why `--mode changed` invokes claude once per case.
+- **`--case` takes one glob.** Braces and repeated `--case` flags don't work (the last one wins). That is why `run.sh` invokes claude once per case whenever it selects cases itself (`--mode changed`, or `--case`).
 - **No `---` inside grader frontmatter values.** A `pattern:` containing `---` breaks the frontmatter parser ("Unexpected EOF"); write `-{3}`.
 - **Errored runs look like regressions.** A run that ends in an error (offline, proxy down, usage limit, timeout) is still graded, on an empty or truncated transcript, and the suite is not marked partial. Every `max: 0` sibling grader passes there by default. `summary.mjs` therefore drops such runs from SCORE, FIRED and WRONG, shows them in an ERRORS column, and exits 2. The one exception is hitting `max_turns`: trigger cases cap turns on purpose.
 - **`auth status` passes offline.** It reads local state only, so `run.sh` also probes the API URL before launching anything; offline, it fails in seconds instead of minutes of retries.

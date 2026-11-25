@@ -10,7 +10,7 @@ description: "Use when a feature has an approved spec.md and tech-spec.md and ne
 
 **Autopilot:** when the user opted in, answer this skill's gates per [`_shared/autopilot.md`](../_shared/autopilot.md).
 
-**Plugin lib:** `${CLAUDE_PLUGIN_ROOT}/lib` — the plugin's helper scripts. Files this skill sends you to write it as `<plugin lib>`: use this resolved path in its place. The Bash tool does not export the variable, so never type it in a command.
+**Plugin lib:** `${CLAUDE_PLUGIN_ROOT}/lib` (helper scripts), written `<plugin lib>` in this skill's files. Type its resolved path in each command, never via a variable (`"$L/…"`): Bash does not export it, and permission rules match the command as typed.
 
 ## When to Use
 

@@ -10,7 +10,7 @@ description: "Use when an approved implementation-plan.md is ready to execute �
 
 **Autopilot:** when the user opted in, answer this skill's gates — Step 0's "always ask" included — per [`_shared/autopilot.md`](../_shared/autopilot.md).
 
-**Plugin lib:** `${CLAUDE_PLUGIN_ROOT}/lib` — the plugin's helper scripts. Files this skill sends you to write it as `<plugin lib>`: use this resolved path in its place. The Bash tool does not export the variable, so never type it in a command.
+**Plugin lib:** `${CLAUDE_PLUGIN_ROOT}/lib` (helper scripts), written `<plugin lib>` in this skill's files. Type its resolved path in each command, never via a variable (`"$L/…"`): Bash does not export it, and permission rules match the command as typed.
 
 **You never write task code.** Every file a plan task creates or modifies is written by that task's implementer subagent, whatever goes wrong — and every review finding is fixed by an implementer. When the environment gets in the way — a denied command, a missing dependency, a tool that will not run — record the task as BLOCKED or NEEDS_CONTEXT, leave it `[~]`, and ask the user what would unblock it. Code you write yourself skips the phase review, and nothing reports that it did.
 

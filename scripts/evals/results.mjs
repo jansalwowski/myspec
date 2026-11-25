@@ -186,9 +186,42 @@ export function loadSet(p) {
 
 // Shell glob (*, ?, [...] and [!...]) to an anchored RegExp, as run.sh's --case matches.
 export function globToRegExp(glob) {
+  return new RegExp(`^${globBody(glob)}$`);
+}
+
+// The extglob groups bash matches in run.sh's `[[ == ]]`: @( ) one, ?( ) zero
+// or one, *( ) any, +( ) one or more of the |-separated patterns. !( ) has no
+// faithful regex form here, so it is refused rather than matched differently.
+const EXTGLOB = { '@': '', '?': '?', '*': '*', '+': '+' };
+
+function globBody(glob) {
   let re = '';
   for (let i = 0; i < glob.length; i++) {
     const ch = glob[i];
+    if (glob[i + 1] === '(' && (ch in EXTGLOB || ch === '!')) {
+      let depth = 0;
+      let end = -1;
+      for (let j = i + 1; j < glob.length && end < 0; j++) {
+        if (glob[j] === '(') depth++;
+        else if (glob[j] === ')' && --depth === 0) end = j;
+      }
+      if (end > 0) {
+        if (ch === '!') throw new Error(`--case: !(...) is not supported: ${glob}`);
+        const alts = [];
+        let start = i + 2;
+        depth = 0;
+        for (let j = i + 2; j <= end; j++) {
+          if (j === end || (glob[j] === '|' && depth === 0)) {
+            alts.push(globBody(glob.slice(start, j)));
+            start = j + 1;
+          } else if (glob[j] === '(') depth++;
+          else if (glob[j] === ')') depth--;
+        }
+        re += `(?:${alts.join('|')})${EXTGLOB[ch]}`;
+        i = end;
+        continue;
+      }
+    }
     const close = ch === '[' ? glob.indexOf(']', i + 2) : -1;
     if (ch === '*') re += '.*';
     else if (ch === '?') re += '.';
@@ -198,7 +231,7 @@ export function globToRegExp(glob) {
       i = close;
     } else re += ch.replace(/[.+^${}()|[\]\\]/g, '\\$&');
   }
-  return new RegExp(`^${re}$`);
+  return re;
 }
 
 // Keep only cases whose name matches the glob.

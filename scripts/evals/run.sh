@@ -303,12 +303,14 @@ spent_usd() {
 # run_eval <output-dir> <model> <max-cost> [--case <glob>] — one `claude plugin eval` invocation.
 # Echoes the eval's exit code to <output-dir>/exit-code.
 run_eval() {
-  local outdir="$1" model="$2" cost="$3"; shift 3
+  local outdir="$1" model="$2" cost="$3" runs="$RUNS" a; shift 3
+  # A job's own --runs (an adaptive or infrastructure retry) replaces --runs N.
+  for a in "$@"; do [ "$a" = --runs ] && runs=""; done
   mkdir -p "$outdir"
   local cmd=("$CLAUDE_BIN" plugin eval "$PLUGIN_DIR"
     --trust-plugin --scaffold --no-publish
     --model "$model" --judge-model sonnet
-    ${RUNS:+--runs "$RUNS"} --ablation "$ABLATION" --threshold "$THRESHOLD"
+    ${runs:+--runs "$runs"} --ablation "$ABLATION" --threshold "$THRESHOLD"
     --concurrency "$CONCURRENCY" --max-cost-usd "$cost"
     --output-dir "$outdir" --report "$outdir/report.html"
     "$@"
@@ -410,6 +412,9 @@ note() { if [ "$1" -gt "$worst" ]; then worst="$1"; fi; }
 # ANDs them with --case), in changed mode by dropping the other cases.
 # A fifth field, when set, is the job's --runs: 1 for an adaptive model's first
 # pass, 2 for its retries (each case's own count otherwise).
+# Full mode with --case runs each matched case by its own name, one after the
+# other: the glob was already applied above, and handing it on would split a
+# job line at a `|` in it and depend on claude plugin eval's glob syntax.
 jobs_list=""
 IFS=',' read -r -a model_list <<< "$MODELS"
 for model in "${model_list[@]}"; do
@@ -423,7 +428,13 @@ for model in "${model_list[@]}"; do
   if [ "$MODE" = full ]; then
     j_runs=""
     if is_adaptive "$model"; then j_runs=1; echo "evals: $model: adaptive, each case once, then twice more for a failed regression case"; fi
-    jobs_list="$jobs_list$OUT/$model|$model|$CASE_GLOB|$tags|$j_runs"$'\n'
+    if [ -n "$CASE_GLOB" ]; then
+      while IFS= read -r c; do
+        [ -n "$c" ] && jobs_list="$jobs_list$OUT/$model/$c|$model|$c||$j_runs"$'\n'
+      done <<< "$mine"
+    else
+      jobs_list="$jobs_list$OUT/$model|$model||$tags|$j_runs"$'\n'
+    fi
   else
     while IFS= read -r c; do
       [ -n "$c" ] && jobs_list="$jobs_list$OUT/$model/$c|$model|$c||"$'\n'
@@ -517,6 +528,39 @@ if [ -n "$ADAPTIVE" ] && [ -z "$stopped" ]; then
     done <<< "$retry"
   done <<< "$first_pass"
   if [ -n "$jobs_list" ]; then slots="$CONCURRENCY"; run_jobs; fi
+fi
+
+# errored_cases <results dir>: "<case>\t<n>" for each case with n with-arm runs
+# that ended in an error other than the max_turns cap.
+errored_cases() {
+  # shellcheck disable=SC2016 # a JavaScript template literal, not shell
+  node --input-type=module -e '
+    import fs from "node:fs";
+    const { BENIGN_ERROR_RE } = await import(process.argv[1]);
+    const doc = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+    for (const c of doc.cases ?? []) {
+      const n = (c.arms?.with ?? []).filter((r) => r.error && !BENIGN_ERROR_RE.test(String(r.error))).length;
+      if (n) console.log(`${c.name}\t${n}`);
+    }' "$SCRIPT_DIR/results.mjs" "$1/aggregate-result.json" 2>/dev/null
+}
+
+# Infrastructure retry, once: a run that ended in an error (a Claude Code
+# sandbox check, an API hiccup) is run again as often as it errored, so one
+# such run does not leave the whole call without a verdict. The retry lands in
+# <job>/infra-retry/<case>; summary.mjs counts the error as infrastructure only
+# when its retry did not replace it, and results.mjs drops errored runs anyway.
+if [ -z "$stopped" ] && [ "${MYSPEC_EVALS_DRY_RUN:-0}" != 1 ]; then
+  jobs_list=""
+  while IFS='|' read -r j_out j_model _ _ _; do
+    [ -n "$j_out" ] && [ -f "$j_out/aggregate-result.json" ] || continue
+    while IFS=$'\t' read -r c k; do
+      [ -n "$c" ] && jobs_list="$jobs_list$j_out/infra-retry/$c|$j_model|$c||$k"$'\n'
+    done < <(errored_cases "$j_out")
+  done <<< "$all_jobs"
+  if [ -n "$jobs_list" ]; then
+    echo "evals: retrying $(printf '%s' "$jobs_list" | grep -c .) case(s) with runs that ended in an error: $(printf '%s' "$jobs_list" | cut -d'|' -f3 | tr '\n' ' ')"
+    slots="$CONCURRENCY"; run_jobs
+  fi
 fi
 
 while IFS='|' read -r j_out _ _ _ _; do
