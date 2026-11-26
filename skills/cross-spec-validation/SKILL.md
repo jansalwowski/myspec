@@ -1,6 +1,6 @@
 ---
 name: cross-spec-validation
-description: "Use when a new or changed spec may contradict or supersede an existing one. Keywords: contradiction, spec conflict, supersede, breaking change, API contract, schema conflict. Do NOT use for single-spec review (feature-spec-review)."
+description: "Use when a new or changed spec may contradict or supersede an existing one. Keywords: spec conflict, breaking change, API or schema contract. Do NOT use for single-spec review (feature-spec-review)."
 tags: [feature, validation, cross-cutting, specification]
 ---
 

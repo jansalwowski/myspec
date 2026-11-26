@@ -1,6 +1,6 @@
 ---
 name: "feature-decompose"
-description: "Use when one feature has grown to cover several distinct capabilities and should be split into sub-features. Keywords: decompose, split feature, break down, modularize. Do NOT use for new or single-capability features."
+description: "Use when one feature has grown to cover several distinct capabilities and should be split into sub-features. Keywords: split feature, break down. Do NOT use for new or single-capability features."
 tags: [feature, decompose, split, subfeatures, refactoring, modular]
 ---
 

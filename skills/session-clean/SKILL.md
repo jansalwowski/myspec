@@ -1,6 +1,7 @@
 ---
 name: session-clean
-description: "Use when dangling session files need sweeping — live logs in .claude/state/sessions/ belonging to nobody still working, plus orphaned untracked files in ${aiDir}/memory/sessions/archive/. Keywords: session cleanup, session sweep, orphaned archives. Do NOT use on your own session (session-complete)."
+description: "Sweep dangling session files: live logs nobody is still working on, and orphaned files in the session archive."
+disable-model-invocation: true
 ---
 
 # Session Clean

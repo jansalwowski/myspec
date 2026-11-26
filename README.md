@@ -74,6 +74,8 @@ When something is easier to see than to read (layouts to pick between, an archit
 
 ## Skills Reference
 
+Six maintenance skills start only when you type them: `/myspec:init`, `/myspec:update`, `/myspec:housekeep`, `/myspec:session-clean`, `/myspec:worktree-clean` and `/myspec:memory-sanitize`. They set `disable-model-invocation: true`, so their descriptions stay out of Claude Code's skill listing, which has a fixed budget. The agent can name them, but it cannot run them for you.
+
 | Skill | Purpose |
 |-------|---------|
 | **Project Setup** | |

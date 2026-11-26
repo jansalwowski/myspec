@@ -1,7 +1,7 @@
 ---
 name: feature-plan
 tags: [feature, planning, implementation, parallel]
-description: "Use when a feature has an approved spec.md and tech-spec.md and needs an execution-ready plan with parallel task groups and milestone checkpoints. Do NOT use without an approved tech-spec, or for a plan already in progress."
+description: "Use when a feature has an approved spec.md and tech-spec.md and needs an execution-ready plan with parallel task groups. Do NOT use without an approved tech-spec, or for a plan already in progress."
 ---
 
 # Feature Plan

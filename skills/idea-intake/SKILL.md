@@ -1,6 +1,6 @@
 ---
 name: "idea-intake"
-description: "Use when a new idea file lands in ${aiDir}/ideas/ and needs triaging into the priority queue — analysis, priority, dependencies, PRIORITY-LISTING.md. Keywords: new idea, idea queue, idea triage, queue idea. Do NOT use to convert an idea to a spec (idea-process)."
+description: "Use when a new idea file in ${aiDir}/ideas/ needs triaging into the priority queue (PRIORITY-LISTING.md). Keywords: new idea, idea triage. Do NOT use to convert an idea to a spec (idea-process)."
 tags: [ideas, planning, intake, queue]
 ---
 

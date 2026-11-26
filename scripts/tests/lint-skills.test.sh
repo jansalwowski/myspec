@@ -139,40 +139,40 @@ fresh
 run
 expect_line "DESC-MISSING" "empty description is reported"
 
-# DESC-CAP: the repo cap is 350 (the 2.0 description diet, #264), not the
-# spec's 1,024: 351 chars must fail, 350 must pass, and a 400-char description
+# DESC-CAP: the repo cap is 250 (the 2.0 description diet set 350, #264; 3.12
+# lowered it), not the spec's 1,024: 251 chars must fail, 250 must pass, and a 400-char description
 # that the spec would allow must fail too.
 LONG="Use when $(printf 'x%.0s' $(seq 1 1020)). Do NOT use for y."
 fresh
 { printf -- '---\nname: demo\ndescription: "%s"\n---\n' "$LONG"; body; } | skill demo
 run
 expect_exit 1 "an over-cap description exits 1"
-expect_line "DESC-CAP .*is 1048 chars; the cap is 350" "an over-cap description is reported with the 350 cap"
+expect_line "DESC-CAP .*is 1048 chars; the cap is 250" "an over-cap description is reported with the 250 cap"
 
 SPEC_OK="Use when $(printf 'x%.0s' $(seq 1 372)). Do NOT use for y."
 fresh
 { printf -- '---\nname: demo\ndescription: "%s"\n---\n' "$SPEC_OK"; body; } | skill demo
 run
-expect_exit 1 "a description under the spec's 1024 but over 350 exits 1 (len ${#SPEC_OK})"
-expect_line "DESC-CAP .*is 400 chars; the cap is 350" "the 400-char description is reported against the 350 cap"
+expect_exit 1 "a description under the spec's 1024 but over 250 exits 1 (len ${#SPEC_OK})"
+expect_line "DESC-CAP .*is 400 chars; the cap is 250" "the 400-char description is reported against the 250 cap"
 
-OVER="Use when $(printf 'x%.0s' $(seq 1 323)). Do NOT use for y."
+OVER="Use when $(printf 'x%.0s' $(seq 1 223)). Do NOT use for y."
 fresh
 { printf -- '---\nname: demo\ndescription: "%s"\n---\n' "$OVER"; body; } | skill demo
 run
-expect_exit 1 "a description of 351 chars exits 1 (len ${#OVER})"
-expect_line "DESC-CAP .*is 351 chars; the cap is 350" "a 351-char description is reported"
+expect_exit 1 "a description of 251 chars exits 1 (len ${#OVER})"
+expect_line "DESC-CAP .*is 251 chars; the cap is 250" "a 251-char description is reported"
 
-AT="Use when $(printf 'x%.0s' $(seq 1 322)). Do NOT use for y."
+AT="Use when $(printf 'x%.0s' $(seq 1 222)). Do NOT use for y."
 fresh
 { printf -- '---\nname: demo\ndescription: "%s"\n---\n' "$AT"; body; } | skill demo
 run
-expect_exit 0 "a description of exactly 350 chars passes (len ${#AT})"
-expect_no_line "DESC-CAP" "a description of exactly 350 chars raises no DESC-CAP"
+expect_exit 0 "a description of exactly 250 chars passes (len ${#AT})"
+expect_no_line "DESC-CAP" "a description of exactly 250 chars raises no DESC-CAP"
 
 # code-review is exempt from DESC-CAP until #258 removes it — only from the
 # cap: the listing truncation still applies to it. No other skill is exempt.
-WTU="$(printf 'w%.0s' $(seq 1 1200))"
+WTU="$(printf 'w%.0s' $(seq 1 1300))"
 fresh
 { printf -- '---\nname: code-review\ndescription: "%s spec.md (feature-spec-review), tech-spec.md (feature-tech-spec-review), SKILL.md (skill-verify)."\nwhen_to_use: "%s"\n---\n' "$SPEC_OK" "$WTU"; body; } | skill code-review
 run
@@ -181,7 +181,7 @@ expect_line "DESC-LENGTH .*when_to_use.*1536" "code-review is not exempt from th
 fresh
 { printf -- '---\nname: doctor\ndescription: "%s (code-review), (feature-verify), (skill-verify)."\n---\n' "$SPEC_OK"; body; } | skill doctor
 run
-expect_line "DESC-CAP .*the cap is 350" "the exemption is per skill: doctor over the cap is reported"
+expect_line "DESC-CAP .*the cap is 250" "the exemption is per skill: doctor over the cap is reported"
 
 # Repo-local maintainer skills (.claude/skills/) never enter a consumer's
 # listing, so the cap skips them; the listing truncation does not.
@@ -189,7 +189,7 @@ fresh
 mkdir -p "$FIX/.claude/skills/triage"
 { printf -- '---\nname: triage\ndescription: "%s"\n---\n' "$SPEC_OK"; body; } > "$FIX/.claude/skills/triage/SKILL.md"
 run --files .claude/skills/triage/SKILL.md
-expect_exit 0 "a .claude/skills skill over 350 passes"
+expect_exit 0 "a .claude/skills skill over 250 passes"
 expect_no_line "DESC-CAP" "a .claude/skills skill is not reported against the cap"
 { printf -- '---\nname: triage\ndescription: "%s"\nwhen_to_use: "%s"\n---\n' "$SPEC_OK" "$WTU"; body; } > "$FIX/.claude/skills/triage/SKILL.md"
 run --files .claude/skills/triage/SKILL.md
@@ -199,6 +199,24 @@ fresh
 { printf -- '---\nname: demo\ndescription: "%s"\nwhen_to_use: "%s"\n---\n' "$AT" "$WTU"; body; } | skill demo
 run
 expect_line "DESC-LENGTH .*when_to_use.*1536" "description + when_to_use over the listing cap is reported"
+
+# ── DESC-TOTAL ──────────────────────────────────────────────────────────────
+# All model-invocable descriptions together are capped at 8,000 chars: 33
+# skills at 245 chars (8,085) fail, 32 (7,840) pass. A manual-only skill's
+# description is not in the listing, so it does not count, and a --files run
+# sees only some skills, so it never reports the total.
+D245="Use when $(printf 'x%.0s' $(seq 1 217)). Do NOT use for y."
+fresh
+for i in $(seq 1 33); do { printf -- '---\nname: s%s\ndescription: "%s"\n---\n' "$i" "$D245"; body; } | skill "s$i"; done
+run
+expect_exit 1 "33 descriptions of 245 chars exceed the total (len ${#D245})"
+expect_line "^skills:1: DESC-TOTAL .*33 model-invocable descriptions total 8085 chars; the cap is 8000" "the total is reported once, on skills/"
+run --files skills/s1/SKILL.md
+expect_no_line "DESC-TOTAL" "a --files run does not report the total"
+{ printf -- '---\nname: s33\ndescription: "%s"\ndisable-model-invocation: true\n---\n' "$D245"; body; } | skill s33
+run
+expect_exit 0 "a manual-only skill does not count toward the total"
+expect_no_line "DESC-TOTAL" "32 model-invocable descriptions of 245 chars stay under the total"
 
 # ── DESC-USE-WHEN (d60997b) ─────────────────────────────────────────────────
 fresh

@@ -1,7 +1,7 @@
 ---
 name: feature-verify
-description: "Use when one feature's health needs auditing — spec, tech-spec, plan, implementation, sub-features, memories, manifest sync. Keywords: feature health, verify feature, feature drift. Do NOT use to audit every feature (feature-status-audit)."
-allowed-tools: [Read, Grep, Glob, Bash]
+description: "Use when one feature's health needs auditing: spec, tech-spec, plan, implementation, sub-features, memories, manifest. Keywords: feature drift. Do NOT use to audit every feature (feature-status-audit)."
+allowed-tools: [Read, Grep, Glob, 'Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/feature-status-audit/audit.mjs":*)', 'Bash(node "${CLAUDE_PLUGIN_ROOT}/lib/feature-spec-sync/dead-paths.mjs":*)']
 ---
 
 # Feature Verify

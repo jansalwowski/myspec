@@ -1,6 +1,6 @@
 ---
 name: visualize-options
-description: "Use when the user should pick layouts, UI states, variants or diagrammed designs by seeing them side by side in a browser, or a diagram, graph or visual result (image, render, screenshot) belongs in Visual Buddy, not a link. Do NOT use for text choices (AskUserQuestion), building mockups (feature-mockup), or open visual exploration (brainstorm)."
+description: "Use when the user should pick layouts, UI states or designs by seeing them side by side, or a diagram or visual result belongs in Visual Buddy. Do NOT use for text choices (AskUserQuestion), mockups (feature-mockup), or open exploration (brainstorm)."
 tags: [decision, mockup, ux, askuserquestion]
 ---
 

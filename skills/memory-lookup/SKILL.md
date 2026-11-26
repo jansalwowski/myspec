@@ -1,6 +1,6 @@
 ---
 name: "memory-lookup"
-description: "Use when debugging, hitting an error, or researching a past decision. Searches procedural, semantic and episodic memories in ${aiDir}/memory/. Do NOT use for first-time implementation with no prior context."
+description: "Use when debugging, hitting an error, or researching a past decision; searches project memories in ${aiDir}/memory/. Do NOT use for first-time implementation with no prior context."
 allowed-tools: [Read, Grep, Glob]
 ---
 

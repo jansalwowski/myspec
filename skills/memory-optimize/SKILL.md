@@ -1,6 +1,6 @@
 ---
 name: memory-optimize
-description: "Use when the project memory tree at ${aiDir}/memory/ needs grooming — dead anchors, memories that never fire, colliding triggers, expired episodes, index drift. Keywords: groom memories, memory audit, stale anchor, re-anchor. Do NOT use for the user-level store (memory-sanitize)."
+description: "Use when the project memory tree at ${aiDir}/memory/ needs grooming: dead anchors, memories that never fire, colliding triggers, index drift. Do NOT use for the user-level store (memory-sanitize)."
 ---
 
 # Memory Optimize

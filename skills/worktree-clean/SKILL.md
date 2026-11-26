@@ -1,6 +1,7 @@
 ---
 name: worktree-clean
-description: "Use when stale git worktrees and the branches behind them need cleaning up. Keywords: prune worktrees, stale branches, git cleanup, squash-merged branch won't delete. Do NOT use to create branches or worktrees."
+description: "Clean up stale git worktrees and the branches behind them, squash-merged branches included."
+disable-model-invocation: true
 ---
 
 # Worktree Clean

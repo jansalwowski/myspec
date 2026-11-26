@@ -1,6 +1,6 @@
 ---
 name: "memorize"
-description: "Use when the user names one project fact to keep — 'remember this for next time: …', 'note that …', 'keep in mind that …' — environments, gotchas, decisions, conventions; it takes precedence over the built-in auto-memory. Do NOT use for personal work preferences (auto-memory), to sweep the conversation (memorify), or to edit a memory."
+description: "Use when the user names one project fact to keep ('remember this for next time', 'note that …'); it wins over auto-memory. Do NOT use for personal preferences (auto-memory), a conversation sweep (memorify), or to edit a memory."
 ---
 
 # Memorize

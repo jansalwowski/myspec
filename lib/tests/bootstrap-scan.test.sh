@@ -136,7 +136,7 @@ GIT_COMMITTER_DATE="@$(( $(date +%s) - 864000 ))" git_ -C "$ROOT/fresh" commit -
 git_ worktree add -q -b gone "$ROOT/gone" >/dev/null 2>&1
 rm -rf "$ROOT/gone"
 OUT=$("$SCRIPT" 2>/dev/null)
-has '**Worktree health**: WARNING, 2 of 2 stale or orphaned; use the worktree-clean skill' && ok \
+has '**Worktree health**: WARNING, 2 of 2 stale or orphaned; run /myspec:worktree-clean' && ok \
   || fail "an old and a missing worktree are flagged (got: $OUT)"
 git_ worktree prune
 # A prunable worktree whose directory is still there (its .git file gone):
@@ -146,7 +146,7 @@ mkdir -p "$REPO/.claude/worktrees"
 git_ worktree add -q -b kept "$REPO/.claude/worktrees/kept" >/dev/null 2>&1
 rm -f "$REPO/.claude/worktrees/kept/.git"
 OUT=$("$SCRIPT" 2>/dev/null)
-has '**Worktree health**: WARNING, 1 of 2 stale or orphaned; use the worktree-clean skill' && ok \
+has '**Worktree health**: WARNING, 1 of 2 stale or orphaned; run /myspec:worktree-clean' && ok \
   || fail "a prunable worktree with its directory is flagged (got: $OUT)"
 git_ worktree prune
 rm -rf "$REPO/.claude/worktrees"
