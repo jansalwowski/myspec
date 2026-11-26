@@ -1,6 +1,6 @@
 ---
 name: brainstorm
-description: "Use when the user wants to explore ideas, generate options, name something, frame a fuzzy problem, or pressure-test a direction. Do NOT use to plan an approved spec (feature-plan)."
+description: "Use when the user wants to explore ideas, generate options, name something, frame a fuzzy problem, or pressure-test a direction with devil's-advocate thinking. Do NOT use to plan an approved spec (feature-plan)."
 ---
 
 # Brainstorm
