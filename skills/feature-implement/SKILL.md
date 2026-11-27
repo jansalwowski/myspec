@@ -131,7 +131,7 @@ Read the implementation plan, front-matter first.
    "${CLAUDE_PLUGIN_ROOT}/lib/session-event.sh" implement start
    ```
 
-   Run it as written: a hook records it from the command itself. It expires after 8h; Step 3 refreshes it per phase. Remove it (`… implement stop`) on **stop** or **fresh** at a checkpoint and at the start of Step 6.
+   Run it alone, as written: a hook records it from the command. It expires after 8h; Step 3 refreshes it per phase. Remove it (`… implement stop`) on **stop** or **fresh** at a checkpoint and at the start of Step 6.
 
 ### Step 3: Execute Milestones
 

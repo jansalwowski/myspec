@@ -84,7 +84,8 @@ if (a[0] === 'plugin' && a[1] === 'eval') {
           : isHead && i === 0 && name === env.STUB_ERROR_HEAD && (env.STUB_ERROR_STICKY || !out.includes('infra-retry')) ? 'examining the PATH directories took longer than 5s' : null,
         graders: [{ name: 'g', passed: q >= 1, scored: true }] })) } })),
   }));
-  process.exit(0);
+  // Like claude: a run that ended in an error scores 0, so the call exits 1.
+  process.exit(isHead && cases.includes(env.STUB_ERROR_HEAD) ? 1 : 0);
 }
 process.exit(0);
 JS
@@ -454,6 +455,9 @@ expect_eq "the staged baseline keeps the requested run count for the case" "$(jf
 STUB_ERROR_STICKY=1 rc_run infra-sticky --version 1.2.0 --models sonnet --runs 2
 expect_eq "a retry that errors again: no verdict, exit 2" "$RC" 2
 expect_eq "a case that never errors is not retried" "$(grep -c '^RUNS HEAD sonnet case-a' "$STUB_LOG")" 0
+# HEAD scores 0.5: at threshold 0.5 only the errored run could fail it.
+(cd "$REPO" && MYSPEC_EVALS_STRICT=1 MYSPEC_EVAL_THRESHOLD=0.5 scripts/evals/run.sh --mode full --models sonnet --runs 2 --case case-c --out "$TMP/out-strict" > "$TMP/strict.log" 2>&1)
+expect_eq "strict run.sh: an error its retry replaced is not below threshold, exit 0" "$?" 0
 unset STUB_ERROR_HEAD
 
 echo "# --case with an extglob alternation runs each matched case by name"
