@@ -563,8 +563,11 @@ if [ -z "$stopped" ] && [ "${MYSPEC_EVALS_DRY_RUN:-0}" != 1 ]; then
   fi
 fi
 
+# A job adds only its infrastructure failures here. Its own exit 1 (below
+# threshold) can come from an errored run the infra retry replaced, so the
+# scores' verdict is summary.mjs's, which reads the retried runs too.
 while IFS='|' read -r j_out _ _ _ _; do
-  [ -n "$j_out" ] && [ -f "$j_out/exit-code" ] && note "$(classify "$j_out")"
+  [ -n "$j_out" ] && [ -f "$j_out/exit-code" ] && [ "$(classify "$j_out")" = 2 ] && note 2
 done <<< "$all_jobs"
 
 if [ "${MYSPEC_EVALS_DRY_RUN:-0}" = 1 ]; then exit 0; fi
